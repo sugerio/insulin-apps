@@ -30,7 +30,7 @@ Open **Returns** and choose **Start 2025**. The app lists everyone in the househ
 - **Children and other dependants:** tick those who lived with you that year.
 
 If someone is missing, choose **Add a new person**: it opens the Household page, and **Back to Start 2025** returns to
-the list. To change who is in a year later, choose **Change** at the top of the year's household step.
+the list. To change who is in a year later, choose **Change** in the **Personal info** step of either return.
 
 ## Marital status on December 31
 
@@ -46,8 +46,8 @@ prepare the return for the year of a separation yet.
 
 ## Province and residency
 
-For you, and your spouse when they are in the year, choose the province they lived in on December 31, and say whether
-they lived in Canada all year. Taxi prepares returns for Ontario, British Columbia and Alberta, for people who lived
+On each return, choose the province the person lived in on December 31, and say whether they lived in Canada all
+year. Taxi prepares returns for Ontario, British Columbia and Alberta, for people who lived
 in Canada all year. For any other province, or for someone who moved to or from Canada during the year, the page says
 the return needs other software.
 

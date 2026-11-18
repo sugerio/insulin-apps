@@ -35,34 +35,39 @@ export const gettingStarted: DocTopic = {
         <>
           <p>
             First add the household's people under <b>Household</b>. Then open <b>Returns</b> and start the tax year, choosing who is in it.
-            Each year has six steps. The list of steps is beside every page of the year, and a step that
-            is done shows a check mark.
+            You and your spouse or partner each have a return, and you work on one return at a time. The return you are on is named above
+            the steps; select it to switch to the other return. Each return has six steps, and a step that is done shows a check mark.
+          </p>
+          <p>
+            Your marital status and who is in the year are the same on both returns. Both returns are worked out together, so each one can
+            use the other's numbers, such as the spouse amount.
           </p>
           <ol>
             <li>
-              <b>Household.</b> Who is in the year, your marital status on December 31, and each adult's province. See{" "}
+              <b>Personal info.</b> Who is in the year, the marital status on December 31, and this person's province. See{" "}
               <DocLink to="household">The household</DocLink>.
             </li>
             <li>
-              <b>Upload documents.</b> Choose a folder or files (PDF, PNG or JPEG). AI reads each file into slips for the person named on it;
-              the same file or the same slip twice is skipped. You can also type slips in step 4.
+              <b>Upload documents.</b> Choose a folder or files (PDF, PNG or JPEG). AI reads each file into slips. A slip with the other
+              person's name on it goes to their return. The same file or the same slip twice is skipped. You can also type slips in step 4.
             </li>
             <li>
-              <b>What applies.</b> For each adult: the slips found in your documents, with their files; for the kinds of slips not found
+              <b>What applies.</b> The slips found in your documents, with their files; for the kinds of slips not found
               (employment, interest and dividends, mutual funds, sales of investments, tuition), whether you have one, and a yes without the slip
               is missing, to upload right there or type in at step 4; and yes or no to what the app doesn't handle yet, such as self-employment or
               rent.
             </li>
             <li>
-              <b>Confirm.</b> Each adult's slips (T4, T5, T3, T5008, T2202), read by AI or entered box by box. Check each one against the paper
-              slip (a box AI wasn't sure of is marked), then confirm them. Changing a slip makes it unconfirmed again.
+              <b>Confirm.</b> The slips (T4, T5, T3, T5008, T2202), read by AI or entered box by box. Check each one against the paper slip (a
+              box AI wasn't sure of is marked), then confirm them. Changing a slip makes it unconfirmed again. A slip that is the other
+              person's can be moved to their return.
             </li>
             <li>
-              <b>Deductions.</b> RRSP and FHSA contributions, medical expenses, donations, unused tuition, and the other amounts each return
+              <b>Deductions.</b> RRSP and FHSA contributions, medical expenses, donations, unused tuition, and the other amounts the return
               needs. Only the questions that can change a return appear.
             </li>
             <li>
-              <b>Finish.</b> Each return's refund or balance owing, its key lines with why each is what it is, and what to check before filing.
+              <b>Finish.</b> The return's refund or balance owing, its key lines with why each is what it is, and what to check before filing.
               The filled-in CRA forms to download come in a later version.
             </li>
           </ol>
@@ -75,9 +80,10 @@ export const gettingStarted: DocTopic = {
       body: (
         <>
           <p>
-            Beside the steps after the household, <b>Estimate</b> shows each return's key lines: total income, net income, taxable income, net
+            Beside the steps after personal info, <b>Estimate</b> shows the return's key lines: total income, net income, taxable income, net
             federal tax, provincial tax (Ontario, British Columbia or Alberta), the total payable, the tax already deducted, and the refund or
-            balance owing. When both returns are prepared together, each uses the other's numbers, such as the spouse amount.
+            balance owing. When both returns are prepared together, each uses the other's numbers, such as the spouse amount; the line's
+            "why" shows them.
           </p>
           <p>
             Select a line to see why it is what it is: its formula, the values that went into it, and each number's source, down to the box of

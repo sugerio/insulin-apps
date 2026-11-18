@@ -14,25 +14,28 @@ Taxi prepares the T1 return of the person preparing it and, if they choose, of t
 partner. It never files with the CRA. When a return is done, you get the CRA's own forms, filled in, to sign and mail.
 You can also copy the numbers into certified tax software.
 
-A tax year has six steps:
+You and your spouse or partner each have a return. You work on one return at a time, and switch to the other from the
+return's name above its steps. Both returns are worked out together, so each can use the other's numbers.
 
-1. **Household.** Who is in the year, and the facts no document shows.
-2. **Upload documents.** One folder of slips and receipts, read by AI.
+Each return has six steps:
+
+1. **Personal info.** Who is in the year, and the facts no document shows.
+2. **Upload documents.** Slips and receipts, read by AI. A slip with the other person's name goes to their return.
 3. **What applies.** What the documents show, and anything missing.
-4. **Confirm.** One table of every number AI read, to check against the papers.
-5. **Deductions.** Deductions and credits, and who claims each one.
-6. **Finish.** The results, and the filled-in forms to download.
+4. **Confirm.** Every number AI read, to check against the papers.
+5. **Deductions.** Deductions and credits.
+6. **Finish.** The refund or balance owing, and what to check before filing.
 
 > [!NOTE]
-> Taxi is being built in parts. Today only step 1, the household, works. Steps 2 to 6 show what they will do.
+> Taxi is being built in parts. The filled-in CRA forms to download come in a later version.
 
 ## Who it is for
 
 Residents of Ontario, British Columbia and Alberta who lived in Canada all year. The returns it will prepare cover
 employment income, investment slips, RRSP contributions, donations and medical expenses.
 
-It doesn't handle self-employment, rental income, income from outside Canada, or Quebec returns. The household step says
-so when one of these applies.
+It doesn't handle self-employment, rental income, income from outside Canada, or Quebec returns. The app says so when
+one of these applies.
 
 ## What it stores
 

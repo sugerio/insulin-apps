@@ -2,7 +2,7 @@ import { DOCUMENT_TYPES, MAX_DOCUMENT_BYTES, type DocumentList, type DocumentRec
 import { Dec } from "../../shared/engine/decimal.ts";
 import { rulesFor } from "../../shared/rules/index.ts";
 import { audit, getYear, yearRow } from "./household.ts";
-import { ApiError, notFound } from "./http.ts";
+import { ApiError, conflict, notFound } from "./http.ts";
 import type { Caller } from "./identity.ts";
 import type { FileToRead, ReadSlip, SlipReader } from "./reader.ts";
 import { loadWorkspace } from "./workspace.ts";
@@ -23,6 +23,7 @@ interface DocumentRow {
   byte_size: number;
   status: DocumentRecord["status"];
   message: string;
+  person_id: string | null;
   created_at: number;
 }
 
@@ -31,7 +32,7 @@ export async function listDocuments(db: Db, orgId: string, year: number): Promis
   if (!row) throw notFound(`The ${year} tax year hasn't been started`);
   const [documents, workspace] = await Promise.all([
     db
-      .prepare("SELECT id, name, content_type, byte_size, status, message, created_at FROM documents WHERE org_id = ? AND tax_year_id = ? ORDER BY created_at DESC, id")
+      .prepare("SELECT id, name, content_type, byte_size, status, message, person_id, created_at FROM documents WHERE org_id = ? AND tax_year_id = ? ORDER BY created_at DESC, id")
       .bind(orgId, row.id)
       .all<DocumentRow>(),
     loadWorkspace(db, orgId, row.id),
@@ -44,6 +45,7 @@ export async function listDocuments(db: Db, orgId: string, year: number): Promis
       byteSize: document.byte_size,
       status: document.status,
       message: document.message,
+      personId: document.person_id,
       slips: workspace.slips
         .filter((slip) => slip.documentId === document.id)
         .map((slip) => ({ id: slip.id, type: slip.type, personId: slip.personId, issuer: slip.issuer })),
@@ -90,6 +92,7 @@ export async function uploadDocument(db: Db, caller: Caller, year: number, reque
   }
   const sha256 = hex(await crypto.subtle.digest("SHA-256", bytes));
   const view = await getYear(db, caller.orgId, year);
+  const uploader = uploaderOf(view, request.headers.get("X-Person-Id"));
   const id = crypto.randomUUID();
 
   const earlier = await db
@@ -115,7 +118,7 @@ export async function uploadDocument(db: Db, caller: Caller, year: number, reque
       message = outcome.message;
     } else {
       modelId = outcome.model;
-      const planned = plan(outcome.slips, view, year);
+      const planned = plan(outcome.slips, view, year, uploader);
       const existing = (await loadWorkspace(db, caller.orgId, row.id)).slips;
       found = planned.filter((slip) => !existing.some((other) => sameSlip(other, slip)));
       if (outcome.taxYear !== null && outcome.taxYear !== year) {
@@ -130,7 +133,9 @@ export async function uploadDocument(db: Db, caller: Caller, year: number, reque
         message = "The slips in this file are already in this year.";
       } else {
         status = "read";
-        message = found.map((slip) => `${slip.type} from ${slip.issuer} for ${slip.personName}${slip.guessed ? " (check whose it is)" : ""}`).join("; ");
+        message = found
+          .map((slip) => `${slip.type} from ${slip.issuer}${slip.personId === uploader.id ? "" : `, added to ${slip.personName}'s return`}${slip.guessed ? " (check whose it is)" : ""}`)
+          .join("; ");
       }
     }
   }
@@ -143,10 +148,10 @@ export async function uploadDocument(db: Db, caller: Caller, year: number, reque
   await db.batch([
     db
       .prepare(
-        `INSERT INTO documents (id, org_id, tax_year_id, name, content_type, byte_size, sha256, status, message, model_id, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO documents (id, org_id, tax_year_id, name, content_type, byte_size, sha256, status, message, model_id, person_id, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
-      .bind(id, caller.orgId, row.id, name, contentType, bytes.byteLength, sha256, status, message, modelId, now),
+      .bind(id, caller.orgId, row.id, name, contentType, bytes.byteLength, sha256, status, message, modelId, uploader.id, now),
     ...chunks.slice(0, CHUNKS_PER_BATCH).map((chunk, index) => insertChunk(db, caller.orgId, id, index, chunk)),
     ...found.map((slip, index) =>
       db
@@ -170,6 +175,7 @@ export async function uploadDocument(db: Db, caller: Caller, year: number, reque
     byteSize: bytes.byteLength,
     status,
     message,
+    personId: uploader.id,
     slips: found.map((slip, index) => ({ id: slipIds[index]!, type: slip.type, personId: slip.personId, issuer: slip.issuer })),
     createdAt: now,
   };
@@ -182,20 +188,30 @@ interface Planned {
   issuer: string;
   personId: string;
   personName: string;
-  /** No adult's name matched: the slip went to the person preparing, to be checked. */
+  /** Several adults' names matched: the slip went to the return it was uploaded in, to be checked. */
   guessed: boolean;
   boxes: Record<string, string>;
   unsure: string[];
 }
 
+/** The adult whose return the file is uploaded in: the `X-Person-Id` header, or the person preparing without it. */
+function uploaderOf(view: TaxYear, header: string | null): Person {
+  const adults = view.adults.map((adult) => view.people.find((person) => person.id === adult.personId)!);
+  if (adults.length === 0) throw conflict("Add yourself to this year before uploading");
+  if (header === null || header === "") return adults.find((person) => person.relationship === "self") ?? adults[0]!;
+  const adult = adults.find((person) => person.id === header);
+  if (!adult) throw new ApiError("validation_failed", "Upload into the return of an adult of this year", [{ path: "X-Person-Id", message: "Not an adult of this year" }]);
+  return adult;
+}
+
 /**
  * What AI read, checked against the year's rules: a known type, only its boxes, amounts that are decimals (a box that
- * isn't is left out and marked unsure), and an adult of the year whose name is on it.
+ * isn't is left out and marked unsure), and the adult whose name is on it. A name that matches no adult, or several,
+ * leaves the slip in the return it was uploaded in.
  */
-function plan(slips: ReadSlip[], view: TaxYear, year: number): Planned[] {
+function plan(slips: ReadSlip[], view: TaxYear, year: number, uploader: Person): Planned[] {
   const rules = rulesFor(year)!;
   const adults = view.adults.map((adult) => view.people.find((person) => person.id === adult.personId)!);
-  const self = adults.find((person) => person.relationship === "self") ?? adults[0]!;
   const planned: Planned[] = [];
   for (const slip of slips) {
     const type = rules.slips.get(slip.type.trim().toUpperCase());
@@ -211,12 +227,13 @@ function plan(slips: ReadSlip[], view: TaxYear, year: number): Planned[] {
     }
     if (Object.keys(boxes).length === 0) continue;
     const match = matchPerson(slip.person, adults);
+    const person = match === null || match === "several" ? uploader : match;
     planned.push({
       type: type.id,
       issuer: slip.issuer.trim().slice(0, 100) || "Unknown issuer",
-      personId: (match ?? self).id,
-      personName: (match ?? self).name,
-      guessed: match === null && adults.length > 1,
+      personId: person.id,
+      personName: person.name,
+      guessed: match === "several",
       boxes,
       unsure: [...unsure],
     });
@@ -224,15 +241,16 @@ function plan(slips: ReadSlip[], view: TaxYear, year: number): Planned[] {
   return planned;
 }
 
-/** The adult whose name is on the slip: the whole name, or failing that a shared first name; null if none or several. */
-function matchPerson(printed: string, adults: Person[]): Person | null {
+/** The adult whose name is on the slip: the whole name, or failing that a shared first name; null if none, "several" if more than one. */
+function matchPerson(printed: string, adults: Person[]): Person | null | "several" {
   const words = (name: string) => name.toLowerCase().normalize("NFKD").replace(/[^a-z\s]/g, "").split(/\s+/).filter(Boolean);
   const target = words(printed);
   if (adults.length === 1) return adults[0]!;
   const whole = adults.filter((adult) => words(adult.name).every((word) => target.includes(word)));
   if (whole.length === 1) return whole[0]!;
   const first = adults.filter((adult) => target.includes(words(adult.name)[0] ?? ""));
-  return first.length === 1 ? first[0]! : null;
+  if (first.length === 1) return first[0]!;
+  return whole.length > 1 || first.length > 1 ? "several" : null;
 }
 
 /**

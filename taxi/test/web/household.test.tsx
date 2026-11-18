@@ -73,8 +73,10 @@ describe("starting a year", () => {
     fireEvent.click(checkbox("Jamie Martin"));
     expect(screen.getByRole("link", { name: "Add a new person" }).getAttribute("href")).toBe(`/household?back=${encodeURIComponent("/returns?start=2025")}`);
     fireEvent.click(screen.getByRole("button", { name: "Start 2025" }));
-    await waitFor(() => expect(router.state.location.pathname).toBe("/returns/2025/household"));
+    await waitFor(() => expect(router.state.location.pathname).toMatch(/^\/returns\/2025\/[0-9a-f-]{36}\/household$/));
     const year = (await (await server.call("GET", "/api/years/2025")).json()) as TaxYear;
+    // The year opens on the return of the person preparing.
+    expect(router.state.location.pathname).toBe(`/returns/2025/${year.adults[0]!.personId}/household`);
     expect(year.prepareTogether).toBe(true);
     expect(year.members.map((id) => year.people.find((person) => person.id === id)?.name)).toEqual(["Alex Martin", "Sam Martin"]);
   });
@@ -93,44 +95,66 @@ describe("starting a year", () => {
 
 describe("step 1 of a year", () => {
   it("saves the year's facts and moves on", async () => {
+    let alex: Person | undefined;
     const { router, server } = await renderApp("/returns/2025/household", {
       seed: async (s) => {
-        const alex = await add(s, "Alex Martin", "self", "1985-04-02");
+        alex = await add(s, "Alex Martin", "self", "1985-04-02");
         await s.call("POST", "/api/years", { as: OWNER, body: { year: 2025, people: [alex.id] } });
       },
     });
     fireEvent.click(await screen.findByRole("radio", { name: "Single" }));
     expect(screen.queryByRole("radio", { name: "Married" })).toBeNull();
-    expect(screen.getByRole("link", { name: "Add a spouse or partner" }).getAttribute("href")).toBe(`/household?back=${encodeURIComponent("/returns/2025/household")}`);
+    const back = `/returns/2025/${alex!.id}/household`;
+    expect(screen.getByRole("link", { name: "Add a spouse or partner" }).getAttribute("href")).toBe(`/household?back=${encodeURIComponent(back)}`);
     fireEvent.change(screen.getByLabelText("Province on December 31"), { target: { value: "BC" } });
     fireEvent.click(screen.getByRole("radio", { name: "Yes" }));
     fireEvent.click(screen.getByRole("button", { name: "Save and continue" }));
-    await waitFor(() => expect(router.state.location.pathname).toBe("/returns/2025/upload"));
+    await waitFor(() => expect(router.state.location.pathname).toBe(`/returns/2025/${alex!.id}/upload`));
     expect(await screen.findByRole("heading", { name: "Upload documents" })).toBeTruthy();
-    const stored = await (await server.call("GET", "/api/years/2025")).json();
-    expect(stored).toMatchObject({ maritalStatus: "single", steps: { household: "done" } });
+    const stored = (await (await server.call("GET", "/api/years/2025")).json()) as TaxYear;
+    expect(stored.maritalStatus).toBe("single");
+    expect(stored.returns[0]!.steps.household).toBe("done");
   });
 
-  it("asks for both adults' facts while the spouse is in the year, and only yours once taken out", async () => {
-    await renderApp("/returns/2025/household", { seed: seedCouple });
-    expect(await screen.findAllByLabelText("Province on December 31")).toHaveLength(2);
+  it("shows one adult's return, with a switcher to the other's, until the spouse is taken out of the year", async () => {
+    const { router } = await renderApp("/returns/2025/household", { seed: seedCouple });
+    expect(await screen.findAllByLabelText("Province on December 31")).toHaveLength(1);
     expect(screen.getAllByRole("radio", { name: /^(Married|Living common-law|Single|Widowed|Divorced|Separated)$/ }).map((radio) => radio.getAttribute("value"))).toEqual(["married", "common_law"]);
-    expect(screen.getAllByLabelText("Province on December 31")).toHaveLength(2);
+    const household = screen.getByRole("heading", { name: "Household in 2025" }).closest("[data-slot=card]") as HTMLElement;
+    expect(within(household).getByText(/^This return ·/)).toBeTruthy();
+    expect(within(household).getByText(/^Spouse or partner ·/)).toBeTruthy();
+    const alexPath = router.state.location.pathname;
+
+    const switcher = screen.getByRole("button", { name: "Return of Alex Martin: switch return" });
+    fireEvent.keyDown(switcher, { key: "Enter" });
+    fireEvent.click(await screen.findByRole("menuitem", { name: /Sam Martin/ }));
+    await waitFor(() => expect(router.state.location.pathname).not.toBe(alexPath));
+    expect(router.state.location.pathname).toMatch(/\/household$/);
+    expect(await screen.findByRole("button", { name: "Return of Sam Martin: switch return" })).toBeTruthy();
+    // From Sam's return, Alex is Sam's spouse.
+    const samHousehold = screen.getByRole("heading", { name: "Household in 2025" }).closest("[data-slot=card]") as HTMLElement;
+    expect(within(samHousehold).getByText("Alex Martin").parentElement!.textContent).toMatch(/Spouse or partner/);
+
     fireEvent.click(screen.getByRole("button", { name: "Change" }));
     fireEvent.click(checkbox("Sam Martin"));
     fireEvent.click(screen.getByRole("button", { name: "Save people" }));
-    await waitFor(() => expect(screen.getAllByLabelText("Province on December 31")).toHaveLength(1));
+    // Sam has no return now: the year opens on Alex's first step still to do, with nothing to switch to.
+    await waitFor(() => expect(router.state.location.pathname).toBe(alexPath));
+    await waitFor(() => expect(screen.queryByRole("button", { name: /switch return/ })).toBeNull());
   });
 
   it("says what is still missing only when you try to continue", async () => {
     const { router } = await renderApp("/returns/2025/household", { seed: seedCouple });
     fireEvent.click(await screen.findByRole("radio", { name: "Married" }));
     expect(screen.queryByText("Fill these in to continue")).toBeNull();
+    const path = router.state.location.pathname;
     fireEvent.click(screen.getByRole("button", { name: "Save and continue" }));
     expect(await screen.findByText("Fill these in to continue")).toBeTruthy();
-    expect(screen.getByText("Choose Sam Martin's province on December 31.")).toBeTruthy();
+    expect(screen.getByText("Choose Alex Martin's province on December 31.")).toBeTruthy();
+    // Sam's facts are Sam's return's.
+    expect(screen.queryByText("Choose Sam Martin's province on December 31.")).toBeNull();
     expect(screen.queryByText("Choose your marital status on December 31.")).toBeNull();
-    expect(router.state.location.pathname).toBe("/returns/2025/household");
+    expect(router.state.location.pathname).toBe(path);
   });
 
   it("shows a viewer the year without anything to change", async () => {

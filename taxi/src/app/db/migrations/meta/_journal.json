@@ -22,6 +22,13 @@
       "when": 1794950051033,
       "tag": "0002_documents",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1795019654717,
+      "tag": "0003_document_person",
+      "breakpoints": true
     }
   ]
 }

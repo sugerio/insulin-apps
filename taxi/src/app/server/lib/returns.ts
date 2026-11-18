@@ -1,4 +1,4 @@
-import type { CreateSlip, SaveAnswers, SlipList, TaxYear, UpdateSlip } from "#shared";
+import type { ConfirmSlips, CreateSlip, SaveAnswers, SlipList, TaxYear, UpdateSlip } from "#shared";
 import { Dec } from "../../shared/engine/decimal.ts";
 import { rulesFor } from "../../shared/rules/index.ts";
 import { audit, bumpRevision, getYear, runGuarded, yearRow, type YearRow } from "./household.ts";
@@ -147,17 +147,18 @@ export async function removeSlip(db: Db, caller: Caller, year: number, id: strin
   return getYear(db, caller.orgId, year);
 }
 
-/** Confirms every unconfirmed slip of the year, recording who did and when. */
-export async function confirmSlips(db: Db, caller: Caller, year: number, revision: number, now: number): Promise<TaxYear> {
-  const { row } = await openYear(db, caller.orgId, year);
+/** Confirms the unconfirmed slips of one adult (or, with no person, of every adult), recording who did and when. */
+export async function confirmSlips(db: Db, caller: Caller, year: number, input: ConfirmSlips, now: number): Promise<TaxYear> {
+  const { row, view } = await openYear(db, caller.orgId, year);
+  if (input.personId !== undefined) checkAdult(view, input.personId, "personId");
   await runGuarded(db, [
-    bumpRevision(db, caller.orgId, row.id, revision, now),
+    bumpRevision(db, caller.orgId, row.id, input.revision, now),
     db
       .prepare(
         `UPDATE slips SET status = 'confirmed', confirmed_at = ?, confirmed_by = ?, updated_at = ?
-         WHERE org_id = ? AND tax_year_id = ? AND status = 'unconfirmed'`,
+         WHERE org_id = ? AND tax_year_id = ? AND status = 'unconfirmed' AND (? IS NULL OR person_id = ?)`,
       )
-      .bind(now, caller.userId, now, caller.orgId, row.id),
+      .bind(now, caller.userId, now, caller.orgId, row.id, input.personId ?? null, input.personId ?? null),
     audit(db, caller, "slips.confirmed", row.id, now),
   ]);
   return getYear(db, caller.orgId, year);

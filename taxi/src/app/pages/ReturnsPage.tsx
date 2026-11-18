@@ -14,8 +14,8 @@ import { STEP_LABELS, nextStep, stepPath } from "../components/YearFrame.tsx";
 import { RELATIONSHIP_LABELS, formatDate } from "../lib/format.ts";
 import { useResource } from "../lib/useResource.ts";
 
-// `/returns`: the household's tax years. Each year shows whose returns are prepared, the filing deadline and the six
-// steps with their state; a year not yet started can be started by someone who prepares returns.
+// `/returns`: the household's tax years. Each year shows the filing deadline and each adult's return with its six
+// steps and their state; a year not yet started can be started by someone who prepares returns.
 
 export function ReturnsPage() {
   const resource = useResource("years", (signal) => apiRequest(routes.listYears, { signal }));
@@ -34,55 +34,23 @@ function Years({ data }: { data: YearList }) {
   return (
     <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
       <div className="flex min-w-0 flex-col gap-4">
-        {data.years.map((year) => {
-          const done = STEPS.filter((step) => year.steps[step] === "done").length;
-          const next = nextStep(year.steps);
-          return (
-            <Card key={year.year}>
-              <CardHeader>
-                <CardTitle>
-                  <h2 className="text-lg font-semibold">{year.year} tax year</h2>
-                </CardTitle>
-                <CardDescription>
-                  File by {formatDate(filingDeadline(year.year))}.{year.filers.length > 0 ? <> Returns for {year.filers.join(" and ")}.</> : null}
-                </CardDescription>
-                <CardAction>
-                  <Badge variant="secondary">
-                    {done} of {STEPS.length} steps done
-                  </Badge>
-                </CardAction>
-              </CardHeader>
-              <CardContent className="flex flex-col gap-4">
-                <ol className="grid gap-2 sm:grid-cols-3" aria-label={`${year.year} steps`}>
-                  {STEPS.map((step, index) => (
-                    <li key={step} className="flex items-center gap-2 text-sm">
-                      <span
-                        className={
-                          year.steps[step] === "done"
-                            ? "flex size-5 items-center justify-center rounded-full bg-emerald-700 text-white"
-                            : "flex size-5 items-center justify-center rounded-full border text-xs text-muted-foreground"
-                        }
-                        aria-hidden="true"
-                      >
-                        {year.steps[step] === "done" ? <Check className="size-3" /> : index + 1}
-                      </span>
-                      <span className={year.steps[step] === "not_built" ? "text-muted-foreground" : undefined}>{STEP_LABELS[step]}</span>
-                      <span className="sr-only">{year.steps[step] === "done" ? "(done)" : year.steps[step] === "not_built" ? "(not available yet)" : "(to do)"}</span>
-                    </li>
-                  ))}
-                </ol>
-                <div>
-                  <Button asChild>
-                    <Link to={stepPath(year.year, next)}>
-                      {canPrepare(me) ? `Continue: ${STEP_LABELS[next]}` : `Open ${year.year}`}
-                      <ArrowRight aria-hidden="true" />
-                    </Link>
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          );
-        })}
+        {data.years.map((year) => (
+          <Card key={year.year}>
+            <CardHeader>
+              <CardTitle>
+                <h2 className="text-lg font-semibold">{year.year} tax year</h2>
+              </CardTitle>
+              <CardDescription>File by {formatDate(filingDeadline(year.year))}.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <ul className="flex flex-col divide-y" aria-label={`${year.year} returns`}>
+                {year.returns.map((progress) => (
+                  <ReturnRow key={progress.personId} year={year.year} progress={progress} />
+                ))}
+              </ul>
+            </CardContent>
+          </Card>
+        ))}
         {notStarted.map((year) => (
           <StartYear key={year} year={year} people={data.people} />
         ))}
@@ -131,6 +99,49 @@ function Years({ data }: { data: YearList }) {
   );
 }
 
+/** One adult's return in a year: its steps and the way to the first one still to do. */
+function ReturnRow({ year, progress }: { year: number; progress: YearList["years"][number]["returns"][number] }) {
+  const me = useMe();
+  const done = STEPS.filter((step) => progress.steps[step] === "done").length;
+  const next = nextStep(progress.steps);
+  return (
+    <li className="flex flex-col gap-3 py-4 first:pt-0 last:pb-0">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-3">
+          <h3 className="truncate font-semibold">{progress.name}</h3>
+          <Badge variant="secondary">
+            {done} of {STEPS.length} steps done
+          </Badge>
+        </div>
+        <Button asChild size="sm">
+          <Link to={stepPath(year, progress.personId, next)} aria-label={`${progress.name}: ${canPrepare(me) ? `continue, ${STEP_LABELS[next]}` : "open"}`}>
+            {canPrepare(me) ? `Continue: ${STEP_LABELS[next]}` : "Open"}
+            <ArrowRight aria-hidden="true" />
+          </Link>
+        </Button>
+      </div>
+      <ol className="grid gap-2 sm:grid-cols-3" aria-label={`${progress.name}'s steps`}>
+        {STEPS.map((step, index) => (
+          <li key={step} className="flex items-center gap-2 text-sm">
+            <span
+              className={
+                progress.steps[step] === "done"
+                  ? "flex size-5 items-center justify-center rounded-full bg-emerald-700 text-white"
+                  : "flex size-5 items-center justify-center rounded-full border text-xs text-muted-foreground"
+              }
+              aria-hidden="true"
+            >
+              {progress.steps[step] === "done" ? <Check className="size-3" /> : index + 1}
+            </span>
+            <span>{STEP_LABELS[step]}</span>
+            <span className="sr-only">{progress.steps[step] === "done" ? "(done)" : "(to do)"}</span>
+          </li>
+        ))}
+      </ol>
+    </li>
+  );
+}
+
 /**
  * A supported year not started yet. Starting it asks who is in it: you always, your spouse to prepare both returns
  * together, and the dependants who lived with you. `?start=<year>` opens the choice (the way back from the Household).
@@ -151,7 +162,7 @@ function StartYear({ year, people }: { year: number; people: Person[] }) {
     try {
       const ids = people.filter((person) => person.relationship === "self" || selected.has(person.id)).map((person) => person.id);
       await apiRequest(routes.startYear, { body: { year, people: ids } });
-      navigate(stepPath(year, "household"));
+      navigate(`/returns/${year}`);
     } catch (error) {
       setState({ status: "error", error });
     }

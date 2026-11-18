@@ -2,7 +2,7 @@ import { z } from "zod";
 import { meSchema, type Permission } from "./access.ts";
 import { documentListSchema, uploadResultSchema } from "./documents.ts";
 import { estimateSchema } from "./estimate.ts";
-import { createSlipSchema, revisionBodySchema, saveAnswersSchema, slipListSchema, updateSlipSchema } from "./returns.ts";
+import { confirmSlipsSchema, createSlipSchema, revisionBodySchema, saveAnswersSchema, slipListSchema, updateSlipSchema } from "./returns.ts";
 import {
   createPersonSchema,
   idSchema,
@@ -147,7 +147,7 @@ export const routes = {
     method: "POST",
     path: "/api/years/:year/documents",
     summary:
-      "Upload one file (PDF, PNG or JPEG, up to 10 MiB) for AI to read into slips: send its bytes as the body with its Content-Type, and its name in an X-File-Name header (URI-encoded). Slips found are added unconfirmed to the adult they name; the same file or the same slips twice are skipped.",
+      "Upload one file (PDF, PNG or JPEG, up to 10 MiB) for AI to read into slips: send its bytes as the body with its Content-Type, and its name in an X-File-Name header (URI-encoded), and the adult whose return it is uploaded in as an X-Person-Id header (the person preparing without it). Slips found are added unconfirmed to the adult whose name is on them, or to that adult when no name matches; the same file or the same slips twice are skipped.",
     permission: "taxi.prepare",
     params: yearParams,
     body: null,
@@ -202,10 +202,11 @@ export const routes = {
   confirmSlips: route({
     method: "POST",
     path: "/api/years/:year/slips/confirm",
-    summary: "Confirm every unconfirmed slip of the year: someone checked each one against the paper slip.",
+    summary:
+      "Confirm the unconfirmed slips of one adult (personId), or of every adult without it: someone checked each one against the paper slip.",
     permission: "taxi.prepare",
     params: yearParams,
-    body: revisionBodySchema,
+    body: confirmSlipsSchema,
     response: taxYearSchema,
   }),
   listPeople: route({

@@ -21,7 +21,9 @@ export const documentSchema = z.strictObject({
    */
   status: z.enum(DOCUMENT_STATUSES),
   message: z.string(),
-  /** The slips added from it. */
+  /** Whose return it was uploaded in; null for a file uploaded before returns were per person. */
+  personId: idSchema.nullable(),
+  /** The slips added from it, each to the adult it names (which may be the other adult of the year). */
   slips: z.array(z.strictObject({ id: idSchema, type: z.string(), personId: idSchema, issuer: z.string() })),
   createdAt: z.number().int(),
 });

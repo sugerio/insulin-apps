@@ -22,21 +22,21 @@ The base URL is `https://taxi.insulinapps.com`, and every endpoint is under `/ap
 |---|---|---|
 | `GET /api/me` | any | Who is calling: their role and permissions. |
 | `GET /api/catalog` | any | The endpoints the caller may use, with request bodies as JSON Schema. |
-| `GET /api/years` | View returns | The household's people and tax years, with each year's progress. |
+| `GET /api/years` | View returns | The household's people and tax years, with each adult's return and its steps. |
 | `POST /api/years` | Prepare returns | Start a tax year with the people in it: `{"year": 2025, "people": ["…"]}`. You must be one of them; your spouse in it prepares both returns together. Starting one that exists returns it unchanged. |
-| `GET /api/years/{year}` | View returns | A tax year: who is in it, the marital status, each adult's province and residency, and open issues. |
+| `GET /api/years/{year}` | View returns | A tax year: who is in it, the marital status, each adult's province and residency, open issues, and each adult's return with the state of its six steps (`returns`). |
 | `GET /api/years/{year}/estimate` | View returns | What the engine computes for each return of the year (below). |
 | `PUT /api/years/{year}/people` | Prepare returns | Change who is in the year: `{"revision", "people"}`. Someone taken out loses their facts for that year. |
 | `PUT /api/years/{year}/household` | Prepare returns | Save the year's facts (below). |
 | `GET /api/years/{year}/documents` | View returns | The files uploaded for the year, with what reading each one found and the slips it added. |
-| `POST /api/years/{year}/documents` | Prepare returns | Upload one file for AI to read: its bytes as the body, its `Content-Type` (`application/pdf`, `image/png` or `image/jpeg`), and its name in an `X-File-Name` header (URI-encoded). Up to 10 MiB. Answers with the file's result and the year. |
+| `POST /api/years/{year}/documents` | Prepare returns | Upload one file for AI to read: its bytes as the body, its `Content-Type` (`application/pdf`, `image/png` or `image/jpeg`), its name in an `X-File-Name` header (URI-encoded), and the adult whose return it is uploaded in as `X-Person-Id` (the person preparing without it). Up to 10 MiB. A slip with the other adult's name goes to their return; one with no name that matches stays in this return. Answers with the file's result and the year. |
 | `GET /api/years/{year}/documents/{id}/file` | View returns | The stored file, as uploaded. |
 | `PUT /api/years/{year}/answers` | Prepare returns | Save an adult's answers: `{"revision", "personId", "answers": {"rrspDeduction": "5000", "hasRentalIncome": false}}`. `null` clears an answer. |
 | `GET /api/years/{year}/slips` | View returns | Every slip of the year's adults, with its boxes and whether it is confirmed. |
 | `POST /api/years/{year}/slips` | Prepare returns | Add a slip: `{"revision", "personId", "type": "T4", "issuer", "boxes": {"14": "60000.00"}}`. It starts unconfirmed. |
 | `PATCH /api/years/{year}/slips/{id}` | Prepare returns | Change whose slip it is, its issuer or its boxes: `{"revision", "personId"?, "issuer"?, "boxes"?}`. It goes back to unconfirmed. |
 | `DELETE /api/years/{year}/slips/{id}` | Prepare returns | Remove a slip: `{"revision"}`. |
-| `POST /api/years/{year}/slips/confirm` | Prepare returns | Confirm every unconfirmed slip of the year: `{"revision"}`. |
+| `POST /api/years/{year}/slips/confirm` | Prepare returns | Confirm one adult's unconfirmed slips: `{"revision", "personId"}`; without `personId`, every adult's. |
 | `GET /api/people` | View returns | Everyone in the household, the same every year. |
 | `POST /api/people` | Prepare returns | Add a person: `{"name", "relationship", "birthDate"}`. |
 | `PATCH /api/people/{id}` | Prepare returns | Change a person's name, relationship or birth date. |

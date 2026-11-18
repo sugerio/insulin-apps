@@ -208,6 +208,8 @@ export const documents = sqliteTable(
     message: text("message").notNull(),
     /** The model that read it, when one did. */
     modelId: text("model_id"),
+    /** Whose return it was uploaded in; null for files uploaded before returns were per person. */
+    personId: text("person_id"),
     createdAt: integer("created_at").notNull(),
   },
   (table) => [

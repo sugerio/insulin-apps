@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import type { Person, TaxYear } from "#shared";
+import type { Person, TaxYear, YearList } from "#shared";
 import { startServer, type TestServer } from "../support/server.ts";
 
 let server: TestServer;
@@ -94,8 +94,8 @@ describe("starting a tax year", () => {
     const year = await startYear([alex, sam, jamie]);
     expect(year).toMatchObject({ year: 2025, revision: 1, maritalStatus: null, prepareTogether: true, members: [alex.id, sam.id, jamie.id] });
     expect(year.adults.map((adult) => adult.personId)).toEqual([alex.id, sam.id]);
-    expect(year.steps.household).toBe("todo");
-    expect(year.steps.upload).toBe("todo");
+    expect(year.returns[0]!.steps.household).toBe("todo");
+    expect(year.returns[0]!.steps.upload).toBe("todo");
   });
 
   it("prepares only your return when your spouse isn't chosen", async () => {
@@ -127,11 +127,14 @@ describe("starting a tax year", () => {
     expect((await server.call("GET", "/api/years/2019")).status).toBe(404);
   });
 
-  it("lists the years with their filers", async () => {
-    await marriedCouple();
-    const list = await json<{ years: { year: number; filers: string[] }[]; supportedYears: number[] }>(server.call("GET", "/api/years"));
+  it("lists the years with each adult's return", async () => {
+    const { alex, sam } = await marriedCouple();
+    const list = await json<YearList>(server.call("GET", "/api/years"));
     expect(list.supportedYears).toEqual([2025]);
-    expect(list.years).toEqual([expect.objectContaining({ year: 2025, filers: ["Alex Martin", "Sam Martin"] })]);
+    expect(list.years[0]!.returns.map((each) => [each.personId, each.name, each.steps.household])).toEqual([
+      [alex.id, "Alex Martin", "todo"],
+      [sam.id, "Sam Martin", "todo"],
+    ]);
   });
 });
 
@@ -177,7 +180,7 @@ describe("the year's facts", () => {
     );
     expect(saved.revision).toBe(2);
     expect(saved.issues).toEqual([]);
-    expect(saved.steps.household).toBe("done");
+    expect(saved.returns[0]!.steps.household).toBe("done");
   });
 
   it("follow the Household: married or common-law with a spouse, the other four without", async () => {
@@ -203,7 +206,7 @@ describe("the year's facts", () => {
     const sam = await addPerson("Sam Martin", "spouse", "1987-09-15");
     const year = await json<TaxYear>(server.call("GET", "/api/years/2025"));
     expect(year.issues).toEqual([expect.objectContaining({ code: "marital_status_mismatch", kind: "blocking", personId: sam.id })]);
-    expect(year.steps.household).toBe("todo");
+    expect(year.returns[0]!.steps.household).toBe("todo");
   });
 
   it("name what the app can't prepare without blocking the step", async () => {
@@ -216,7 +219,7 @@ describe("the year's facts", () => {
       ["unsupported_province", "unsupported"],
       ["part_year_resident", "unsupported"],
     ]);
-    expect(saved.steps.household).toBe("done");
+    expect(saved.returns[0]!.steps.household).toBe("done");
   });
 
   it("refuse a stale revision and keep the stored facts", async () => {

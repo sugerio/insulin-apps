@@ -1,7 +1,7 @@
 import { Navigate, createBrowserRouter, type RouteObject } from "react-router";
 import { RequireAuth } from "./auth/guards.tsx";
 import { AppLayout } from "./components/AppLayout.tsx";
-import { YearFrame, YearIndex } from "./components/YearFrame.tsx";
+import { ReturnFrame, ReturnIndex, YearFrame, YearIndex } from "./components/YearFrame.tsx";
 import { DocsPage } from "./pages/DocsPage.tsx";
 import { HouseholdPage } from "./pages/HouseholdPage.tsx";
 import { HouseholdStep } from "./pages/HouseholdStep.tsx";
@@ -30,13 +30,20 @@ export const routes: RouteObject[] = [
             element: <YearFrame />,
             children: [
               { index: true, element: <YearIndex /> },
-              { path: "household", element: <HouseholdStep /> },
-              { path: "upload", element: <UploadStep /> },
-              { path: "applies", element: <AppliesStep /> },
-              { path: "confirm", element: <ConfirmStep /> },
-              { path: "deductions", element: <DeductionsStep /> },
-              { path: "finish", element: <FinishStep /> },
-              { path: "*", element: <NotFoundPage /> },
+              {
+                path: ":person",
+                element: <ReturnFrame />,
+                children: [
+                  { index: true, element: <ReturnIndex /> },
+                  { path: "household", element: <HouseholdStep /> },
+                  { path: "upload", element: <UploadStep /> },
+                  { path: "applies", element: <AppliesStep /> },
+                  { path: "confirm", element: <ConfirmStep /> },
+                  { path: "deductions", element: <DeductionsStep /> },
+                  { path: "finish", element: <FinishStep /> },
+                  { path: "*", element: <NotFoundPage /> },
+                ],
+              },
             ],
           },
           { path: "/docs/:topic?", element: <DocsPage /> },

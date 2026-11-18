@@ -12,8 +12,9 @@ uploaded slips read by AI (or typed in), what applies, deductions and the result
 
 ## What it does today
 
-- **Tax years.** Start a year (2025) and follow its six steps: household, upload documents, what applies, confirm,
-  deductions, finish.
+- **Tax years.** Start a year (2025). You and your spouse or partner each have a return; the app shows one return at a
+  time, with a switcher to the other. Each return has six steps: personal info, upload documents, what applies,
+  confirm, deductions, finish.
 - **The household.** Add yourself, your spouse or common-law partner, and your children and other dependants, with
   their birth dates, on the Household page. Starting a year asks who is in it: your spouse in it means both returns are
   prepared together. Each year then records your marital status on December 31, and each adult's province and whether
@@ -27,12 +28,13 @@ uploaded slips read by AI (or typed in), what applies, deductions and the result
   dependant amounts, transfers between spouses (Schedule 2), and provincial tax: ON428 (surtax, tax reduction, LIFT
   credit, health premium), BC428 (BC tax reduction) and AB428 (supplemental credit). Beside steps 2 to 5,
   an estimate shows each return's result lines; select a line to see why.
-- **Step 2, AI reading.** Upload a folder or files; Claude reads each one into slips for the person named on it, using
+- **Step 2, AI reading.** Upload a folder or files into a return; Claude reads each one into slips (a slip with the other
+  person's name goes to their return), using
   the organization's Anthropic credential (Settings › Integrations, key `anthropic`). Duplicates are skipped, and every
   slip starts unconfirmed.
 - **Steps 3 to 6.** What applies (the slips found, the kinds not found and whether you have them, what is still missing, and what the app
   doesn't handle), Confirm (each slip entered box by
-  box, then confirmed), Deductions (only the questions a return reads), and Finish (each refund or balance owing, the
+  box, then confirmed, or moved to the other return), Deductions (only the questions the return reads), and Finish (the refund or balance owing, the
   key lines with why, and what to check before filing).
 - **Roles.** Owners, admins and editors prepare returns; viewers see everything and change nothing. Custom roles pick
   from two permissions: Prepare returns and View returns.

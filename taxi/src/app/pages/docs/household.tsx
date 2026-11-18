@@ -54,7 +54,7 @@ export const household: DocTopic = {
           </ul>
           <p>
             Someone missing? Choose <b>Add a new person</b>: it opens the Household page, and <b>Back to Start 2025</b> brings you back to the list.
-            To change who is in a year later, use <b>Change</b> at the top of the year's household step.
+            To change who is in a year later, use <b>Change</b> in the <b>Personal info</b> step of either return.
           </p>
         </>
       ),
@@ -84,7 +84,7 @@ export const household: DocTopic = {
       title: "Province and residency",
       body: (
         <>
-          <p>For you, and your spouse when they are in the year, choose the province they lived in on December 31, and say whether they lived in Canada all year.</p>
+          <p>On each return, choose the province the person lived in on December 31, and say whether they lived in Canada all year.</p>
           <p>
             The app prepares returns for <b>Ontario</b>, <b>British Columbia</b> and <b>Alberta</b>, for people who lived in Canada all year. For any
             other province, or for someone who moved to or from Canada during the year, the page says the return needs other software.

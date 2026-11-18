@@ -9,9 +9,11 @@ import { rulesFor } from "../shared/rules/index.ts";
 import { formatMoney, formatRate } from "../lib/format.ts";
 import { useEstimate } from "../lib/useYearData.ts";
 import { ResourceView } from "./Feedback.tsx";
+import { useReturn } from "./YearFrame.tsx";
 
-// The year's estimate beside a step: each return's result lines from the server, and "why" for each line, which the
-// browser works out with the same engine and the input the server sent.
+// The open return's estimate beside a step: its result lines from the server, and "why" for each line, which the
+// browser works out with the same engine and the input the server sent (both adults' returns are worked out together,
+// so what one adult's return takes from the other's shows in the "why").
 
 export function EstimateCard() {
   const resource = useEstimate();
@@ -30,48 +32,42 @@ export function EstimateCard() {
 }
 
 function EstimateBody({ estimate }: { estimate: Estimate }) {
+  const { person: owner } = useReturn();
   const rules = rulesFor(estimate.input.year)!;
   const evaluation = useMemo(() => new Evaluation(rules, estimate.input), [rules, estimate.input]);
-  const couple = estimate.result.people.length > 1;
+  const person = estimate.result.people.find((each) => each.personId === owner.id);
+  if (!person) return <p className="text-sm text-muted-foreground">Nothing to work out yet.</p>;
   return (
-    <div className="flex flex-col gap-4">
-      {estimate.result.people.map((person) => {
-        const name = estimate.input.people.find((each) => each.id === person.personId)?.name ?? "";
-        return (
-          <section key={person.personId} aria-label={name} className="flex flex-col gap-1.5">
-            {couple ? <h3 className="text-sm font-medium">{name}</h3> : null}
-            <ul className="flex flex-col">
-              {person.lines.map((line) => (
-                <ResultLine key={line.id} line={line} explain={() => evaluation.explain(person.personId, `line.${line.id}`)} rules={rules} />
-              ))}
-            </ul>
-            {person.missing.length + person.unhandled.length > 0 ? (
-              <ul className="flex flex-col gap-0.5 text-xs text-muted-foreground">
-                {person.missing.map((item) => (
-                  <li key={item.question}>Needed: {item.ask}</li>
-                ))}
-                {person.unhandled.map((note) => (
-                  <li key={note}>{note}</li>
-                ))}
-              </ul>
-            ) : null}
-            {person.estimates.length > 0 ? (
-              <details className="text-xs text-muted-foreground">
-                <summary className="cursor-pointer">
-                  {person.estimates.length} {person.estimates.length === 1 ? "answer" : "answers"} assumed
-                </summary>
-                <ul className="mt-1 flex flex-col gap-0.5 pl-3">
-                  {person.estimates.map((item) => (
-                    <li key={item.question}>
-                      {item.ask}: {typeof item.assumed === "boolean" ? (item.assumed ? "yes" : "no") : rules.questions.get(item.question)?.type === "money" ? formatMoney(item.assumed) : item.assumed}
-                    </li>
-                  ))}
-                </ul>
-              </details>
-            ) : null}
-          </section>
-        );
-      })}
+    <div className="flex flex-col gap-1.5">
+      <ul className="flex flex-col">
+        {person.lines.map((line) => (
+          <ResultLine key={line.id} line={line} explain={() => evaluation.explain(person.personId, `line.${line.id}`)} rules={rules} />
+        ))}
+      </ul>
+      {person.missing.length + person.unhandled.length > 0 ? (
+        <ul className="flex flex-col gap-0.5 text-xs text-muted-foreground">
+          {person.missing.map((item) => (
+            <li key={item.question}>Needed: {item.ask}</li>
+          ))}
+          {person.unhandled.map((note) => (
+            <li key={note}>{note}</li>
+          ))}
+        </ul>
+      ) : null}
+      {person.estimates.length > 0 ? (
+        <details className="text-xs text-muted-foreground">
+          <summary className="cursor-pointer">
+            {person.estimates.length} {person.estimates.length === 1 ? "answer" : "answers"} assumed
+          </summary>
+          <ul className="mt-1 flex flex-col gap-0.5 pl-3">
+            {person.estimates.map((item) => (
+              <li key={item.question}>
+                {item.ask}: {typeof item.assumed === "boolean" ? (item.assumed ? "yes" : "no") : rules.questions.get(item.question)?.type === "money" ? formatMoney(item.assumed) : item.assumed}
+              </li>
+            ))}
+          </ul>
+        </details>
+      ) : null}
     </div>
   );
 }

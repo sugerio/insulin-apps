@@ -40,8 +40,12 @@ async function couple() {
 
 /** A PDF's bytes: only its first bytes matter to the app; `tag` makes each file different. */
 const pdf = (tag: string) => new TextEncoder().encode(`%PDF-1.4\n% ${tag}\n%%EOF\n`) as Uint8Array<ArrayBuffer>;
-const upload = (bytes: Uint8Array<ArrayBuffer>, name = "slip.pdf", contentType = "application/pdf", as?: typeof VIEWER) =>
-  server.call("POST", "/api/years/2025/documents", { raw: bytes, headers: { "Content-Type": contentType, "X-File-Name": encodeURIComponent(name) }, ...(as ? { as } : {}) });
+const upload = (bytes: Uint8Array<ArrayBuffer>, name = "slip.pdf", contentType = "application/pdf", as?: typeof VIEWER, personId?: string) =>
+  server.call("POST", "/api/years/2025/documents", {
+    raw: bytes,
+    headers: { "Content-Type": contentType, "X-File-Name": encodeURIComponent(name), ...(personId ? { "X-Person-Id": personId } : {}) },
+    ...(as ? { as } : {}),
+  });
 
 const T4 = { type: "T4", person: "SAM MARTIN", issuer: "Island Grocers", boxes: { 14: "31,000.00", 16: "1636.25", 22: "$2,400.00", 99: "5" }, unsure: ["16"] };
 
@@ -49,9 +53,12 @@ describe("uploading a slip", () => {
   it("reads it into unconfirmed slips for the adult named on it", async () => {
     const { sam } = await couple();
     answers.push({ kind: "read", taxYear: 2025, slips: [T4], model: "claude-opus-5-5" });
-    const result = await json<UploadResult>(upload(pdf("one"), "T4 Sam.pdf"));
-    expect(result.document).toMatchObject({ name: "T4 Sam.pdf", status: "read", message: "T4 from Island Grocers for Sam Martin" });
-    expect(result.year.steps.upload).toBe("done");
+    const result = await json<UploadResult>(upload(pdf("one"), "T4 Sam.pdf", undefined, undefined, sam.id));
+    expect(result.document).toMatchObject({ name: "T4 Sam.pdf", status: "read", message: "T4 from Island Grocers", personId: sam.id });
+    expect(result.year.returns.map((each) => [each.personId, each.steps.upload])).toEqual([
+      [result.year.adults[0]!.personId, "todo"],
+      [sam.id, "done"],
+    ]);
     const [slip] = (await json<SlipList>(server.call("GET", "/api/years/2025/slips"))).slips;
     // Box 99 isn't a T4 box: dropped. Amounts lose their $ and commas.
     expect(slip).toMatchObject({ personId: sam.id, source: "ai", status: "unconfirmed", boxes: { 14: "31000", 16: "1636.25", 22: "2400" }, unsure: ["16"], documentId: result.document.id });
@@ -108,12 +115,32 @@ describe("uploading a slip", () => {
     expect((await json<UploadResult>(upload(pdf("broken")))).document.status).toBe("read");
   });
 
-  it("gives a slip with no matching name to the person preparing, to be checked", async () => {
-    const { alex } = await couple();
+  it("puts a slip with the other adult's name in their return, and says so", async () => {
+    const { alex, sam } = await couple();
+    answers.push({ kind: "read", taxYear: 2025, slips: [T4], model: "m" });
+    const result = await json<UploadResult>(upload(pdf("sam's slip"), "slip.pdf", undefined, undefined, alex.id));
+    expect(result.document).toMatchObject({ personId: alex.id, message: "T4 from Island Grocers, added to Sam Martin's return" });
+    expect(result.document.slips[0]!.personId).toBe(sam.id);
+    // The slip is Sam's, read from a file: Sam's upload step is done; Alex uploaded it, so Alex's is too.
+    expect(result.year.returns.map((each) => each.steps.upload)).toEqual(["done", "done"]);
+  });
+
+  it("keeps a slip with no matching name in the return it was uploaded in", async () => {
+    const { sam } = await couple();
     answers.push({ kind: "read", taxYear: 2025, slips: [{ ...T4, person: "Jordan Lee" }], model: "m" });
-    const result = await json<UploadResult>(upload(pdf("other name")));
-    expect(result.document.message).toBe("T4 from Island Grocers for Alex Martin (check whose it is)");
-    expect(result.document.slips[0]!.personId).toBe(alex.id);
+    const result = await json<UploadResult>(upload(pdf("other name"), "slip.pdf", undefined, undefined, sam.id));
+    expect(result.document.message).toBe("T4 from Island Grocers");
+    expect(result.document.slips[0]!.personId).toBe(sam.id);
+    // Without a person, a file goes into the return of the person preparing.
+    answers.push({ kind: "read", taxYear: 2025, slips: [{ ...T4, person: "Jordan Lee", issuer: "Other Co" }], model: "m" });
+    const unnamed = await json<UploadResult>(upload(pdf("no person")));
+    expect(unnamed.document.personId).toBe(unnamed.year.adults[0]!.personId);
+  });
+
+  it("refuses a return that isn't an adult's of the year, before reading", async () => {
+    await couple();
+    expect((await upload(pdf("x"), "slip.pdf", undefined, undefined, crypto.randomUUID())).status).toBe(400);
+    expect(contexts).toHaveLength(0);
   });
 
   it("refuses a file that isn't a PDF, PNG or JPEG, or isn't what it says, and a viewer", async () => {

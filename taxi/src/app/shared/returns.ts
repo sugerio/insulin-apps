@@ -57,8 +57,12 @@ export const updateSlipSchema = z
   });
 export type UpdateSlip = z.infer<typeof updateSlipSchema>;
 
-/** A change that needs nothing but the revision it is based on: removing a slip, confirming the slips. */
+/** A change that needs nothing but the revision it is based on: removing a slip. */
 export const revisionBodySchema = z.strictObject({ revision: revisionSchema });
+
+/** Confirming slips: one adult's, or with no `personId` every adult's. */
+export const confirmSlipsSchema = z.strictObject({ revision: revisionSchema, personId: idSchema.optional() });
+export type ConfirmSlips = z.infer<typeof confirmSlipsSchema>;
 
 /** An answer: money as decimal text, yes or no, a choice's option; null clears it. */
 export const answerValueSchema = z.union([z.string().max(40), z.boolean(), z.null()]);

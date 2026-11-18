@@ -81,7 +81,7 @@ describe("slips", () => {
   it("are added unconfirmed, read by the engine, and confirmed all at once", async () => {
     const { alex, revision } = await year();
     const added = await json<TaxYear>(server.call("POST", "/api/years/2025/slips", { body: { revision, personId: alex.id, type: "T4", issuer: "Maple Corp", boxes: T4 } }), 201);
-    expect(added.steps.confirm).toBe("todo");
+    expect(added.returns[0]!.steps.confirm).toBe("todo");
     const list = await json<SlipList>(server.call("GET", "/api/years/2025/slips", { as: VIEWER }));
     expect(list.slips).toEqual([
       expect.objectContaining({ personId: alex.id, type: "T4", issuer: "Maple Corp", boxes: { 14: "60000", 16: "3361.75", 18: "984", 22: "9000" }, status: "unconfirmed" }),
@@ -89,13 +89,13 @@ describe("slips", () => {
     expect(lineOf(await estimate(), alex.id, "T1.15000")).toMatchObject({ value: "60000" });
 
     const confirmed = await json<TaxYear>(server.call("POST", "/api/years/2025/slips/confirm", { body: { revision: added.revision } }));
-    expect(confirmed.steps.confirm).toBe("done");
+    expect(confirmed.returns[0]!.steps.confirm).toBe("done");
     const [slip] = (await json<SlipList>(server.call("GET", "/api/years/2025/slips"))).slips;
     expect(slip).toMatchObject({ status: "confirmed", confirmedAt: 1_767_225_600_000 });
 
     // Any change sends it back to unconfirmed.
     const changed = await json<TaxYear>(server.call("PATCH", `/api/years/2025/slips/${slip!.id}`, { body: { revision: confirmed.revision, boxes: { ...T4, 22: "9500" } } }));
-    expect(changed.steps.confirm).toBe("todo");
+    expect(changed.returns[0]!.steps.confirm).toBe("todo");
     expect((await json<SlipList>(server.call("GET", "/api/years/2025/slips"))).slips[0]).toMatchObject({ status: "unconfirmed", boxes: expect.objectContaining({ 22: "9500" }) });
 
     const removed = await json<TaxYear>(server.call("DELETE", `/api/years/2025/slips/${slip!.id}`, { body: { revision: changed.revision } }));
@@ -142,16 +142,16 @@ describe("the steps", () => {
       hasChildCare: false,
     };
     let current = await json<TaxYear>(server.call("PUT", "/api/years/2025/answers", { body: { revision, personId: alex.id, answers: applies } }));
-    expect(current.steps).toMatchObject({ household: "done", upload: "todo", applies: "done", confirm: "todo", deductions: "todo", finish: "todo" });
+    expect(current.returns[0]!.steps).toMatchObject({ household: "done", upload: "todo", applies: "done", confirm: "todo", deductions: "todo", finish: "todo" });
     current = await json<TaxYear>(
       server.call("PUT", "/api/years/2025/answers", {
         body: { revision: current.revision, personId: alex.id, answers: { rrspDeduction: "0", fhsaDeduction: "0", medicalExpenses: "0", donations: "0", unusedTuition: "0" } },
       }),
     );
     // Alex is married and Sam's return isn't prepared here: Sam's net income is still needed.
-    expect(current.steps.deductions).toBe("todo");
+    expect(current.returns[0]!.steps.deductions).toBe("todo");
     current = await json<TaxYear>(server.call("PUT", "/api/years/2025/answers", { body: { revision: current.revision, personId: alex.id, answers: { spouseNetIncome: "12000" } } }));
-    expect(current.steps.deductions).toBe("done");
+    expect(current.returns[0]!.steps.deductions).toBe("done");
   });
 
   it("count a slip found as the answer to its question, and a yes without the slip as missing", async () => {
@@ -163,11 +163,34 @@ describe("the steps", () => {
       }),
     );
     // A T4 is said to exist but isn't here yet.
-    expect(current.steps.applies).toBe("todo");
+    expect(current.returns[0]!.steps.applies).toBe("todo");
     current = await json<TaxYear>(server.call("POST", "/api/years/2025/slips", { body: { revision: current.revision, personId: alex.id, type: "T4", issuer: "Maple Corp", boxes: T4 } }), 201);
-    expect(current.steps.applies).toBe("done");
+    expect(current.returns[0]!.steps.applies).toBe("done");
     // With the T4 here, the employment question needs no answer at all.
     current = await json<TaxYear>(server.call("PUT", "/api/years/2025/answers", { body: { revision: current.revision, personId: alex.id, answers: { hasEmploymentIncome: null } } }));
-    expect(current.steps.applies).toBe("done");
+    expect(current.returns[0]!.steps.applies).toBe("done");
+  });
+
+  it("are each adult's own: one return's slips and facts don't hold up the other's", async () => {
+    const { alex, sam } = await year(true);
+    let current = await json<TaxYear>(server.call("GET", "/api/years/2025"));
+    const stepOf = (view: TaxYear, personId: string, step: keyof TaxYear["returns"][number]["steps"]) => view.returns.find((each) => each.personId === personId)!.steps[step];
+    current = await json<TaxYear>(server.call("POST", "/api/years/2025/slips", { body: { revision: current.revision, personId: alex.id, type: "T4", issuer: "Maple Corp", boxes: T4 } }), 201);
+    current = await json<TaxYear>(server.call("POST", "/api/years/2025/slips", { body: { revision: current.revision, personId: sam.id, type: "T4", issuer: "Cafe", boxes: { 14: "9000" } } }), 201);
+    current = await json<TaxYear>(server.call("POST", "/api/years/2025/slips/confirm", { body: { revision: current.revision, personId: alex.id } }));
+    expect([stepOf(current, alex.id, "confirm"), stepOf(current, sam.id, "confirm")]).toEqual(["done", "todo"]);
+    const slips = (await json<SlipList>(server.call("GET", "/api/years/2025/slips"))).slips;
+    expect(Object.fromEntries(slips.map((slip) => [slip.personId, slip.status]))).toEqual({ [alex.id]: "confirmed", [sam.id]: "unconfirmed" });
+    // Sam's province missing holds up only Sam's first step; a status missing would hold up both.
+    current = await json<TaxYear>(
+      server.call("PUT", "/api/years/2025/household", { body: { revision: current.revision, maritalStatus: "married", adults: [{ personId: sam.id, province: null, residentAllYear: true }] } }),
+    );
+    expect([stepOf(current, alex.id, "household"), stepOf(current, sam.id, "household")]).toEqual(["done", "todo"]);
+    current = await json<TaxYear>(
+      server.call("PUT", "/api/years/2025/household", { body: { revision: current.revision, maritalStatus: null, adults: [{ personId: sam.id, province: "ON", residentAllYear: true }] } }),
+    );
+    expect([stepOf(current, alex.id, "household"), stepOf(current, sam.id, "household")]).toEqual(["todo", "todo"]);
+    // Confirming for someone outside the year is refused.
+    expect((await server.call("POST", "/api/years/2025/slips/confirm", { body: { revision: current.revision, personId: crypto.randomUUID() } })).status).toBe(400);
   });
 });

@@ -3,25 +3,25 @@ import { Link, useNavigate } from "react-router";
 import { FileUp } from "lucide-react";
 import { canPrepare, type Estimate, type Slip, type SlipList } from "#shared";
 import { Button } from "@/components/ui/button.tsx";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card.tsx";
+import { Card, CardContent } from "@/components/ui/card.tsx";
 import { Label } from "@/components/ui/label.tsx";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group.tsx";
 import { ApiError, describeError } from "../api/client.ts";
 import { useMe } from "../auth/AuthProvider.tsx";
 import { Banner, ResourceView } from "../components/Feedback.tsx";
-import { StepLayout, useAdults } from "../components/StepLayout.tsx";
-import { stepPath, useYear } from "../components/YearFrame.tsx";
+import { StepLayout } from "../components/StepLayout.tsx";
+import { stepPath, stepsOf, useReturn, useYear } from "../components/YearFrame.tsx";
 import { saveAnswersFor } from "../lib/saveAnswers.ts";
 import { uploadFile, uploadType } from "../lib/upload.ts";
 import { useEstimate, useSlips } from "../lib/useYearData.ts";
 import type { Question } from "../shared/engine/rules.ts";
 import { rulesFor } from "../shared/rules/index.ts";
 
-// Step 3, `/returns/:year/applies`: for each adult, what their documents show and what they don't. The year's rules
-// list the kinds of income and expenses to ask about (`step: applies` in questions.yaml). A question with a `slip` is
-// answered by finding that slip: found ones are listed with their file; for the others the person says whether they
-// have one, and a yes without the slip is missing, to upload right here or type in at step 4. Questions without a slip
-// name what the app doesn't handle.
+// Step 3, `/returns/:year/:personId/applies`: what the open return's documents show and what they don't. The year's
+// rules list the kinds of income and expenses to ask about (`step: applies` in questions.yaml). A question with a
+// `slip` is answered by finding that slip: found ones are listed with their file; for the others the person says
+// whether they have one, and a yes without the slip is missing, to upload right here or type in at step 4. Questions
+// without a slip name what the app doesn't handle.
 
 export function AppliesStep() {
   const { year } = useYear();
@@ -36,57 +36,47 @@ export function AppliesStep() {
   );
 }
 
-type Values = Record<string, Record<string, boolean | null>>;
-
 function AppliesForm({ estimate, slips }: { estimate: Estimate; slips: SlipList }) {
   const me = useMe();
   const navigate = useNavigate();
   const { year, replace, reload } = useYear();
-  const adults = useAdults();
+  const { person } = useReturn();
   const editable = canPrepare(me);
   const rules = rulesFor(year.year)!;
   const questions = [...rules.questions.values()].filter((question) => question.step === "applies");
   const topics = questions.filter((question) => question.slip !== undefined);
   const notHandled = questions.filter((question) => question.slip === undefined);
-  const slipsOf = (personId: string, type: string) => slips.slips.filter((slip) => slip.personId === personId && slip.type === type);
-  const [values, setValues] = useState<Values>(() =>
-    Object.fromEntries(
-      adults.map((adult) => {
-        const given = estimate.input.answers[adult.personId] ?? {};
-        return [adult.personId, Object.fromEntries(questions.map((question) => [question.id, typeof given[question.id] === "boolean" ? (given[question.id] as boolean) : null]))];
-      }),
-    ),
-  );
+  const slipsOf = (type: string) => slips.slips.filter((slip) => slip.personId === person.id && slip.type === type);
+  const [values, setValues] = useState<Record<string, boolean | null>>(() => {
+    const given = estimate.input.answers[person.id] ?? {};
+    return Object.fromEntries(questions.map((question) => [question.id, typeof given[question.id] === "boolean" ? (given[question.id] as boolean) : null]));
+  });
   const [state, setState] = useState<{ status: "idle" | "saving" } | { status: "error"; error: unknown }>({ status: "idle" });
-  const set = (personId: string, id: string, value: boolean) => setValues((current) => ({ ...current, [personId]: { ...current[personId], [id]: value } }));
+  const set = (id: string, value: boolean) => setValues((current) => ({ ...current, [id]: value }));
 
   /** The answers to save: every answered question, not the ones a found slip answers. */
-  const answersToSave = () =>
-    Object.fromEntries(
-      Object.entries(values).map(([personId, answers]) => [
-        personId,
-        Object.fromEntries(
-          Object.entries(answers).filter(([id, value]) => {
-            const slip = rules.questions.get(id)?.slip;
-            return value !== null && !(slip && slipsOf(personId, slip).length > 0);
-          }),
-        ),
-      ]),
-    );
+  const answersToSave = () => ({
+    [person.id]: Object.fromEntries(
+      Object.entries(values).filter(([id, value]) => {
+        const slip = rules.questions.get(id)?.slip;
+        return value !== null && !(slip && slipsOf(slip).length > 0);
+      }),
+    ),
+  });
 
   async function save(thenContinue: boolean) {
     setState({ status: "saving" });
     try {
       const saved = await saveAnswersFor(year, answersToSave());
       replace(saved);
-      if (thenContinue && saved.steps.applies === "done") navigate(stepPath(year.year, "confirm"));
+      if (thenContinue && stepsOf(saved, person.id)?.applies === "done") navigate(stepPath(year.year, person.id, "confirm"));
       else setState({ status: "idle" });
     } catch (error) {
       setState({ status: "error", error });
     }
   }
 
-  /** Uploads a missing slip after saving the answers so far, so nothing typed here is lost. */
+  /** Uploads a missing slip into this return after saving the answers so far, so nothing chosen here is lost. */
   async function upload(file: File) {
     const type = uploadType(file);
     if (!type) {
@@ -96,7 +86,7 @@ function AppliesForm({ estimate, slips }: { estimate: Estimate; slips: SlipList 
     setState({ status: "saving" });
     try {
       const saved = await saveAnswersFor(year, answersToSave());
-      const result = await uploadFile(year.year, file, type);
+      const result = await uploadFile(year.year, person.id, file, type);
       replace(result.year.revision > saved.revision ? result.year : saved);
       if (result.document.status !== "read") setState({ status: "error", error: new ApiError(400, "validation_failed", `${file.name}: ${result.document.message}`) });
     } catch (error) {
@@ -104,87 +94,62 @@ function AppliesForm({ estimate, slips }: { estimate: Estimate; slips: SlipList 
     }
   }
 
-  const missing = adults.flatMap((adult) =>
-    topics.filter((topic) => values[adult.personId]?.[topic.id] === true && slipsOf(adult.personId, topic.slip!).length === 0).map((topic) => `${topic.slip} for ${adult.person.name}`),
-  );
-  const unanswered = adults.some((adult) =>
-    questions.some((question) => values[adult.personId]?.[question.id] === null && !(question.slip && slipsOf(adult.personId, question.slip).length > 0)),
-  );
+  const found = topics.filter((topic) => slipsOf(topic.slip!).length > 0);
+  const notFound = topics.filter((topic) => slipsOf(topic.slip!).length === 0);
+  const missing = notFound.filter((topic) => values[topic.id] === true).map((topic) => topic.slip!);
+  const unanswered = questions.some((question) => values[question.id] === null && !(question.slip && slipsOf(question.slip).length > 0));
   const stale = state.status === "error" && state.error instanceof ApiError && state.error.status === 409;
 
   return (
     <>
       {missing.length > 0 ? (
         <Banner kind="warning" title="Still missing">
-          {missing.join(", ")}. Upload each one below, or type it in at step 4.
+          {missing.map((type) => `the ${type}`).join(", ")}. Upload each one below, or type it in at step 4.
         </Banner>
       ) : null}
-      <div className={adults.length > 1 ? "grid gap-4 2xl:grid-cols-2" : "flex flex-col gap-4"}>
-        {adults.map((adult) => {
-          const found = topics.filter((topic) => slipsOf(adult.personId, topic.slip!).length > 0);
-          const notFound = topics.filter((topic) => slipsOf(adult.personId, topic.slip!).length === 0);
-          return (
-            <Card key={adult.personId}>
-              <CardHeader>
-                <CardTitle>
-                  <h2 className="text-base font-semibold">{adult.person.name}</h2>
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="flex flex-col gap-5">
-                <section aria-label={`Found in ${adult.person.name}'s documents`} className="flex flex-col gap-1">
-                  <h3 className="text-sm font-medium">Found in your documents</h3>
-                  {found.length === 0 ? <p className="text-sm text-muted-foreground">No slips yet.</p> : null}
-                  <ul className="flex flex-col divide-y">
-                    {found.flatMap((topic) =>
-                      slipsOf(adult.personId, topic.slip!).map((slip) => <FoundRow key={slip.id} topic={topic} slip={slip} />),
-                    )}
-                  </ul>
-                </section>
-                {notFound.length > 0 ? (
-                  <section aria-label={`Not found for ${adult.person.name}`} className="flex flex-col gap-1">
-                    <h3 className="text-sm font-medium">Not found: do you have these?</h3>
-                    <ul className="flex flex-col divide-y">
-                      {notFound.map((topic) => (
-                        <QuestionRow
-                          key={topic.id}
-                          question={topic}
-                          value={values[adult.personId]?.[topic.id] ?? null}
-                          editable={editable}
-                          onChange={(value) => set(adult.personId, topic.id, value)}
-                          extra={
-                            values[adult.personId]?.[topic.id] === true ? (
-                              <MissingSlip type={topic.slip!} editable={editable} busy={state.status === "saving"} onFile={(file) => void upload(file)} />
-                            ) : null
-                          }
-                        />
-                      ))}
-                    </ul>
-                  </section>
-                ) : null}
-                <section aria-label={`Not handled for ${adult.person.name}`} className="flex flex-col gap-1">
-                  <h3 className="text-sm font-medium">Not handled by this app</h3>
-                  <ul className="flex flex-col divide-y">
-                    {notHandled.map((question) => (
-                      <QuestionRow
-                        key={question.id}
-                        question={question}
-                        value={values[adult.personId]?.[question.id] ?? null}
-                        editable={editable}
-                        onChange={(value) => set(adult.personId, question.id, value)}
-                        extra={
-                          values[adult.personId]?.[question.id] === true ? (
-                            <p className="mt-1 text-xs text-amber-700 dark:text-amber-400">Not handled by this app yet.</p>
-                          ) : null
-                        }
-                      />
-                    ))}
-                  </ul>
-                </section>
-              </CardContent>
-            </Card>
-          );
-        })}
-      </div>
+      <Card>
+        <CardContent className="flex flex-col gap-5">
+          <section aria-label="Found in your documents" className="flex flex-col gap-1">
+            <h2 className="text-sm font-medium">Found in your documents</h2>
+            {found.length === 0 ? <p className="text-sm text-muted-foreground">No slips yet.</p> : null}
+            <ul className="flex flex-col divide-y">
+              {found.flatMap((topic) => slipsOf(topic.slip!).map((slip) => <FoundRow key={slip.id} topic={topic} slip={slip} />))}
+            </ul>
+          </section>
+          {notFound.length > 0 ? (
+            <section aria-label="Not found" className="flex flex-col gap-1">
+              <h2 className="text-sm font-medium">Not found: do you have these?</h2>
+              <ul className="flex flex-col divide-y">
+                {notFound.map((topic) => (
+                  <QuestionRow
+                    key={topic.id}
+                    question={topic}
+                    value={values[topic.id] ?? null}
+                    editable={editable}
+                    onChange={(value) => set(topic.id, value)}
+                    extra={values[topic.id] === true ? <MissingSlip type={topic.slip!} editable={editable} busy={state.status === "saving"} onFile={(file) => void upload(file)} /> : null}
+                  />
+                ))}
+              </ul>
+            </section>
+          ) : null}
+          <section aria-label="Not handled by this app" className="flex flex-col gap-1">
+            <h2 className="text-sm font-medium">Not handled by this app</h2>
+            <ul className="flex flex-col divide-y">
+              {notHandled.map((question) => (
+                <QuestionRow
+                  key={question.id}
+                  question={question}
+                  value={values[question.id] ?? null}
+                  editable={editable}
+                  onChange={(value) => set(question.id, value)}
+                  extra={values[question.id] === true ? <p className="mt-1 text-xs text-amber-700 dark:text-amber-400">Not handled by this app yet.</p> : null}
+                />
+              ))}
+            </ul>
+          </section>
+        </CardContent>
+      </Card>
       {stale ? (
         <Banner kind="error" title="Someone else changed this year" action={<Button variant="outline" size="sm" onClick={reload}>Reload</Button>}>
           {describeError(state.error)}
@@ -246,6 +211,7 @@ function QuestionRow({ question, value, editable, onChange, extra }: { question:
 
 function MissingSlip({ type, editable, busy, onFile }: { type: string; editable: boolean; busy: boolean; onFile: (file: File) => void }) {
   const { year } = useYear();
+  const { person } = useReturn();
   const input = useRef<HTMLInputElement>(null);
   return (
     <div className="mt-2 flex flex-wrap items-center gap-2">
@@ -268,7 +234,7 @@ function MissingSlip({ type, editable, busy, onFile }: { type: string; editable:
               event.target.value = "";
             }}
           />
-          <Link className="text-xs underline underline-offset-2" to={stepPath(year.year, "confirm")}>
+          <Link className="text-xs underline underline-offset-2" to={stepPath(year.year, person.id, "confirm")}>
             Type it in instead
           </Link>
         </>

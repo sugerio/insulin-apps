@@ -44,34 +44,47 @@ async function seed(server: TestServer, { applies = false, slip = false } = {}) 
   return alex;
 }
 
+/** Where a step of Alex's return is, once the old link to it has opened. */
+const stepOf = (router: { state: { location: { pathname: string } } }, step: string) => router.state.location.pathname.replace(/[^/]+$/, step);
+
 const estimate = async (server: TestServer) => (await (await server.call("GET", "/api/years/2025/estimate")).json()) as Estimate;
+
+describe("a return", () => {
+  it("opens from a link to a step without a person, as the person preparing's return", async () => {
+    let alex: Person | undefined;
+    const { router } = await renderApp("/returns/2025/applies", { seed: async (s) => void (alex = await seed(s)) });
+    await waitFor(() => expect(router.state.location.pathname).toBe(`/returns/2025/${alex!.id}/applies`));
+    expect(await screen.findByText("Alex Martin", { selector: "span" })).toBeTruthy();
+  });
+});
 
 describe("What applies", () => {
   it("lists the slips found, and asks only about the kinds of income not found", async () => {
     await renderApp("/returns/2025/applies", { seed: (s) => seed(s, { slip: true }).then(() => undefined) });
-    const found = await screen.findByRole("region", { name: "Found in Alex Martin's documents" });
+    const found = await screen.findByRole("region", { name: "Found in your documents" });
     expect(within(found).getByText("Employment income")).toBeTruthy();
     expect(within(found).getByText(/T4 from Maple Corp/)).toBeTruthy();
     expect(within(found).getByText("Typed in")).toBeTruthy();
-    const notFound = screen.getByRole("region", { name: "Not found for Alex Martin" });
+    const notFound = screen.getByRole("region", { name: "Not found" });
     expect(within(notFound).queryByText("Employment income")).toBeNull();
     expect(within(notFound).getByText("Interest or dividends")).toBeTruthy();
   });
 
   it("marks a yes without its slip as missing, and moves on once everything is answered", async () => {
     const { router, server } = await renderApp("/returns/2025/applies", { seed: (s) => seed(s).then(() => undefined) });
-    const notFound = await screen.findByRole("region", { name: "Not found for Alex Martin" });
+    const notFound = await screen.findByRole("region", { name: "Not found" });
     const [employmentYes] = within(notFound).getAllByRole("radio", { name: "Yes" });
     fireEvent.click(employmentYes!);
     expect(screen.getByText("Missing: the T4")).toBeTruthy();
-    expect(screen.getByText(/T4 for Alex Martin\. Upload each one below/)).toBeTruthy();
+    expect(screen.getByText(/the T4\. Upload each one below/)).toBeTruthy();
     for (const radio of screen.getAllByRole("radio", { name: "No" })) fireEvent.click(radio);
     expect(screen.queryByText("Missing: the T4")).toBeNull();
-    const notHandled = screen.getByRole("region", { name: "Not handled for Alex Martin" });
+    const notHandled = screen.getByRole("region", { name: "Not handled by this app" });
     fireEvent.click(within(notHandled).getAllByRole("radio", { name: "Yes" })[0]!);
     expect(screen.getByText("Not handled by this app yet.")).toBeTruthy();
+    const confirm = stepOf(router, "confirm");
     fireEvent.click(screen.getByRole("button", { name: "Save and continue" }));
-    await waitFor(() => expect(router.state.location.pathname).toBe("/returns/2025/confirm"));
+    await waitFor(() => expect(router.state.location.pathname).toBe(confirm));
     const answers = Object.values((await estimate(server)).input.answers)[0]!;
     expect(answers).toMatchObject({ hasSelfEmployment: true, hasEmploymentIncome: false, hasChildCare: false });
   });
@@ -81,12 +94,12 @@ describe("What applies", () => {
       read: async () => ({ kind: "read", taxYear: 2025, model: "m", slips: [{ type: "T5", person: "Alex Martin", issuer: "Lakeview Credit Union", boxes: { 13: "1250.00" }, unsure: [] }] }),
     };
     await renderApp("/returns/2025/applies", { seed: (s) => seed(s).then(() => undefined), server: { reader: () => reader } });
-    const notFound = await screen.findByRole("region", { name: "Not found for Alex Martin" });
+    const notFound = await screen.findByRole("region", { name: "Not found" });
     fireEvent.click(within(notFound).getAllByRole("radio", { name: "Yes" })[1]!);
     fireEvent.change(screen.getByLabelText("Upload the T5"), { target: { files: [new File(["%PDF-1.4 t5"], "t5.pdf", { type: "application/pdf" })] } });
     // Saving the answers, the upload and reloading the year take a moment.
-    await waitFor(() => expect(within(screen.getByRole("region", { name: "Found in Alex Martin's documents" })).getByText("Interest or dividends")).toBeTruthy(), { timeout: 5000 });
-    const found = screen.getByRole("region", { name: "Found in Alex Martin's documents" });
+    await waitFor(() => expect(within(screen.getByRole("region", { name: "Found in your documents" })).getByText("Interest or dividends")).toBeTruthy(), { timeout: 5000 });
+    const found = screen.getByRole("region", { name: "Found in your documents" });
     expect(within(found).getByRole("link", { name: "View file" })).toBeTruthy();
   });
 });
@@ -116,6 +129,31 @@ describe("Confirm", () => {
     expect(boxes.slice(0, 4)).toEqual(["Box 14", "Box 16", "Box 16A", "Box 18"]);
   });
 
+  it("shows only the open return's slips, and moves one to the other adult's return", async () => {
+    let ids: { alex: string; sam: string } | undefined;
+    const { server } = await renderApp("/returns/2025/confirm", {
+      seed: async (s) => {
+        const add = async (name: string, relationship: string, birthDate: string) =>
+          ((await (await s.call("POST", "/api/people", { as: OWNER, body: { name, relationship, birthDate } })).json()) as Person).id;
+        const alex = await add("Alex Martin", "self", "1985-04-02");
+        const sam = await add("Sam Martin", "spouse", "1987-09-15");
+        ids = { alex, sam };
+        await s.call("POST", "/api/years", { as: OWNER, body: { year: 2025, people: [alex, sam] } });
+        await s.call("POST", "/api/years/2025/slips", { as: OWNER, body: { revision: 1, personId: alex, type: "T4", issuer: "Maple Corp", boxes: { 14: "60000" } } });
+        await s.call("POST", "/api/years/2025/slips", { as: OWNER, body: { revision: 2, personId: sam, type: "T4", issuer: "Island Grocers", boxes: { 14: "31000" } } });
+      },
+    });
+    expect(await screen.findByText("T4 · Maple Corp")).toBeTruthy();
+    expect(screen.queryByText("T4 · Island Grocers")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Move T4 from Maple Corp to Sam Martin's return" }));
+    await waitFor(() => expect(screen.queryByText("T4 · Maple Corp")).toBeNull());
+    const slips = (await (await server.call("GET", "/api/years/2025/slips")).json()) as { slips: { personId: string; issuer: string }[] };
+    expect(slips.slips.map((slip) => [slip.issuer, slip.personId]).sort()).toEqual([
+      ["Island Grocers", ids!.sam],
+      ["Maple Corp", ids!.sam],
+    ]);
+  });
+
   it("shows a viewer the slips without anything to change", async () => {
     await renderApp("/returns/2025/confirm", { as: VIEWER, seed: (s) => seed(s, { applies: true, slip: true }).then(() => undefined) });
     expect(await screen.findByText("T4 · Maple Corp")).toBeTruthy();
@@ -131,8 +169,9 @@ describe("Deductions", () => {
     expect(screen.queryByLabelText(/Tuition to transfer/)).toBeNull();
     expect(screen.queryByLabelText(/spouse's or partner's 2025 net income/)).toBeNull();
     fireEvent.change(rrsp, { target: { value: "2,500" } });
+    const finish = stepOf(router, "finish");
     fireEvent.click(screen.getByRole("button", { name: "Save and continue" }));
-    await waitFor(() => expect(router.state.location.pathname).toBe("/returns/2025/finish"));
+    await waitFor(() => expect(router.state.location.pathname).toBe(finish));
     const answers = Object.values((await estimate(server)).input.answers)[0]!;
     expect(answers).toMatchObject({ rrspDeduction: "2500", donations: "0", medicalExpenses: "0" });
   });

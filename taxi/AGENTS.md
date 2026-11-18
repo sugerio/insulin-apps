@@ -11,9 +11,11 @@ CRA's own forms for the person to sign and mail. It runs on the Insulin app temp
 Nitro, deployed as a Cloudflare Worker with one D1 database. Users, roles and permissions come from the Insulin
 platform; the organization is the tenant.
 
-A tax year has six steps: household, upload documents, what applies, confirm, deductions, finish. **Only the household
-step is built.** The other five are pages that say what they will do (`src/app/pages/LaterStep.tsx`); the server
-reports them as `not_built`. The tax engine, AI reading of documents and CRA form filling come in later changes.
+Each adult of a tax year (the person preparing, and their spouse when in the year) has a return with six steps:
+personal info, upload documents, what applies, confirm, deductions, finish. The app shows one return at a time, at
+`/returns/:year/:personId/:step`, with a switcher to the other; the server reports each return's steps
+(`TaxYear.returns`). The engine works out both returns together, so the couple's credits and transfers hold. CRA form
+filling comes in a later change.
 
 ## Commands
 
@@ -29,7 +31,7 @@ Run from `taxi/` unless noted.
 | To see how a household is computed | `npm run rules:try -- test/golden/ca-2025/single-employee-on.json` (each result line and why) |
 | After changing `src/app/db/schema.ts` | `npm run db:generate` (drizzle-kit 0.31.11 with drizzle-orm 0.45.3, as in Cap Table's README, "Database changes") |
 | To check what publishing will build | `NITRO_PRESET=cloudflare_module npm run build` |
-| To try it | `npm run dev` (port 3000; you are the "Preview owner", a stand-in owner) |
+| To try it | `npm run dev` (port 3000; you are the "Preview owner", a stand-in owner). If 3000 is taken, `npx vite --configLoader native --port 3010` |
 | From the repository root, before you finish | `node .github/scripts/check-insulin-app.mjs taxi` and `node .github/scripts/check-public-content.mjs` |
 
 ## Where things live
@@ -45,7 +47,7 @@ Run from `taxi/` unless noted.
 | `src/app/server/app.ts` | The Hono app: security headers, the tick (`POST /api/scheduled`), same-origin and identity checks, and every route of the table mounted with its permission, params, body and answer checked |
 | `src/app/server/lib/` | `identity.ts` (the platform's headers, the only reader of them), `household.ts` (D1 reads and writes, the issues of a year), `returns.ts` (answers and slips), `workspace.ts` (a year's answers and slips, the engine input, each step's state), `estimate.ts`, `documents.ts` (uploads: checks, D1 chunks, duplicates, matching slips to people), `reader.ts` (the Claude call: prompt from slips.yaml, structured output; tests inject a reader with recorded answers), `ai.ts` (the reader through `integrationFetch('anthropic')`), `usage-metrics.ts` (the hourly report), `http.ts` (errors, JSON bodies) |
 | `src/app/db/` | `schema.ts`, `client.ts`, `migrations/` (generated) |
-| `src/app/router.tsx`, `src/app/pages/`, `src/app/components/` | The React app: Returns (`/returns`, with Start a year), Household (`/household`, the people), a year's steps (`/returns/:year/:step`, framed by `YearFrame.tsx`), Docs; `PeopleEditor.tsx` holds the people list and the picker of who is in a year |
+| `src/app/router.tsx`, `src/app/pages/`, `src/app/components/` | The React app: Returns (`/returns`, with Start a year), Household (`/household`, the people), one person's return (`/returns/:year/:personId/:step`, framed by `YearFrame.tsx`: the year, its estimate and slips, the open return and the switcher; an old `/returns/:year/:step` link opens the person preparing's return), Docs; `PeopleEditor.tsx` holds the people list and the picker of who is in a year |
 | `src/app/components/AppLayout.tsx`, `src/app/lib/navigation.ts`, `lib/platform.ts` | The shell: the two-level navigation, Docs and Settings, the organization switcher and the person |
 | `src/app/pages/docs/`, `components/Docs.tsx` | The in-app Docs: one static TSX file per topic |
 | `docs/public/` | The public docs at `insulinapps.com/docs/taxi/` |

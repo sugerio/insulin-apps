@@ -4,6 +4,7 @@ import {
   PROVINCES,
   SUPPORTED_PROVINCES,
   canPrepare,
+  isIssueOf,
   maritalStatusesFor,
   routes,
   type MaritalStatus,
@@ -20,34 +21,25 @@ import { ApiError, apiRequest, describeError } from "../api/client.ts";
 import { MemberPicker } from "../components/PeopleEditor.tsx";
 import { useMe } from "../auth/AuthProvider.tsx";
 import { Banner } from "../components/Feedback.tsx";
-import { Page, PageHead } from "../components/Page.tsx";
-import { StepNav, stepPath, useYear } from "../components/YearFrame.tsx";
+import { StepLayout } from "../components/StepLayout.tsx";
+import { stepPath, stepsOf, useReturn, useYear } from "../components/YearFrame.tsx";
 import { MARITAL_STATUS_LABELS, PROVINCE_LABELS, RELATIONSHIP_LABELS, formatDate } from "../lib/format.ts";
 
-// Step 1, `/returns/:year/household`: who is in the year, and the facts no document tells the app. The people come
-// from the Household page; the year picks among them (your spouse in the year means both returns are prepared
-// together). The year's facts (marital status on December 31, each adult's province and residency) are saved
-// together, under the year's revision.
+// Step 1, `/returns/:year/:personId/household`: the facts of the open return that no document tells the app: the
+// adult's province and residency, and the two facts the year's returns share (the marital status on December 31, and
+// who is in the year). The people and how each is related come from the Household page. The facts are saved together,
+// under the year's revision.
 
 export function HouseholdStep() {
   const { year } = useYear();
   // Set once "Save and continue" stops on something missing; kept here because a save remounts the facts below.
   const [showMissing, setShowMissing] = useState(false);
   return (
-    <Page title={`${year.year} household`} crumbs={[["Returns", "/returns"], [String(year.year), `/returns/${year.year}`], ["Household"]]} wide>
-      <div className="grid items-start gap-5 lg:grid-cols-[220px_minmax(0,1fr)] xl:grid-cols-[220px_minmax(0,1fr)_300px]">
-        <StepNav />
-        <div className="flex min-w-0 flex-col gap-5">
-          <PageHead title={`Your household in ${year.year}`} />
-          <YearPeopleCard />
-          {/* A new revision (a save, or someone else's) starts the form again from what is stored. */}
-          <YearFacts key={year.revision} showMissing={showMissing} onMissing={() => setShowMissing(true)} />
-        </div>
-        <aside className="lg:col-start-2 xl:col-start-auto">
-          <TaxNotes year={year.year} />
-        </aside>
-      </div>
-    </Page>
+    <StepLayout step="household" title="Personal info" aside={<TaxNotes year={year.year} />}>
+      <YearPeopleCard />
+      {/* A new revision (a save, or someone else's) starts the form again from what is stored. */}
+      <YearFacts key={year.revision} showMissing={showMissing} onMissing={() => setShowMissing(true)} />
+    </StepLayout>
   );
 }
 
@@ -63,7 +55,7 @@ function TaxNotes({ year }: { year: number }) {
       <CardContent className="flex flex-col gap-3 text-sm text-muted-foreground">
         <p>
           <b className="text-foreground">Spouse in the year.</b> Each of you files a return. Prepared together, credits such as donations and
-          medical expenses go to whichever of you saves more.
+          medical expenses go to whichever of you saves more. The marital status and the people in the year are the same on both returns.
         </p>
         <p>
           <b className="text-foreground">Marital status.</b> The status on December 31 counts. Married and common-law are taxed the same; the T1
@@ -87,12 +79,13 @@ function TaxNotes({ year }: { year: number }) {
 function YearPeopleCard() {
   const me = useMe();
   const { year, replace } = useYear();
+  const { person: owner } = useReturn();
   const editable = canPrepare(me);
   const [changing, setChanging] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(() => new Set(year.members));
   const [state, setState] = useState<{ status: "idle" | "saving" } | { status: "error"; error: unknown }>({ status: "idle" });
   const members = year.people.filter((person) => year.members.includes(person.id));
-  const addPerson = `/household?back=${encodeURIComponent(stepPath(year.year, "household"))}`;
+  const addPerson = `/household?back=${encodeURIComponent(stepPath(year.year, owner.id, "household"))}`;
 
   async function save() {
     setState({ status: "saving" });
@@ -110,7 +103,7 @@ function YearPeopleCard() {
     <Card>
       <CardHeader>
         <CardTitle>
-          <h2 className="text-base font-semibold">Who is in {year.year}</h2>
+          <h2 className="text-base font-semibold">Household in {year.year}</h2>
         </CardTitle>
         {editable && !changing ? (
           <CardAction>
@@ -151,7 +144,7 @@ function YearPeopleCard() {
               <li key={person.id} className="flex flex-wrap justify-between gap-3 py-2.5 text-sm">
                 <span className="font-medium">{person.name}</span>
                 <span className="text-muted-foreground">
-                  {RELATIONSHIP_LABELS[person.relationship]} · Born {formatDate(person.birthDate)}
+                  {relationTo(owner, person)} · Born {formatDate(person.birthDate)}
                 </span>
               </li>
             ))}
@@ -174,6 +167,7 @@ function YearFacts({ showMissing, onMissing }: { showMissing: boolean; onMissing
   const me = useMe();
   const navigate = useNavigate();
   const { year, replace, reload } = useYear();
+  const { person: owner, adult } = useReturn();
   const editable = canPrepare(me);
   // The Household's spouse or partner, in this year or not: it decides which statuses there are to choose from.
   const partner = year.people.find((person) => person.relationship === "spouse");
@@ -182,39 +176,30 @@ function YearFacts({ showMissing, onMissing }: { showMissing: boolean; onMissing
   const [maritalStatus, setMaritalStatus] = useState<MaritalStatus | null>(() =>
     year.maritalStatus !== null && statuses.includes(year.maritalStatus) ? year.maritalStatus : null,
   );
-  const [adults, setAdults] = useState<Record<string, AdultDraft>>(() =>
-    Object.fromEntries(year.adults.map((adult) => [adult.personId, { province: adult.province, residentAllYear: adult.residentAllYear }])),
-  );
+  const [draft, setDraft] = useState<AdultDraft>({ province: adult.province, residentAllYear: adult.residentAllYear });
   const [state, setState] = useState<{ status: "idle" | "saving" } | { status: "error"; error: unknown }>({ status: "idle" });
-
-  const self = year.people.find((person) => person.relationship === "self");
-  // The year's adults: you, and your spouse when in the year (their returns are prepared together).
-  const prepared = year.adults.map((adult) => year.people.find((person) => person.id === adult.personId)).filter((person): person is Person => person !== undefined);
-  const draftOf = (personId: string): AdultDraft => adults[personId] ?? { province: null, residentAllYear: null };
-  const setAdult = (personId: string, change: Partial<AdultDraft>) => setAdults((current) => ({ ...current, [personId]: { ...draftOf(personId), ...change } }));
 
   async function save(thenContinue: boolean) {
     setState({ status: "saving" });
     try {
       const saved = await apiRequest(routes.saveHousehold, {
         params: { year: year.year },
-        body: {
-          revision: year.revision,
-          maritalStatus,
-          adults: prepared.map((person) => ({ personId: person.id, ...draftOf(person.id) })),
-        },
+        body: { revision: year.revision, maritalStatus, adults: [{ personId: owner.id, ...draft }] },
       });
-      if (thenContinue && saved.steps.household !== "done") onMissing();
+      const done = stepsOf(saved, owner.id)?.household === "done";
+      if (thenContinue && !done) onMissing();
       replace(saved);
-      if (thenContinue && saved.steps.household === "done") navigate(stepPath(year.year, "upload"));
+      if (thenContinue && done) navigate(stepPath(year.year, owner.id, "upload"));
     } catch (error) {
       setState({ status: "error", error });
     }
   }
 
   const stale = state.status === "error" && state.error instanceof ApiError && state.error.status === 409;
-  const blocking = year.issues.filter((issue) => issue.kind === "blocking");
-  const unsupported = year.issues.filter((issue) => issue.kind === "unsupported");
+  // This return's issues: its adult's, and those of the facts the year's returns share.
+  const issues = year.issues.filter((issue) => isIssueOf(issue, owner.id));
+  const blocking = issues.filter((issue) => issue.kind === "blocking");
+  const unsupported = issues.filter((issue) => issue.kind === "unsupported");
 
   return (
     <>
@@ -222,9 +207,7 @@ function YearFacts({ showMissing, onMissing }: { showMissing: boolean; onMissing
         <CardHeader>
           <CardTitle>
             <h2 className="text-base font-semibold" id="marital-status">
-              {partner && self && year.prepareTogether
-                ? `${firstName(self)} and ${firstName(partner)}'s status on December 31, ${year.year}`
-                : `Your marital status on December 31, ${year.year}`}
+              Marital status on December 31, {year.year}
             </h2>
           </CardTitle>
         </CardHeader>
@@ -241,20 +224,14 @@ function YearFacts({ showMissing, onMissing }: { showMissing: boolean; onMissing
             ))}
           </RadioGroup>
           {partner ? null : (
-            <Link to={`/household?back=${encodeURIComponent(`/returns/${year.year}/household`)}`} className="text-sm underline underline-offset-2">
+            <Link to={`/household?back=${encodeURIComponent(stepPath(year.year, owner.id, "household"))}`} className="text-sm underline underline-offset-2">
               Add a spouse or partner
             </Link>
           )}
         </CardContent>
       </Card>
 
-      {prepared.length > 0 ? (
-        <div className="grid gap-4 md:grid-cols-2">
-          {prepared.map((person) => (
-            <AdultCard key={person.id} person={person} draft={draftOf(person.id)} editable={editable} onChange={(change) => setAdult(person.id, change)} />
-          ))}
-        </div>
-      ) : null}
+      <AdultCard draft={draft} editable={editable} onChange={(change) => setDraft((current) => ({ ...current, ...change }))} />
 
       {unsupported.map((issue) => (
         <Banner key={`${issue.code}-${issue.personId ?? ""}`} kind="warning" title="Not handled by this app">
@@ -291,7 +268,7 @@ function YearFacts({ showMissing, onMissing }: { showMissing: boolean; onMissing
           </div>
         ) : (
           <Button asChild variant="outline">
-            <Link to={stepPath(year.year, "upload")}>Next step</Link>
+            <Link to={stepPath(year.year, owner.id, "upload")}>Next step</Link>
           </Button>
         )}
       </div>
@@ -299,14 +276,14 @@ function YearFacts({ showMissing, onMissing }: { showMissing: boolean; onMissing
   );
 }
 
-function AdultCard({ person, draft, editable, onChange }: { person: Person; draft: AdultDraft; editable: boolean; onChange: (change: Partial<AdultDraft>) => void }) {
+function AdultCard({ draft, editable, onChange }: { draft: AdultDraft; editable: boolean; onChange: (change: Partial<AdultDraft>) => void }) {
   const id = useId();
   const others = PROVINCES.filter((province) => !SUPPORTED_PROVINCES.includes(province));
   return (
     <Card>
       <CardHeader>
         <CardTitle>
-          <h2 className="text-base font-semibold">{person.name}</h2>
+          <h2 className="text-base font-semibold">Where you lived</h2>
         </CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
@@ -353,8 +330,12 @@ function AdultCard({ person, draft, editable, onChange }: { person: Person; draf
   );
 }
 
-/** The first word of a person's name, for labels that name both adults. */
-const firstName = (person: Person) => person.name.split(/\s+/)[0] ?? person.name;
+/** How someone in the year is related to the adult whose return is open. */
+function relationTo(owner: Person, person: Person): string {
+  if (person.id === owner.id) return "This return";
+  if (person.relationship === "self") return RELATIONSHIP_LABELS.spouse;
+  return RELATIONSHIP_LABELS[person.relationship];
+}
 
 /** One option of a radio group, drawn as a bordered row that is wholly clickable. */
 function Choice({ value, label }: { value: string; label: string }) {

@@ -1,7 +1,7 @@
 import { useId, useState, type FormEvent } from "react";
 import { Link } from "react-router";
 import { Plus } from "lucide-react";
-import { canPrepare, routes, type Slip, type SlipList } from "#shared";
+import { canPrepare, routes, type Person, type Slip, type SlipList } from "#shared";
 import { Badge } from "@/components/ui/badge.tsx";
 import { Button } from "@/components/ui/button.tsx";
 import { Card, CardAction, CardContent, CardHeader, CardTitle } from "@/components/ui/card.tsx";
@@ -11,37 +11,39 @@ import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select.
 import { ApiError, apiRequest, describeError } from "../api/client.ts";
 import { useMe } from "../auth/AuthProvider.tsx";
 import { Banner, ResourceView } from "../components/Feedback.tsx";
-import { StepLayout, useAdults } from "../components/StepLayout.tsx";
-import { stepPath, useYear } from "../components/YearFrame.tsx";
+import { StepLayout } from "../components/StepLayout.tsx";
+import { stepPath, useReturn, useYear } from "../components/YearFrame.tsx";
 import { byBox, formatMoney } from "../lib/format.ts";
 import { useSlips } from "../lib/useYearData.ts";
 import { rulesFor } from "../shared/rules/index.ts";
 import type { SlipType } from "../shared/engine/rules.ts";
 
-// Step 4, `/returns/:year/confirm`: every slip of the year's adults, entered by hand for now (AI reading comes with
-// step 2). The form for a slip is built from its type in the year's rules (slips.yaml): its boxes as printed.
+// Step 4, `/returns/:year/:personId/confirm`: the slips of the open return, read by AI from the uploads or typed in,
+// to check against the paper slips. The form for a slip is built from its type in the year's rules (slips.yaml): its
+// boxes as printed. A slip that is the other adult's moves to their return.
 
 export function ConfirmStep() {
   const slips = useSlips();
   return (
     <StepLayout step="confirm" title="Confirm your slips">
-      <ResourceView resource={slips}>{(data) => <SlipsByPerson data={data} />}</ResourceView>
+      <ResourceView resource={slips}>{(data) => <ReturnSlips data={data} />}</ResourceView>
     </StepLayout>
   );
 }
 
-function SlipsByPerson({ data }: { data: SlipList }) {
+function ReturnSlips({ data }: { data: SlipList }) {
   const me = useMe();
   const { year, replace, reload } = useYear();
-  const adults = useAdults();
+  const { person } = useReturn();
   const editable = canPrepare(me);
   const [state, setState] = useState<{ status: "idle" | "saving" } | { status: "error"; error: unknown }>({ status: "idle" });
-  const unconfirmed = data.slips.filter((slip) => slip.status === "unconfirmed").length;
+  const slips = data.slips.filter((slip) => slip.personId === person.id);
+  const unconfirmed = slips.filter((slip) => slip.status === "unconfirmed").length;
 
   async function confirmAll() {
     setState({ status: "saving" });
     try {
-      replace(await apiRequest(routes.confirmSlips, { params: { year: year.year }, body: { revision: year.revision } }));
+      replace(await apiRequest(routes.confirmSlips, { params: { year: year.year }, body: { revision: year.revision, personId: person.id } }));
       setState({ status: "idle" });
     } catch (error) {
       setState({ status: "error", error });
@@ -50,9 +52,7 @@ function SlipsByPerson({ data }: { data: SlipList }) {
 
   return (
     <>
-      {adults.map((adult) => (
-        <PersonSlips key={adult.personId} personId={adult.personId} name={adult.person.name} slips={data.slips.filter((slip) => slip.personId === adult.personId)} editable={editable} />
-      ))}
+      <PersonSlips personId={person.id} slips={slips} editable={editable} />
       {state.status === "error" ? (
         state.error instanceof ApiError && state.error.status === 409 ? (
           <Banner kind="error" title="Someone else changed this year" action={<Button variant="outline" size="sm" onClick={reload}>Reload</Button>}>
@@ -69,22 +69,23 @@ function SlipsByPerson({ data }: { data: SlipList }) {
           </Button>
         ) : null}
         <Button asChild>
-          <Link to={stepPath(year.year, "deductions")}>Next: deductions</Link>
+          <Link to={stepPath(year.year, person.id, "deductions")}>Next: deductions</Link>
         </Button>
       </div>
     </>
   );
 }
 
-function PersonSlips({ personId, name, slips, editable }: { personId: string; name: string; slips: Slip[]; editable: boolean }) {
+function PersonSlips({ personId, slips, editable }: { personId: string; slips: Slip[]; editable: boolean }) {
   const { year } = useYear();
   const types = rulesFor(year.year)!.slips;
+  const others = year.adults.filter((adult) => adult.personId !== personId).map((adult) => year.people.find((person) => person.id === adult.personId)!);
   const [editing, setEditing] = useState<string | "new" | null>(null);
   return (
     <Card>
       <CardHeader>
         <CardTitle>
-          <h2 className="text-base font-semibold">{name}</h2>
+          <h2 className="text-base font-semibold">Slips</h2>
         </CardTitle>
         {editable && editing === null ? (
           <CardAction>
@@ -126,6 +127,11 @@ function PersonSlips({ personId, name, slips, editable }: { personId: string; na
                       </a>
                     </p>
                   ) : null}
+                  {editable && editing === null
+                    ? others.map((other) => (
+                        <MoveSlip key={other.id} slip={slip} to={other} />
+                      ))
+                    : null}
                 </div>
                 <Badge variant={slip.status === "confirmed" ? "secondary" : "outline"}>{slip.status === "confirmed" ? "Confirmed" : "To confirm"}</Badge>
                 {editable && editing === null ? (
@@ -171,12 +177,33 @@ function RemoveSlip({ slip }: { slip: Slip }) {
   );
 }
 
+/** A slip that is the other adult's goes to their return, unconfirmed. */
+function MoveSlip({ slip, to }: { slip: Slip; to: Person }) {
+  const { year, replace } = useYear();
+  const [error, setError] = useState<unknown>(null);
+  const first = to.name.split(/\s+/)[0] ?? to.name;
+  return (
+    <p className="text-xs">
+      <button
+        type="button"
+        className="text-muted-foreground underline underline-offset-2 hover:text-foreground"
+        aria-label={`Move ${slip.type} from ${slip.issuer} to ${to.name}'s return`}
+        onClick={() => {
+          setError(null);
+          apiRequest(routes.updateSlip, { params: { year: year.year, id: slip.id }, body: { revision: year.revision, personId: to.id } }).then(replace, setError);
+        }}
+      >
+        Not yours? Move to {first}'s return
+      </button>
+      {error ? <span className="block text-destructive">{describeError(error)}</span> : null}
+    </p>
+  );
+}
+
 /** Add a slip (no `slip`) or change one: its type's boxes, each blank or an amount. */
 function SlipForm({ personId, slip, onDone }: { personId: string; slip?: Slip; onDone: () => void }) {
   const id = useId();
   const { year, replace } = useYear();
-  const adults = useAdults();
-  const [owner, setOwner] = useState(personId);
   const types = [...rulesFor(year.year)!.slips.values()];
   const [type, setType] = useState(slip?.type ?? types[0]!.id);
   const [issuer, setIssuer] = useState(slip?.issuer ?? "");
@@ -192,7 +219,7 @@ function SlipForm({ personId, slip, onDone }: { personId: string; slip?: Slip; o
       const saved = slip
         ? await apiRequest(routes.updateSlip, {
             params: { year: year.year, id: slip.id },
-            body: { revision: year.revision, issuer, boxes: filled, ...(owner !== slip.personId ? { personId: owner } : {}) },
+            body: { revision: year.revision, issuer, boxes: filled },
           })
         : await apiRequest(routes.addSlip, { params: { year: year.year }, body: { revision: year.revision, personId, type, issuer, boxes: filled } });
       replace(saved);
@@ -206,19 +233,7 @@ function SlipForm({ personId, slip, onDone }: { personId: string; slip?: Slip; o
 
   return (
     <form className="flex flex-col gap-4" onSubmit={(event) => void submit(event)} aria-label={slip ? `Edit ${slip.type} from ${slip.issuer}` : "Add a slip"}>
-      <div className={slip && adults.length > 1 ? "grid gap-4 sm:grid-cols-3" : "grid gap-4 sm:grid-cols-2"}>
-        {slip && adults.length > 1 ? (
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor={`${id}-owner`}>Whose slip</Label>
-            <NativeSelect id={`${id}-owner`} value={owner} onChange={(event) => setOwner(event.target.value)}>
-              {adults.map((adult) => (
-                <NativeSelectOption key={adult.personId} value={adult.personId}>
-                  {adult.person.name}
-                </NativeSelectOption>
-              ))}
-            </NativeSelect>
-          </div>
-        ) : null}
+      <div className="grid gap-4 sm:grid-cols-2">
         <div className="flex flex-col gap-1.5">
           <Label htmlFor={`${id}-type`}>Slip</Label>
           <NativeSelect id={`${id}-type`} value={type} onChange={(event) => setType(event.target.value)} disabled={slip !== undefined}>

@@ -94,10 +94,24 @@ export const issueSchema = z.strictObject({
 });
 export type Issue = z.infer<typeof issueSchema>;
 
+/** Issues about the facts every return of the year shares (the marital status, who prepares): they are each return's. */
+const SHARED_ISSUES: ReadonlySet<Issue["code"]> = new Set(["no_self", "no_marital_status", "marital_status_mismatch"]);
+/** Whether an issue is one of an adult's return: about that adult, or about a fact the year's returns share. */
+export const isIssueOf = (issue: Issue, personId: string) => SHARED_ISSUES.has(issue.code) || issue.personId === personId;
+
 export const STEPS = ["household", "upload", "applies", "confirm", "deductions", "finish"] as const;
 export const stepSchema = z.enum(STEPS);
 export type Step = z.infer<typeof stepSchema>;
 export const stepStatusSchema = z.enum(["done", "todo", "not_built"]);
+export const stepStatusesSchema = z.record(stepSchema, stepStatusSchema);
+export type StepStatuses = z.infer<typeof stepStatusesSchema>;
+
+/** One adult's return in a year: whose it is and how far each of its steps is. */
+export const returnProgressSchema = z.strictObject({
+  personId: idSchema,
+  steps: stepStatusesSchema,
+});
+export type ReturnProgress = z.infer<typeof returnProgressSchema>;
 
 export const taxYearSchema = z.strictObject({
   year: z.number().int(),
@@ -113,7 +127,8 @@ export const taxYearSchema = z.strictObject({
   /** The year's adults (you, and your spouse when in the year). */
   adults: z.array(adultYearSchema),
   issues: z.array(issueSchema),
-  steps: z.record(stepSchema, stepStatusSchema),
+  /** Each adult's return, in the order of `adults`: its steps' states. */
+  returns: z.array(returnProgressSchema),
   updatedAt: z.number().int(),
 });
 export type TaxYear = z.infer<typeof taxYearSchema>;
@@ -148,9 +163,8 @@ export type SaveHousehold = z.infer<typeof saveHouseholdSchema>;
 
 export const yearSummarySchema = z.strictObject({
   year: z.number().int(),
-  /** The adults whose returns are prepared, by name. */
-  filers: z.array(z.string()),
-  steps: z.record(stepSchema, stepStatusSchema),
+  /** Each adult's return: whose it is, by name, and its steps' states. */
+  returns: z.array(returnProgressSchema.extend({ name: z.string() })),
   updatedAt: z.number().int(),
 });
 export const peopleListSchema = z.strictObject({ people: z.array(personSchema) });

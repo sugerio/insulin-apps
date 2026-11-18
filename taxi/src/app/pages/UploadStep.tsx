@@ -10,13 +10,13 @@ import { apiRequest, describeError } from "../api/client.ts";
 import { useMe } from "../auth/AuthProvider.tsx";
 import { ResourceView } from "../components/Feedback.tsx";
 import { StepLayout } from "../components/StepLayout.tsx";
-import { stepPath, useYear } from "../components/YearFrame.tsx";
+import { stepPath, useReturn, useYear } from "../components/YearFrame.tsx";
 import { uploadFile, uploadType } from "../lib/upload.ts";
 import { useResource } from "../lib/useResource.ts";
 
-// Step 2, `/returns/:year/upload`: pick a folder (or files, or drop them), and each PDF, PNG or JPEG is sent on its own,
-// three at a time, for AI to read into slips. Each file's row shows what was found as its answer arrives. The slips
-// land unconfirmed in step 4.
+// Step 2, `/returns/:year/:personId/upload`: pick a folder (or files, or drop them), and each PDF, PNG or JPEG is sent
+// on its own, three at a time, into the open return for AI to read into slips. Each file's row shows what was found as
+// its answer arrives. The slips land unconfirmed in step 4, in the return of the adult whose name is on them.
 
 const PARALLEL = 3;
 
@@ -40,6 +40,7 @@ export function UploadStep() {
 function Uploader() {
   const me = useMe();
   const { year, replace } = useYear();
+  const { person } = useReturn();
   const [rows, setRows] = useState<Row[]>([]);
   const [dragging, setDragging] = useState(false);
   const folderInput = useRef<HTMLInputElement>(null);
@@ -69,7 +70,7 @@ function Uploader() {
       if (!item) return;
       update(item.key, { key: item.key, name: item.file.name, state: "reading" });
       try {
-        const result = await uploadFile(year.year, item.file, item.type);
+        const result = await uploadFile(year.year, person.id, item.file, item.type);
         update(item.key, { key: item.key, name: item.file.name, state: "done", document: result.document });
         // Uploads finish in any order: keep the newest year.
         if (result.year.revision > latest.current) {
@@ -104,7 +105,7 @@ function Uploader() {
             onDragLeave={() => setDragging(false)}
             onDrop={onDrop}
           >
-            <p className="text-sm font-medium">This year's slips and receipts, and last year's notices of assessment</p>
+            <p className="text-sm font-medium">{person.name}'s slips and receipts for {year.year}, and last year's notice of assessment</p>
             <p className="text-xs text-muted-foreground">PDF, PNG or JPEG, up to 10 MiB each. Drop them here, or choose:</p>
             <div className="flex flex-wrap justify-center gap-2">
               <Button variant="outline" onClick={() => folderInput.current?.click()} disabled={reading}>
@@ -153,7 +154,7 @@ function Uploader() {
         ) : null}
         <div className="flex justify-end">
           <Button asChild variant={rows.length > 0 && !reading ? "default" : "outline"}>
-            <Link to={stepPath(year.year, "applies")}>Next: what applies</Link>
+            <Link to={stepPath(year.year, person.id, "applies")}>Next: what applies</Link>
           </Button>
         </div>
       </CardContent>
@@ -189,9 +190,19 @@ export function DocumentStatus({ document }: { document: DocumentRecord }) {
   );
 }
 
+/**
+ * The files of the open return: uploaded in it, or holding a slip of its adult. A file uploaded before returns were per
+ * person, with no slip, is the person preparing's.
+ */
 function Uploaded({ data }: { data: DocumentList }) {
   const { year } = useYear();
-  if (data.documents.length === 0) return null;
+  const { person } = useReturn();
+  const preparing = year.returns[0]?.personId;
+  const documents = data.documents.filter(
+    (document) =>
+      document.personId === person.id || document.slips.some((slip) => slip.personId === person.id) || (document.personId === null && document.slips.length === 0 && person.id === preparing),
+  );
+  if (documents.length === 0) return null;
   return (
     <Card>
       <CardHeader>
@@ -201,7 +212,7 @@ function Uploaded({ data }: { data: DocumentList }) {
       </CardHeader>
       <CardContent>
         <ul className="flex flex-col divide-y">
-          {data.documents.map((document) => (
+          {documents.map((document) => (
             <li key={document.id} className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 py-2 text-sm">
               {document.status === "duplicate" ? (
                 <span className="min-w-0 flex-1 truncate font-medium">{document.name}</span>

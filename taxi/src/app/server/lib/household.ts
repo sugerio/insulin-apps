@@ -188,7 +188,7 @@ async function viewOf(db: Db, orgId: string, row: YearRow): Promise<TaxYear> {
     members,
     adults,
     issues,
-    steps: stepStatuses({ year: row.year, maritalStatus: row.marital_status, people, members, adults }, issues, workspace),
+    returns: stepStatuses({ year: row.year, maritalStatus: row.marital_status, people, members, adults }, issues, workspace),
     updatedAt: row.updated_at,
   };
 }
@@ -213,8 +213,7 @@ export async function listYears(db: Db, orgId: string, supportedYears: readonly 
     people: await listPeople(db, orgId),
     years: years.map((view) => ({
       year: view.year,
-      filers: view.adults.map((adult) => view.people.find((person) => person.id === adult.personId)?.name ?? ""),
-      steps: view.steps,
+      returns: view.returns.map((progress) => ({ ...progress, name: view.people.find((person) => person.id === progress.personId)?.name ?? "" })),
       updatedAt: view.updatedAt,
     })),
   };
@@ -450,6 +449,7 @@ export async function removePerson(db: Db, caller: Caller, id: string, now: numb
     db.prepare("DELETE FROM returns WHERE person_id = ? AND org_id = ?").bind(id, caller.orgId),
     db.prepare("DELETE FROM answers WHERE person_id = ? AND org_id = ?").bind(id, caller.orgId),
     db.prepare("DELETE FROM slips WHERE person_id = ? AND org_id = ?").bind(id, caller.orgId),
+    db.prepare("UPDATE documents SET person_id = NULL WHERE person_id = ? AND org_id = ?").bind(id, caller.orgId),
     db.prepare("DELETE FROM tax_year_people WHERE person_id = ? AND org_id = ?").bind(id, caller.orgId),
     db.prepare("DELETE FROM people WHERE id = ? AND org_id = ?").bind(id, caller.orgId),
     audit(db, caller, "person.removed", id, now),

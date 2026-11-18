@@ -8,10 +8,10 @@ export function uploadType(file: File): string | null {
   return extension === "pdf" ? "application/pdf" : extension === "png" ? "image/png" : extension === "jpg" || extension === "jpeg" ? "image/jpeg" : null;
 }
 
-/** Uploads one file for AI to read into slips (step 2, or a missing slip in step 3). */
-export function uploadFile(year: number, file: File, type: string): Promise<UploadResult> {
+/** Uploads one file into an adult's return for AI to read into slips (step 2, or a missing slip in step 3). */
+export function uploadFile(year: number, personId: string, file: File, type: string): Promise<UploadResult> {
   return apiRequest(routes.uploadDocument, {
     params: { year },
-    raw: { body: file, contentType: type, headers: { "X-File-Name": encodeURIComponent(file.name) } },
+    raw: { body: file, contentType: type, headers: { "X-File-Name": encodeURIComponent(file.name), "X-Person-Id": personId } },
   });
 }

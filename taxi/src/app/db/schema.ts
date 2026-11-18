@@ -185,6 +185,8 @@ export const slips = sqliteTable(
   ],
 );
 
+// `duplicate` is no longer written (a duplicate upload isn't saved, and migration 0004 removed the old rows). It stays
+// in the CHECK because changing a CHECK rebuilds the table.
 export const DOCUMENT_STATUSES = ["read", "duplicate", "not_a_slip", "failed", "not_available"] as const;
 
 /**

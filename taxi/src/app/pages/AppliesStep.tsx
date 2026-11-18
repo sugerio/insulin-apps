@@ -88,7 +88,7 @@ function AppliesForm({ estimate, slips }: { estimate: Estimate; slips: SlipList 
       const saved = await saveAnswersFor(year, answersToSave());
       const result = await uploadFile(year.year, person.id, file, type);
       replace(result.year.revision > saved.revision ? result.year : saved);
-      if (result.document.status !== "read") setState({ status: "error", error: new ApiError(400, "validation_failed", `${file.name}: ${result.document.message}`) });
+      if (result.status !== "read") setState({ status: "error", error: new ApiError(400, "validation_failed", `${file.name}: ${result.message}`) });
     } catch (error) {
       setState({ status: "error", error });
     }

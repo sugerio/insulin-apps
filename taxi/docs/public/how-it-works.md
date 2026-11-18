@@ -35,8 +35,13 @@ never holds it. Without that credential, files are stored but not read, and slip
 With the file, Claude gets the year, the names of the people in the year, and the slip types the app reads with their
 boxes. It answers in a fixed shape: each slip's type, the name on it, the issuer, its boxes and the boxes it couldn't
 read clearly. It is told never to return a social insurance number. Taxi then checks the answer itself: only known slip
-types and boxes are kept, amounts must be numbers, a slip for another year is refused, and the same slip twice is
-skipped. Every slip read this way starts unconfirmed: someone checks it against the paper slip in step 4.
+types and boxes are kept, amounts must be numbers, a slip for another year is refused, and a slip already in the year
+isn't added again. Every slip read this way starts unconfirmed: someone checks it against the paper slip in step 4.
+
+A file is the same as one uploaded before when its content is the same (its SHA-256), whatever its name: it isn't read
+or saved again. Two files with the same name and different content are two files. A file that couldn't be read can be
+read again from what was stored. Deleting a file deletes every slip read from it, confirmed or not, in whichever return
+it is; slips typed in by hand stay.
 
 ## How a return is computed
 

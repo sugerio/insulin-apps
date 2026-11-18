@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { meSchema, type Permission } from "./access.ts";
-import { documentListSchema, uploadResultSchema } from "./documents.ts";
+import { documentListSchema, readResultSchema } from "./documents.ts";
 import { estimateSchema } from "./estimate.ts";
 import { confirmSlipsSchema, createSlipSchema, revisionBodySchema, saveAnswersSchema, slipListSchema, updateSlipSchema } from "./returns.ts";
 import {
@@ -42,6 +42,7 @@ const route = <P extends z.ZodType | null, B extends z.ZodType | null, R extends
 const yearParams = z.strictObject({ year: yearSchema });
 const personParams = z.strictObject({ id: idSchema });
 const slipParams = z.strictObject({ year: yearSchema, id: idSchema });
+const documentParams = z.strictObject({ year: yearSchema, id: idSchema });
 
 export const apiCatalogSchema = z.strictObject({
   endpoints: z.array(
@@ -147,11 +148,31 @@ export const routes = {
     method: "POST",
     path: "/api/years/:year/documents",
     summary:
-      "Upload one file (PDF, PNG or JPEG, up to 10 MiB) for AI to read into slips: send its bytes as the body with its Content-Type, and its name in an X-File-Name header (URI-encoded), and the adult whose return it is uploaded in as an X-Person-Id header (the person preparing without it). Slips found are added unconfirmed to the adult whose name is on them, or to that adult when no name matches; the same file or the same slips twice are skipped.",
+      "Upload one file (PDF, PNG or JPEG, up to 10 MiB) for AI to read into slips: send its bytes as the body with its Content-Type, and its name in an X-File-Name header (URI-encoded), and the adult whose return it is uploaded in as an X-Person-Id header (the person preparing without it). Slips found are added unconfirmed to the adult whose name is on them, or to that adult when no name matches. The same file, or the same slips, already in the year are not saved again (status duplicate).",
     permission: "taxi.prepare",
     params: yearParams,
     body: null,
-    response: uploadResultSchema,
+    response: readResultSchema,
+  }),
+  readDocumentAgain: route({
+    method: "POST",
+    path: "/api/years/:year/documents/:id/read",
+    summary:
+      "Read a file again that couldn't be read (status failed or not_available), from the bytes already stored. Its slips are added as for an upload; a file whose slips are already in the year is removed (status duplicate).",
+    permission: "taxi.prepare",
+    params: documentParams,
+    body: null,
+    response: readResultSchema,
+  }),
+  deleteDocument: route({
+    method: "DELETE",
+    path: "/api/years/:year/documents/:id",
+    summary:
+      "Delete an uploaded file and every slip read from it, confirmed or not, in whichever adult's return it is. Send the revision you read.",
+    permission: "taxi.prepare",
+    params: documentParams,
+    body: revisionBodySchema,
+    response: taxYearSchema,
   }),
   saveAnswers: route({
     method: "PUT",

@@ -101,6 +101,8 @@ export function createApp(options: AppOptions = {}) {
   mount(routes.uploadDocument, async ({ caller, params, db, now, request }) =>
     documents.uploadDocument(db, caller, params.year, request, readerFor(caller.orgId), now),
   );
+  mount(routes.readDocumentAgain, async ({ caller, params, db, now }) => documents.readDocumentAgain(db, caller, params.year, params.id, readerFor(caller.orgId), now));
+  mount(routes.deleteDocument, async ({ caller, params, body, db, now }) => documents.deleteDocument(db, caller, params.year, params.id, body.revision, now));
   // A stored file's bytes, to show it beside the numbers read from it: not JSON, so outside the route table.
   app.get("/api/years/:year/documents/:id/file", async (c) => {
     const caller = c.get("caller");

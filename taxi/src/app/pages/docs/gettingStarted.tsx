@@ -49,7 +49,8 @@ export const gettingStarted: DocTopic = {
             </li>
             <li>
               <b>Upload documents.</b> Choose a folder or files (PDF, PNG or JPEG). AI reads each file into slips. A slip with the other
-              person's name on it goes to their return. The same file or the same slip twice is skipped. You can also type slips in step 4.
+              person's name on it goes to their return. A file with the same content as one already uploaded, whatever its name, isn't saved again. A file uploaded by
+              mistake can be deleted, with the slips read from it. You can also type slips in step 4.
             </li>
             <li>
               <b>What applies.</b> The slips found in your documents, with their files; for the kinds of slips not found

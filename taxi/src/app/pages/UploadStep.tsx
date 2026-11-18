@@ -1,43 +1,49 @@
 import { useRef, useState, type DragEvent } from "react";
 import { Link } from "react-router";
 import { FileUp, FolderUp } from "lucide-react";
-import { MAX_DOCUMENT_BYTES, canPrepare, routes, type DocumentList, type DocumentRecord } from "#shared";
+import { MAX_DOCUMENT_BYTES, canPrepare, routes, type DocumentList, type DocumentRecord, type ReadResult } from "#shared";
 import { Badge } from "@/components/ui/badge.tsx";
 import { Button } from "@/components/ui/button.tsx";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card.tsx";
 import { cn } from "@/lib/utils.ts";
 import { apiRequest, describeError } from "../api/client.ts";
 import { useMe } from "../auth/AuthProvider.tsx";
-import { ResourceView } from "../components/Feedback.tsx";
+import { Banner, ResourceView } from "../components/Feedback.tsx";
 import { StepLayout } from "../components/StepLayout.tsx";
 import { stepPath, useReturn, useYear } from "../components/YearFrame.tsx";
 import { uploadFile, uploadType } from "../lib/upload.ts";
 import { useResource } from "../lib/useResource.ts";
 
 // Step 2, `/returns/:year/:personId/upload`: pick a folder (or files, or drop them), and each PDF, PNG or JPEG is sent
-// on its own, three at a time, into the open return for AI to read into slips. Each file's row shows what was found as
-// its answer arrives. The slips land unconfirmed in step 4, in the return of the adult whose name is on them.
+// on its own, three at a time, into the open return for AI to read into slips. A file being read, or one that wasn't
+// saved (skipped, already here, an error), shows in the list of this upload; a saved file moves to "Uploaded files",
+// where it can be read again (when reading it failed) or deleted with the slips read from it.
 
 const PARALLEL = 3;
 
-type Row =
-  | { key: string; name: string; state: "waiting" | "reading" }
-  | { key: string; name: string; state: "skipped"; message: string }
-  | { key: string; name: string; state: "done"; document: DocumentRecord }
-  | { key: string; name: string; state: "error"; message: string };
+type Row = { key: string; name: string } & ({ state: "waiting" } | { state: "reading" } | { state: "skipped" | "duplicate" | "error"; message: string });
 
 export function UploadStep() {
   const { year } = useYear();
   const documents = useResource(`documents-${year.year}-${year.revision}`, (signal) => apiRequest(routes.listDocuments, { params: { year: year.year }, signal }));
+  // Uploads bump the year's revision, so the files list waits for them before deleting or reading again.
+  const [uploading, setUploading] = useState(false);
+  // Kept here: the files list reloads (and remounts) whenever the year changes.
+  const [notice, setNotice] = useState<string | null>(null);
   return (
     <StepLayout step="upload" title="Upload documents">
-      <Uploader />
-      <ResourceView resource={documents}>{(data) => <Uploaded data={data} />}</ResourceView>
+      <Uploader onUploading={setUploading} />
+      {notice ? (
+        <Banner kind="info" action={<Button variant="outline" size="sm" onClick={() => setNotice(null)}>Dismiss</Button>}>
+          {notice}
+        </Banner>
+      ) : null}
+      <ResourceView resource={documents}>{(data) => <Uploaded data={data} uploading={uploading} onNotice={setNotice} />}</ResourceView>
     </StepLayout>
   );
 }
 
-function Uploader() {
+function Uploader({ onUploading }: { onUploading: (uploading: boolean) => void }) {
   const me = useMe();
   const { year, replace } = useYear();
   const { person } = useReturn();
@@ -48,8 +54,8 @@ function Uploader() {
   const latest = useRef(year.revision);
   const editable = canPrepare(me);
 
-  function update(key: string, row: Row) {
-    setRows((current) => current.map((each) => (each.key === key ? row : each)));
+  function update(key: string, row: Row | null) {
+    setRows((current) => (row ? current.map((each) => (each.key === key ? row : each)) : current.filter((each) => each.key !== key)));
   }
 
   async function send(files: File[]) {
@@ -64,14 +70,16 @@ function Uploader() {
       return { key, name: file.name, state: "waiting" };
     });
     setRows((current) => [...initial, ...current]);
+    if (queued.length === 0) return;
 
     const next = async (): Promise<void> => {
       const item = queued.shift();
       if (!item) return;
       update(item.key, { key: item.key, name: item.file.name, state: "reading" });
       try {
-        const result = await uploadFile(year.year, person.id, item.file, item.type);
-        update(item.key, { key: item.key, name: item.file.name, state: "done", document: result.document });
+        const result: ReadResult = await uploadFile(year.year, person.id, item.file, item.type);
+        // A saved file is listed under "Uploaded files"; one that wasn't stays here with why.
+        update(item.key, result.document ? null : { key: item.key, name: item.file.name, state: "duplicate", message: result.message });
         // Uploads finish in any order: keep the newest year.
         if (result.year.revision > latest.current) {
           latest.current = result.year.revision;
@@ -82,7 +90,12 @@ function Uploader() {
       }
       return next();
     };
-    await Promise.all(Array.from({ length: PARALLEL }, next));
+    onUploading(true);
+    try {
+      await Promise.all(Array.from({ length: PARALLEL }, next));
+    } finally {
+      onUploading(false);
+    }
   }
 
   function onDrop(event: DragEvent) {
@@ -143,7 +156,7 @@ function Uploader() {
           </div>
         ) : null}
         {rows.length > 0 ? (
-          <ul className="flex flex-col divide-y" aria-label="Files being read">
+          <ul className="flex flex-col divide-y" aria-label="This upload">
             {rows.map((row) => (
               <li key={row.key} className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 py-2 text-sm">
                 <span className="min-w-0 flex-1 truncate font-medium">{row.name}</span>
@@ -167,24 +180,28 @@ function RowStatus({ row }: { row: Row }) {
   if (row.state === "reading") return <span className="text-muted-foreground">Reading…</span>;
   if (row.state === "skipped") return <span className="text-muted-foreground">Skipped: {row.message}</span>;
   if (row.state === "error") return <span className="text-destructive">{row.message}</span>;
-  if (row.state === "done") return <DocumentStatus document={row.document} />;
-  return null;
+  return (
+    <span className="flex min-w-0 basis-full flex-wrap items-baseline gap-2 sm:basis-auto">
+      <Badge variant="outline">Already here</Badge>
+      <span className="text-muted-foreground">{row.message}</span>
+    </span>
+  );
 }
 
 const STATUS_LABELS: Record<DocumentRecord["status"], string> = {
   read: "Read",
-  duplicate: "Already here",
   not_a_slip: "No slip found",
   failed: "Couldn't read",
   not_available: "AI reading not set up",
 };
 
+/** Files that weren't read: they have no slips, and can be read again. */
+const UNREAD: readonly DocumentRecord["status"][] = ["failed", "not_available"];
+
 export function DocumentStatus({ document }: { document: DocumentRecord }) {
   return (
     <span className="flex min-w-0 basis-full flex-wrap items-baseline gap-2 sm:basis-auto">
-      <Badge variant={document.status === "read" ? "secondary" : document.status === "failed" || document.status === "not_available" ? "destructive" : "outline"}>
-        {STATUS_LABELS[document.status]}
-      </Badge>
+      <Badge variant={document.status === "read" ? "secondary" : UNREAD.includes(document.status) ? "destructive" : "outline"}>{STATUS_LABELS[document.status]}</Badge>
       <span className="text-muted-foreground">{document.message}</span>
     </span>
   );
@@ -194,7 +211,7 @@ export function DocumentStatus({ document }: { document: DocumentRecord }) {
  * The files of the open return: uploaded in it, or holding a slip of its adult. A file uploaded before returns were per
  * person, with no slip, is the person preparing's.
  */
-function Uploaded({ data }: { data: DocumentList }) {
+function Uploaded({ data, uploading, onNotice }: { data: DocumentList; uploading: boolean; onNotice: (notice: string | null) => void }) {
   const { year } = useYear();
   const { person } = useReturn();
   const preparing = year.returns[0]?.personId;
@@ -213,19 +230,99 @@ function Uploaded({ data }: { data: DocumentList }) {
       <CardContent>
         <ul className="flex flex-col divide-y">
           {documents.map((document) => (
-            <li key={document.id} className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 py-2 text-sm">
-              {document.status === "duplicate" ? (
-                <span className="min-w-0 flex-1 truncate font-medium">{document.name}</span>
-              ) : (
-                <a className="min-w-0 flex-1 truncate font-medium underline-offset-2 hover:underline" href={`/api/years/${year.year}/documents/${document.id}/file`} target="_blank" rel="noreferrer">
-                  {document.name}
-                </a>
-              )}
-              <DocumentStatus document={document} />
-            </li>
+            <UploadedFile key={document.id} document={document} uploading={uploading} onNotice={onNotice} />
           ))}
         </ul>
       </CardContent>
     </Card>
+  );
+}
+
+type FileState = { status: "idle" } | { status: "confirming" } | { status: "working"; action: "delete" | "read" } | { status: "error"; error: unknown };
+
+/** One uploaded file: open it, read it again when reading failed, or delete it (after saying which slips go with it). */
+function UploadedFile({ document, uploading, onNotice }: { document: DocumentRecord; uploading: boolean; onNotice: (notice: string | null) => void }) {
+  const me = useMe();
+  const { year, replace } = useYear();
+  const [state, setState] = useState<FileState>({ status: "idle" });
+  const editable = canPrepare(me);
+  const working = state.status === "working";
+  const nameOf = (personId: string) => year.people.find((each) => each.id === personId)?.name ?? "someone";
+
+  async function remove() {
+    setState({ status: "working", action: "delete" });
+    try {
+      const updated = await apiRequest(routes.deleteDocument, { params: { year: year.year, id: document.id }, body: { revision: year.revision } });
+      onNotice(null);
+      replace(updated);
+    } catch (error) {
+      setState({ status: "error", error });
+    }
+  }
+
+  async function readAgain() {
+    setState({ status: "working", action: "read" });
+    try {
+      const result = await apiRequest(routes.readDocumentAgain, { params: { year: year.year, id: document.id } });
+      onNotice(result.document ? null : `${document.name}: ${result.message} The file was removed.`);
+      replace(result.year);
+    } catch (error) {
+      setState({ status: "error", error });
+    }
+  }
+
+  return (
+    <li className="flex flex-col gap-1 py-2 text-sm">
+      <div className="flex items-center gap-3">
+        <a className="min-w-0 flex-1 truncate font-medium underline-offset-2 hover:underline" href={`/api/years/${year.year}/documents/${document.id}/file`} target="_blank" rel="noreferrer">
+          {document.name}
+        </a>
+        {editable && state.status !== "confirming" ? (
+          <span className="flex shrink-0 gap-1">
+            {UNREAD.includes(document.status) ? (
+              <Button variant="ghost" size="sm" disabled={working || uploading} onClick={() => void readAgain()} aria-label={`Read ${document.name} again`}>
+                {working && state.action === "read" ? "Reading…" : "Read again"}
+              </Button>
+            ) : null}
+            <Button variant="ghost" size="sm" className="text-destructive" disabled={working || uploading} onClick={() => setState({ status: "confirming" })} aria-label={`Delete ${document.name}`}>
+              {working && state.action === "delete" ? "Deleting…" : "Delete"}
+            </Button>
+          </span>
+        ) : null}
+      </div>
+      <DocumentStatus document={document} />
+      {state.status === "confirming" ? (
+        <Banner
+          kind="warning"
+          title={`Delete ${document.name}?`}
+          action={
+            <span className="flex gap-2">
+              <Button variant="destructive" size="sm" disabled={uploading} onClick={() => void remove()}>
+                Delete file
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => setState({ status: "idle" })}>
+                Cancel
+              </Button>
+            </span>
+          }
+        >
+          {document.slips.length === 0 ? (
+            "No slips were read from it."
+          ) : (
+            <>
+              The slips read from it are deleted too:
+              <ul className="mt-1 list-disc pl-5">
+                {document.slips.map((slip) => (
+                  <li key={slip.id}>
+                    {slip.type} from {slip.issuer}, on {nameOf(slip.personId)}'s return{slip.status === "confirmed" ? " (confirmed)" : ""}
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+        </Banner>
+      ) : null}
+      {state.status === "error" ? <span className="text-xs text-destructive">{describeError(state.error)}</span> : null}
+    </li>
   );
 }

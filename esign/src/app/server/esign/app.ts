@@ -635,7 +635,8 @@ async function scheduleSend(context: import('hono').Context<Env>, body: Record<s
  * active, its drafts are sent or refused; no record of Esign's use there yet, every due draft of it rests ten minutes
  * (restWaiting); suspended, its drafts step back (deferOrganization) and wait, as before; no answer in time, its drafts
  * are left as they are, in their place, for the next run, and the run asks no more about it. Then the next batch, while
- * the budget lasts and a run's places remain; the first batch is always handled whole.
+ * the budget lasts and a run's places remain. Sends stop once the budget is used (a send can be slow), after at least
+ * one, so a run always moves on.
  */
 async function sendScheduled(env: Bindings, tenantId: string | null): Promise<{ scheduledSent: number; scheduledFailed: number }> {
   let sent = 0, failed = 0, first = true;
@@ -679,7 +680,8 @@ async function sendScheduled(env: Bindings, tenantId: string | null): Promise<{ 
         if (answer.status === 'answered' && !answer.active) { await deferOrganization(env.DB, org, Date.now()); skipped.push(org); continue; }
       }
       for (const { row, request, schedule, at } of drafts.filter((draft) => draft.row.tenant_id === org)) {
-        if (sent + failed >= SCHEDULED_PER_RUN || (!first && Date.now() > until)) break;
+        // Sends stop once the budget is used, but a run always sends or refuses one, so it never stands still.
+        if (sent + failed >= SCHEDULED_PER_RUN || (sent + failed > 0 && Date.now() > until)) break;
         const caller = scheduledCaller(schedule.by, row.tenant_id, asking ? answers.get(row.tenant_id) ?? null : undefined);
         if (caller === 'unavailable' || caller === 'unconfirmed') continue;
         let error: string | null = null;

@@ -11,7 +11,7 @@ import { loadWorkspace } from "./workspace.ts";
 // pieces, and read by AI into slips. What comes back is checked against the year's slip types before anything is
 // saved; slips are added unconfirmed to the adult whose name is on them. The same file uploaded again (its SHA-256,
 // whatever its name), or a file whose slips are all in the year already (same type, issuer and boxes), isn't saved. A
-// file with the name of one in the same return, and other content, is a new version: it replaces that one and its slips.
+// file with the name of one in the same return is a new version: it replaces that one and its slips, even unchanged.
 // A file that couldn't be read can be read again from its stored bytes; any file can be deleted with its slips.
 
 type Db = D1Database;
@@ -112,28 +112,27 @@ export async function uploadDocument(db: Db, caller: Caller, year: number, reque
   const uploader = uploaderOf(view, request.headers.get("X-Person-Id"));
 
   // A file of the same name in this return (uploaded in it, or holding a slip of its adult) is an earlier version of
-  // this one: the same content is unchanged; other content replaces it, with its slips, once this one is read.
+  // this one, whatever its content: this one replaces it, with its slips, once it is read.
   const sameName = (
     await db
       .prepare(
-        `SELECT id, sha256, status FROM documents d WHERE org_id = ? AND tax_year_id = ? AND name = ?
+        `SELECT id FROM documents d WHERE org_id = ? AND tax_year_id = ? AND name = ?
            AND (person_id = ? OR EXISTS (SELECT 1 FROM slips s WHERE s.document_id = d.id AND s.person_id = ?))`,
       )
       .bind(caller.orgId, row.id, name, uploader.id, uploader.id)
-      .all<{ id: string; sha256: string; status: string }>()
+      .all<{ id: string }>()
   ).results;
-  const unread = (status: string) => (UNREAD as readonly string[]).includes(status);
-  if (sameName.some((each) => each.sha256 === sha256 && !unread(each.status))) {
-    return { status: "duplicate", message: `${name} is unchanged. Nothing to update.`, document: null, replaced: [], year: view };
-  }
-  const earlier = await db
-    .prepare(`SELECT name FROM documents WHERE org_id = ? AND tax_year_id = ? AND sha256 = ? AND status NOT IN (${UNREAD_SQL}) LIMIT 1`)
-    .bind(caller.orgId, row.id, sha256)
-    .first<{ name: string }>();
+  const previous = sameName.map((each) => each.id);
+  // The same content under another name (or in the other return) is already here.
+  const earlier = (
+    await db
+      .prepare(`SELECT id, name FROM documents WHERE org_id = ? AND tax_year_id = ? AND sha256 = ? AND status NOT IN (${UNREAD_SQL})`)
+      .bind(caller.orgId, row.id, sha256)
+      .all<{ id: string; name: string }>()
+  ).results.find((each) => !previous.includes(each.id));
   if (earlier) return { status: "duplicate", message: `The same file is already here, as ${earlier.name}.`, document: null, replaced: [], year: view };
 
   const workspace = await loadWorkspace(db, caller.orgId, row.id);
-  const previous = sameName.map((each) => each.id);
   const reading = await readInto(year, view, uploader, { bytes, contentType: contentType as FileToRead["contentType"] }, reader, workspace.slips, previous);
   // An earlier version is replaced only by a file read into slips: one that couldn't be read keeps it, and isn't saved.
   if (previous.length > 0 && reading.status !== "read" && reading.status !== "duplicate") {

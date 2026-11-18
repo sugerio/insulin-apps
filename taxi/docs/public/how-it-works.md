@@ -38,11 +38,10 @@ read clearly. It is told never to return a social insurance number. Taxi then ch
 types and boxes are kept, amounts must be numbers, a slip for another year is refused, and a slip already in the year
 isn't added again. Every slip read this way starts unconfirmed: someone checks it against the paper slip in step 4.
 
-A file is the same as one uploaded before when its content is the same (its SHA-256), whatever its name: it isn't read
-or saved again. A file with the name of one already in the same return, and different content, is a new version: once
-it is read into slips, it replaces the earlier file and every slip read from it (those start unconfirmed again). If the
-new version can't be read into slips, the earlier one is kept. Files of the same name in two people's returns don't
-replace each other. A file that couldn't be read can be read again from what was stored. Deleting a file deletes every slip read from it, confirmed or not, in whichever return
+A file with the name of one already in the same return is a new version, changed or not: once it is read into slips,
+it replaces the earlier file and every slip read from it (those start unconfirmed again). If the new version can't be
+read into slips, the earlier one is kept. Files of the same name in two people's returns don't replace each other. A
+file with the same content (its SHA-256) as one under another name isn't read or saved again. A file that couldn't be read can be read again from what was stored. Deleting a file deletes every slip read from it, confirmed or not, in whichever return
 it is; slips typed in by hand stay.
 
 ## How a return is computed

@@ -106,14 +106,18 @@ describe("uploading a slip", () => {
     expect((await json<SlipList>(server.call("GET", "/api/years/2025/slips"))).slips).toHaveLength(1);
   });
 
-  it("says a file of the same name and content is unchanged, without reading it", async () => {
+  it("reads a file of the same name and content again, and replaces the earlier one", async () => {
     await couple();
-    answers.push({ kind: "read", taxYear: 2025, slips: [T4], model: "m" });
+    answers.push({ kind: "read", taxYear: 2025, slips: [T4], model: "m" }, { kind: "read", taxYear: 2025, slips: [T4], model: "m" });
     const first = await json<ReadResult>(upload(pdf("one"), "T4.pdf"));
     const again = await json<ReadResult>(upload(pdf("one"), "T4.pdf"));
-    expect(again).toMatchObject({ status: "duplicate", message: "T4.pdf is unchanged. Nothing to update.", document: null, replaced: [] });
-    expect(again.year.revision).toBe(first.year.revision);
-    expect(contexts).toHaveLength(1);
+    expect(again).toMatchObject({ status: "read", message: "Replaced the earlier T4.pdf and its slip. T4 from Island Grocers, added to Sam Martin's return", replaced: [{ id: first.document!.id }] });
+    expect(contexts).toHaveLength(2);
+    expect((await json<DocumentList>(server.call("GET", "/api/years/2025/documents"))).documents.map((document) => document.id)).toEqual([again.document!.id]);
+    expect((await json<SlipList>(server.call("GET", "/api/years/2025/slips"))).slips.map((slip) => slip.documentId)).toEqual([again.document!.id]);
+    // The same content under another name is still already here.
+    const copy = await json<ReadResult>(upload(pdf("one"), "copy.pdf"));
+    expect(copy).toMatchObject({ status: "duplicate", message: "The same file is already here, as T4.pdf.", document: null });
   });
 
   it("keeps the earlier version when the new one can't be read into slips", async () => {

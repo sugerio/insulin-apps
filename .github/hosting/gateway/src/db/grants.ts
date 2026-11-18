@@ -10,6 +10,8 @@ export interface GrantRow {
   role: GrantRole
   custom_role_id: string | null
   custom_role_name: string | null
+  /** The custom role's permission keys, as JSON. */
+  custom_permissions: string | null
 }
 
 export interface CustomRoleRow {
@@ -65,7 +67,7 @@ export function owner(org: string, actor: string): string {
     WHERE a.org_id = ${org} AND a.user_id = ${actor} AND a.role = 'OWNER')`
 }
 
-const GRANT_SELECT = `SELECT g.user_id, g.app, g.role, g.custom_role_id, c.name AS custom_role_name
+const GRANT_SELECT = `SELECT g.user_id, g.app, g.role, g.custom_role_id, c.name AS custom_role_name, c.permissions AS custom_permissions
   FROM app_grants g LEFT JOIN custom_roles c ON c.id = g.custom_role_id`
 
 export async function listOrgGrants(db: D1Database, orgId: string): Promise<GrantRow[]> {

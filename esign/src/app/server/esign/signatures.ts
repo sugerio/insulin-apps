@@ -3,7 +3,7 @@ import { storedFieldRenderer, type Box } from './field-render.ts';
 import { validateFields, type TemplateField } from './fields.ts';
 
 /**
- * The stored form of a signature (table `signatures`, migrations/0007_signatures.sql).
+ * The stored form of a signature (table `signatures`, db/schema.ts).
  *
  * A row is written once, when the signer signs, and its facts never change after that (database
  * triggers refuse it). Its PDF is rendered afterwards, from the row alone: `status` is PENDING
@@ -31,7 +31,7 @@ export type SignatureFacts = {
   taskId: string;
   role: string;
   recipientName: string;
-  /** The task's email (immutable, migration 0027): the address the one-time code was sent to and verified for. */
+  /** The task's email (immutable, a trigger: migrations/0001_triggers.sql): the address the one-time code was sent to and verified for. */
   recipientEmail: string;
   /** SHA-256 of the recipient page session token the signer signed with. */
   sessionHash: string;

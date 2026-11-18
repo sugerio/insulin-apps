@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { requireRole } from './ownership.ts';
 import { SESSION_HEADER, sessionToken } from './session-header.ts';
 import {PDFDocument} from 'pdf-lib';
 import { bodyLimit } from 'hono/body-limit';
@@ -9,12 +10,13 @@ import { assertSignatureGeometrySafe, assertTextFits, renderText, renderTypedSig
 import { canonicalJson } from './canonical-json.ts';
 import { artifactObjectKey } from './signatures.ts';
 import { completeEnvelopeOfSession } from './envelope-completion.ts';
-import { MailRelayError, otpMailer } from './mail.ts';
+import { MailRelayError, mailerFor, otpMailer } from './mail.ts';
 import { isProd, otpKey, signingEnabled, testSealKey } from './environment.ts';
 import { sealTrustFromEnv } from './seal/config.ts';
 import { AUDIT, auditTrail, recordAuditQuietly, requestFacts, sessionContext } from './audit.ts';
 import { expireIfDue } from './task-expiry.ts';
-import { consentStatement, lastHostAuthentication, parseHostAuthentication, parseSignerTitle, sha256Hex, signerContext } from './signer-facts.ts';
+import { consentStatement, lastHostAuthentication, sessionEntry, parseHostAuthentication, parseSignerTitle, sha256Hex, signerContext } from './signer-facts.ts';
+import { messageFor, openInvitation, resendInvitation, sameEmail } from './invitations.ts';
 import { CONSENT_DISCLOSURE, consentDisclosure } from './disclosure.ts';
 import { taskDetails } from './details.ts';
 import { hasManagedEvidence, managedDelivery, verifyManagedEvidence } from './seal/managed.ts';
@@ -23,6 +25,8 @@ import { embedderAllowed, frameAncestors } from './signing-page.ts';
 import { releaseCopyLink, useCopyLink } from './signed-copies.ts';
 import type { Env } from './app.ts';
 import { deliveryPdf } from './delivery-pdf.ts';
+import { ENVELOPE_FIELDS, ENVELOPE_ROLES } from './envelope-fields.ts';
+import { contentDisposition, signedFileNameOf } from './signed-file-name.ts';
 import { finalizeLocalTestEvidence } from './seal/local.ts';
 import type { BlobStore } from './blob-store.ts';
 
@@ -93,19 +97,56 @@ export function mountSigningRoutes(app: Hono<Env>): void {
     return c.json({hosts:[own,...frameAncestors(c.env.SIGNING_PAGE_FRAME_ANCESTORS,isProd(c.env))],signingEnabled:signingEnabled(c.env)});
   });
   app.post('/api/envelopes/:id/tasks/:taskId/recipient-view', whenSigningEnabled, bodyLimit({maxSize:4096}), async c => {
+    // Opening a signer's page acts on the envelope: its editors, admins and owner (ownership.ts).
+    const refused=await requireRole(c,'envelope',c.req.param('id') ?? '','editor');if(refused)return refused;
     await expireIfDue(c.env.DB, c.req.param('id') ?? '');
-    let body: {origin?:unknown;hostAuthentication?:unknown};try {body=await c.req.json();} catch {return c.json({error:'invalid_request'},400);}
-    if (!body || (body.origin !== undefined && typeof body.origin !== 'string')) return c.json({error:'invalid_request'},400);
+    let body: {origin?:unknown;hostAuthentication?:unknown;signedInEmail?:unknown};try {body=await c.req.json();} catch {return c.json({error:'invalid_request'},400);}
+    if (!body || typeof body !== 'object' || Array.isArray(body) || (body.origin !== undefined && typeof body.origin !== 'string') || (body.signedInEmail !== undefined && typeof body.signedInEmail !== 'string')) return c.json({error:'invalid_request'},400);
+    const unknown=Object.keys(body).filter(key=>!['origin','hostAuthentication','signedInEmail'].includes(key));
+    if (unknown.length) return c.json({error:'unknown_field',fields:unknown},422);
+    // The host opens only its own signers' pages, for the account signed in to it, which must have the
+    // signer's email; a signer Esign invites signs from their invitation. Every caller alike: Esign's own
+    // console opens no signer's page (its signers sign from their invitations).
+    const task=await c.env.DB.prepare('SELECT t.recipient_email,t.details_json FROM tasks t JOIN envelopes e ON e.id=t.envelope_id WHERE t.id=? AND e.id=? AND e.tenant_id=?').bind(c.req.param('taskId'),c.req.param('id'),c.get('tenantId')).first<{recipient_email:string;details_json:string}>();
+    if (!task) return c.json({error:'recipient_unavailable'},404);
+    if (taskDetails(task.details_json).delivery==='email') return c.json({error:'recipient_signs_by_email'},409);
+    if (typeof body.signedInEmail!=='string'||!body.signedInEmail.trim()) return c.json({error:'signed_in_email_required'},422);
+    if (!sameEmail(body.signedInEmail,task.recipient_email)) return c.json({error:'signer_mismatch'},403);
+    const signedInEmail=body.signedInEmail.trim().toLowerCase();
     // The page origin the code is for: the app's own unless the host names another allowed one.
     const origin=typeof body.origin==='string'?body.origin:new URL(c.req.url).origin;
     if (!pageOrigins(c).has(origin)) return c.json({error:'invalid_origin'},400);
     // How the host signed the recipient in, recorded as the host's statement.
     const hostAuthentication=parseHostAuthentication(body.hostAuthentication);
     if (hostAuthentication==='invalid') return c.json({error:'invalid_request'},400);
-    try {const code=await issueRecipientCode(c.env.DB,{tenantId:c.get('tenantId'),envelopeId:c.req.param('id'),taskId:c.req.param('taskId'),origin,now:Date.now()});
-      await recordAuditQuietly(c.env.DB,{envelopeId:c.req.param('id') ?? '',taskId:c.req.param('taskId'),type:AUDIT.viewIssued,...requestFacts(c.req.raw),detail:{pageOrigin:origin,...(hostAuthentication?{hostAuthentication}:{})}});
+    try {const code=await issueRecipientCode(c.env.DB,{tenantId:c.get('tenantId'),envelopeId:c.req.param('id'),taskId:c.req.param('taskId'),origin,now:Date.now(),entry:{...(hostAuthentication?{hostAuthentication}:{}),...{signedInEmail}}});
+      await recordAuditQuietly(c.env.DB,{envelopeId:c.req.param('id') ?? '',taskId:c.req.param('taskId'),type:AUDIT.viewIssued,...requestFacts(c.req.raw),detail:{pageOrigin:origin,...(hostAuthentication?{hostAuthentication}:{}),signedInEmail}});
       return c.json({code},201);}
     catch {return c.json({error:'recipient_unavailable'},404);}
+  });
+  // The sender sends an invited signer's invitation again, with a new link (the old one stops working).
+  app.post('/api/envelopes/:id/tasks/:taskId/invitation', whenSigningEnabled, async c => {
+    const refused=await requireRole(c,'envelope',c.req.param('id') ?? '','editor');if(refused)return refused;
+    await expireIfDue(c.env.DB, c.req.param('id') ?? '');
+    const mailer=mailerFor(c.env,c.get('tenantId'));
+    if (!mailer||!c.env.APP_ORIGIN) return c.json({error:'mail_unavailable'},503);
+    const result=await resendInvitation(c.env.DB,c.get('tenantId'),c.req.param('id') ?? '',c.req.param('taskId') ?? '',mailer,c.env.APP_ORIGIN);
+    if (result==='not_invited') return c.json({error:'not_invited'},409);
+    if (result==='failed') return c.json({error:'mail_unavailable'},503);
+    return c.body(null,204);
+  });
+  // An invitation link (/sign#invite=<token>) opens the page like the host's link: a one-time code for
+  // the app's own origin, while the invitation is the signer's latest and their turn lasts.
+  app.post('/api/public/signing/invitation', whenSigningEnabled, bodyLimit({maxSize:1024}), async c => {
+    let body:{token?:unknown};try {body=await c.req.json();} catch {return c.json({error:'invalid_request'},400);}
+    if (!body || typeof body.token!=='string') return c.json({error:'invalid_request'},400);
+    const opened=await openInvitation(c.env.DB,body.token);
+    if (!opened) return c.json({error:'invalid_invitation'},401);
+    const origin=new URL(c.req.url).origin;
+    try {const code=await issueRecipientCode(c.env.DB,{tenantId:opened.tenantId,envelopeId:opened.envelopeId,taskId:opened.taskId,origin,now:Date.now(),entry:{entry:'EMAIL_INVITATION'}});
+      await recordAuditQuietly(c.env.DB,{envelopeId:opened.envelopeId,taskId:opened.taskId,type:AUDIT.invitationOpened,...requestFacts(c.req.raw),detail:{pageOrigin:origin}});
+      return c.json({code},201);}
+    catch {return c.json({error:'invalid_invitation'},401);}
   });
   app.post('/api/public/page-sessions/exchange', async c => {
     let body: {code?:unknown;embedded?:unknown;embedder?:unknown;embedders?:unknown};try {body=await c.req.json();} catch {return c.json({error:'invalid_request'},400);}
@@ -180,8 +221,9 @@ export function mountSigningRoutes(app: Hono<Env>): void {
         if(refusal.reason==='expired')return c.json({error:'otp_expired'},401);
         return c.json({error:'invalid_otp',attemptsLeft:refusal.attemptsLeft},401);
       }
-      // Identity confirmed: the emailed code, and the host's sign-in from the link this signer was last given.
-      const session=await sessionContext(c.env.DB,pageToken(c));if(session){const hostAuthentication=await lastHostAuthentication(c.env.DB,session.envelopeId,session.taskId);await recordAuditQuietly(c.env.DB,{envelopeId:session.envelopeId,taskId:session.taskId,type:AUDIT.otpVerified,...requestFacts(c.req.raw),...(hostAuthentication?{detail:{hostAuthentication}}:{})});}
+      // Identity confirmed: the emailed code, and how the signer came to this session (sessionEntry):
+      // the host's sign-in and the account Esign checked, or their invitation.
+      const session=await sessionContext(c.env.DB,pageToken(c));if(session){const entry=await sessionEntry(c.env.DB,pageToken(c));await recordAuditQuietly(c.env.DB,{envelopeId:session.envelopeId,taskId:session.taskId,type:AUDIT.otpVerified,...requestFacts(c.req.raw),...(Object.keys(entry).length?{detail:entry}:{})});}
       return c.body(null,204);}
     catch {return c.json({error:'invalid_session'},401);}
   });
@@ -206,7 +248,7 @@ export function mountSigningRoutes(app: Hono<Env>): void {
   }
   async function fieldsFor(c:import('hono').Context<Env>) {
     const task=await authorizeRecipientSession(c.env.DB,pageToken(c),requestOrigin(c),Date.now());
-    const row=await c.env.DB.prepare('SELECT t.role,t.recipient_name,t.recipient_email,p.roles_json,p.fields_json FROM tasks t JOIN envelopes e ON e.id=t.envelope_id JOIN templates p ON p.id=e.template_id AND p.tenant_id=e.tenant_id WHERE t.id=?').bind(task).first<{role:string;recipient_name:string;recipient_email:string;roles_json:string;fields_json:string}>();
+    const row=await c.env.DB.prepare(`SELECT t.role,t.recipient_name,t.recipient_email,${ENVELOPE_ROLES} AS roles_json,${ENVELOPE_FIELDS} AS fields_json FROM tasks t JOIN envelopes e ON e.id=t.envelope_id WHERE t.id=?`).bind(task).first<{role:string;recipient_name:string;recipient_email:string;roles_json:string;fields_json:string}>();
     if(!row)throw new Error('Missing template');const raw:unknown=JSON.parse(row.fields_json);if(!Array.isArray(raw))throw new Error('Invalid fields');
     // The page shows Date signed and Title fields only when the template has any.
     const hasTextFields=raw.some((f:any)=>f.type==='Date signed'||f.type==='Title');
@@ -230,10 +272,13 @@ export function mountSigningRoutes(app: Hono<Env>): void {
     const nextRow=await c.env.DB.prepare('SELECT n.recipient_name AS name, n.details_json AS details FROM tasks t JOIN tasks n ON n.envelope_id=t.envelope_id AND n.routing_order=t.routing_order+1 WHERE t.id=?').bind(details.task).first<{name:string;details:string}>();
     const nextCompany=nextRow?taskDetails(nextRow.details).onBehalfOf:undefined;
     const next=nextRow?{name:nextRow.name,...(nextCompany?{organization:nextCompany}:{})}:undefined;
+    // The sender's message to this signer (their own, or the envelope's), shown on Review.
+    const texts=await c.env.DB.prepare('SELECT t.details_json AS task,e.details_json AS envelope FROM tasks t JOIN envelopes e ON e.id=t.envelope_id WHERE t.id=?').bind(details.task).first<{task:string;envelope:string}>();
+    const message=texts?messageFor(texts.envelope,texts.task):null;
     return c.json({id:a.id,sha256:a.sha256,verified:await sessionVerified(c,details.task),disclosure:{version:CONSENT_DISCLOSURE.version,text:CONSENT_DISCLOSURE.text},intent:consentStatement(who.documentName,who.documentVersion,who.facts.onBehalfOf),signerName:details.recipientName,recipientEmail:details.recipientEmail,
       ...(who.documentName?{documentName:who.documentName}:{}),...(who.documentVersion?{documentVersion:who.documentVersion}:{}),
       ...(who.sender?{sender:{name:who.sender.name,...(who.sender.organization?{organization:who.sender.organization}:{})}}:{}),
-      ...(hostAuthentication?{hostAuthentication}:{}),signers:{before:order?.before??0,after:order?.after??0,...(next?{next}:{})},...(who.afterSigning.length?{afterSigning:who.afterSigning}:{}),
+      ...(hostAuthentication?{hostAuthentication}:{}),...(message?{message}:{}),signers:{before:order?.before??0,after:order?.after??0,...(next?{next}:{})},...(who.afterSigning.length?{afterSigning:who.afterSigning}:{}),
       ...(who.facts.title||who.facts.onBehalfOf?{signer:who.facts}:{}),...(details.fields.length?{fields:details.fields,role:details.role,recipientName:details.recipientName,...(details.hasTextFields?{v3:true}:{})}:{})});} catch {return c.json({error:'unavailable'},401);}});
   // The signer whose turn it is declines, after the code, with a reason: the envelope ends for
   // everyone, and the audit trail records who declined, why, and from where.
@@ -340,8 +385,12 @@ export function mountSigningRoutes(app: Hono<Env>): void {
     const existing=await replay();if (existing) return c.json(existing,202);
     try {const a=await current(c);if (a.id!==body.artifactId || a.sha256!==body.artifactHash) throw new Error('Stale artifact');const file=await c.env.ARTIFACTS.get(a.object_key);if (!file || await sha256(await file.arrayBuffer())!==a.sha256) throw new Error('Input mismatch');
       const {fields,hasTextFields}=await fieldsFor(c);const command={token,origin:requestOrigin(c),now:Date.now(),artifactId:a.id,artifactHash:a.sha256};
-      // A Title field shows the title the signer gave on Review, nothing else.
-      if(hasTextFields&&fields.some(f=>f.type==='Title')){const values=body.signatures as Record<string,unknown>|undefined;if(!signerTitle||signerTitle==='invalid'||fields.some(f=>f.type==='Title'&&values?.[f.id]!==signerTitle))return c.json({error:'title_mismatch'},422);}
+      // Every required field signed (or filled in); an optional one may be left empty. Date signed is the server's.
+      const given=(body.signatures&&typeof body.signatures==='object'?body.signatures:{}) as Record<string,unknown>;
+      const missing=fields.filter(f=>f.required&&f.type!=='Date signed'&&given[f.id]===undefined).map(f=>f.id);
+      if(missing.length)return c.json({error:'required_fields_missing',fields:missing},422);
+      // A Title field the signer fills shows the title they gave on Review, nothing else.
+      if(hasTextFields){const values=body.signatures as Record<string,unknown>|undefined,filled=fields.filter(f=>f.type==='Title'&&values?.[f.id]!==undefined);if(filled.length&&(!signerTitle||signerTitle==='invalid'||filled.some(f=>values?.[f.id]!==signerTitle)))return c.json({error:'title_mismatch'},422);}
       const disclosure=await consentDisclosure();
       const id=await recordSignature(c.env.DB,c.env.ARTIFACTS,{...command,consent:true,values:body.signatures,signaturePreviews:body.signaturePreviews,textPreviews:body.textPreviews,datePreviews:body.datePreviews,disclosure:{version:disclosure.version,sha256:disclosure.sha256},authority});
       const session=await sessionContext(c.env.DB,token);
@@ -350,6 +399,7 @@ export function mountSigningRoutes(app: Hono<Env>): void {
     } catch (error) {const raced=await replay();return raced ? c.json(raced,202) : c.json({error:error instanceof DateChanged?'date_changed':'signature_rejected'},409);}
   });
   app.get('/api/envelopes/:id/delivery-pdf', noStore, async c => {
+    const refused=await requireRole(c,'envelope',c.req.param('id') ?? '','viewer');if(refused)return refused;
     const envelope=await c.env.DB.prepare("SELECT 1 FROM envelopes WHERE id=? AND tenant_id=? AND status='COMPLETED'").bind(c.req.param('id'),c.get('tenantId')).first();
     if(!envelope) return c.json({error:'not_found'},404);
     const id=c.req.param('id') ?? '';
@@ -362,7 +412,7 @@ export function mountSigningRoutes(app: Hono<Env>): void {
         const testKey=testSealKey(c.env);if(!testKey) return c.json({error:'unavailable'},503);
         result=await deliveryPdf(c.env.DB,c.env.ARTIFACTS,c.get('tenantId'),id,testKey);
       }
-      return c.body(Uint8Array.from(result.bytes).buffer,200,{'Content-Type':'application/pdf','Content-Disposition':`inline; filename="${result.metadata.format.startsWith('esign-local-delivery')?'delivery-local-test':'delivery'}.pdf"`,'X-Content-Type-Options':'nosniff'});
+      return c.body(Uint8Array.from(result.bytes).buffer,200,{'Content-Type':'application/pdf','Content-Disposition':contentDisposition('inline',await signedFileNameOf(c.env.DB,id,result.metadata.format.startsWith('esign-local-delivery'))),'X-Content-Type-Options':'nosniff'});
     } catch {return c.json({error:'unavailable'},503);}
   });
   // A signer's copy, from the link in their completion notice (signed-copies.ts): the /copy page
@@ -378,7 +428,7 @@ export function mountSigningRoutes(app: Hono<Env>): void {
       if(!managed&&!testKey)throw new Error('Seal unavailable');
       const result=await deliveryPdf(c.env.DB,c.env.ARTIFACTS,link.tenantId,link.envelopeId,managed?managedDelivery(c.env.DB,c.env.ARTIFACTS,link.tenantId,link.envelopeId,sealTrustFromEnv(c.env)):testKey!);
       await recordAuditQuietly(c.env.DB,{envelopeId:link.envelopeId,taskId:link.taskId,type:AUDIT.copyDownloaded,...requestFacts(c.req.raw)});
-      return c.body(Uint8Array.from(result.bytes).buffer,200,{'Content-Type':'application/pdf','Content-Disposition':`attachment; filename="signed-${link.envelopeId}.pdf"`,'Cache-Control':'no-store','X-Content-Type-Options':'nosniff'});
+      return c.body(Uint8Array.from(result.bytes).buffer,200,{'Content-Type':'application/pdf','Content-Disposition':contentDisposition('attachment',await signedFileNameOf(c.env.DB,link.envelopeId,result.metadata.format.startsWith('esign-local-delivery'))),'Cache-Control':'no-store','X-Content-Type-Options':'nosniff'});
     } catch {
       // The copy could not be built this time: the link works again, rather than being spent on a failure.
       await releaseCopyLink(c.env.DB,body.token as string);
@@ -386,6 +436,7 @@ export function mountSigningRoutes(app: Hono<Env>): void {
     }
   });
   app.get('/api/envelopes/:id/certificate', noStore, async c => {
+    const refused=await requireRole(c,'envelope',c.req.param('id') ?? '','viewer');if(refused)return refused;
     const envelope=await c.env.DB.prepare("SELECT id,template_id,created_at,status FROM envelopes WHERE id=? AND tenant_id=? AND status='COMPLETED'").bind(c.req.param('id'),c.get('tenantId')).first();
     if (!envelope) return c.json({error:'not_found'},404);
     const id=c.req.param('id') ?? '';

@@ -38,8 +38,8 @@ async function harness() {
     if (!created.id) return { status: res.status, error: created.error } as const;
     const id = created.id;
     await req(`/api/envelopes/${id}/prepare`, { method: 'POST', headers: auth });
-    const task = (await (await req(`/api/envelopes/${id}`, { headers: auth })).json() as { tasks: { id: string }[] }).tasks[0];
-    const { code } = await (await req(`/api/envelopes/${id}/tasks/${task.id}/recipient-view`, json({ origin: ORIGIN, ...view }, auth))).json() as { code: string };
+    const task = (await (await req(`/api/envelopes/${id}`, { headers: auth })).json() as { tasks: { id: string; recipientEmail: string }[] }).tasks[0];
+    const { code } = await (await req(`/api/envelopes/${id}/tasks/${task.id}/recipient-view`, json({signedInEmail:task.recipientEmail, origin: ORIGIN, ...view }, auth))).json() as { code: string };
     const { token } = await (await req('/api/public/page-sessions/exchange', json({ code }, { origin: ORIGIN, ...SIGNER }))).json() as { token: string };
     const headers = { origin: ORIGIN, 'x-esign-session': token, ...SIGNER };
     if (verify) {
@@ -202,7 +202,7 @@ test("the envelope read says when each recipient first opened the signing page",
     assert.ok(opened.openedAt, 'opened once the page session started');
     assert.ok(Date.parse(opened.openedAt!) >= before - 1000);
     // A second session keeps the first time.
-    const { code } = await (await h.req(`/api/envelopes/${s.id}/tasks/${s.taskId}/recipient-view`, h.json({ origin: ORIGIN }, h.auth))).json() as { code: string };
+    const { code } = await (await h.req(`/api/envelopes/${s.id}/tasks/${s.taskId}/recipient-view`, h.json({ origin: ORIGIN, signedInEmail: 'ana@partner.test' }, h.auth))).json() as { code: string };
     await h.req('/api/public/page-sessions/exchange', h.json({ code }, { origin: ORIGIN, ...SIGNER }));
     assert.equal((await read()).openedAt, opened.openedAt);
   } finally { await h.mf.dispose(); }

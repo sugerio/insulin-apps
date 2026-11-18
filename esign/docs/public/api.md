@@ -19,21 +19,28 @@ The base URL is `https://esign.insulinapps.com`. Every endpoint is under `/api/`
 | An AI agent | Through the MCP server at `https://esign.insulinapps.com/mcp` | Acts with the person's role. Esign's **Connect AI** page (`https://insulinapps.com/apps/esign/settings/connect-ai`, or **Connect AI** in the account bar) has the setup for Claude Code, Codex, Gemini CLI, opencode, Claude.ai and ChatGPT. Its tools `read` and `change` call these endpoints. See [AI agents](/docs/platform/ai-agents). |
 | A signer's page | A one-time code exchanged for a page session (`x-esign-session` header) | Only the public `/api/public/` endpoints. |
 
-Every management call sees only the caller's organization. An id from another organization answers `404 not_found`, as
-if it didn't exist.
+Every management call sees only the caller's organization, and in it only the templates and envelopes the caller owns or
+that are shared with them (see [Owners, sharing and tags](#owners-sharing-and-tags)). Any other id answers
+`404 not_found`, as if it didn't exist.
 
 ## Conventions
 
 - **JSON** in and out, except uploads (multipart or PDF bytes) and PDF downloads.
 - **Permissions.** Reading (`GET`) needs **View envelopes** (`esign.view`); anything else needs **Send and manage
-  envelopes** (`esign.manage`). `GET /api/me` and `GET /api/catalog` work for every role.
+  envelopes** (`esign.manage`), except setting your own tags and leaving what is shared with you. `GET /api/me` and `GET /api/catalog` work for every role.
+  On a template or an envelope, the caller also needs a role in it: **Viewer**, **Editor** or **Admin** below, which
+  its owner has, and someone who may only view Esign is a Viewer at most. Too low a role answers `403 forbidden`.
 - **Errors** are `{"error": "<code>"}` with an HTTP status: `400` and `422` for a request Esign doesn't accept, `401
   unauthorized` without an identity, `403 forbidden` when the role doesn't allow it, `404 not_found`, `409` when the state
   changed meanwhile (for example `envelope_not_voidable` or `idempotency_conflict`).
 - **Signing must be set up.** Until it is, the endpoints marked † answer `404 signing_disabled`. `GET /api/me` says
   whether it is (`signingEnabled`).
-- **Paging.** Lists are newest first: `limit` (1 to 100, default 50) and `before` (a time in epoch milliseconds: pass the
-  last item's `createdAt` for the next page).
+- **Paging.** Lists are newest first: `limit` (1 to 100, default 50), and `next` when there may be more: pass it as
+  `cursor` for the following page (envelopes and templates made in the same millisecond are each listed once). `before`
+  (a time in epoch milliseconds) lists only those made before it.
+- **Lists of templates and envelopes** take `scope` (`mine` or `shared`; both by default) and `tag` (up to 5 of your own
+  tags, repeated: those with all of them). Each item has its `owner` (`{id, kind: person|client, name?, email?}`), your
+  role in it (`myRole`) and your `tags`.
 - **Ids** are opaque strings. Times in lists are epoch milliseconds (`createdAt`); deadlines and audit times are ISO 8601.
 
 ## Endpoints
@@ -49,31 +56,67 @@ if it didn't exist.
 
 | Method and path | Permission | What it does |
 | --- | --- | --- |
-| `GET /api/templates` | View | The organization's templates, newest first: `{templates: [{id, name?, metadata, roles, fields, createdAt}]}`. |
-| `POST /api/templates` | Manage | Upload a PDF (at most 5 MiB and 100 pages) as multipart form fields `file` and `roles` (a JSON array of 1 to 20 distinct role names, in signing order), and optionally `name` and `metadata` (a JSON object; see [Names and metadata](#names-and-metadata)). Answers `201 {id, name?, metadata, roles}`. Signed on an added signature page. |
-| `GET /api/templates/{id}` | View | A template's name and metadata, its roles and placed fields (type, role, page, box), and whether they can be signed. |
-| `POST /api/template-editing-sessions` | Manage | Open the field editor for a host page to embed: `{allowedParentOrigin, roles?, sourceTemplateId?, name?, metadata?}`. The template it saves gets that name and metadata, or the source template's. Answers `{sessionId, url}`. |
-| `POST /api/template-editing-sessions/{id}/source` | Manage | Stage the PDF the session starts from (body: the PDF, `application/pdf`), once, before the editor is opened. |
-| `GET /api/template-editing-sessions/{id}` | View | `{templateId}` once the editor has saved, else `{templateId: null}`. |
+| `GET /api/templates` | View | The templates you own or that are shared with you, newest first: `{templates: [{id, name?, metadata, defaultSigners, roles, fields, createdAt, owner, myRole, tags}], next?}`. Filters: `q` (the name contains it, or it is the template's id), `since` (uploaded at or after, epoch ms), `status` (`active`, the default: ready to use; `draft`; or `all`), `scope` and `tag`; `next` is the `cursor` of the following page. Each has its `status`. |
+| `POST /api/templates` (JSON) | Manage | Save as template: `{fromEnvelope, name?, roles?, defaultSigners?, tags?, share?}` makes a template of an envelope you see that was sent with a document uploaded with it (not a draft, no template): its PDF and fields, `roles` renaming its roles in their order (its own by default), its document name unless `name`, and with `defaultSigners: true` its signers as default signers. You own it; it is ready. Answers `201 {id, name?, roles, defaultSigners, tags}`; an envelope of another kind answers `409 not_an_uploaded_envelope`. |
+| `POST /api/templates` | Manage | Upload a PDF (at most 5 MiB and 100 pages) as multipart form fields `file` and `roles` (a JSON array of 1 to 20 distinct role names, in signing order), and optionally `name`, `metadata` (a JSON object; see [Names and metadata](#names-and-metadata)), `defaultSigners` (a JSON object; see [Default signers](#default-signers)), `tags` and `share` (JSON arrays; see [Owners, sharing and tags](#owners-sharing-and-tags)). You own it. Answers `201 {id, name?, metadata, roles, defaultSigners, tags}`. Signed on an added signature page. |
+| `GET /api/templates/{id}` | Viewer | A template's name, metadata and default signers, its roles and placed fields (type, role, page, box, `required`; a pre-filled field's type is `Prefill`, its role empty, with its `name` and `label`), its pre-filled fields once per name (`prefill: [{name, label, required, default?}]`), whether they can be signed, `createdAt`, `status` (`active`, or `draft`: saved from the field editor before it is ready, and not usable to send), its owner, your role and your tags, and `archivedAt` when it was deleted or replaced by a new version. Lists show the templates that aren't archived only. |
+| `GET /api/templates/{id}/pdf` | Viewer | Its PDF as uploaded (`application/pdf`), to show it. |
+| `POST /api/templates/{id}` | Editor | Rename it: `{name}` (`null` clears it). Answers `{id, name?}`. Envelopes already sent keep their document name. |
+| `POST /api/templates/{id}/delete` | Admin | Delete it: it is archived, which takes it off every list, Esign's pages included. Everything by its id works as before (`GET` says `archivedAt`), so a host that keeps the id is unaffected, and envelopes sent from it are signed as before. Answers `{id, deleted: true}`. |
+| `POST /api/templates/{id}/default-signers` | Editor | Replace the template's default signers: `{defaultSigners}` (`{}` clears them). Answers `{id, defaultSigners}`. Envelopes already sent keep their signers. |
+| `POST /api/template-editing-sessions` | Manage | Open the field editor for a host page to embed: `{allowedParentOrigin, roles?, sourceTemplateId?, replace?, name?, metadata?, tags?, share?, prefill?}`. `prefill`, `[{name, label}]` (1 to 30): the pre-filled fields you fill in when you send; the editor offers those to place, and its author can't add their own. A source template must be one you see (Viewer). With `replace: true` (Editor of the source), the saved template is the source's new version: it keeps the source's owner, name, default signers, shares and everyone's tags, and takes its place in lists; the source is archived, as if deleted: off the lists, while everything by its id works as before; `tags` and `share` are then ignored. The template it saves is yours, gets that name and metadata, or the source template's, your tags (with yours on the source) and the shares asked for. Answers `{sessionId, url}`. With `{allowedParentOrigin, envelopeId}` instead, it places the fields of a draft whose document was uploaded with it: the roles are its signers', the PDF its own, and saving writes the draft's fields (`draft=true` as it is; without it, every role needs a required Signature). |
+| `POST /api/template-editing-sessions/{id}/source` | Manage | Stage the PDF the session starts from (body: the PDF, `application/pdf`), once, before the editor is opened. Whoever opened the session only. |
+| `GET /api/template-editing-sessions/{id}` | View | `{templateId}` once the editor has saved, else `{templateId: null}`. Whoever opened the session only. |
 
 ### Envelopes
 
 | Method and path | Permission | What it does |
 | --- | --- | --- |
-| `GET /api/envelopes` | View | The organization's envelopes, newest first: `{envelopes: [{id, templateId, status, createdAt, documentName?, metadata}]}`. Filter with `status`. |
-| `POST /api/envelopes` | Manage | Send a template for signature, one recipient per role. Needs an `Idempotency-Key` header. Answers `201 {id, status: "IN_PROGRESS"}`; the first signer's turn starts at once. |
-| `GET /api/envelopes/{id}` | View | The status, `documentName` and `metadata`, and each signer's task, in order: `id`, `role`, `recipientName`, `recipientEmail`, `routingOrder`, `status`, `expiresAt`, `openedAt`. |
-| `GET /api/envelopes/{id}/audit` | View | The audit trail, in order: `{events: [{type, at, recipient?, ip?, userAgent?, detail?}]}`. Never codes or message ids. |
-| `POST /api/envelopes/{id}/void` | Manage | Withdraw an envelope that is out for signature, with an optional `{reason}` (up to 500 characters). Repeating it is harmless; any other status answers `409 envelope_not_voidable`. |
-| `POST /api/envelopes/{id}/tasks/{taskId}/recipient-view` † | Manage | A one-time code for the active signer's signing page: `{code}`. Body: `{origin?, hostAuthentication?}`. |
-| `GET /api/envelopes/{id}/delivery-pdf` | View | A completed envelope's signed PDF followed by its certificate of completion. |
-| `GET /api/envelopes/{id}/certificate` | View | A completed envelope's certificate as JSON: the seal, checked against the stored files on every read. |
-| `POST /api/process-due` † | Manage | Due work for the caller's organization, at once: answers `{expired, completed, waiting, failed}`. The platform runs it for every organization every five minutes anyway. |
+| `GET /api/envelopes` | View | The envelopes you own or that are shared with you, newest first: `{envelopes: [{id, templateId, status, createdAt, documentName?, metadata, signers: [{role, name, email, status}], progress: {signed, total}, current?: {taskId, name, email, delivery}, lastChangeAt, owner, myRole, tags}], next?}`. `current` is whose turn it is, while it is out for signature; `lastChangeAt` its latest event; `next` the `cursor` of the following page. Drafts are listed only when `status` asks for `DRAFT`; their `signers` are those the draft names so far, and a scheduled one has `sendAt` (when Esign sends it) or `sendError` (why it couldn't, then). Filters: `status` (one or more, comma-separated or repeated), `q` (the document name or a signer's name or email contains it, or the envelope's id), `since` (created at or after, epoch ms), `view` (`waiting`: yours, out for signature; `expiring`: out for signature, the active signer's deadline within 7 days), `scope` and `tag`. |
+| `POST /api/envelopes` | Manage | Send a template you see (Viewer) for signature, one recipient per role. Needs an `Idempotency-Key` header. You own the envelope; it isn't shared with the template's people. Answers `201 {id, status: "IN_PROGRESS"}`; the first signer's turn starts at once. A draft template answers `409 template_draft`. `prefill` gives the template's pre-filled fields' values by name (`{"partner.legalName": "Kestrel Systems Ltd"}`): each is drawn on the document before anyone signs, in every box placed for its name; one not given takes its default, or stays empty. Refused: `422 unknown_prefill` (a name the template hasn't), `422 invalid_prefill` (a value that isn't printable ASCII, trimmed, at most 128 characters), `422 prefill_missing` (a required one without a value), `422 prefill_too_long` (a value too wide for its box at the smallest size); each with `fields`, the names. `GET /api/envelopes/{id}` shows the values drawn as `prefill: [{name, label, value}]`. With `draft: true`, saves a draft instead: the request as it is (only its fields' names, its template, `tags` and `share` are checked), with no tasks, invitations or contacts; answers `201 {id, status: "DRAFT"}`. With `sendAt` (ISO 8601, 1 minute to 400 days ahead; not with `draft`), sends it later: checked now as a send (refused as one would be, and `422 deadline_before_send_at` for a signer's deadline at or before it; `422 invalid_send_at` for the time), saved as a draft with nothing sent; answers `201 {id, status: "DRAFT", sendAt}`. Esign sends it then, as you, within a few minutes: for a person, only while the platform still lists them with Manage in Esign; for an API client, which the platform doesn't list, as it was when it scheduled it: revoking the client doesn't cancel it, so discard the draft first (the people its settings name, anyone it is shared with as editor, or an organization owner who took over what it owns). |
+| `POST /api/envelopes/{id}` | Editor | A draft, changed (the same body as `POST /api/envelopes`, with `draft: true`, which also cancels a scheduled send; answers `{id, status: "DRAFT"}`), scheduled or rescheduled (with `sendAt`, as above; answers `{id, status: "DRAFT", sendAt}`) or sent (without it: checked and sent as a new envelope, once; answers `{id, status: "IN_PROGRESS"}`). No `Idempotency-Key`. An envelope that isn't a draft answers `409 not_draft`. |
+| `POST /api/envelopes/{id}/document` | Editor | The PDF of a draft created without `templateId` (its document is uploaded with it), as the body (`application/pdf`, at most 5 MiB and 100 pages, no form fields or annotations, pages not rotated); again to replace it, which clears the fields placed on it. Answers `201 {id, pages, sha256}`. Its fields are placed with an editing session's `envelopeId`; sending it (`POST /api/envelopes/{id}` without `templateId`) answers `409 document_required` or `fields_required` until they are there, and `422 fields_not_ready` until every role has a required Signature field. The envelope's `templateId` is then null. |
+| `GET /api/envelopes/{id}` | Viewer | The status, `documentName`, `metadata` and `message`, the pre-filled fields' values drawn on the document (`prefill: [{name, label, value}]`), a draft's request as saved (`draft`), for a draft with an uploaded document `upload: {document, roles, fields}`, and each signer's task, in order: `id`, `role`, `recipientName`, `recipientEmail`, `routingOrder`, `status`, `delivery`, `message`, `expiresAt`, `openedAt`, `invitedAt`; its owner, your role and your tags. |
+| `GET /api/envelopes/{id}/audit` | Viewer | The audit trail, in order: `{events: [{type, at, recipient?, ip?, userAgent?, detail?}]}`. Never codes or message ids. |
+| `POST /api/envelopes/{id}/void` | Editor | Withdraw an envelope that is out for signature, with an optional `{reason}` (up to 500 characters). Repeating it is harmless; any other status answers `409 envelope_not_voidable`. A draft is discarded: deleted, with its shares and tags (`{id, status: "DISCARDED"}`). |
+| `POST /api/envelopes/{id}/tasks/{taskId}/recipient-view` † | Editor | A one-time code for the active signer's signing page: `{code}`. Body: `{signedInEmail, origin?, hostAuthentication?}`; see [Embed the signing page](#embed-the-signing-page). |
+| `POST /api/envelopes/{id}/tasks/{taskId}/invitation` | Editor | Email the active signer's invitation again, with a new link; the earlier link stops working. Answers `204`; `409 not_invited` for a signer Esign doesn't invite. |
+| `GET /api/envelopes/{id}/delivery-pdf` | Viewer | A completed envelope's signed PDF followed by its certificate of completion. `Content-Disposition` names it by its document and the day it was completed (UTC), such as `Reseller Agreement - Signed 2026-11-13.pdf`; each signer's copy has the same name. |
+| `GET /api/envelopes/{id}/certificate` | Viewer | A completed envelope's certificate as JSON: the seal, checked against the stored files on every read. |
+| `POST /api/process-due` † | Manage | Due work for the caller's organization, at once: answers `{expired, completed, waiting, failed, scheduledSent, scheduledFailed}` (the last two: drafts sent later whose time had come). The platform runs it for every organization every five minutes anyway. |
 
 `POST /api/envelopes/{id}/prepare` still exists for older callers and does nothing; don't use it.
 
+### Contacts
+
+The organization's address book: everyone its envelopes named as a signer, and anyone added by hand. See
+[How contacts are kept](#how-contacts-are-kept).
+
+| Method and path | Permission | What it does |
+| --- | --- | --- |
+| `GET /api/contacts` | View | The contacts, most recently used (or added) first: `{contacts: [{id, email, name, title?, company?, envelopeCount, lastUsedAt?, createdAt, updatedAt}], next?}`: `envelopeCount` and `lastUsedAt` count the envelopes that named them since they were added. `q` keeps those whose name or email contains it (up to 100 characters, case-insensitive); `limit` is 1 to 100 (50 by default); pass `next` as `cursor` for the following page. |
+| `GET /api/contacts/{id}` | View | A contact, with `envelopes`: every envelope you see that names them as a signer, those from before they were added too, newest first (at most 50), each `{id, status, createdAt, documentName?, role, taskStatus}`. |
+| `POST /api/contacts` | Manage | Add a contact, `{email, name, title?, company?}`, or change the one with this email (compared case-insensitively). Answers `201` when added, `200` when changed, with the contact. A `title` or `company` left out is kept; `null` or `""` clears it. |
+| `POST /api/contacts/{id}` | Manage | Change a contact's `name`, `title` or `company`, as above. The email can't change: another email is another contact. |
+| `POST /api/contacts/{id}/delete` | Manage | Delete a contact. Answers `{id, deleted: true}`. |
+
 Envelope statuses are `IN_PROGRESS`, `FINALIZING`, `COMPLETED`, `VOIDED`, `DECLINED` and `EXPIRED`; a signer's task is
 `PENDING`, `ACTIVE` or `SIGNED`. See [Sending envelopes](/docs/esign/sending-envelopes#statuses).
+
+### Sharing, tags and ownership
+
+`{kind}` is `templates` or `envelopes`.
+
+| Method and path | Permission | What it does |
+| --- | --- | --- |
+| `GET /api/{kind}/{id}/shares` | Viewer | Who sees it: `{id, myRole, owner, organization?: {role, sharedAt}, shares: [{email, name?, role, sharedAt}]}`. `organization` is there when it is shared with everyone in your organization. |
+| `POST /api/{kind}/{id}/shares` | Admin | Share it with someone, or change their role: `{email, role}`, `role` one of `admin`, `editor`, `viewer`; or with everyone in your organization: `{organization: true, role}`, `role` `editor` or `viewer`. Answers as above. Its owner's own email answers `422 owner_not_shared`; an API client's address is refused. |
+| `POST /api/{kind}/{id}/shares/delete` | Admin, or anyone for themselves | Stop sharing it with someone: `{email}`, or with everyone: `{organization: true}`. Removing yourself answers `{id, removed: true}`. Someone it isn't shared with answers `404 not_shared`. |
+| `POST /api/{kind}/{id}/tags` | Viewer | Replace your own tags on it: `{tags}` (`[]` clears them). Answers `{id, tags}`. |
+| `GET /api/tags` | View | Your own tags, most used first: `{tags: [{tag, uses}]}`. `q` keeps those containing it; `limit` 1 to 100 (20 by default). |
+| `GET /api/members` | View | The people of your organization who can use Esign, to share with: `{members: [{id, email, name?}]}`, as the platform lists them (someone who has never opened Esign included). `q`: their name or email contains it (up to 100 characters); `limit`: 1 to 100, 20 by default. |
+| `GET /api/owners` | Organization owners | Everyone who owns templates or envelopes: `{owners: [{id, kind, name?, email?, templates, envelopes, lastSeenAt?}]}`. |
+| `POST /api/owners/{id}/transfer` | Organization owners | Take over everything someone (a person or an API client) owns: answers `{from, to, templates, envelopes}`. Shares stay, but yours on those documents (you own them now). |
 
 ## Send an envelope
 
@@ -81,12 +124,13 @@ Envelope statuses are `IN_PROGRESS`, `FINALIZING`, `COMPLETED`, `VOIDED`, `DECLI
 
 | Field | Required | What it is |
 | --- | --- | --- |
-| `templateId` | Yes | The template to send. |
-| `recipients` | Yes | One per role of the template (1 to 20), each `{role, name, email}` and optionally `expiresAt` (ISO 8601, in the future, within 400 days), `title` (up to 128 characters), `onBehalfOf` (the company, up to 200), `namedBy` (who named this signer, up to 300) and `afterSigning` (up to 3 lines shown after signing). |
+| `templateId` | Yes, to send | The template to send. A draft (`draft: true`) whose PDF you upload yourself leaves it out: upload it with `POST /api/envelopes/{id}/document`, then place its fields with an editing session's `envelopeId`. |
+| `recipients` | Yes | One per role of the template (1 to 20), each `{role, name, email}` (a `name` or `email` left out is the role's [default signer](#default-signers)'s, if the template has one) and optionally `expiresAt` (ISO 8601, in the future, within 400 days), `title` (up to 128 characters), `onBehalfOf` (the company, up to 200), `namedBy` (who named this signer, up to 300), `afterSigning` (up to 3 lines shown after signing), `delivery` and `message`; see [How signers reach the page](#how-signers-reach-the-page). |
 | `documentName` | No | Shown to signers and named in the statement they agree to (up to 200 characters). |
 | `documentVersion` | No | `{label, publishedAt?}`, such as `{"label": "v3"}` (a label of up to 16 characters). |
 | `sender` | No | `{name, email?, organization?}`. |
 | `metadata` | No | Your own keys and values; see [Names and metadata](#names-and-metadata). Part of the request: the same key with other metadata is a conflict. |
+| `message` | No | `{subject?, body?}`: your message to every signer. See [How signers reach the page](#how-signers-reach-the-page). |
 
 The `Idempotency-Key` header is required: 1 to 128 letters, digits, `-` or `_`, a fresh random value for each new
 envelope. The envelope's id is derived from your organization and the key, so:
@@ -100,6 +144,27 @@ a recipient, the document version and the sender may name only the fields above)
 name the signature page can't draw), `422 positioned_fields_not_supported` (the template's placed fields can't be signed),
 `404 not_found` (no such template).
 
+## How signers reach the page
+
+Each recipient's `delivery` says how they get to the signing page:
+
+- `host` (the default): your product. Esign emails them nothing; your backend asks for a one-time code with
+  `recipient-view` when it is their turn, for the account signed in to your product (see
+  [Embed the signing page](#embed-the-signing-page)).
+- `email`: Esign. When it is their turn, Esign emails them an invitation with a link to the signing page, from your
+  organization's mail relay. `recipient-view` refuses them (`409 recipient_signs_by_email`). If the email went astray,
+  send it again with `POST /api/envelopes/{id}/tasks/{taskId}/invitation`; the earlier link then stops working. A link
+  works while it is the signer's turn.
+
+Either way the signer then confirms a code emailed to them before they sign, and the certificate says how they came:
+"signed in to the sender's system as …" or "Email invitation link".
+
+`message` is your message to the signers, `{subject?, body?}`: a subject of one line, up to 100 characters, and a body
+of plain text, up to 10,000 characters, line breaks kept. The envelope's `message` is for every signer; a recipient's own
+`message` replaces it for them. The body is shown on the signing page, next to the document, and in an invitation;
+the subject is the invitation's (without one, "Please sign:" and the document's name). It is part of the request, like
+`metadata`, and not part of the signed evidence.
+
 ## Names and metadata
 
 A template can have a **name**, up to 200 characters, shown on the Templates page. Templates and envelopes can carry
@@ -107,6 +172,72 @@ A template can have a **name**, up to 200 characters, shown on the Templates pag
 an object of at most 20 keys (letters, digits, `_`, `.` and `-`, up to 40 characters) whose values are strings of up to
 500 characters. Esign keeps it as given and returns it on every read; it never reads it, and it is not part of the
 sealed evidence or shown to signers. A malformed name or metadata is refused with `422`.
+
+## Default signers
+
+A template's `defaultSigners` say who usually signs as some of its roles: an object keyed by role, each
+`{name?, email?}` with at least one of them, such as
+`{"seller": {"name": "Sam Seller", "email": "sam@seller.example"}}`. A name follows the rules of a recipient's name (it
+must be drawable by the signature font), an email those of a recipient's email; a role the template hasn't is refused
+with `422`.
+
+When you send, a recipient that leaves out its `name` or `email` gets its role's default; what you give wins. Without a
+default to fall back on, a missing name or email is refused with `422 invalid_recipient`. The envelope records the
+signers it was sent to, so changing a template's default signers later changes no envelope. An envelope's idempotency is
+by the request as sent: a retry gets the envelope the first request made, even if the defaults changed since.
+
+A copy made in the field editor (`sourceTemplateId`) keeps its source's default signers for the roles it keeps; a new
+PDF placed in the editor gets them with `POST /api/templates/{id}/default-signers` once saved.
+
+## Owners, sharing and tags
+
+Every template and envelope has one **owner**: the person or the API client that created it, or whom an organization
+owner transferred it to. Nobody else sees it, not even your organization's owners and admins, unless it is shared with
+them by email, or with everyone in your organization, with a role:
+
+| Role | What it may do |
+| --- | --- |
+| **Viewer** | See it: an envelope's tasks, audit trail, signed PDF and certificate; who it is shared with. Send envelopes from a template, and copy it in the field editor. Tag it for themselves. |
+| **Editor** | Also change it: a template's default signers; an envelope's void, invitations and signing pages. |
+| **Admin** | Also share it, with anyone, as Admin at most, and stop sharing it. |
+| **Owner** | All of that. The owner is never a share. |
+
+A role is capped by the caller's role in Esign: someone who may only view Esign is a Viewer at most. Anyone it is shared
+with by email can remove themselves. An envelope isn't shared with its template's people: it is its sender's.
+
+**Everyone in your organization.** Shared with everyone, as Viewer or Editor (never Admin), it is seen by every person of
+your organization who uses Esign, at that role, or at the higher one they are shared by email. API clients are not part of
+everyone. The lists' `scope=shared` includes it; its owner still finds it under `mine`.
+
+When you create a template, an envelope or an editing session, `share` (an array of at most 20 `{email, role}`, or
+`{organization: true, role}` for everyone) shares it with others at once; each person once, at the highest role given,
+and never with yourself.
+
+**API clients.** An API client owns what it creates. Your organization's owners and admins choose who else sees it: on
+Esign's **API access** page, **Esign settings** under the client opens its page in Esign, **Who sees what it creates**.
+The people added there see, as Admin, every template and envelope the client owns, those it created before included,
+for as long as they are on the list. They are not shares: the documents' **Share** lists them under the client's
+settings, and only that page changes them. `share` on a create request shares with others as usual.
+
+**Taking over.** An organization owner can take over everything someone owns, for someone who left or an API client no
+longer used (`POST /api/owners/{id}/transfer`, or **Owners** on the Ownership page, `/ownership`, linked from an API client's page).
+
+**Tags** are your own: up to 20 per template or envelope, each up to 50 characters, compared case-insensitively. Nobody
+else sees them, the owner included. `tags` on a create request sets them; an envelope also gets yours on its template,
+and a copy made in the field editor yours on its source. Lists filter by them with `tag`.
+
+Ownership, shares and tags are never evidence: the certificate and the signed PDF don't mention them.
+
+## How contacts are kept
+
+Every envelope adds each of its signers to the organization's contacts, one per email address (compared
+case-insensitively), or refreshes the one there: the name is the envelope's, and its title and company (`onBehalfOf`)
+replace the contact's when the envelope gives them. A retried send counts once. Members also add, change and delete
+contacts, in Esign's **Contacts** page or through the API above.
+
+A contact only helps fill in a signer: it is never evidence. An envelope keeps the name and email it was sent with,
+whatever happens to the contact later, and deleting a contact deletes no envelope. The next envelope that names them adds
+them again.
 
 ## Examples
 
@@ -214,7 +345,8 @@ clients uploaded.
 A host product shows the signing page inside its own pages:
 
 1. When it is a signer's turn (their task is `ACTIVE`), the host's backend calls
-   `POST /api/envelopes/{id}/tasks/{taskId}/recipient-view` with `{}` and gets `{code}`.
+   `POST /api/envelopes/{id}/tasks/{taskId}/recipient-view` with `{"signedInEmail": "…"}`, the email of the account
+   signed in to the host, and gets `{code}`.
 2. The host frames `https://esign.insulinapps.com/sign#code=CODE&host=HOST_ORIGIN`, where `HOST_ORIGIN` is the host
    page's origin (for messages). Put the code in the fragment, never in a query string, and never log it.
 3. The page exchanges the code for a 15-minute session, takes the signer through review, the emailed code and signing,
@@ -224,6 +356,10 @@ A host product shows the signing page inside its own pages:
 Rules:
 
 - The code works once, within two minutes, only for that signer and while their task is active.
+- Only for your signers (`delivery` `host`), and only when `signedInEmail` is the signer's email, compared without
+  regard to case: otherwise `422 signed_in_email_required` or `403 signer_mismatch`. Esign records the account it
+  checked, and the certificate shows it. This holds for every caller, a member in the browser included: Esign's own
+  console opens no signer's page.
 - The host's origin must be one of the origins the deployment allows to embed Esign's pages. The page refuses to start
   in a frame from any other origin, or in one that hides its origin.
 - `hostAuthentication` (`{method, provider?, domain?, signedInAt?}`, `method` an upper-case word such as `SSO`) tells
@@ -242,6 +378,7 @@ calls them directly.
 | Endpoint | Used by | What it does |
 | --- | --- | --- |
 | `POST /api/public/page-sessions/exchange` | Signing page | Exchanges the one-time code for a page session. |
+| `POST /api/public/signing/invitation` | Signing page | Exchanges an invitation link's token for a one-time code. |
 | `GET /api/public/signing/current` | Signing page | The document's details, fields, disclosure and intent statement, and whether the code is verified. |
 | `GET /api/public/signing/pdf` | Signing page | The PDF to sign. |
 | `POST /api/public/signing/page-views` | Signing page | Records the pages the signer viewed. |
@@ -251,7 +388,7 @@ calls them directly.
 | `POST /api/public/signing/decline` | Signing page | Declines, with a reason. |
 | `POST /api/public/signing/sign` | Signing page | Records the signature. |
 | `POST /api/public/copies/open` | Copy page | Downloads a signer's copy, once, within 30 days. |
-| `POST /api/public/editor/exchange`, `GET /api/public/editor/current`, `GET /api/public/editor/pdf`, `POST /api/public/editor/save` | Field editor | The editor's session, its source PDF, and one save. |
+| `POST /api/public/editor/exchange`, `GET /api/public/editor/current`, `GET /api/public/editor/pdf`, `POST /api/public/editor/save` | Field editor | The editor's session, its source PDF, and its save: drafts (`draft=true`) as often as needed, then one save as ready. |
 | `GET /api/health` | Anyone | `{"status": "ok", "service": "esign"}`. |
 
 The platform limits requests to these paths per IP address, and those that change something (code exchanges, sends and

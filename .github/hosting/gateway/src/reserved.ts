@@ -1,5 +1,6 @@
 // /__insulin/* on every host: reserved for the gateway and never forwarded to an app. The account bar calls these from
 // inside app pages with same-origin fetch, so the app's CSP (connect-src 'self') allows them.
+import { appMembers } from './integrations/members.ts'
 import { appAccess } from './access.ts'
 import { integrationProxy } from './integrations/proxy.ts'
 import { appMailRelay } from './mail/relay.ts'
@@ -30,6 +31,10 @@ export async function reservedRoutes(ctx: Context): Promise<Response> {
     // Usage reports (metrics/report.ts), sent by app Workers every hour with their own token: POST, apex only.
     case '/__insulin/metrics':
       return appMetricsReport(ctx)
+    // The people of an organization who can use the app (integrations/members.ts), asked by app Workers with their own
+    // token: GET, apex only.
+    case '/__insulin/members':
+      return appMembers(ctx)
     case '/__insulin/me':
       return method === 'GET' || method === 'HEAD' ? me(ctx) : methodNotAllowed(ctx, ['GET', 'HEAD'])
     case '/__insulin/switch-org':

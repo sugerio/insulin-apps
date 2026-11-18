@@ -19,3 +19,13 @@ test('save messages require exact parent/source origin, request ID and matching 
  assert.equal(protocol.readSaveRequest!({origin:'https://host.example.com',source:parent,data:{...request,extra:true}},'https://host.example.com',parent),null);
  assert.equal(protocol.readSaveResult!({origin:'https://editor.example.com',source:iframe,data:{...reply,extra:true}},'https://editor.example.com',iframe,'req-123'),null);
 });
+
+test('a save request may ask for a draft; without it, it is the save hosts have always sent', async () => {
+ const {readSaveCall}=await import('../src/app/ui/editor-save-protocol.ts');
+ const parent={},at=(data:unknown)=>readSaveCall({origin:'https://host.example.com',source:parent,data},'https://host.example.com',parent);
+ assert.deepEqual(at({type:'esign.editor.save',requestId:'req-1'}),{requestId:'req-1',draft:false});
+ assert.deepEqual(at({type:'esign.editor.save',requestId:'req-1',draft:true}),{requestId:'req-1',draft:true});
+ assert.deepEqual(at({type:'esign.editor.save',requestId:'req-1',draft:false}),{requestId:'req-1',draft:false});
+ for(const draft of ['true',1,null])assert.equal(at({type:'esign.editor.save',requestId:'req-1',draft}),null,String(draft));
+ assert.equal(at({type:'esign.editor.save',requestId:'req-1',draft:true,extra:1}),null);
+});

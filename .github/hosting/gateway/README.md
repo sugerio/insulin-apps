@@ -11,7 +11,7 @@ over a service binding with the console identity headers. The apps need no hosti
 | `www.SITE_DOMAIN` | a 301 to the apex, same path and query |
 | `auth.SITE_DOMAIN` | a 308 to the apex, same path and query: sign-in used to live here, and e-mails already sent link to it |
 | `<app>.SITE_DOMAIN` | the app, through its `APP_<APP>` service binding (its own favicon included), except the gateway's `/mcp` and `/.well-known/oauth-*`, and `/settings/users`, `/settings/integrations`, `/settings/api` and `/settings/connect-ai`, which redirect (GET only) to the app's settings on the apex; `/api/*` with a service account's Bearer token goes to the app as that account; the app's public paths (`insulin.publicPaths`) go to it for anyone, with no identity (DESIGN.md §8.1); every five minutes the gateway POSTs to the app's `insulin.scheduled` path, if it has one (DESIGN.md §8.5) |
-| `/__insulin/*` on every host | reserved, never forwarded: stylesheet, favicon (`icon.svg`), account bar, `me`, `switch-org`, `logout`; on the apex, the navigation's collapse toggles `/__insulin/nav` (DESIGN.md §3.2), the integration proxy `/__insulin/integrations/*`, the apps' mail relay `/__insulin/mail` (DESIGN.md §8.2) and their hourly usage reports `/__insulin/metrics` (DESIGN.md §8.6) |
+| `/__insulin/*` on every host | reserved, never forwarded: stylesheet, favicon (`icon.svg`), account bar, `me`, `switch-org`, `logout`; on the apex, the navigation's collapse toggles `/__insulin/nav` (DESIGN.md §3.2), the integration proxy `/__insulin/integrations/*`, the apps' mail relay `/__insulin/mail` (DESIGN.md §8.2), their hourly usage reports `/__insulin/metrics` (DESIGN.md §8.6) and who can use an app `/__insulin/members` (DESIGN.md §8.7) |
 
 The design of accounts, roles and access is `.github/hosting/DESIGN.md`. The operator runbook (setup, secrets, adding an
 app) is `.github/hosting/README.md`. This file is for developers.
@@ -49,7 +49,7 @@ inline SVG), `xml-crypto` with `@xmldom/xmldom` (SAML signatures, which need the
 | `src/mcp/server.ts` | each app's `/mcp` (stateless JSON-RPC; tools `whoami`, `endpoints`, `read`, `change`) and its protected-resource metadata |
 | `src/mcp/docs.ts` | the docs' MCP server at `/docs/mcp` on the apex: public, no sign-in, tools `search_docs`, `read_doc`, `list_docs` |
 | `src/mcp/connect-ai.ts` | an app's Connect AI page (`/apps/<app>/settings/connect-ai`): its MCP server and each client's setup, the person's agents for the app, and everyone's for owners and admins, with Disconnect |
-| `src/integrations/` | an app's integrations page (`settings.ts`, stored credentials), its API access page (`api-clients.ts`, OAuth clients: owners and admins manage them, rotation with a 24-hour overlap) and the integration proxy (`proxy.ts`) |
+| `src/integrations/` | an app's integrations page (`settings.ts`, stored credentials), its API access page (`api-clients.ts`, OAuth clients: owners and admins manage them, rotation with a 24-hour overlap, and the link to the app's own settings for each client), the integration proxy (`proxy.ts`) and `members.ts` (`GET /__insulin/members`: with the app's token, the people of an organization who can use it, with their role and permissions there; DESIGN.md §8.7) |
 | `src/auth/agents.ts` | Account → AI agents (`/account/agents`): a person's grants, disconnecting them, and links to each app's Connect AI |
 | `src/sso/` | enterprise sign-in and provisioning: `/settings/sso` (`settings.ts`), the flow cookie and requests (`flow.ts`), SAML (`saml.ts`, with the XML libraries loaded through `xml-deps.js`), OIDC (`oidc.ts`), SCIM 2.0 at `/scim/v2` (`scim.ts`) |
 | `src/reserved.ts` | `/__insulin/me` (who is signed in, their organizations, the apex's origin and, in an app, its settings pages), `switch-org`, `logout`, `nav` (the navigation's collapse toggles), and the local captured-mail page |
@@ -87,7 +87,7 @@ The deploy pipeline generates the production wrangler config from this list; kee
 | crons | trigger | `*/5 * * * *` (the apps' tick, `src/scheduled.ts`) and `17 3 * * *` (the daily cleanup) |
 | `APP_<APP>` | service | one per app, e.g. `APP_CAPTABLE` → `insulin-apps-captable` |
 | `SITE_DOMAIN` | var | e.g. `insulinapps.com` |
-| `SITE_APPS` | var | JSON list (a string, or an already-parsed array): `[{ "name", "title", "summary", "binding", "source", "permissions", "publicPaths", "scheduled", "navigation" }]`; `permissions` is the app's catalog from its `package.json` (`insulin.permissions`), `publicPaths` its paths for people without an account (`insulin.publicPaths`), `scheduled` the path its tick goes to, or null (`insulin.scheduled`), and `navigation` its level 1, which the app's settings pages show (`insulin.navigation`, DESIGN.md §3.2; missing in an older list, it is empty); a malformed list fails closed |
+| `SITE_APPS` | var | JSON list (a string, or an already-parsed array): `[{ "name", "title", "summary", "binding", "source", "permissions", "publicPaths", "scheduled", "navigation", "clientSettings" }]`; `permissions` is the app's catalog from its `package.json` (`insulin.permissions`), `publicPaths` its paths for people without an account (`insulin.publicPaths`), `scheduled` the path its tick goes to, or null (`insulin.scheduled`), `navigation` its level 1, which the app's settings pages show (`insulin.navigation`, DESIGN.md §3.2; missing in an older list, it is empty), and `clientSettings` its page for each OAuth client, `{path, description?}` or null (`insulin.clientSettings`, DESIGN.md §5.3.1), which the API access page links for owners and admins; a malformed list fails closed |
 | `GOOGLE_CLIENT_ID` | var | optional; empty hides Google sign-in |
 | `GOOGLE_CLIENT_SECRET` | secret | required when `GOOGLE_CLIENT_ID` is set |
 | `TURNSTILE_SITE_KEY` | var | required |
@@ -104,7 +104,9 @@ The deploy pipeline generates the production wrangler config from this list; kee
 The app Worker gets `x-suger-user-id`, `x-suger-organization-id`, `x-suger-app-id` (`insulin-apps-<app>`),
 `x-suger-app-role` and the URL-encoded `x-suger-user-email` and `x-suger-user-name`, as `@fours/app` reads them with
 `SUGER_ACCESS_MODE=console`, plus `x-suger-access-via` (`browser`, `mcp` or `api`) and, for an app with a permission
-catalog, `x-suger-app-permissions` (space-separated). A request on a public path carries only `x-suger-app-id` and
+catalog, `x-suger-app-permissions` (space-separated), and for a person (never an API client) `x-suger-org-role`, their
+organization role (`OWNER`, `ADMIN`, `EDITOR`, `VIEWER` or `APPS`), which apps honour only with `SUGER_TRUST_ORG_ROLE`
+(the deploy and the local stack set it). A request on a public path carries only `x-suger-app-id` and
 `x-suger-access-via: public`, and the five-minute tick only `x-suger-app-id` and `x-suger-access-via: schedule`. The
 app role is `ADMIN`, `EDITOR` or `VIEWER`: organization owners and admins are admins in every app, and a custom role is
 sent as the least built-in role that has its permissions (DESIGN.md §2.4). Every incoming `x-suger-*` header and the gateway's cookies are removed first. User, organization and

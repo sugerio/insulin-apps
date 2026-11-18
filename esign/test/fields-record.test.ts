@@ -37,12 +37,12 @@ test('a fields signature captures only the verified current role, time and image
   const pdf=await PDFDocument.create();pdf.addPage([600,800]);const form=new FormData();form.set('file',new File([await pdf.save()],'synthetic.pdf'));form.set('roles','["ana","bob"]');
   const template=await (await req('/api/templates',{method:'POST',headers:mgmt,body:form})).json();
   const fields=[{id:'sig-a',type:'Signature',role:'ana',page:1,required:true,rect:{x:.05,y:.1,width:.25,height:.08}},{id:'sig-b',type:'Signature',role:'bob',page:1,required:true,rect:{x:.05,y:.7,width:.25,height:.08}}];
-  const setFields=(value:unknown)=>db.prepare('UPDATE templates SET fields_json=? WHERE id=?').bind(JSON.stringify(value),template.id).run();
+  const setFields=(value:unknown)=>db.batch([db.prepare('UPDATE templates SET fields_json=? WHERE id=?').bind(JSON.stringify(value),template.id),db.prepare('UPDATE envelopes SET fields_json=? WHERE template_id=? AND fields_json IS NOT NULL').bind(JSON.stringify(value),template.id)]);
   await setFields(fields);
   const created=await req('/api/envelopes',post({templateId:template.id,recipients:[{role:'ana',name:'Ana',email:'ana@example.com'},{role:'bob',name:'Bob',email:'bob@example.com'}]},{...mgmt,'idempotency-key':'v3-fixture'}));assert.equal(created.status,201);const envelope=await created.json();
   assert.equal((await req(`/api/envelopes/${envelope.id}/prepare`,{method:'POST',headers:mgmt})).status,204);
   const tasks=(await (await req(`/api/envelopes/${envelope.id}`,{headers:mgmt})).json()).tasks;
-  const view=await (await req(`/api/envelopes/${envelope.id}/tasks/${tasks[0].id}/recipient-view`,post({origin},mgmt))).json();
+  const view=await (await req(`/api/envelopes/${envelope.id}/tasks/${tasks[0].id}/recipient-view`,post({signedInEmail:tasks[0].recipientEmail,origin},mgmt))).json();
   const session=await (await req('/api/public/page-sessions/exchange',post({code:view.code},{origin}))).json();const headers={origin,'x-esign-session':session.token};
   const sent=await (await req('/api/public/signing/otp',post({},headers))).json(),message=await (await mail.get(`test-mail/${sent.messageId}.json`))!.json() as {otp:string};assert.equal((await req('/api/public/signing/otp/verify',post({otp:message.otp},headers))).status,204);
   const current=await (await req('/api/public/signing/current',{headers})).json();
@@ -136,7 +136,7 @@ test('a fields signature captures only the verified current role, time and image
   const output=(await db.prepare('SELECT output_artifact_id AS artifact_id,output_sha256 AS sha256 FROM signatures WHERE id=?').bind(id).first<{artifact_id:string;sha256:string}>())!;assert.equal(output.artifact_id,`signed:${id}`);const outputKey=`envelopes/${envelope.id}/${output.artifact_id}.pdf`;
   await assert.rejects(()=>db.prepare('UPDATE signatures SET output_sha256=? WHERE id=?').bind('0'.repeat(64),id).run(),/final/);
   const originalOutput=await (await bucket.get(outputKey))!.arrayBuffer();await bucket.put(outputKey,new TextEncoder().encode('forged output'));await assert.rejects(()=>processSignature(db,bucket,id),/Output integrity failure/);assert.equal(await retrySignature(db,bucket,{...base,values}),null);await bucket.put(outputKey,originalOutput);assert.equal(await retrySignature(db,bucket,{...base,values}),id);
-  const secondView=await (await req(`/api/envelopes/${envelope.id}/tasks/${tasks[1].id}/recipient-view`,post({origin},mgmt))).json();
+  const secondView=await (await req(`/api/envelopes/${envelope.id}/tasks/${tasks[1].id}/recipient-view`,post({signedInEmail:tasks[1].recipientEmail,origin},mgmt))).json();
   const secondSession=await (await req('/api/public/page-sessions/exchange',post({code:secondView.code},{origin}))).json();const secondHeaders={origin,'x-esign-session':secondSession.token};
   const secondSent=await (await req('/api/public/signing/otp',post({},secondHeaders))).json(),secondMessage=await (await mail.get(`test-mail/${secondSent.messageId}.json`))!.json() as {otp:string};assert.equal((await req('/api/public/signing/otp/verify',post({otp:secondMessage.otp},secondHeaders))).status,204);
   const secondCommand={token:secondSession.token,origin,now:Date.now(),consent:true,artifactId:output.artifact_id,artifactHash:output.sha256,values:{'sig-b':'BOB'},signaturePreviews:{'sig-b':await receipt(output.sha256,fields[1],'BOB')}};

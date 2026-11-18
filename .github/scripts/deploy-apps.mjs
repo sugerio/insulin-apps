@@ -144,7 +144,7 @@ export function appSecretValues(app, environment) {
   return { values, missing }
 }
 
-export function buildAppConfig({ appDirectory, app, databaseId, baseConfig = {}, integrationsUrl = null, mailUrl = null, metricsUrl = null }) {
+export function buildAppConfig({ appDirectory, app, databaseId, baseConfig = {}, integrationsUrl = null, mailUrl = null, metricsUrl = null, membersUrl = null }) {
   const outputDirectory = join(appDirectory, '.output')
   const { config: generatedConfig, ignoredKeys } = sanitizeAppBaseConfig(baseConfig)
   if (ignoredKeys.length) {
@@ -168,14 +168,18 @@ export function buildAppConfig({ appDirectory, app, databaseId, baseConfig = {},
     ],
     vars: {
       SUGER_ACCESS_MODE: 'console',
+      // This gateway sends x-suger-org-role, which apps honour only with this (DESIGN.md §2.4).
+      SUGER_TRUST_ORG_ROLE: 'true',
       ...(integrationsUrl ? { SUGER_INTEGRATIONS_URL: integrationsUrl } : {}),
       ...(mailUrl ? { SUGER_MAIL_URL: mailUrl } : {}),
       // Where the app reports its usage every hour (DESIGN.md §8.6).
       ...(metricsUrl ? { SUGER_METRICS_URL: metricsUrl } : {}),
+      // Who in an organization can use the app (DESIGN.md §8.7).
+      ...(membersUrl ? { SUGER_MEMBERS_URL: membersUrl } : {}),
     },
     // With the gateway's URLs, the binding to call them through: the app keeps the URL (the gateway routes by it) and
     // sends the request over the binding instead of the internet.
-    ...(integrationsUrl || mailUrl || metricsUrl ? { services: [{ binding: GATEWAY_BINDING, service: GATEWAY_NAME }] } : {}),
+    ...(integrationsUrl || mailUrl || metricsUrl || membersUrl ? { services: [{ binding: GATEWAY_BINDING, service: GATEWAY_NAME }] } : {}),
     workers_dev: false,
     preview_urls: false,
   }
@@ -257,7 +261,8 @@ export function sanitizeAppBaseConfig(baseConfig) {
 
 export function buildGatewayConfig({ root, apps, settings, databaseId }) {
   const gatewayDirectory = join(root, '.github', 'hosting', 'gateway')
-  // The gateway needs the permissions, public paths, scheduled path and navigation, never the names of an app's secrets.
+  // The gateway needs the permissions, public paths, scheduled path, client settings path and navigation, never the
+  // names of an app's secrets.
   const siteApps = apps.map(({ secrets: _secrets, ...app }) => ({
     ...app,
     navigation: gatewayNavigation(app.navigation),
@@ -419,7 +424,8 @@ export async function deployApps({
     const integrationsUrl = appTokens.size ? `https://${settings.siteDomain}/__insulin/integrations` : null
     const mailUrl = appTokens.size ? `https://${settings.siteDomain}/__insulin/mail` : null
     const metricsUrl = appTokens.size ? `https://${settings.siteDomain}/__insulin/metrics` : null
-    writeJson(configPath, buildAppConfig({ appDirectory, app, databaseId, baseConfig, integrationsUrl, mailUrl, metricsUrl }))
+    const membersUrl = appTokens.size ? `https://${settings.siteDomain}/__insulin/members` : null
+    writeJson(configPath, buildAppConfig({ appDirectory, app, databaseId, baseConfig, integrationsUrl, mailUrl, metricsUrl, membersUrl }))
     runner.run(wrangler, ['d1', 'migrations', 'apply', workerName(app.name), '--remote', '--config', configPath], {
       cwd: root,
       env: childEnvironment,

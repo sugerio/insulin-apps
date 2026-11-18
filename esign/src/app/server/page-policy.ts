@@ -66,7 +66,8 @@ export async function pageHeaders(pathname: string, contentType: string | null, 
     'Content-Security-Policy': policy.join('; '),
     'X-Content-Type-Options': 'nosniff',
   }
-  if (kind === 'member') headers['Referrer-Policy'] = 'same-origin'
+  // A member's page is checked with the server each time it loads, so a reload takes a newly deployed version.
+  if (kind === 'member') { headers['Referrer-Policy'] = 'same-origin'; headers['Cache-Control'] = 'no-cache' }
   else {
     // Codes and tokens travel in the fragment, which browsers never send; no-referrer and no-store keep the rest private.
     headers['Cache-Control'] = 'no-store'

@@ -38,7 +38,7 @@ export const eSignatures: DocTopic = {
       title: 'Consent to electronic records',
       body: [
         p('When the signer is a consumer, US law asks for more before electronic records replace paper: the consumer is told they may have a paper copy, how to withdraw consent, and what they need to open and keep the records, and then they consent.'),
-        h(InApp, null, 'the signing page shows an electronic records disclosure that covers a paper copy, withdrawing consent, and what the signer needs; the signer agrees to it before signing. Its wording is a draft that still needs review by counsel.'),
+        h(InApp, null, 'the signing page shows an electronic records disclosure that covers a paper copy, withdrawing consent, and what the signer needs; the signer agrees to it before signing.'),
       ],
     },
     {

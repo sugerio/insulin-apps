@@ -36,12 +36,12 @@ test('local HTTP Ana then Marcus authenticate, inspect and sign consecutive PDFs
     const details=await (await req(`/api/envelopes/${envelope.id}`,{headers:management})).json();
     // Every tenant signs on the Worker's own origin, plus SIGNING_PAGE_ORIGINS; nothing else.
     const firstTask=details.tasks[0].id;
-    assert.deepEqual(await (await req(`/api/envelopes/${envelope.id}/tasks/${firstTask}/recipient-view`,json({origin:'https://other.example.com'},management))).json(),{error:'invalid_origin'});
-    const ownView=await req(`/api/envelopes/${envelope.id}/tasks/${firstTask}/recipient-view`,json({},management));assert.equal(ownView.status,201);
+    assert.deepEqual(await (await req(`/api/envelopes/${envelope.id}/tasks/${firstTask}/recipient-view`,json({origin:'https://other.example.com',signedInEmail:details.tasks[0].recipientEmail},management))).json(),{error:'invalid_origin'});
+    const ownView=await req(`/api/envelopes/${envelope.id}/tasks/${firstTask}/recipient-view`,json({signedInEmail:details.tasks[0].recipientEmail},management));assert.equal(ownView.status,201);
     const ownExchange=await req('/api/public/page-sessions/exchange',json({code:(await ownView.json()).code},{origin:'http://localhost'}));assert.equal(ownExchange.status,200,'the default code is for the Worker\'s own origin');
     assert.equal((await req('/api/public/page-sessions/exchange',json({code:'0'.repeat(64)},{origin:'https://other.example.com'}))).status,403,'other origins are refused before the exchange');
     async function sign(task:any,index:number) {
-      const view=await req(`/api/envelopes/${envelope.id}/tasks/${task.id}/recipient-view`,json({origin},management));assert.equal(view.status,201,await view.clone().text());const {code}=await view.json();
+      const view=await req(`/api/envelopes/${envelope.id}/tasks/${task.id}/recipient-view`,json({signedInEmail:task.recipientEmail,origin},management));assert.equal(view.status,201,await view.clone().text());const {code}=await view.json();
       const exchange=await req('/api/public/page-sessions/exchange',json({code},{origin}));assert.equal(exchange.status,200);const {token}=await exchange.json();
       const headers={origin,'x-esign-session':token};
       // The document can be read before the code; signing it cannot (below, and in the record layer).
@@ -87,6 +87,8 @@ test('local HTTP Ana then Marcus authenticate, inspect and sign consecutive PDFs
     const failedDelivery=await app.fetch(new Request(`http://localhost/api/envelopes/${envelope.id}/delivery-pdf`,{headers:management}),{...env,ARTIFACTS:failingBucket});assert.equal(failedDelivery.status,503);
     assert.ok(await bucket.get(`envelopes/${envelope.id}/local-delivery-v4.pdf`));
     const delivery=await req(`/api/envelopes/${envelope.id}/delivery-pdf`,{headers:management});assert.equal(delivery.status,200);
+    const savedAs=(r:Response)=>decodeURIComponent(/filename\*=UTF-8''([^;]+)/.exec(r.headers.get('content-disposition')??'')?.[1]??'');
+    assert.match(savedAs(delivery),new RegExp(`^(.+|Envelope ${envelope.id.slice(0,8)}) - Signed \\d{4}-\\d{2}-\\d{2} \\(local test\\)\\.pdf$`),'named by its document and the day it was completed');
     const deliveryBytes=await delivery.arrayBuffer();assert.ok((await PDFDocument.load(deliveryBytes)).getPageCount()>2);
     const pdfjs=await import('pdfjs-dist/legacy/build/pdf.mjs');
     const loaded=await pdfjs.getDocument({data:new Uint8Array(deliveryBytes.slice(0)),useSystemFonts:true}).promise;
@@ -107,7 +109,7 @@ test('local HTTP Ana then Marcus authenticate, inspect and sign consecutive PDFs
     const brokenOpen=await app.fetch(new Request('http://localhost/api/public/copies/open',{method:'POST',headers:{origin:'http://localhost','content-type':'application/json'},body:JSON.stringify({token:copyToken})}),{...env,ARTIFACTS:Object.assign(Object.create(bucket),{get:async()=>null})});
     assert.equal(brokenOpen.status,503);
     const copy=await openCopy('http://localhost');assert.equal(copy.status,200,'a failed attempt does not spend the link');
-    assert.match(copy.headers.get('content-disposition')??'',/^attachment;/);
+    assert.match(copy.headers.get('content-disposition')??'',/^attachment;/);assert.equal(savedAs(copy),savedAs(delivery),'a signer\'s copy is named as the sender\'s download');
     assert.deepEqual(await copy.arrayBuffer(),deliveryBytes);
     assert.equal((await openCopy('http://localhost')).status,410,'once');
     assert.equal((await db.prepare("SELECT COUNT(*) AS n FROM audit_events WHERE envelope_id=? AND type='COPY_DOWNLOADED'").bind(envelope.id).first<{n:number}>())!.n,1);
@@ -135,7 +137,7 @@ test('local HTTP Ana then Marcus authenticate, inspect and sign consecutive PDFs
       const envelope2=await created.json();
       assert.equal((await req(`/api/envelopes/${envelope2.id}/prepare`,{method:'POST',headers:management})).status,204);
       const task2=(await (await req(`/api/envelopes/${envelope2.id}`,{headers:management})).json()).tasks[0];
-      const view2=await (await req(`/api/envelopes/${envelope2.id}/tasks/${task2.id}/recipient-view`,json({origin},management))).json();
+      const view2=await (await req(`/api/envelopes/${envelope2.id}/tasks/${task2.id}/recipient-view`,json({signedInEmail:task2.recipientEmail,origin},management))).json();
       const session2=await (await req('/api/public/page-sessions/exchange',json({code:view2.code},{origin}))).json();
       sessions.push({origin,'x-esign-session':session2.token});
     }

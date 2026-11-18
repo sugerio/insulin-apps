@@ -20,7 +20,7 @@ test('local primitives chain Ana D0 to D1 and Marcus D1 to D2 without overwritin
     const h0=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',d0)),n=>n.toString(16).padStart(2,'0')).join('');
     await db.exec(`INSERT INTO tenants (id) VALUES ('a');
 INSERT INTO templates (id,tenant_id,object_key,roles_json,created_at) VALUES ('template','a','source','["ana","marcus"]',1);
-INSERT INTO envelopes (id,tenant_id,template_id,status,created_at,request_sha256) VALUES ('env','a','template','IN_PROGRESS',1,'hash');
+INSERT INTO envelopes (id,tenant_id,template_id,status,created_at,request_sha256) VALUES ('env','a','template','IN_PROGRESS',1,'hash'); UPDATE envelopes SET roles_json = (SELECT roles_json FROM templates WHERE id = envelopes.template_id), fields_json = (SELECT fields_json FROM templates WHERE id = envelopes.template_id);
 INSERT INTO tasks (id,envelope_id,role,recipient_name,recipient_email,routing_order,status) VALUES ('ana','env','ana','Ana','ana@example.com',1,'ACTIVE');
 INSERT INTO tasks (id,envelope_id,role,recipient_name,recipient_email,routing_order,status) VALUES ('marcus','env','marcus','Marcus','marcus@example.com',2,'PENDING');
 `);

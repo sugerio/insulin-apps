@@ -10,6 +10,10 @@ export const AUDIT = {
   viewIssued: 'RECIPIENT_VIEW_ISSUED',
   /** The recipient opened the signing page with that link. */
   sessionOpened: 'SIGNING_SESSION_OPENED',
+  /** Esign emailed a signer it invites (delivery 'email') the link to their signing page (invitations.ts). */
+  invitationSent: 'INVITATION_SENT',
+  /** The signer opened the signing page with their invitation link: a link was issued to them, by Esign. */
+  invitationOpened: 'INVITATION_OPENED',
   otpSent: 'OTP_SENT',
   otpVerified: 'OTP_VERIFIED',
   documentViewed: 'DOCUMENT_VIEWED',

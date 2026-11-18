@@ -66,9 +66,10 @@ export async function listApps(root = repositoryRoot) {
     const permissions = readPermissions(entry.name, manifest.insulin?.permissions)
     const publicPaths = readPublicPaths(entry.name, manifest.insulin?.publicPaths)
     const scheduled = readScheduled(entry.name, manifest.insulin?.scheduled, publicPaths)
+    const clientSettings = readClientSettings(entry.name, manifest.insulin?.clientSettings, publicPaths)
     const secrets = readSecretNames(entry.name, manifest.insulin?.secrets)
     const navigation = readNavigation(entry.name, manifest.insulin?.navigation)
-    apps.push({ name: entry.name, title, summary, permissions, publicPaths, scheduled, navigation, secrets })
+    apps.push({ name: entry.name, title, summary, permissions, publicPaths, scheduled, clientSettings, navigation, secrets })
   }
 
   checkSecretNamespaces(apps)
@@ -190,6 +191,43 @@ export function readScheduled(app, raw, publicPaths = []) {
   const problem = scheduledProblem(raw, publicPaths)
   if (problem) throw new Error(`App ${JSON.stringify(app)}: insulin.scheduled ${problem}`)
   return raw
+}
+
+/**
+ * Why `insulin.clientSettings` is refused, or null: the app's own page of settings for one OAuth client, which the API
+ * access page links each client to (`{path}/{service account id}?name=…`, DESIGN.md §5.3.1). A page a navigation item
+ * could link to (navigationPathProblem), without a query or a trailing slash, outside `/api/`, and never public. The
+ * gateway's config.ts keeps the same rule.
+ */
+export function clientSettingsProblem(entry, publicPaths = []) {
+  const problem = navigationPathProblem(entry)
+  if (problem) return problem
+  if (entry.includes('?') || entry.endsWith('/')) return 'must not hold a query or end with a slash'
+  const lower = entry.toLowerCase()
+  if (lower === '/api' || lower.startsWith('/api/')) return 'must be a page, not under /api/'
+  if (publicPaths.some((path) => {
+    const publicPath = path.toLowerCase()
+    return publicPath.endsWith('/') ? lower.startsWith(publicPath) : lower === publicPath || lower.startsWith(`${publicPath}/`)
+  })) return "must not be one of the app's public paths or under one"
+  return null
+}
+
+/**
+ * The app's page of settings for each OAuth client (`insulin.clientSettings`): its path, or `{path, description?}` with
+ * one line, 1 to 160 characters of plain text, the API access page shows beside the link. As `{path, description}`
+ * (description null when there is none), or null when it has none. The gateway's config.ts keeps the same rule.
+ */
+export function readClientSettings(app, raw, publicPaths = []) {
+  if (raw === undefined || raw === null) return null
+  const at = `App ${JSON.stringify(app)}: insulin.clientSettings`
+  const { path, description, ...rest } = typeof raw === 'string' ? { path: raw } : raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : { path: raw }
+  if (Object.keys(rest).length) throw new Error(`${at} has unknown fields (${Object.keys(rest).join(', ')}): path and description only`)
+  const problem = clientSettingsProblem(path, publicPaths)
+  if (problem) throw new Error(`${at} ${problem}`)
+  if (description !== undefined && (typeof description !== 'string' || !description.trim() || description.length > 160 || /[\u0000-\u001f\u007f]/.test(description))) {
+    throw new Error(`${at}.description must be 1 to 160 characters of plain text`)
+  }
+  return { path, description: description === undefined ? null : description.trim() }
 }
 
 /**

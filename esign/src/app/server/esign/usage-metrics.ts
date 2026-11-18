@@ -88,7 +88,8 @@ const STORAGE_BYTES = `WITH owned (tenant_id, size) AS (
 export async function measureUsage(db: D1Database): Promise<UsageReport> {
   type Row = { tenant_id: string; status?: string; value: number };
   const [statuses, templates, signatures, storage] = await db.batch<Row>([
-    db.prepare('SELECT tenant_id, status, COUNT(*) AS value FROM envelopes GROUP BY tenant_id, status'),
+    // Envelopes sent: a draft (status DRAFT) isn't one yet, and has no gauge of its own.
+    db.prepare("SELECT tenant_id, status, COUNT(*) AS value FROM envelopes WHERE status <> 'DRAFT' GROUP BY tenant_id, status"),
     db.prepare('SELECT tenant_id, COUNT(*) AS value FROM templates GROUP BY tenant_id'),
     db.prepare('SELECT e.tenant_id, COUNT(*) AS value FROM signatures s JOIN envelopes e ON e.id = s.envelope_id GROUP BY e.tenant_id'),
     db.prepare(STORAGE_BYTES),

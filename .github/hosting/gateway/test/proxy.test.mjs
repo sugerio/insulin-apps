@@ -53,6 +53,7 @@ test('the app receives exactly the console identity headers', async () => {
   assert.ok(received.headers['x-suger-organization-id'].length <= 128)
   assert.equal(received.headers['x-suger-app-id'], 'insulin-apps-captable')
   assert.equal(received.headers['x-suger-app-role'], 'ADMIN', 'an owner is an admin in every app')
+  assert.equal(received.headers['x-suger-org-role'], 'OWNER', 'and still an owner of the organization')
   assert.equal(received.headers['x-suger-access-via'], 'browser')
   assert.equal(received.headers['x-suger-app-permissions'], undefined, 'this app declares no permissions')
   assert.equal(received.headers['x-suger-user-email'], encodeURIComponent(person.email))
@@ -66,7 +67,7 @@ test('header spoofing: x-suger-* headers from the browser never reach the app, i
     headers: {
       'X-Suger-User-Id': 'usr_spoofed', 'x-suger-organization-id': 'org_spoofed', 'X-SUGER-APP-ROLE': 'OWNER',
       'x-Suger-App-Id': 'evil', 'x-suger-user-email': 'boss%40example.test', 'X-Suger-Extra': 'smuggled',
-      'x-suger-app-permissions': 'everything', 'x-suger-access-via': 'api',
+      'x-suger-app-permissions': 'everything', 'x-suger-access-via': 'api', 'X-Suger-Org-Role': 'OWNER',
     },
   })
   assert.equal(received.headers['x-suger-user-id'], person.id)
@@ -76,6 +77,7 @@ test('header spoofing: x-suger-* headers from the browser never reach the app, i
   assert.equal(received.headers['x-suger-extra'], undefined)
   assert.equal(received.headers['x-suger-app-permissions'], undefined)
   assert.equal(received.headers['x-suger-access-via'], 'browser')
+  assert.equal(received.headers['x-suger-org-role'], 'OWNER', 'the gateway\'s own, whatever the browser sent')
   const anonymous = await h.client().get(h.url('captable', '/api/echo'), { headers: { 'x-suger-user-id': 'usr_x', 'x-suger-organization-id': 'org_x', 'x-suger-app-id': 'a', 'x-suger-app-role': 'OWNER' } })
   assert.equal(anonymous.status, 401, 'spoofed identity without a session gets nowhere')
 })

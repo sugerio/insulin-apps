@@ -23,25 +23,16 @@
         "label": "Envelopes",
         "icon": "inbox",
         "path": "/envelopes",
-        "group": "Esign",
-        "children": [
-          { "key": "all-envelopes", "label": "All envelopes", "icon": "list", "path": "/envelopes" },
-          { "key": "new-envelope", "label": "New envelope", "icon": "file-pen", "path": "/envelopes/new", "role": "EDITOR" },
-          { "key": "out-for-signature", "label": "Out for signature", "icon": "send", "path": "/envelopes?status=in_progress", "group": "Status" },
-          { "key": "finishing", "label": "Finishing", "icon": "clock", "path": "/envelopes?status=finalizing", "group": "Status" },
-          { "key": "completed", "label": "Completed", "icon": "check-circle", "path": "/envelopes?status=completed", "group": "Status" },
-          { "key": "declined", "label": "Declined", "icon": "file-text", "path": "/envelopes?status=declined", "group": "Status" },
-          { "key": "expired", "label": "Expired", "icon": "calendar", "path": "/envelopes?status=expired", "group": "Status" },
-          { "key": "voided", "label": "Voided", "icon": "archive", "path": "/envelopes?status=voided", "group": "Status" }
-        ]
+        "group": "Esign"
       },
-      { "key": "templates", "label": "Templates", "icon": "files", "path": "/templates", "group": "Esign" }
+      { "key": "templates", "label": "Templates", "icon": "files", "path": "/templates", "group": "Esign" },
+      { "key": "contacts", "label": "Contacts", "icon": "users", "path": "/contacts", "group": "Esign" }
     ],
     "permissions": [
       {
         "key": "esign.manage",
         "label": "Send and manage envelopes",
-        "description": "Upload templates and place their fields, send envelopes, void them, open signing pages for recipients and finish due work. Includes viewing.",
+        "description": "Upload templates and place their fields, send envelopes, void them, resend invitations and finish due work. Includes viewing.",
         "role": "EDITOR"
       },
       {
@@ -59,6 +50,7 @@
       "/api/public/"
     ],
     "scheduled": "/api/scheduled",
+    "clientSettings": { "path": "/client-settings", "description": "Choose who in your organization sees, and manages as admins, everything this client creates in Esign." },
     "secrets": [
       "ESIGN_OTP_KEY",
       "ESIGN_FRAME_ANCESTORS"

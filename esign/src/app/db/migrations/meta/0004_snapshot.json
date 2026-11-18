@@ -1,8 +1,8 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "b673ade4-2fdc-4dd2-b889-589f7332d3fb",
-  "prevId": "053db18a-378f-4ebb-9800-0957c90ef98a",
+  "id": "672e2ec4-a27c-4fec-9001-3117f759dc32",
+  "prevId": "9f4cbe8b-76c0-4320-a310-027d4ea24802",
   "tables": {
     "access_codes": {
       "name": "access_codes",
@@ -52,6 +52,13 @@
         "used_at": {
           "name": "used_at",
           "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "entry_json": {
+          "name": "entry_json",
+          "type": "text",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
@@ -125,6 +132,13 @@
         "otp_verified_at": {
           "name": "otp_verified_at",
           "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "entry_json": {
+          "name": "entry_json",
+          "type": "text",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
@@ -450,6 +464,119 @@
       "uniqueConstraints": {},
       "checkConstraints": {}
     },
+    "contacts": {
+      "name": "contacts",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "tenant_id": {
+          "name": "tenant_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "email": {
+          "name": "email",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "email_key": {
+          "name": "email_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "title": {
+          "name": "title",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "company": {
+          "name": "company",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "envelope_count": {
+          "name": "envelope_count",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "last_used_at": {
+          "name": "last_used_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "recent_at": {
+          "name": "recent_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "contacts_by_recent": {
+          "name": "contacts_by_recent",
+          "columns": [
+            "tenant_id",
+            "recent_at",
+            "id"
+          ],
+          "isUnique": false
+        },
+        "contacts_tenant_email": {
+          "name": "contacts_tenant_email",
+          "columns": [
+            "tenant_id",
+            "email_key"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
     "copy_deliveries": {
       "name": "copy_deliveries",
       "columns": {
@@ -522,6 +649,179 @@
       },
       "uniqueConstraints": {},
       "checkConstraints": {}
+    },
+    "document_shares": {
+      "name": "document_shares",
+      "columns": {
+        "tenant_id": {
+          "name": "tenant_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "resource_type": {
+          "name": "resource_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "resource_id": {
+          "name": "resource_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "grantee_email_key": {
+          "name": "grantee_email_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "grantee_email": {
+          "name": "grantee_email",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "role": {
+          "name": "role",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "granted_by": {
+          "name": "granted_by",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "granted_at": {
+          "name": "granted_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "document_shares_by_grantee": {
+          "name": "document_shares_by_grantee",
+          "columns": [
+            "tenant_id",
+            "grantee_email_key",
+            "resource_type"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {
+        "document_shares_resource_type_resource_id_grantee_email_key_pk": {
+          "columns": [
+            "resource_type",
+            "resource_id",
+            "grantee_email_key"
+          ],
+          "name": "document_shares_resource_type_resource_id_grantee_email_key_pk"
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "document_shares_type": {
+          "name": "document_shares_type",
+          "value": "\"document_shares\".\"resource_type\" IN ('template', 'envelope')"
+        },
+        "document_shares_role": {
+          "name": "document_shares_role",
+          "value": "\"document_shares\".\"role\" IN ('admin', 'editor', 'viewer')"
+        }
+      }
+    },
+    "document_tags": {
+      "name": "document_tags",
+      "columns": {
+        "tenant_id": {
+          "name": "tenant_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "resource_type": {
+          "name": "resource_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "resource_id": {
+          "name": "resource_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "tag_key": {
+          "name": "tag_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "tag": {
+          "name": "tag",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "document_tags_by_tag": {
+          "name": "document_tags_by_tag",
+          "columns": [
+            "tenant_id",
+            "user_id",
+            "resource_type",
+            "tag_key"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {
+        "document_tags_tenant_id_user_id_resource_type_resource_id_tag_key_pk": {
+          "columns": [
+            "tenant_id",
+            "user_id",
+            "resource_type",
+            "resource_id",
+            "tag_key"
+          ],
+          "name": "document_tags_tenant_id_user_id_resource_type_resource_id_tag_key_pk"
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "document_tags_type": {
+          "name": "document_tags_type",
+          "value": "\"document_tags\".\"resource_type\" IN ('template', 'envelope')"
+        }
+      }
     },
     "editor_sessions": {
       "name": "editor_sessions",
@@ -603,6 +903,45 @@
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
+        },
+        "owner_user_id": {
+          "name": "owner_user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "''"
+        },
+        "shares_json": {
+          "name": "shares_json",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'[]'"
+        },
+        "tags_json": {
+          "name": "tags_json",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'[]'"
+        },
+        "replaces_source": {
+          "name": "replaces_source",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "envelope_id": {
+          "name": "envelope_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
         }
       },
       "indexes": {},
@@ -659,7 +998,7 @@
           "name": "template_id",
           "type": "text",
           "primaryKey": false,
-          "notNull": true,
+          "notNull": false,
           "autoincrement": false
         },
         "status": {
@@ -690,6 +1029,35 @@
           "notNull": true,
           "autoincrement": false,
           "default": "'{}'"
+        },
+        "owner_user_id": {
+          "name": "owner_user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "''"
+        },
+        "draft_json": {
+          "name": "draft_json",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "roles_json": {
+          "name": "roles_json",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "fields_json": {
+          "name": "fields_json",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
         }
       },
       "indexes": {
@@ -697,6 +1065,15 @@
           "name": "envelopes_by_tenant",
           "columns": [
             "tenant_id",
+            "created_at"
+          ],
+          "isUnique": false
+        },
+        "envelopes_by_owner": {
+          "name": "envelopes_by_owner",
+          "columns": [
+            "tenant_id",
+            "owner_user_id",
             "created_at"
           ],
           "isUnique": false
@@ -726,18 +1103,39 @@
         }
       }
     },
-    "metrics_reports": {
-      "name": "metrics_reports",
+    "invitations": {
+      "name": "invitations",
       "columns": {
-        "hour": {
-          "name": "hour",
-          "type": "integer",
+        "task_id": {
+          "name": "task_id",
+          "type": "text",
           "primaryKey": true,
           "notNull": true,
           "autoincrement": false
         },
-        "started_at": {
-          "name": "started_at",
+        "tenant_id": {
+          "name": "tenant_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "envelope_id": {
+          "name": "envelope_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "token_hash": {
+          "name": "token_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "reserved_at": {
+          "name": "reserved_at",
           "type": "integer",
           "primaryKey": false,
           "notNull": true,
@@ -751,11 +1149,141 @@
           "autoincrement": false
         }
       },
-      "indexes": {},
-      "foreignKeys": {},
+      "indexes": {
+        "invitations_token_hash_unique": {
+          "name": "invitations_token_hash_unique",
+          "columns": [
+            "token_hash"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "invitations_task_id_tasks_id_fk": {
+          "name": "invitations_task_id_tasks_id_fk",
+          "tableFrom": "invitations",
+          "tableTo": "tasks",
+          "columnsFrom": [
+            "task_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "invitations_envelope_id_envelopes_id_fk": {
+          "name": "invitations_envelope_id_envelopes_id_fk",
+          "tableFrom": "invitations",
+          "tableTo": "envelopes",
+          "columnsFrom": [
+            "envelope_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "checkConstraints": {}
+    },
+    "members": {
+      "name": "members",
+      "columns": {
+        "tenant_id": {
+          "name": "tenant_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "kind": {
+          "name": "kind",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "email": {
+          "name": "email",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "email_key": {
+          "name": "email_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "org_role": {
+          "name": "org_role",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "first_seen_at": {
+          "name": "first_seen_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "last_seen_at": {
+          "name": "last_seen_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "members_by_email": {
+          "name": "members_by_email",
+          "columns": [
+            "tenant_id",
+            "email_key"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {
+        "members_tenant_id_user_id_pk": {
+          "columns": [
+            "tenant_id",
+            "user_id"
+          ],
+          "name": "members_tenant_id_user_id_pk"
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "members_kind": {
+          "name": "members_kind",
+          "value": "\"members\".\"kind\" IN ('person', 'client')"
+        }
+      }
     },
     "otp_challenges": {
       "name": "otp_challenges",
@@ -1310,6 +1838,13 @@
           ],
           "isUnique": false
         },
+        "tasks_by_recipient_email": {
+          "name": "tasks_by_recipient_email",
+          "columns": [
+            "lower(\"recipient_email\")"
+          ],
+          "isUnique": false
+        },
         "tasks_envelope_role": {
           "name": "tasks_envelope_role",
           "columns": [
@@ -1403,6 +1938,37 @@
           "notNull": true,
           "autoincrement": false,
           "default": "'{}'"
+        },
+        "default_signers_json": {
+          "name": "default_signers_json",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'{}'"
+        },
+        "owner_user_id": {
+          "name": "owner_user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "''"
+        },
+        "archived_at": {
+          "name": "archived_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'active'"
         }
       },
       "indexes": {
@@ -1420,10 +1986,120 @@
             "created_at"
           ],
           "isUnique": false
+        },
+        "templates_by_owner": {
+          "name": "templates_by_owner",
+          "columns": [
+            "tenant_id",
+            "owner_user_id",
+            "created_at"
+          ],
+          "isUnique": false
         }
       },
       "foreignKeys": {},
       "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "metrics_reports": {
+      "name": "metrics_reports",
+      "columns": {
+        "hour": {
+          "name": "hour",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "started_at": {
+          "name": "started_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "sent_at": {
+          "name": "sent_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "api_client_people": {
+      "name": "api_client_people",
+      "columns": {
+        "tenant_id": {
+          "name": "tenant_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "client_user_id": {
+          "name": "client_user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "email_key": {
+          "name": "email_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "email": {
+          "name": "email",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "added_by": {
+          "name": "added_by",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "added_at": {
+          "name": "added_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "api_client_people_by_email": {
+          "name": "api_client_people_by_email",
+          "columns": [
+            "tenant_id",
+            "email_key"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {
+        "api_client_people_tenant_id_client_user_id_email_key_pk": {
+          "columns": [
+            "tenant_id",
+            "client_user_id",
+            "email_key"
+          ],
+          "name": "api_client_people_tenant_id_client_user_id_email_key_pk"
+        }
+      },
       "uniqueConstraints": {},
       "checkConstraints": {}
     }
@@ -1436,6 +2112,14 @@
     "columns": {}
   },
   "internal": {
-    "indexes": {}
+    "indexes": {
+      "tasks_by_recipient_email": {
+        "columns": {
+          "lower(\"recipient_email\")": {
+            "isExpression": true
+          }
+        }
+      }
+    }
   }
 }

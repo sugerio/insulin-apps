@@ -1,10 +1,10 @@
 // /apps/<app>/settings/api on the apex (DESIGN.md §5.3): the app's OAuth clients (client credentials, stored as service
 // accounts), how a program gets a token and calls the API, and, for the organization's owners and admins, creating,
 // changing, rotating and deleting clients. A secret appears once, right after it is made; the list never shows one.
-import { ChevronDown, KeyRound } from "lucide-react"
+import { ArrowUpRight, ChevronDown, KeyRound, SlidersHorizontal } from "lucide-react"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
+import { Button, buttonVariants } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Notice, PostButton, SelectField, TextField } from "@/components/forms"
@@ -57,6 +57,14 @@ function hasPrevious(ctx: Context, client: ServiceAccountRow): boolean {
 }
 
 /** The token endpoint and the app's API, as a program reaches them. */
+/**
+ * The app's own page of settings for one OAuth client (`insulin.clientSettings`, DESIGN.md §5.3.1), on the app's host:
+ * the client's service account id, the id its calls carry, and its name, for a client that hasn't called the app yet.
+ */
+function clientSettingsUrl(ctx: Context, app: HostedApp, client: ServiceAccountRow): string {
+  return `${originOf(ctx, app.host)}${app.clientSettings!.path}/${encodeURIComponent(client.id)}?name=${encodeURIComponent(client.name)}`
+}
+
 function endpoints(ctx: Context, app: HostedApp) {
   return { tokenUrl: `${originOf(ctx, ctx.config.domain)}/oauth/token`, resource: originOf(ctx, app.host) }
 }
@@ -215,6 +223,19 @@ function ClientsCard({ ctx, app, data }: { ctx: Context; app: HostedApp; data: A
                           </div>
                         </form>
                       </details>
+                    ) : null}
+                    {data.manage && client.revoked_at === null && app.clientSettings ? (
+                      // The app's own page for this client: a button, and the app's line on what is set there.
+                      <div className="mt-3 flex max-w-xs flex-col items-start gap-1.5">
+                        <a href={clientSettingsUrl(ctx, app, client)} className={buttonVariants({ variant: "outline", size: "sm" })}>
+                          <SlidersHorizontal aria-hidden="true" />
+                          {app.title} settings<span className="sr-only"> for {client.name}</span>
+                          <ArrowUpRight aria-hidden="true" />
+                        </a>
+                        <p className="text-xs text-muted-foreground">
+                          {app.clientSettings.description ?? `Settings ${app.title} keeps for this client, on ${app.title}'s own page.`}
+                        </p>
+                      </div>
                     ) : null}
                   </TableCell>
                   <TableCell className="align-top"><Badge variant="outline">{grantLabel(client)}</Badge></TableCell>

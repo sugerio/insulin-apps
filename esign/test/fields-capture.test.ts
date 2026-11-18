@@ -46,3 +46,17 @@ test('UTC midnight changes the captured date',()=>{
  assert.equal(old.fields.find(f=>f.id==='date-a')!.text,'2024-04-30');assert.equal(current.fields.find(f=>f.id==='date-a')!.text,'2024-05-01');
  assert.doesNotThrow(()=>parseRender(rendered(old),facts(before)));assert.throws(()=>parseRender(rendered(old),facts(after)));
 });
+
+test('a required field must be signed; an optional one may be left empty, and the record still reads back',()=>{
+ const withOptional=[...template,{id:'sig-a2',type:'Signature',role:'ana',page:1,required:false,rect:{x:0,y:.5,width:.2,height:.1}},{id:'title-a2',type:'Title',role:'ana',page:1,required:false,rect:{x:.4,y:.5,width:.2,height:.1}}];
+ // The required Signature or Title missing: refused.
+ assert.throws(()=>captureFields(withOptional,['ana','bob'],1,'ana',time,{'title-a':'Chief Executive'}),/Missing input/);
+ assert.throws(()=>captureFields(withOptional,['ana','bob'],1,'ana',time,{'sig-a':'ANA'}),/Missing input/);
+ // The optional ones left empty: captured without them, and the record reads back.
+ const snapshot=captureFields(withOptional,['ana','bob'],1,'ana',time,input);
+ assert.deepEqual(snapshot.fields.map(f=>f.id),['sig-a','date-a','title-a']);
+ const render=rendered(snapshot);
+ assert.deepEqual(parseRender(render,facts(time)),render);
+ // Signed where the signer chose to: the optional signature too.
+ assert.deepEqual(captureFields(withOptional,['ana','bob'],1,'ana',time,{...input,'sig-a2':'ANA'}).fields.map(f=>f.id),['sig-a','date-a','title-a','sig-a2']);
+});

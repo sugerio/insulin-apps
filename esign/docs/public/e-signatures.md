@@ -53,7 +53,6 @@ may have a paper copy, how to withdraw consent, and what they need to open and k
 
 **In Esign:** the signing page shows an electronic records disclosure that covers a paper copy, withdrawing consent and
 what the signer needs; the signer agrees to it before signing, and the signature records which version they agreed to.
-Its wording is a draft that still needs review by counsel.
 
 ## Knowing who signed
 
@@ -80,7 +79,7 @@ wills, some family-law and court documents, some real-estate documents, and cert
 depends on the country and the state, and changes over time.
 
 **In Esign:** nothing checks what kind of document is sent. Whoever sends decides whether an electronic signature fits
-it. While Esign is experimental, send synthetic documents only.
+it.
 
 ## Keeping records
 

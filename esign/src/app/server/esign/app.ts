@@ -635,13 +635,14 @@ async function scheduleSend(context: import('hono').Context<Env>, body: Record<s
  * each is handled by its own answer: active, it is served; no record of Esign's use there yet, every due draft of it
  * rests ten minutes (restWaiting); suspended, its drafts step back and wait (deferOrganization); no answer in time, its
  * drafts are left as they are. The served ones send in passes, one draft of each organization a pass in turn, until
- * the run's places (SCHEDULED_PER_RUN) or its budget run out, after at least one send or refusal. The cursor moves past
- * every organization handled, served a turn or not answered for, up to the first one a run couldn't serve. Another
- * wave follows while places remain and the budget leaves a question's wait.
+ * the run's places (SCHEDULED_PER_RUN) or its budget run out, after at least one send or refusal; the budget is checked
+ * before a draft is taken, so an organization not reached keeps its drafts and its turn. The cursor moves past every
+ * organization handled (served a turn, resting, suspended or not answered for), up to the first one a run didn't
+ * serve. Another wave follows while places remain and the budget leaves a question's wait.
  *
- * So with N organizations with a draft due, each is asked about within ceil(N / WAVE_ORGANIZATIONS) runs, whatever
- * the others hold or how slowly they answer, and has a draft sent or refused within that many runs when sends fit in
- * the budget; within N runs at worst, since every run serves at least one organization in turn.
+ * So with N organizations with a draft due, every one is asked about and served within N runs at worst (each run
+ * serves at least the next one in turn), and within ceil(N / WAVE_ORGANIZATIONS) runs when the sends fit in the
+ * budget.
  */
 async function sendScheduled(env: Bindings, tenantId: string | null): Promise<{ scheduledSent: number; scheduledFailed: number }> {
   let sent = 0, failed = 0;
@@ -682,12 +683,13 @@ async function sendScheduled(env: Bindings, tenantId: string | null): Promise<{ 
     let finished = false;
     while (!finished && serving.some((org) => queues.get(org)!.length)) {
       for (const org of serving) {
-        const draft = queues.get(org)!.shift();
-        if (!draft) { done.add(org); continue; }
-        // Sends stop once the places or the budget are used, after at least one, so a run always moves on.
+        const queue = queues.get(org)!;
+        if (!queue.length) continue;
+        // Sends stop once the places or the budget are used, after at least one, so a run always moves on. Checked
+        // before taking a draft: an organization not served keeps its drafts and its turn.
         if (sent + failed >= SCHEDULED_PER_RUN || (sent + failed > 0 && Date.now() > until)) { finished = true; break; }
+        const { row, request, schedule, at } = queue.shift()!;
         done.add(org);
-        const { row, request, schedule, at } = draft;
         const caller = scheduledCaller(schedule.by, row.tenant_id, asking ? answers.get(row.tenant_id) ?? null : undefined);
         if (caller === 'unavailable' || caller === 'unconfirmed') continue;
         let error: string | null = null;
@@ -705,6 +707,7 @@ async function sendScheduled(env: Bindings, tenantId: string | null): Promise<{ 
         await recordScheduleFailure(env.DB, row.id, at, error);
       }
     }
+    // One whose queue is empty is handled: everything it had was taken (or it had no draft to take).
     for (const org of serving) if (!queues.get(org)!.length) done.add(org);
     // The cursor moves past each organization handled, in turn, up to the first one this run couldn't serve.
     for (const org of organizations) {

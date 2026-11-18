@@ -66,15 +66,16 @@ seals the finished envelope and emails each signer a link to their copy.
   "organization_unconfirmed"` (readers see `sendWaiting`) and `schedule.retryAt` ten minutes on;
   suspended, its drafts step back four minutes and wait; no answer in time, its drafts are left as
   they are. The served organizations send in passes, one draft of each a pass, in turn, until the
-  run's 25 places or its 10-second budget run out (after at least one send or refusal). The
-  cursor moves past every organization handled, served a turn or not answered for, up to the
-  first one the run couldn't serve; another wave follows while places remain and the budget
-  leaves a question's 5 seconds. **The bound:** with N organizations with a draft due, each is
-  asked about within ceil(N / 10) runs, whatever the others hold or however slowly they answer,
-  and has a draft sent or refused within that many runs when the sends fit in the budget; within
-  N runs at worst, since every run serves at least one organization in its turn. Sending claims a
-  draft in the batch that sends it, so two runs at once never send one twice. After the due work, whatever its outcome, the tick sends the hour's usage
-  report (below), after its response when the request has a `waitUntil`.
+  run's 25 places or its 10-second budget run out (after at least one send or refusal); the budget
+  is checked before a draft is taken, so an organization not reached keeps its drafts and its
+  turn. The cursor moves past every organization handled (served a turn, resting, suspended or not
+  answered for), up to the first one the run didn't serve; another wave follows while places
+  remain and the budget leaves a question's 5 seconds. **The bound:** with N organizations with a
+  draft due, every one is asked about and served within N runs at worst (each run serves at least
+  the next one in turn, however slow its sends), and within ceil(N / 10) runs when the sends fit
+  in the budget. Sending claims a draft in the batch that sends it, so two runs at once never send
+  one twice. After the due work, whatever its outcome, the tick sends the hour's usage report
+  (below), after its response when the request has a `waitUntil`.
 - **Mail.** There is no email binding: codes and completion notices go through the platform's mail
   relay (`mail.ts`), `POST $SUGER_MAIL_URL` with `SUGER_APP_TOKEN` and the organization, over the
   `SUGER_GATEWAY` service binding when the deploy gave one (`gateway-fetch.ts`). Only a 202

@@ -404,7 +404,7 @@ test('an organization that never answers in time holds no one up, gets no step b
 
 const pad = (n: number) => String(n).padStart(2, '0');
 
-test('twenty organizations that never answer in time ahead of a healthy one: it is asked and sends within ceil(21 / 10) ticks', async () => {
+test('twenty organizations that never answer in time ahead of a healthy one, its send fitting the budget: it is asked and sends within ceil(21 / 10) ticks', async () => {
   const answers: Record<string, { ms: number; kind: 'member' }> = {};
   for (let i = 1; i <= 20; i += 1) answers[`org-${pad(i)}`] = { ms: 900, kind: 'member' };
   const { h, asked, draft, statuses } = await slowPlatform(answers);
@@ -423,7 +423,7 @@ test('twenty organizations that never answer in time ahead of a healthy one: it 
   } finally { await h.mf.dispose(); }
 });
 
-test('ten organizations with more drafts than a run has places ahead of an eleventh: it sends within ceil(11 / 10) ticks, the ten in turns', async () => {
+test('ten organizations with more drafts than a run has places ahead of an eleventh, sends fitting the budget: it sends within ceil(11 / 10) ticks, the ten in turns', async () => {
   // A budget that holds a run's 25 sends even on a busy machine: the places, not the time, end the first run.
   const { h, draft, statuses } = await slowPlatform({}, { budgetMs: 8000, statusTimeoutMs: 500 });
   try {
@@ -454,6 +454,32 @@ test("one organization's 75 drafts beside another's one: sends take turns, so th
     const ran = await h.tick();
     assert.ok(ran.scheduledSent >= 2, JSON.stringify(ran));
     assert.deepEqual(await statuses([b]), ['IN_PROGRESS'], "the second send of the run is org-b's");
+  } finally { await h.mf.dispose(); }
+});
+
+/** A budget one send uses up, as sends slower than the tick's 10 s would: each run sends exactly one. */
+const SLOW_SENDS = { budgetMs: 1, statusTimeoutMs: 500 };
+
+test("with sends slower than the budget, an organization not served keeps its turn: org-b sends at tick 2 while org-a has a new draft every tick", async () => {
+  const { h, draft, statuses } = await slowPlatform({}, SLOW_SENDS);
+  try {
+    await draft('org-a', 'a-1');
+    const b = await draft('org-b', 'b');
+    assert.equal((await h.tick()).scheduledSent, 1, 'one send a run');
+    assert.deepEqual(await statuses([b]), ['DRAFT'], "org-a's turn came first");
+    await draft('org-a', 'a-2');
+    assert.equal((await h.tick()).scheduledSent, 1);
+    assert.deepEqual(await statuses([b]), ['IN_PROGRESS'], 'its turn, at the next tick');
+  } finally { await h.mf.dispose(); }
+});
+
+test('the worst case: 21 organizations with sends slower than the budget are each served within 21 ticks', async () => {
+  const { h, draft, statuses } = await slowPlatform({}, SLOW_SENDS);
+  try {
+    const ids: string[] = [];
+    for (let i = 1; i <= 21; i += 1) ids.push(await draft(`org-${pad(i)}`, `worst-${i}`));
+    for (let tick = 1; tick <= 21; tick += 1) assert.equal((await h.tick()).scheduledSent, 1, `tick ${tick}`);
+    assert.deepEqual(await statuses(ids), ids.map(() => 'IN_PROGRESS'), 'each one served, one a tick, in turn');
   } finally { await h.mf.dispose(); }
 });
 

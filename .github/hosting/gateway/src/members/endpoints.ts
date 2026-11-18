@@ -9,7 +9,7 @@ import type { HostedApp } from '../config.ts'
 import type { Context } from '../context.ts'
 import { isId } from '../crypto.ts'
 import { findAccessRow } from '../db/grants.ts'
-import { appUsedIn, lookupMembers, memberEventsAfter, memberStatusRows, orgOwners, type MemberStatusRow } from '../db/members.ts'
+import { appUsedIn, lookupMembers, memberEventsAfter, memberStatusRows, orgOwners, SearchTooVaried, type MemberStatusRow } from '../db/members.ts'
 import { appCaller, problem, readCursor } from '../http/app-caller.ts'
 import { BodyTooLarge, isJsonBody, readText } from '../http/request.ts'
 import { jsonResponse } from '../http/response.ts'
@@ -49,7 +49,14 @@ export async function memberLookup(ctx: Context): Promise<Response> {
   // The person may have lost access, or the organization been suspended, since the request was signed.
   const row = await findAccessRow(ctx.config.db, signed.org, signed.user, app.name)
   if (!accessFromRow(app, row) || !(await appUsedIn(ctx.config.db, app.name, signed.org))) return problem('no_app_access', 403)
-  const found = await lookupMembers(ctx.config.db, app.name, signed.org, query, LOOKUP_LIMIT)
+  let found: Awaited<ReturnType<typeof lookupMembers>>
+  try {
+    found = await lookupMembers(ctx.config.db, app.name, signed.org, query, LOOKUP_LIMIT)
+  } catch (error) {
+    // More letters with a case than one search can fold: refused plainly rather than answered with nobody.
+    if (error instanceof SearchTooVaried) return problem('search_too_varied', 400)
+    throw error
+  }
   const people = found.people.flatMap((person) => {
     const access = accessFromRow(app, person)
     return access ? [{ type: 'person' as const, id: person.id, name: person.name, email: person.email, appRole: access.role }] : []

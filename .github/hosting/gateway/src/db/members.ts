@@ -145,48 +145,77 @@ export interface LookupPersonRow {
 }
 
 /**
- * A search box's text, lower case (String.prototype.toLowerCase), as instr() finds it in a name or address folded the
- * same way (folded): as typed, wildcards and all. Not LIKE: D1 refuses a LIKE pattern over 50 bytes, and the text may be
- * 100 characters.
+ * A search box's text as compared (String.prototype.toLowerCase, with final sigma read as sigma), as instr() finds it
+ * in a name or address folded the same way (searchFolding): as typed, wildcards and all. Not LIKE: D1 refuses a LIKE
+ * pattern over 50 bytes, and the text may be 100 characters.
  */
 function searchText(query: string): string {
-  return query.toLowerCase()
+  return query.toLowerCase().replaceAll('ς', 'σ')
 }
 
-/** The most characters beyond ASCII a search folds (two parameters each, within D1's 100 a statement). */
-const FOLDED_CHARACTERS_MAX = 40
+/**
+ * The most capitals one search folds, two parameters each: with the lookup's own four, within D1's 100 a statement. A
+ * search with more (over 48 different letters with a case, in 100 characters) is refused (SearchTooVaried).
+ */
+export const SEARCH_FOLDS_MAX = 48
+
+/** A search that would fold more capitals than one statement can hold: the endpoint answers 400 `search_too_varied`. */
+export class SearchTooVaried extends Error {}
+
+// Every character beyond ASCII whose toLowerCase differs, by that lower case: the capitals (and title-case letters)
+// that lower to each lower-case letter, one string or several characters long (İ lowers to i and a combining dot).
+// Built once per isolate; every cased letter of Unicode is below U+20000. ASCII capitals are lower()'s.
+let lowerToCapitals: Map<string, string[]> | null = null
+function capitalsByLower(): Map<string, string[]> {
+  if (lowerToCapitals) return lowerToCapitals
+  const map = new Map<string, string[]>()
+  for (let point = 0x80; point < 0x20000; point += 1) {
+    if (point >= 0xd800 && point <= 0xdfff) continue
+    const capital = String.fromCodePoint(point)
+    const lower = capital.toLowerCase()
+    if (lower !== capital) map.set(lower, [...(map.get(lower) ?? []), capital])
+  }
+  return (lowerToCapitals = map)
+}
 
 /**
- * A stored name or address (`column`), folded for comparing with `text` as toLowerCase folds `text`, in SQL, with the
- * values its parameters take from `first` on. SQLite's lower() folds ASCII only, so for each character of `text` beyond
- * ASCII, replace() turns the capitals that lower to it into it first: "Élodie" then holds "élodie", as "ÉLODIE" does.
- * Only the text's own characters matter, since no other character can match one of them; one-to-one case pairs only
- * (a capital whose lower case is two characters, rare in names, compares as SQLite has it).
+ * What a stored name or address needs replaced, before SQLite's lower() (ASCII only) and instr() compare it with
+ * `text`, for it to read as toLowerCase reads it wherever that matters: for each character of `text`, every capital
+ * beyond ASCII that lowers to it (É to é, ẞ to ß, Σ to σ, the Kelvin sign to k), final sigma to sigma, and a capital
+ * that lowers to several characters (İ) when `text` holds one of them. Only `text`'s own characters matter: a stored
+ * capital lowering to anything else can't be part of a match. [capital, lower] pairs; SearchTooVaried past the bound.
  */
-function folded(column: string, text: string, first: number): { sql: string; values: string[] } {
-  const values: string[] = []
-  for (const char of new Set(text)) {
-    if (char.codePointAt(0)! < 0x80) continue
-    const capital = char.toUpperCase()
-    if (capital === char || [...capital].length !== 1 || capital.toLowerCase() !== char) continue
-    values.push(capital, char)
-    if (values.length / 2 >= FOLDED_CHARACTERS_MAX) break
+function searchFolding(text: string): [string, string][] {
+  const characters = new Set(text)
+  const pairs: [string, string][] = []
+  for (const [lower, capitals] of capitalsByLower()) {
+    const wanted = [...lower].length === 1 ? characters.has(lower) : [...lower].some((character) => characters.has(character))
+    if (wanted) for (const capital of capitals) pairs.push([capital, lower])
   }
+  if (characters.has('σ')) pairs.push(['ς', 'σ'])
+  if (pairs.length > SEARCH_FOLDS_MAX) throw new SearchTooVaried()
+  return pairs
+}
+
+/** `column` folded with `pairs` (searchFolding), in SQL, the pairs' values bound from parameter `first` on. */
+function folded(column: string, pairs: [string, string][], first: number): string {
   let sql = `lower(${column})`
-  for (let k = 0; k < values.length; k += 2) sql = `replace(${sql}, ?${first + k}, ?${first + k + 1})`
-  return { sql, values }
+  pairs.forEach((_, k) => { sql = `replace(${sql}, ?${first + 2 * k}, ?${first + 2 * k + 1})` })
+  return sql
 }
 
 /**
  * Up to `limit` people who can use `app` in the organization now (an organization role, or a grant for this app; an
  * active account) and up to `limit` of the app's live API clients, whose name or address contains `query`, without
- * regard to case. A person whose address is the query itself comes first, so an app checking an address someone typed
- * finds it however many others contain it (Esign: an API client's people); then by name.
+ * regard to case (searchFolding; SearchTooVaried for a search with more letters to fold than a statement holds). A
+ * person whose address is the query itself comes first, so an app checking an address someone typed finds it however
+ * many others contain it (Esign: an API client's people); then by name.
  */
 export async function lookupMembers(db: D1Database, app: string, orgId: string, query: string, limit: number): Promise<{ people: LookupPersonRow[]; clients: { id: string; name: string }[] }> {
   const text = searchText(query)
   // ?1 to ?4 are the app, the organization, the text and the limit; the folding pairs follow, the same for every column.
-  const name = folded('u.name', text, 5), email = folded('u.email', text, 5), client = folded('s.name', text, 5)
+  const pairs = searchFolding(text), values = pairs.flat()
+  const name = folded('u.name', pairs, 5), email = folded('u.email', pairs, 5), client = folded('s.name', pairs, 5)
   const [people, clients] = await db.batch([
     db.prepare(
       `SELECT u.id, u.name, u.email, m.role AS member_role, g.role AS grant_role, g.custom_role_id, c.name AS custom_role_name,
@@ -196,14 +225,14 @@ export async function lookupMembers(db: D1Database, app: string, orgId: string, 
        LEFT JOIN app_grants g ON g.org_id = m.org_id AND g.user_id = m.user_id AND g.app = ?1
        LEFT JOIN custom_roles c ON c.id = g.custom_role_id
        WHERE m.org_id = ?2 AND (m.role <> 'APPS' OR g.role IS NOT NULL)
-         AND (instr(${name.sql}, ?3) > 0 OR instr(${email.sql}, ?3) > 0)
-       ORDER BY ${email.sql} = ?3 DESC, u.name COLLATE NOCASE, u.email LIMIT ?4`,
-    ).bind(app, orgId, text, limit, ...name.values),
+         AND (instr(${name}, ?3) > 0 OR instr(${email}, ?3) > 0)
+       ORDER BY ${email} = ?3 DESC, u.name COLLATE NOCASE, u.email LIMIT ?4`,
+    ).bind(app, orgId, text, limit, ...values),
     db.prepare(
       `SELECT s.id, s.name FROM service_accounts s
-       WHERE s.org_id = ?2 AND s.app = ?1 AND s.revoked_at IS NULL AND instr(${client.sql}, ?3) > 0
+       WHERE s.org_id = ?2 AND s.app = ?1 AND s.revoked_at IS NULL AND instr(${client}, ?3) > 0
        ORDER BY s.name COLLATE NOCASE, s.id LIMIT ?4`,
-    ).bind(app, orgId, text, limit, ...client.values),
+    ).bind(app, orgId, text, limit, ...values),
   ])
   return { people: (people?.results ?? []) as LookupPersonRow[], clients: (clients?.results ?? []) as { id: string; name: string }[] }
 }

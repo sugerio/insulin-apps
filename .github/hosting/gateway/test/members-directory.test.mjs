@@ -171,6 +171,37 @@ test('names and addresses are matched without regard to case beyond ASCII: peopl
   assert.deepEqual(await ids('éloxx'), [], 'still only what contains it')
 })
 
+test('every capital that lowers to a letter of the search folds to it: final sigma, capital sharp s, dotted capital I, the Kelvin sign', async () => {
+  const owner = await h.user({ name: 'Fiona Fold' })
+  const orgId = await h.org(owner.client, 'Folding Org')
+  await members_(orgId, [
+    { id: uuid(9301), email: 'nikos@example.test', name: 'ΝΙΚΟΣ ΠΑΠΑΣ' },
+    { id: uuid(9302), email: 'sandra@example.test', name: 'ẞandra Example' },
+    { id: uuid(9303), email: 'ilkay@example.test', name: 'İlkay Örnek' },
+    { id: uuid(9304), email: 'kelvin@example.test', name: '\u212Aelvin Sample' },
+    { id: uuid(9305), email: 'odysseas@example.test', name: 'Οδυσσέας Ελύτης' },
+  ])
+  const header = await lookupHeader(owner)
+  const ids = async (q) => (await members(q, header)).json.members.map((m) => m.id)
+  for (const q of ['ΝΙΚΟΣ', 'νικος', 'νικοσ', 'Νίκος'.normalize('NFD').replace(/\p{M}/gu, ''), 'παπας']) assert.deepEqual(await ids(q), [uuid(9301)], `${q}: final sigma is sigma`)
+  for (const q of ['ßandra example', 'ẞANDRA', 'ẞandra']) assert.deepEqual(await ids(q), [uuid(9302)], `${q}: capital sharp s`)
+  for (const q of ['i̇lkay', 'İLKAY', 'örnek']) assert.deepEqual(await ids(q), [uuid(9303)], `${q}: dotted capital I`)
+  assert.deepEqual(await ids('kelvin sample'), [uuid(9304)], 'the Kelvin sign lowers to k')
+  assert.deepEqual(await ids('οδυσσέας'), [uuid(9305)])
+})
+
+test('a search with more letters to fold than one statement can compare (48) is refused plainly, not answered with nobody', async () => {
+  const owner = await h.user({ name: 'Vera Varied' })
+  await h.org(owner.client, 'Varied Org')
+  const header = await lookupHeader(owner)
+  // Every Cyrillic and Greek small letter: 56 letters, each with a capital (or two) to fold, more than 48.
+  const varied = 'абвгдежзийклмнопрстуфхцчшщъыьэюяαβγδεζηθικλμνξοπρστυφχψω'
+  const refused = await members(varied, header)
+  assert.equal(refused.status, 400)
+  assert.equal(refused.json.error, 'search_too_varied')
+  assert.equal((await members(varied.slice(0, 30), header)).status, 200, 'thirty letters fold')
+})
+
 test('an exact address comes first, ahead of 20 people whose address contains it, so an app checking an address finds it', async () => {
   const owner = await h.user({ name: 'Cora Crowd' })
   const orgId = await h.org(owner.client, 'Crowded Org')

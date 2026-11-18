@@ -74,6 +74,22 @@ CREATE TABLE app_orgs (
 
 CREATE INDEX app_orgs_by_org ON app_orgs (org_id);
 
+-- Where each app was used before this migration, so that its endpoints answer for those organizations from the start,
+-- before anyone opens the app there again: an app acts for some of them without a request (Esign's scheduled sends
+-- check whoever scheduled them with member status). From what the gateway holds of an app in an organization: the
+-- app's usage reports for it (§8.6, the daily rows kept 400 days and the hourly), its mail through the relay
+-- (`app:<app>`), its API clients and AI agents' grants there (revoked or expired ones too), its stored credentials, and
+-- the specific-apps members given it. Never an organization with none of these, or one that no longer exists; the
+-- app-wide report rows (`''`) are no organization. `first_at` is the earliest of them. One statement for each: D1
+-- refuses a compound SELECT of seven terms.
+INSERT INTO app_orgs (app, org_id, first_at) SELECT r.app, r.org_id, MIN(r.hour) FROM app_metrics_daily r JOIN orgs o ON o.id = r.org_id WHERE r.app <> '' GROUP BY r.app, r.org_id ON CONFLICT (app, org_id) DO UPDATE SET first_at = MIN(first_at, excluded.first_at);
+INSERT INTO app_orgs (app, org_id, first_at) SELECT r.app, r.org_id, MIN(r.hour) FROM app_metrics_hourly r JOIN orgs o ON o.id = r.org_id WHERE r.app <> '' GROUP BY r.app, r.org_id ON CONFLICT (app, org_id) DO UPDATE SET first_at = MIN(first_at, excluded.first_at);
+INSERT INTO app_orgs (app, org_id, first_at) SELECT substr(m.kind, 5), m.org_id, MIN(m.created_at) FROM mail_log m JOIN orgs o ON o.id = m.org_id WHERE m.kind LIKE 'app:_%' GROUP BY substr(m.kind, 5), m.org_id ON CONFLICT (app, org_id) DO UPDATE SET first_at = MIN(first_at, excluded.first_at);
+INSERT INTO app_orgs (app, org_id, first_at) SELECT s.app, s.org_id, MIN(s.created_at) FROM service_accounts s JOIN orgs o ON o.id = s.org_id WHERE s.app <> '' GROUP BY s.app, s.org_id ON CONFLICT (app, org_id) DO UPDATE SET first_at = MIN(first_at, excluded.first_at);
+INSERT INTO app_orgs (app, org_id, first_at) SELECT g.app, g.org_id, MIN(g.created_at) FROM oauth_grants g JOIN orgs o ON o.id = g.org_id WHERE g.app <> '' GROUP BY g.app, g.org_id ON CONFLICT (app, org_id) DO UPDATE SET first_at = MIN(first_at, excluded.first_at);
+INSERT INTO app_orgs (app, org_id, first_at) SELECT i.app, i.org_id, MIN(i.created_at) FROM integrations i JOIN orgs o ON o.id = i.org_id WHERE i.app <> '' GROUP BY i.app, i.org_id ON CONFLICT (app, org_id) DO UPDATE SET first_at = MIN(first_at, excluded.first_at);
+INSERT INTO app_orgs (app, org_id, first_at) SELECT g.app, g.org_id, MIN(g.created_at) FROM app_grants g JOIN orgs o ON o.id = g.org_id WHERE g.app <> '' GROUP BY g.app, g.org_id ON CONFLICT (app, org_id) DO UPDATE SET first_at = MIN(first_at, excluded.first_at);
+
 -- An organization that starts using an app gets its overrides there at the app's next read, even if they were set
 -- before (and the app's cursor has passed their change).
 CREATE TRIGGER app_orgs_first_use_sends_limits AFTER INSERT ON app_orgs WHEN EXISTS (SELECT 1 FROM org_app_limits l WHERE l.org_id = NEW.org_id AND l.app = NEW.app) BEGIN UPDATE app_limit_sequence SET seq = seq + 1 WHERE id = 1; INSERT INTO org_app_limit_changes (app, org_id, seq) VALUES (NEW.app, NEW.org_id, (SELECT seq FROM app_limit_sequence WHERE id = 1)) ON CONFLICT (app, org_id) DO UPDATE SET seq = excluded.seq; END;

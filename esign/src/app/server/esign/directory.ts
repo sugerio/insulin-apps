@@ -75,8 +75,8 @@ export type MemberNow =
 
 /**
  * One person's or API client's standing in Esign in the organization, by id (POST SUGER_MEMBER_STATUS_URL): null when
- * the platform can't be asked or didn't answer as agreed (an organization where Esign wasn't used since the platform
- * began to record it included: someone opens Esign there first).
+ * the platform can't be asked or didn't answer as agreed, an organization it has no record of Esign's use in included
+ * (it records organizations that used Esign before it began to, from their usage reports and the like, DESIGN.md §8.9).
  */
 export async function memberNow(env: DirectoryEnv, organizationId: string, id: string): Promise<MemberNow | null> {
   const endpoint = gatewayEndpoint(env.SUGER_MEMBER_STATUS_URL, env.SUGER_APP_TOKEN);

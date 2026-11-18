@@ -52,10 +52,16 @@ export function splitStatements(sql) {
     .split(/;\s*(?:\n|$)/).map((statement) => statement.trim()).filter(Boolean)
 }
 
-export async function applyMigrations(db) {
+/**
+ * Applies the gateway's migrations in order. With `upgrade`, as a database a release upgrades: those before
+ * `upgrade.before` (a migration's file name) first, then `upgrade.seed(db)` writes what that database held, then the rest.
+ */
+export async function applyMigrations(db, upgrade = null) {
   const dir = join(gatewayDir, 'migrations')
   const files = (await readdir(dir)).filter((name) => /^\d{4}_[a-z0-9_]+\.sql$/.test(name)).sort()
+  if (upgrade && !files.includes(upgrade.before)) throw new Error(`No migration ${upgrade.before}`)
   for (const file of files) {
+    if (upgrade && file === upgrade.before) await upgrade.seed(db)
     for (const statement of splitStatements(await readFile(join(dir, file), 'utf8'))) await db.prepare(statement).run()
   }
 }
@@ -234,8 +240,9 @@ export class Harness {
   /**
    * `stubBindings` names more service bindings (`APP_<NAME>`) that reach the stub app, besides APP_CAPTABLE: apps that
    * are deployed in a test. `publicLimit` is RL_PUBLIC's allowance (requests to public paths that change something).
+   * `upgrade` (`{ before, seed }`) starts from a database an earlier release migrated and used (applyMigrations).
    */
-  constructor({ mode = 'test', vars = {}, omit = [], authLimit = 1000, appLimit = 1000, publicLimit = 1000, apps = APPS, stubBindings = [], scheme } = {}) {
+  constructor({ mode = 'test', vars = {}, omit = [], authLimit = 1000, appLimit = 1000, publicLimit = 1000, apps = APPS, stubBindings = [], scheme, upgrade = null } = {}) {
     this.mode = mode
     this.domain = vars.SITE_DOMAIN ?? (mode === 'test' ? 'insulinapps.localhost' : 'example.test')
     this.scheme = scheme ?? (this.domain.endsWith('.localhost') ? 'http:' : 'https:')
@@ -255,6 +262,8 @@ export class Harness {
     this.vars = Object.fromEntries(Object.entries({ ...base, ...vars }).filter(([, value]) => value !== undefined))
     this.limits = { authLimit, appLimit, publicLimit }
     this.stubBindings = stubBindings
+    // A database migrated from an earlier release, then upgraded (applyMigrations).
+    this.upgrade = upgrade
   }
 
   /** The old sign-in host, which only redirects to the apex now. */
@@ -306,7 +315,7 @@ export class Harness {
     await this.mf.ready
     if (!this.omit.has('DB')) {
       this.db = await this.mf.getD1Database('DB')
-      await applyMigrations(this.db)
+      await applyMigrations(this.db, this.upgrade)
       // Every test person's address is at example.test (uniqueEmail), and each owner domain may have only two
       // organizations (DESIGN.md §3.1): the harness gives example.test room, as an operator would. The limit's own
       // tests use other domains.

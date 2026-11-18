@@ -30,7 +30,7 @@ import type {
   WakeProgress,
 } from './contract.ts'
 import { ORG_HEADER } from './contract.ts'
-import { ContainerClient, ContainerError } from './container.ts'
+import { ContainerClient, ContainerError, type Health, NoContainer } from './container.ts'
 import { type Env, REGISTRY_NAME, callObject, testControls, OUTBOX_NAME, CAPACITY_NAME } from './env.ts'
 import { EngineFailure, errorResponse, fail, json, readJson, requireId } from './http.ts'
 import { nextWindowStart, validateKeepReady, windowAt } from './keep-ready.ts'
@@ -48,6 +48,8 @@ export const EMPTY_COUNTS: CollectionCounts = { documents: 0, activeDocuments: 0
 export const EMPTY_STATE: AnswerState = { documents: [], marks: [], factsKey: null, facts: 0, passages: 0, textBytes: 0 }
 
 const START_FAILURES_BEFORE_EXPIRED = 3
+/** Storage key: until when no container is asked for, after Cloudflare had none to give (NoContainer). */
+const NO_CONTAINER_UNTIL = 'noContainerUntil'
 const WAKE_TIMEOUTS_BEFORE_GIVING_UP = 3
 
 export class CollectionEngine {
@@ -565,14 +567,16 @@ export class CollectionEngine {
     // past, which would run it again at once, forever).
     const held = isHeld(meta)
     if (held) times.push(Date.parse(meta.heldUntil!))
-    if (meta.op && !held) times.push(now + SETTINGS.wakePollMs)
+    // A start Cloudflare had no container for waits before the next (startContainer).
+    const startAt = Math.max(now + SETTINGS.wakePollMs, (await this.state.storage.get<number>(NO_CONTAINER_UNTIL)) ?? 0)
+    if (meta.op && !held) times.push(startAt)
     if (meta.active) {
       const record = await this.store.getImport(meta.active)
       if (record?.retryAt) times.push(record.retryAt)
       else times.push(record?.phase === 'running' ? now + SETTINGS.pollMs : now)
     }
     if (meta.queue.length && (!held || meta.removals.length)) times.push(now + SETTINGS.capacityRetryMs)
-    if (meta.wakeRequested && !held) times.push(now + SETTINGS.wakePollMs)
+    if (meta.wakeRequested && !held) times.push(startAt)
     if (runtime && this.box.running) {
       // After a commit the query process starts again at once; while waking, poll.
       if (runtime.phase === 'busy' && !meta.active && !meta.op) times.push(now)
@@ -617,8 +621,8 @@ export class CollectionEngine {
    */
   observeExit(): void {
     if (this.monitoring || !this.state.container) return
-    this.monitoring = this.state.container
-      .monitor()
+    this.monitoring = this.box
+      .watch()
       .catch((error: unknown) => console.warn('container stopped:', String(error)))
       .then(async () => {
         // React to the exit at once: an import is interrupted, questions wake it again.
@@ -650,15 +654,29 @@ export class CollectionEngine {
       await this.store.log('start-refused-held', { purpose })
       throw new OnHold()
     }
-    this.box.start({
-      snapshot: snapshot?.handle ?? null,
-      instance,
-      env: testControls(this.env) ? { KNOWLEDGE_TEST_CONTROLS: '1' } : undefined,
-      labels: { collection: meta.collectionId, purpose },
-    })
-    this.observeExit()
-    await this.box.setInactivityTimeout(SETTINGS.inactivityTimeoutMs)
-    const health = await this.box.waitHealthy()
+    // Cloudflare had no container to give a moment ago: none is asked for until the wait is over.
+    const waitUntil = (await this.state.storage.get<number>(NO_CONTAINER_UNTIL)) ?? 0
+    if (waitUntil > clock.now()) {
+      await this.store.deleteRuntime()
+      await this.chargeUsage(null)
+      throw new NoContainer('Waiting for Cloudflare to have a container to give.')
+    }
+    let health: Health
+    try {
+      this.box.start({
+        snapshot: snapshot?.handle ?? null,
+        instance,
+        env: testControls(this.env) ? { KNOWLEDGE_TEST_CONTROLS: '1' } : undefined,
+        labels: { collection: meta.collectionId, purpose },
+      })
+      this.observeExit()
+      await this.box.setInactivityTimeout(SETTINGS.inactivityTimeoutMs)
+      health = await this.box.waitHealthy()
+    } catch (error) {
+      if (error instanceof NoContainer) await this.noContainer(purpose, error)
+      throw error
+    }
+    await this.state.storage.delete(NO_CONTAINER_UNTIL)
     const runtime: Runtime = {
       origin: meta.version,
       snapshotId: snapshot?.handle.id ?? null,
@@ -681,6 +699,19 @@ export class CollectionEngine {
     }
     await this.store.log('container-started', { purpose, instance, from: snapshot?.handle.id ?? 'image', ms: clock.now() - started })
     return runtime
+  }
+
+  /**
+   * A start Cloudflare had no container for (NoContainer): nothing runs and no time is counted. It is no failure of the
+   * collection: no try of an import is counted, no snapshot is given up and no operation dropped. Every start waits
+   * SETTINGS.noContainerRetryMs, then asks again (the import goes back to the queue, a wake or an operation waits).
+   */
+  async noContainer(purpose: 'questions' | 'learning', error: NoContainer): Promise<void> {
+    await this.box.destroy('no container to give')
+    await this.store.deleteRuntime()
+    await this.chargeUsage(null)
+    await this.state.storage.put(NO_CONTAINER_UNTIL, clock.now() + SETTINGS.noContainerRetryMs)
+    await this.store.log('no-container', { purpose, error: errorText(error), retryInSeconds: SETTINGS.noContainerRetryMs / 1000 })
   }
 
   /** The snapshot the current restore point runs on, if it can still be started. */
@@ -731,6 +762,8 @@ export class CollectionEngine {
       } catch (error) {
         // The hold landed while the old container stopped: not a failed start.
         if (error instanceof OnHold) return this.whileHeld(await this.meta())
+        // Cloudflare had no container to give: the wake asks again after the wait, and the snapshot is fine.
+        if (error instanceof NoContainer) return
         await this.store.log('start-failed', { error: errorText(error) })
         await this.box.destroy('failed to start')
         await this.store.deleteRuntime()

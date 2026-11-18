@@ -5,6 +5,7 @@
 import type { GoBackPreview, NotRestorableReason, RestorePoint } from './contract.ts'
 import type { CollectionEngine } from './collection.ts'
 import { isHeld, OnHold } from './collection.ts'
+import { NoContainer } from './container.ts'
 import { fail } from './http.ts'
 import { SETTINGS } from './settings.ts'
 import type { Operation, RestorePointRecord, SnapshotRecord } from './types.ts'
@@ -112,13 +113,14 @@ export async function runOperation(e: CollectionEngine): Promise<void> {
     else if (op.kind === 'repair') await repair(e, op)
     else await fromBackup(e, op)
   } catch (error) {
-    if (error instanceof OnHold) {
-      // The hold landed while the old container stopped, and none started: not a failure. A repair tries the same
-      // restore point again once the hold ends (a go back was dropped when the hold landed).
+    if (error instanceof OnHold || error instanceof NoContainer) {
+      // The hold landed while the old container stopped, or Cloudflare had no container to give, and none started:
+      // not a failure. A repair tries the same restore point again once the hold ends (a go back was dropped when the
+      // hold landed); without a container, the operation starts again after the wait (startContainer).
       await e.updateMeta((m) => {
         if (m.op?.kind === op.kind && m.op.startedAt === op.startedAt) m.op = op
       })
-      await e.store.log('operation-held', { kind: op.kind })
+      await e.store.log(error instanceof OnHold ? 'operation-held' : 'operation-waits', { kind: op.kind })
       return
     }
     await e.store.log('operation-failed', { kind: op.kind, error: errorText(error) })

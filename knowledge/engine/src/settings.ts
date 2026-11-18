@@ -52,6 +52,9 @@ export const SETTINGS = {
   wakeTimeoutMs: 10 * 60 * 1000,
   // Re-ask the capacity guard this often while an import waits, in case a release notice was lost.
   capacityRetryMs: 30 * 1000,
+  // After Cloudflare had no container to give a start (its account limits, or too many starts at once), no container
+  // is asked for until this long has passed.
+  noContainerRetryMs: 30 * 1000,
   // The container's own inactivity timeout: a safety net behind the Durable Object's sleep alarm.
   inactivityTimeoutMs: 60 * 60 * 1000,
   // Usage is written to the outbox at least this often while a container runs.
@@ -68,15 +71,19 @@ export const SETTINGS = {
   maxKeepStagedMs: 45 * 24 * 60 * 60 * 1000,
   maxNotesPerImport: 50,
   maxNoteChars: 20000,
-  // Planning values, measured on Cloudflare (standard-4, the Engine-lane run of 2026-11-17), from a try's job start
-  // to its commit: one short file or note 110-116 s (about 50 s of Cognee, 55 s saving); 41 short documents learned
-  // again 317 s; one 2 MiB text (848 passages) 1,835 s. Time grows with the text, not only with the documents: a
-  // document's text is planned from its size until it is read (a file's bytes, at most the 2 MB read limit; a
-  // quarter of them for formats that aren't plain text), then from the text read. Starting the container (from a
-  // snapshot or the image, and its check) took 29-31 s more.
+  // Planning values, measured on Cloudflare (standard-4, the Engine-lane run of 2026-11-17, documents learned one at a
+  // time), from a try's job start to its commit: one short file or note 110-116 s (about 50 s of Cognee, 55 s saving);
+  // 20 short documents 211 s, 41 learned again 317 s (5.3 s each); one 2 MiB text (848 passages) 1,835 s. Time grows
+  // with the text, not only with the documents: a document's text is planned from its size until it is read (a
+  // file's bytes, at most the 2 MB read limit; a quarter of them for formats that aren't plain text), then from the
+  // text read. Starting the container (from a snapshot or the image, and its check) took 29-31 s more. Documents are
+  // learned in groups now, which Cognee does in about three quarters of the time per document (measured natively,
+  // README "Service settings"): 4.1 s; a later try of an import learns them one at a time again: 5.3 s. The
+  // collection's size isn't planned for: Cognee's time per document barely grows with it.
   containerStartSeconds: 30,
   importBaseSeconds: 105,
-  perDocumentSeconds: 5.3,
+  perDocumentSeconds: 4.1,
+  perDocumentOneByOneSeconds: 5.3,
   perTextMiBSeconds: 860,
   readLimitBytes: 2 * 1024 * 1024,
   wakeSeconds: 60,

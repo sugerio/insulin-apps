@@ -248,6 +248,7 @@ export class FakeCloud {
   nextSnapshot = 1
   image = 'registry.example/engine@1'
   starts: { collection: string; snapshot: string | null; instance?: string; env?: Record<string, string> }[] = []
+  refused: { collection: string; instance?: string }[] = [] // starts that got no container
   // Knobs for tests
   jobPolls = 1 // how many GET /jobs/<id> a job stays running
   queryPolls = 1 // how many status calls the query process takes to load, and to open
@@ -256,6 +257,7 @@ export class FakeCloud {
   detectorError = false
   dataFormat = 'fmt-1'
   failStarts = 0 // the next starts fail
+  noContainer = 0 // the next starts get no container: the start stops at once and monitor() says why, as Cloudflare does
   hangJobs: string[] = [] // jobs of these ops never finish
   onStart: (() => void) | null = null // e.g. move the fake clock: starting takes time
   openWrites = false // the query process writes under /data when it opens (as databases may): /data no longer equals the snapshot
@@ -322,6 +324,7 @@ export class FakeContainer {
     earlyOpen: false,
   }
   exited: (() => void) | null = null
+  refusal: Error | null = null // why the last start got no container, for monitor()
   lingering = 0 // a finished job's processes still exiting
   env: Record<string, string> = {}
   bootSnapshot: string | null = null
@@ -341,6 +344,12 @@ export class FakeContainer {
       this.cloud.failStarts -= 1
       throw new Error('the container could not start')
     }
+    if (this.cloud.noContainer > 0) {
+      this.cloud.noContainer -= 1
+      this.refusal = new Error('There is no Container instance that can be provided to this Durable Object.')
+      this.cloud.refused.push({ collection: this.name, instance: options.instance })
+      return
+    }
     this.cloud.onStart?.()
     const id = options.containerSnapshot?.id ?? null
     if (id && !this.cloud.snapshots.has(id)) throw new Error('snapshot not found')
@@ -356,6 +365,11 @@ export class FakeContainer {
   }
 
   monitor() {
+    if (this.refusal) {
+      const refusal = this.refusal
+      this.refusal = null
+      return Promise.reject(refusal)
+    }
     return new Promise<void>((resolve) => {
       this.exited = resolve
     })
@@ -396,8 +410,10 @@ export class FakeContainer {
         const response = await this.serve(request)
         if (drop?.after) throw new Error('Network connection lost.')
         if (drop?.cut) {
+          // The body stops halfway and ends without an error, under the length the server announced (as Cloudflare
+          // delivered the first run's two backup files).
           const bytes = new Uint8Array(await response.arrayBuffer())
-          return new Response(bytes.slice(0, Math.floor(bytes.length / 2)), { status: response.status })
+          return new Response(bytes.slice(0, Math.floor(bytes.length / 2)), { status: response.status, headers: response.headers })
         }
         return response
       },
@@ -412,7 +428,11 @@ export class FakeContainer {
     const parts = url.pathname.split('/').filter(Boolean).map(decodeURIComponent)
     const method = request.method
     this.cloud.calls.push({ collection: this.name, method, path: url.pathname })
-    const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })
+    // Every answer says how long it is, as server.py's do.
+    const json = (body: unknown, status = 200) => {
+      const bytes = new TextEncoder().encode(JSON.stringify(body))
+      return new Response(bytes, { status, headers: { 'content-type': 'application/json', 'content-length': String(bytes.length) } })
+    }
 
     if (method === 'GET' && url.pathname === '/health') {
       return json({ ok: true, bootId: 'boot', activeJob: this.active, dataFormat: this.cloud.dataFormat, query: { state: this.query.state } })
@@ -471,13 +491,13 @@ export class FakeContainer {
     if (parts[0] === 'query') return this.queryRoute(parts[1], request, json)
     if (method === 'GET' && parts[0] === 'text' && parts.length === 2) {
       const text = this.data.get(`text/${parts[1]}.json`)
-      return text ? new Response(text) : json({ error: 'no such text' }, 404)
+      return text ? new Response(text, { headers: { 'content-length': String(new TextEncoder().encode(text).length) } }) : json({ error: 'no such text' }, 404)
     }
     if (parts[0] === 'files') {
       const path = parts.slice(1).join('/')
       if (method === 'GET') {
         const value = this.data.get(path)
-        return value === undefined ? json({ error: 'no such file' }, 404) : new Response(value, { headers: { 'content-length': String(value.length) } })
+        return value === undefined ? json({ error: 'no such file' }, 404) : new Response(value, { headers: { 'content-length': String(byteLength(value)) } })
       }
       if (method === 'PUT') {
         if (this.query.state !== 'stopped') return json({ error: 'busy' }, 409)
@@ -821,12 +841,15 @@ export function paragraphs(documentId: string, text: string) {
   return out
 }
 
+/** A file's size in bytes, as the server and the manifest count it (UTF-8). */
+const byteLength = (text: string) => new TextEncoder().encode(text).length
+
 export function manifestOf(data: Map<string, string>) {
   const entries: Record<string, { sha256: string; size: number }> = {}
   let bytes = 0
   for (const key of [...data.keys()].sort()) {
-    entries[key] = { sha256: sha256(data.get(key)!), size: data.get(key)!.length }
-    bytes += data.get(key)!.length
+    entries[key] = { sha256: sha256(data.get(key)!), size: byteLength(data.get(key)!) }
+    bytes += byteLength(data.get(key)!)
   }
   const digest = sha256(Object.entries(entries).map(([k, e]) => `${k}\0${e.sha256}\0${e.size}\n`).join(''))
   return { digest, files: Object.keys(entries).length, bytes, entries }

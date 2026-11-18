@@ -6,12 +6,13 @@ nothing holds a file under /data open (the PoC's rule 1).
 
 Ops:
   ingest    read every file of an import (extract.py), hide sensitive values (hide.py, fails closed), then learn the
-            redacted text one document at a time; index passages; rebuild facts. Originals are deleted as soon as
-            they are read. A relearn batch learns stored redacted texts again (after an engine change).
+            redacted texts in groups, one cognify per group (one document at a time on a later try); index passages;
+            rebuild facts. Originals are deleted as soon as they are read. A relearn batch learns stored redacted
+            texts again (after an engine change).
   remove    remove documents for good: from Cognee's databases, their text and passage index; rebuild facts
   reread    apply stricter hiding rules to stored texts; learn the changed ones again; move outdated marks
-            After both, every store is purged of what was deleted and /data is searched for the removed or newly
-            hidden text (purge.py): any left fails the job, so nothing is committed or backed up.
+            After both, every store is purged of what was deleted and checked, and what the stores hold is read for
+            the removed or newly hidden text (purge.py): any left fails the job, so nothing is committed or backed up.
   stats     reopen all three databases through Cognee and count their records
   manifest  sha256 every file under /data (no Cognee import)
   grep      count planted values under /data (test controls only: HID-01's evidence)
@@ -46,6 +47,14 @@ WORK_DIR = Path(os.environ.get("KNOWLEDGE_WORK", "/var/lib/knowledge/work"))
 TEST_CONTROLS = os.environ.get("KNOWLEDGE_TEST_CONTROLS") == "1"
 CHUNK_TABLE = "DocumentChunk_text"
 DATA_ID_NAMESPACE = uuid5(NAMESPACE_URL, "urn:insulin-knowledge:document")
+# How this code lays out a collection in Cognee, the last part of the image's KNOWLEDGE_DATA_FORMAT (the Dockerfile; a
+# test keeps them equal). knowledge-2: each document is its own data item, found by its id (data_id_of). A snapshot or
+# backup in another layout is never opened as current: the collection learns everything again from its saved text.
+DATA_LAYOUT = "knowledge-2"
+# Documents learned together, with one cognify (learn()): at most this many, and this much text. Cognee works on 20
+# documents of a call side by side; larger groups were no faster (README, "Service settings").
+LEARN_GROUP_DOCUMENTS = 20
+LEARN_GROUP_BYTES = 4 * 1024 * 1024
 
 EXIT_FAILED = 2
 EXIT_ALREADY_INGESTED = 3
@@ -104,6 +113,17 @@ class Progress:
         if self.path:
             write_json(self.path, self.state)
 
+    def learning(self, file_ids: list[str | None], done: int) -> None:
+        """A group of documents being learned together. Only a group of one names its file as the current one: a crash
+        while several are learned can't say which of them stopped it."""
+        for file_id in file_ids:
+            if file_id:
+                self.state["files"][file_id] = "understanding"
+        self.state["current"] = file_ids[0] if len(file_ids) == 1 else None
+        self.state["done"] = done
+        if self.path:
+            write_json(self.path, self.state)
+
 
 # --------------------------------------------------------------------------- stored text
 
@@ -153,7 +173,8 @@ def data_id_of(document_id: str) -> UUID:
 
 def chunks_by_document(document_ids: set[str]) -> dict[str, list[dict]]:
     """Cognee's chunks of the given documents, read straight from the LanceDB table the chunk search uses. A chunk
-    belongs to the document whose data item made it (by id); one learned before items had their own ids, by name."""
+    belongs to the document whose data item made it, found by the item's id and never by name: databases from before
+    data ids (one item for two documents with the same text) are never opened (DATA_LAYOUT)."""
     import lancedb
 
     path = DATABASES_DIR / "cognee.lancedb"
@@ -167,10 +188,7 @@ def chunks_by_document(document_ids: set[str]) -> dict[str, list[dict]]:
     for row in db.open_table(CHUNK_TABLE).to_arrow().to_pylist():
         payload = row.get("payload") or {}
         document_id = by_data_id.get(str(payload.get("document_id") or ""))
-        if document_id is None:
-            name = str(payload.get("document_name") or "")
-            document_id = name[:-4] if name.endswith(".txt") else name
-        if document_id in document_ids:
+        if document_id is not None:
             out.setdefault(document_id, []).append(
                 {"id": str(row.get("id") or payload.get("id")), "index": payload.get("chunk_index"), "text": payload.get("text") or ""}
             )
@@ -214,25 +232,46 @@ def all_passages() -> dict[str, dict]:
     return out
 
 
-async def learn(document_id: str, text: str) -> None:
-    """Adds one redacted text to Cognee and builds its graph. The file is named by document id, and its data item has
-    an id of its own (data_id_of), so two documents with the same text stay two documents, each with its passages."""
+def learning_groups(documents: list[dict], one_by_one: bool) -> list[list[dict]]:
+    """The documents of an import in the groups learned together: at most LEARN_GROUP_DOCUMENTS and LEARN_GROUP_BYTES
+    of text each (a text over that is a group of its own), or one by one."""
+    groups: list[list[dict]] = []
+    size = 0
+    for item in documents:
+        text_bytes = len(item["stored"]["text"].encode("utf-8"))
+        full = groups and (len(groups[-1]) >= LEARN_GROUP_DOCUMENTS or size + text_bytes > LEARN_GROUP_BYTES)
+        if one_by_one or not groups or full:
+            groups.append([])
+            size = 0
+        groups[-1].append(item)
+        size += text_bytes
+    return groups
+
+
+async def learn(documents: list[tuple[str, str]]) -> None:
+    """Adds redacted texts to Cognee and builds their graph with one cognify. Each file is named by document id, and
+    its data item has an id of its own (data_id_of), so two documents with the same text stay two documents, each with
+    its passages. One cognify for the group, not one per document: each call is a pipeline run of its own (its records
+    and a compaction pass), and a group's documents are worked on side by side (README, "Service settings")."""
     import cognee
     from cognee.tasks.ingestion.data_item import DataItem
 
     work = WORK_DIR / "learn"
     work.mkdir(parents=True, exist_ok=True)
-    path = work / f"{document_id}.txt"
-    path.write_text(text)
+    paths = [(document_id, work / f"{document_id}.txt") for document_id, _ in documents]
     try:
-        await cognee.add(DataItem(data=str(path), data_id=data_id_of(document_id)), dataset_name=DATASET)
+        for (_, path), (_, text) in zip(paths, documents):
+            path.write_text(text)
+        await cognee.add([DataItem(data=str(path), data_id=data_id_of(document_id)) for document_id, path in paths], dataset_name=DATASET)
         await cognee.cognify(datasets=[DATASET])
     finally:
-        path.unlink(missing_ok=True)
+        for _, path in paths:
+            path.unlink(missing_ok=True)
 
 
 async def forget(document_id: str) -> bool:
-    """Deletes one document's data from Cognee's databases. True when it was there."""
+    """Deletes one document's data from Cognee's databases, found by its data item's id (never by name: another
+    document's item could carry it). True when it was there."""
     import cognee
 
     db_file = relational_db_file()
@@ -240,10 +279,7 @@ async def forget(document_id: str) -> bool:
         return False
     data_id = data_id_of(document_id)
     with sqlite3.connect(f"file:{db_file}?mode=ro", uri=True) as conn:
-        rows = conn.execute(
-            "SELECT id, raw_data_location FROM data WHERE id IN (?, ?) OR name IN (?, ?)",
-            (data_id.hex, str(data_id), f"{document_id}.txt", document_id),
-        ).fetchall()
+        rows = conn.execute("SELECT id, raw_data_location FROM data WHERE id IN (?, ?)", (data_id.hex, str(data_id))).fetchall()
         datasets = conn.execute("SELECT id FROM datasets WHERE name = ?", (DATASET,)).fetchall()
     if not rows or not datasets:
         return False
@@ -390,27 +426,33 @@ async def op_ingest(args) -> dict:
         store_text(item["stored"])
     progress.read()
 
-    # 2. Learn the redacted text, one document at a time.
+    # 2. Learn the redacted texts, in groups (learning_groups). A later try learns one document at a time, so the
+    # progress names a file that stops the learning (the process crashes on it) and the last try fails naming it.
     previous_facts = len(read_json(FACTS_PATH, {"facts": []}).get("facts", []))
-    for done, item in enumerate(prepared):
-        stored = item["stored"]
-        progress.file(item["fileId"], "understanding", done)
-        await learn(stored["documentId"], stored["text"])
-        progress.file(item["fileId"], "learned", done + 1)
-        documents.append(
-            {
-                "documentId": stored["documentId"],
-                "fileId": item["fileId"],
-                "noteId": item["noteId"],
-                "kind": stored["kind"],
-                "textBytes": len(stored["text"].encode("utf-8")),
-                "pages": stored.get("pageCount"),
-                "hidden": len(stored.get("hidden") or []),
-                "truncated": bool(stored.get("truncated")),
-                "reason": stored.get("note"),
-                "changed": True,
-            }
-        )
+    done = 0
+    groups = learning_groups(prepared, one_by_one=int(batch.get("attempt") or 1) > 1)
+    learning_started = time.monotonic()
+    for group in groups:
+        progress.learning([item["fileId"] for item in group], done)
+        await learn([(item["stored"]["documentId"], item["stored"]["text"]) for item in group])
+        for item in group:
+            done += 1
+            progress.file(item["fileId"], "learned", done)
+            stored = item["stored"]
+            documents.append(
+                {
+                    "documentId": stored["documentId"],
+                    "fileId": item["fileId"],
+                    "noteId": item["noteId"],
+                    "kind": stored["kind"],
+                    "textBytes": len(stored["text"].encode("utf-8")),
+                    "pages": stored.get("pageCount"),
+                    "hidden": len(stored.get("hidden") or []),
+                    "truncated": bool(stored.get("truncated")),
+                    "reason": stored.get("note"),
+                    "changed": True,
+                }
+            )
 
     # 3. Passages, the corrections' marks and facts.
     passages, capped = index_passages([d["documentId"] for d in documents])
@@ -451,6 +493,8 @@ async def op_ingest(args) -> dict:
         "newFacts": max(0, total_facts - previous_facts),
         "files": progress.state["files"],
         "changed": newly_hidden,
+        # How long Cognee took, in how many groups: the Durable Object logs it, for the planning times.
+        "learning": {"groups": len(groups), "ms": round((time.monotonic() - learning_started) * 1000)},
     }
 
 
@@ -484,6 +528,7 @@ async def op_reread(args) -> dict:
         marks_by_doc.setdefault(mark["documentId"], []).append(mark)
     progress = Progress(args.progress, len(batch["documentIds"]))
     documents, changed, remapped = [], [], []
+    rewritten: list[dict] = []  # each changed document's text before, its passages before and its text now
     for done, document_id in enumerate(batch["documentIds"]):
         stored = load_text(document_id)
         if not stored:
@@ -500,13 +545,20 @@ async def op_reread(args) -> dict:
         new = to_stored(document_id, stored["kind"], stored["name"], stored.get("type", ""), redaction, stored.get("pageCount"), stored.get("truncated"), stored.get("note"))
         await forget(document_id)
         store_text(new)
-        await learn(document_id, new["text"])
-        index_passages([document_id])
+        rewritten.append({"stored": new, "oldText": old_text, "oldIndex": old_index})
+    # The changed texts are learned again together, in groups, as an import learns its files.
+    for group in learning_groups(rewritten, one_by_one=False):
+        await learn([(item["stored"]["documentId"], item["stored"]["text"]) for item in group])
+    index_passages([item["stored"]["documentId"] for item in rewritten])
+    rehide = lambda text: hide.apply(text, rules).text  # noqa: E731
+    for item in rewritten:
+        document_id, new = item["stored"]["documentId"], item["stored"]
         new_index = read_json(PASSAGES_DIR / f"{document_id}.json", [])
-        rehide = lambda text: hide.apply(text, rules).text  # noqa: E731
-        remapped.extend(remap_marks(marks_by_doc.get(document_id, []), old_text, old_index, new["text"], new_index, rehide))
+        remapped.extend(remap_marks(marks_by_doc.get(document_id, []), item["oldText"], item["oldIndex"], new["text"], new_index, rehide))
         changed.append(document_id)
         documents.append({"documentId": document_id, "changed": True, "textBytes": len(new["text"].encode()), "hidden": len(new["hidden"])})
+    order = {document_id: i for i, document_id in enumerate(batch["documentIds"])}
+    documents.sort(key=lambda d: order[d["documentId"]])
     total_facts = await rebuild_facts()
     return {"documents": documents, "changed": changed, "marks": remapped, "facts": total_facts, "newFacts": 0}
 
@@ -598,8 +650,8 @@ def op_grep(args) -> dict:
 
 def purged(args) -> dict:
     """remove and reread: the op itself runs in a child process, so when it exits every database Cognee opened is
-    closed; then every store is purged of what was deleted, and /data is searched for the removed or newly hidden text
-    (purge.py). Any left fails the job: nothing is committed or backed up."""
+    closed; then every store is purged of what was deleted and checked, and what the stores hold now is read for the
+    removed or newly hidden text (purge.py). Any left fails the job: nothing is committed or backed up."""
     import purge
 
     batch = json.loads((Path(args.batch_dir) / "batch.json").read_text())
@@ -625,10 +677,10 @@ def purged(args) -> dict:
     remaining = purge.left(DATA_DIR, probes, kept)
     result["purge"].update({"probes": len(probes), "ms": round((time.monotonic() - started) * 1000)})
     if remaining:
-        print(json.dumps({"left": remaining}), file=sys.stderr)  # file names and counts only, never the text
+        print(json.dumps({"left": remaining}), file=sys.stderr)  # places and counts only, never the text
         raise Stop(
-            f"{'Removed' if args.op == 'remove' else 'Newly hidden'} text was still found in {len(remaining)} of the "
-            "collection's files after they were cleaned up, so nothing was kept."
+            f"{'Removed' if args.op == 'remove' else 'Newly hidden'} text was still found in the collection's data after "
+            f"it was cleaned up ({len(remaining)} {'place' if len(remaining) == 1 else 'places'}), so nothing was kept."
         )
     return result
 

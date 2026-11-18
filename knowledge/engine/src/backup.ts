@@ -42,7 +42,7 @@ export async function run(e: CollectionEngine, runtime: Runtime): Promise<Backup
     const key = blobKey(meta, entry.sha256)
     if (await e.env.BACKUPS.head(key)) continue
     // R2 checks the bytes against the manifest's checksum: a stream cut short by a drop is refused and read again.
-    await e.box.copyFile(path, (body) => e.env.BACKUPS.put(key, body, { sha256: entry.sha256 }))
+    await e.box.copyFile(path, entry.size, (body) => e.env.BACKUPS.put(key, body, { sha256: entry.sha256 }))
     uploaded += 1
   }
   const day = utcDay()

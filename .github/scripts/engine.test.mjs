@@ -172,6 +172,11 @@ test("the deployed config takes only the engine's classes and bindings, names th
     config: { ...config, containers: [{ class_name: 'CollectionEngine', images: { base: { dockerfile: './container/Dockerfile', build_vars: { A: 'b' } } } }] },
   })
   assert.deepEqual(named.containers, [{ class_name: 'CollectionEngine', images: { base: { image } } }])
+  // Knowledge's own engine: its Durable Object starts its containers, so the deployed config keeps that policy and no
+  // max_instances (Wrangler refuses one there; its containers count against the account's limits).
+  const knowledge = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'knowledge', 'engine')
+  const deployedKnowledge = deployedEngineConfig({ app: 'knowledge', engineDirectory: knowledge, config: readEngineConfig(knowledge), imageReference: image, serves: [1, 1] })
+  assert.deepEqual(deployedKnowledge.containers, [{ class_name: 'CollectionEngine', scheduling_policy: 'durable_object', images: { base: { image } } }])
   assert.throws(() => deployedEngineConfig({ app: 'alpha', engineDirectory: engine, config, imageReference: null, serves: [1, 1] }), /no image to deploy/)
 })
 

@@ -11,7 +11,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-DEFAULT_THRESHOLD = 0.70
+DEFAULT_THRESHOLD = 0.68  # calibration.json's, used only when that file can't be read
 EPSILON = 1e-6
 
 

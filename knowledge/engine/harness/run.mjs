@@ -15,6 +15,8 @@
 //   --soak 10                the PoC's recovery soak (default 0)
 //   --size                   also IMP-07: 500 documents in 10 imports (long)
 //   --capacity               also IMP-10: 21 imports across 21 organizations at once (21 containers)
+//   --image-change before    HIS-03-real, the real image change: learn and back up a collection, and keep its answers
+//   --image-change after     after the engine is deployed again with a changed image: it comes back from its backup
 //   --label standard-1       a label for the report, e.g. the questions instance this engine was deployed with
 
 import { execFileSync } from 'node:child_process'
@@ -94,6 +96,9 @@ allowed to edit Workers, R2 and Containers), from knowledge/engine/:
   npx wrangler r2 bucket create ${engineName}-backups
   # The image's dependency layer is large; Wrangler's own registry credential lasts 15 minutes. Build and push
   # the image with a longer-lived credential first if the upload is slow (README.md, "Build gotchas").
+  # Logged in with \`wrangler login\`, a deploy that starts near the end of its token's hour fails while the image is
+  # prepared, with a bare "Unauthorized"; and the harness's first deploy can answer "This Worker does not exist" right
+  # after uploading it. Both work when run again.
   npx wrangler deploy -c harness/.run/${run}/engine.jsonc
   npx wrangler deploy -c harness/.run/${run}/harness.jsonc
   npx wrangler secret put HARNESS_TOKEN -c harness/.run/${run}/harness.jsonc < harness/.run/${run}/token
@@ -109,11 +114,19 @@ function cleanup(id) {
 
   npx wrangler delete -c harness/.run/${run}/harness.jsonc
   npx wrangler delete -c harness/.run/${run}/engine.jsonc
+  # The containers application outlives the engine Worker: find ${engineName}-collectionengine and delete it by id.
+  npx wrangler containers list
+  npx wrangler containers delete <its id>
   npx wrangler r2 bucket delete ${engineName}-files
   npx wrangler r2 bucket delete ${engineName}-backups
+  # The run's own image tags, when the image was pushed by hand (README, "Build gotchas"):
+  npx wrangler containers images list
+  npx wrangler containers images delete <repository>:<tag>
   rm -r harness/.run/${run}
 
-Container snapshots can't be deleted; with no handle left they can't be opened, and they expire within 30 days.`)
+Container snapshots can't be deleted. Cloudflare keeps them as tags in the engine image's repository
+(rootfs-snapshot-…, rootfs-set-…): deleting one is refused (403), so the repository stays listed until they expire,
+30 days after they were made or last restored. With no handle left they can't be opened.`)
 }
 
 // ==================================================================== the client
@@ -203,6 +216,21 @@ async function search(cid, query, { org = ORG, topK, threshold } = {}) {
 
 const state = (cid, org = ORG) => must('GET', `/v1/collections/${cid}/__test/state`, undefined, [200], { org })
 const control = (cid, action, body = {}, org = ORG) => must('POST', `/v1/collections/${cid}/__test/${action}`, body, [200], { org })
+
+/**
+ * Backs a collection up (the `backup` control puts it to sleep, which backs it up) and checks the backup was taken:
+ * one lost on the way (the engine logs it and sleeps anyway) is asked for again, so a plan never goes on without it.
+ */
+async function backUp(cid, org = ORG) {
+  const version = (await status(cid, org)).version
+  for (let tries = 1; ; tries++) {
+    await control(cid, 'backup', {}, org)
+    const { meta } = await state(cid, org)
+    if (meta.lastBackupVersion === version && !meta.backupDue) return
+    if (tries === 3) throw new Error(`no backup of ${cid} version ${version} after 3 tries`)
+    log(`  the backup of ${cid} version ${version} wasn't taken; asking again`)
+  }
+}
 const objects = (org = ORG) => must('GET', '/v1/__test/objects', undefined, [200], { org })
 const status = (cid, org = ORG) => must('GET', `/v1/collections/${cid}`, undefined, [200], { org })
 const points = async (cid, org = ORG) => (await must('GET', `/v1/collections/${cid}/restore-points`, undefined, [200], { org })).restorePoints
@@ -298,10 +326,12 @@ plan('IMP-03', 'All or nothing', async () => {
   const before = await status(MAIN)
   let killedAt = null
   await startImport(MAIN, 'batch-003', corpus('batch-003'))
+  // The engine learns an import's files together (in groups), so they turn "learned" all at once: the container is
+  // destroyed while they are being understood, before every file is learned.
   const interrupted = await waitImport(MAIN, 'batch-003', {
     onPoll: async (s) => {
       const learned = s.files.filter((f) => f.state === 'learned').length
-      if (killedAt === null && learned >= 3) {
+      if (killedAt === null && s.files.some((f) => f.state === 'understanding') && learned < s.files.length) {
         killedAt = learned
         await control(MAIN, 'destroy-container')
       }
@@ -312,7 +342,7 @@ plan('IMP-03', 'All or nothing', async () => {
   const done = await waitImport(MAIN, 'batch-003')
   const docs = await documents(MAIN)
   const checks = {
-    crashedPartWay: killedAt !== null && killedAt < 5,
+    crashedPartWay: killedAt !== null && killedAt < corpus('batch-003').length,
     markedInterrupted: interrupted.state === 'interrupted',
     restorePointUnchanged: between.version === before.version && between.counts.documents === before.counts.documents,
     retryCommitted: done.state === 'committed' && done.attempt === 2,
@@ -497,7 +527,10 @@ plan('FIX-02', 'Corrections survive a re-read; a changed passage asks to be chec
   await createCollection(cid)
   const item = questions('answerable.json').find((q) => q.expectDoc === '03-oncall-rotation-policy')
   const file = corpus('batch-001').find((f) => f.name.startsWith(item.expectDoc))
-  await learn(cid, 'file', [file])
+  // On Cloudflare each corpus document is one passage, so no word of its file lies outside the corrected passage: a
+  // second document gives the re-read a word to hide that leaves the corrected passage alone.
+  const other = corpus('batch-001').find((f) => f !== file)
+  await learn(cid, 'file', [file, other])
   const old = (await search(cid, item.query)).passages.find((p) => p.text.includes(item.expectFact))
   if (!old) throw new Error('no passage holds the fact to correct')
   await must('POST', `/v1/collections/${cid}/corrections`, {
@@ -505,7 +538,9 @@ plan('FIX-02', 'Corrections survive a re-read; a changed passage asks to be chec
   }, [202])
   await waitIdle(cid)
   const words = (text) => new Set(text.match(/[A-Za-z]{6,}/g) ?? [])
-  const fileText = (await must('GET', `/v1/collections/${cid}/documents/${old.documentId}`)).text
+  const texts = []
+  for (const d of (await documents(cid)).filter((d) => d.kind === 'file')) texts.push((await must('GET', `/v1/collections/${cid}/documents/${d.documentId}`)).text)
+  const fileText = texts.join('\n')
   const inPassage = words(old.text)
   const elsewhere = [...words(fileText)].find((w) => !inPassage.has(w) && !old.text.toLowerCase().includes(w.toLowerCase()))
   const inside = [...inPassage].find((w) => !item.expectFact.includes(w))
@@ -581,7 +616,7 @@ plan('HIS-02', 'Waking from the backup', async () => {
   const items = questions('answerable.json').slice(0, 10)
   const before = []
   for (const item of items) before.push((await search(MAIN, item.query)).passages.map((p) => p.textHash))
-  await control(MAIN, 'backup')
+  await backUp(MAIN)
   const counts = (await status(MAIN)).counts
   const version = (await status(MAIN)).version
   await control(MAIN, 'drop-snapshot')
@@ -606,25 +641,87 @@ plan('HIS-04', 'A failed integrity check', async () => {
   const before = await status(MAIN)
   await control(MAIN, 'corrupt-manifest')
   await search(MAIN, questions('answerable.json')[0].query)
-  const summary = (await points(MAIN))[0].summary
+  // The repair names the version on the restore point it makes ("Answering from version …", or "Came back from its
+  // backup"); one that answers from an earlier point then learns everything again, which adds a point after it. The
+  // first answer may come after both, so every point made since is read, not only the newest.
+  await waitIdle(MAIN)
+  const made = (await points(MAIN)).filter((p) => p.version > before.version)
+  const repair = made.find((p) => /^Answering from version \d+|^Came back from its backup/.test(p.summary))
   const mismatches = (await state(MAIN)).log.filter((e) => e.event === 'checksum-mismatch').length
   return {
-    checks: { oneRetry: mismatches >= 2, namesTheVersion: /Answering from version \d+|Came back from its backup/.test(summary) },
-    evidence: { summary, before: before.version },
+    checks: { oneRetry: mismatches >= 2, namesTheVersion: Boolean(repair) },
+    evidence: { before: before.version, made: made.map((p) => `v${p.version}: ${p.summary}`) },
   }
 })
 
 plan('HIS-03', 'An engine image change (simulated; see README for the real one)', async () => {
   const before = (await search(MAIN, questions('answerable.json')[1].query)).passages.map((p) => p.textHash)
+  // Every point that could be restored becomes `engine_changed`. One an earlier plan made unavailable stays so: it
+  // keeps a reason an image change doesn't outrank (HIS-04's damaged point stays `damaged`, as a point blocked by a
+  // removal or stricter hiding keeps its reason), or becomes `engine_changed` (an expired one; history.ts reasonFor).
+  const earlier = new Map((await points(MAIN)).map((p) => [p.version, p]))
   await control(MAIN, 'image-changed')
   const after = (await search(MAIN, questions('answerable.json')[1].query)).passages.map((p) => p.textHash)
   const list = await points(MAIN)
+  const older = list.filter((p) => earlier.has(p.version))
+  const kept = ['removed_for_good', 'newly_hidden', 'damaged']
+  const expected = (p) => (kept.includes(earlier.get(p.version).reason) ? earlier.get(p.version).reason : 'engine_changed')
   return {
-    checks: { sameAnswers: JSON.stringify(after) === JSON.stringify(before), olderPointsUnavailable: list.slice(1).every((p) => !p.restorable && p.reason === 'engine_changed') },
-    evidence: { summary: list[0].summary },
-    manual: 'After a real image change: deploy the engine again from a changed Dockerfile, then run --only HIS-03 against a collection made before it.',
+    checks: {
+      sameAnswers: JSON.stringify(after) === JSON.stringify(before),
+      olderPointsUnavailable: older.length > 0 && older.every((p) => !p.restorable && p.reason === expected(p)),
+    },
+    evidence: { summary: list[0].summary, older: older.map((p) => `v${p.version}: ${p.reason}`) },
+    manual: 'The real image change is HIS-03-real: --image-change before, deploy the engine again with a changed image, then --image-change after.',
   }
 })
+
+// HIS-03 for real spans two runs of the harness around a second deploy, so its collection is named in a file between
+// them (its organization isn't purged at the end of the first).
+const REAL_IMAGE_CHANGE = join(here, 'report', 'his03-real.json')
+
+plan('HIS-03-real', 'An engine image change, for real (before and after a second deploy)', async () => {
+  const files = corpus('batch-002')
+  const items = questions('answerable.json').filter((q) => files.some((f) => f.name.startsWith(q.expectDoc)))
+  const answers = async (cid, org) => {
+    const out = []
+    for (const item of items) out.push((await search(cid, item.query, { org })).passages.map((p) => p.textHash))
+    return out
+  }
+  const phase = option('image-change')
+  if (phase === 'before') {
+    const [cid, org] = [`e2e-${stamp}-his03`, `${ORG}-his03`]
+    await createCollection(cid, org)
+    const done = await learn(cid, 'his03', files, { org })
+    if (done.state !== 'committed') throw new Error(`the import ${done.state}`)
+    const asked = await answers(cid, org)
+    await backUp(cid, org)
+    const { version, counts } = await status(cid, org)
+    mkdirSync(dirname(REAL_IMAGE_CHANGE), { recursive: true })
+    writeFileSync(REAL_IMAGE_CHANGE, JSON.stringify({ cid, org, version, counts, answers: asked }, null, 2))
+    return {
+      checks: { learnedAndBackedUp: true },
+      evidence: { cid, org, version },
+      manual: 'Deploy the engine again with a changed image (the same one with a layer added will do), then run --only HIS-03-real --image-change after.',
+    }
+  }
+  if (phase !== 'after') throw new Error('--image-change takes before or after')
+  const before = JSON.parse(readFileSync(REAL_IMAGE_CHANGE, 'utf8'))
+  const { cid, org } = before
+  const started = Date.now()
+  const asked = await answers(cid, org)
+  const firstAnswerSeconds = (Date.now() - started) / 1000
+  const list = await points(cid, org)
+  const events = (await state(cid, org)).log.map((e) => e.event)
+  const checks = {
+    sameAnswers: JSON.stringify(asked) === JSON.stringify(before.answers),
+    sameCounts: JSON.stringify((await status(cid, org)).counts) === JSON.stringify(before.counts),
+    cameBackFromTheBackup: /^Came back from its backup/.test(list[0].summary) && events.includes('from-backup-done') && !events.includes('from-backup-relearn'),
+    olderPointsUnavailable: list.length > 1 && list.slice(1).every((p) => !p.restorable && p.reason === 'engine_changed'),
+  }
+  await api('POST', `/v1/orgs/${org}/purge`, {}, { org })
+  return { checks, evidence: { firstAnswerSeconds, points: list.map((p) => `v${p.version}: ${p.summary} (${p.reason ?? 'restorable'})`) } }
+}, { costly: 'image-change' })
 
 plan('HID-01', 'Nothing hidden is stored; HID-03 originals are deleted', async () => {
   const cid = HID
@@ -637,7 +734,7 @@ plan('HID-01', 'Nothing hidden is stored; HID-03 originals are deleted', async (
   await learn(cid, 'personal', [{ fileId: 'personal', name: 'personal-data.md', type: 'text/markdown', bytes: readFileSync(join(dir, 'personal-data.md')) }], { org })
   const counts = await objects(org)
   await search(cid, 'contacts and keys', { org })
-  await control(cid, 'backup', {}, org)
+  await backUp(cid, org)
   await search(cid, 'contacts and keys', { org })
   const found = await control(cid, 'grep', { values: planted }, org)
   const exportId = `exp-${stamp}`
@@ -673,7 +770,7 @@ plan('HID-04', 'A stricter rule applies to old files', async () => {
   const word = 'Ledgerline'
   await learn(cid, 'with-word', [corpus('batch-001')[0]], { org })
   // A backup and a ready export that hold the word, before the rule hides it.
-  await control(cid, 'backup', {}, org)
+  await backUp(cid, org)
   const exportId = `exp-hid-${stamp}`
   await must('POST', `/v1/collections/${cid}/exports`, { exportId }, [200], { org })
   let before
@@ -713,7 +810,7 @@ plan('HIS-07', 'Remove for good', async () => {
     await sleep(SHARE_WINDOW_MS)
   }
   const target = (await documents(cid, org)).find((d) => d.name === file.name)
-  await control(cid, 'backup', {}, org)
+  await backUp(cid, org)
   const removed = await must('DELETE', `/v1/collections/${cid}/documents/${target.documentId}`, undefined, [200], { org })
   await waitIdle(cid, org)
   await search(cid, 'migration lock timeout', { org })
@@ -793,7 +890,7 @@ plan('DEL-01', 'Deleting during an import', async () => {
   const cid = `e2e-${stamp}-del`
   await createCollection(cid, org)
   await learn(cid, 'first', corpus('batch-002'), { org })
-  await control(cid, 'backup', {}, org)
+  await backUp(cid, org)
   await startImport(cid, 'during', corpus('batch-003'), { org })
   await waitImport(cid, 'during', { org, onPoll: (s) => s.state === 'learning' || s.state === 'reading' })
   const deleting = await api('DELETE', `/v1/collections/${cid}`, undefined, { org })
@@ -834,15 +931,22 @@ plan('IMP-07', '500 documents in 10 imports', async () => {
       const doc = base[n % base.length]
       return { fileId: `s${n}`, name: `${n}-${doc.name}`, text: `${doc.text}\n\nRevision ${n}: reviewed by team ${n % 17}.` }
     })
+    // The engine's own plan for the import, as the answer to its submission gives it (etaSeconds: the whole try,
+    // before its job starts; nothing waits ahead of it here), against the time from then to its commit. An import
+    // that needed a second try isn't the plan's to meet.
+    const begun = await startImport(cid, `size-${batch}`, files)
+    if (![200, 202].includes(begun.status)) throw new Error(`import size-${batch}: ${begun.status} ${JSON.stringify(begun.body)}`)
     const started = Date.now()
-    await learn(cid, `size-${batch}`, files)
-    rows.push({ batch, seconds: (Date.now() - started) / 1000 })
+    const planned = begun.body.etaSeconds
+    const done = await waitImport(cid, `size-${batch}`)
+    rows.push({ batch, seconds: (Date.now() - started) / 1000, planned, attempt: done.attempt, state: done.state })
+    log(`  size-${batch}: ${done.state} in ${rows.at(-1).seconds} s, planned ${planned} s (attempt ${done.attempt})`)
   }
   const snapshots = (await state(cid)).snapshots
-  const expected = 43 + 5.3 * 50
+  const timed = rows.filter((r) => r.state === 'committed' && r.attempt === 1 && r.planned !== null)
   return {
     checks: {
-      within25Percent: rows.every((r) => Math.abs(r.seconds - expected) <= expected * 0.25),
+      within25Percent: timed.length === rows.length && timed.every((r) => Math.abs(r.seconds - r.planned) <= r.planned * 0.25),
       snapshotUnder20GB: snapshots.every((s) => s.size < 20 * 1024 ** 3),
     },
     evidence: { rows, largestSnapshotBytes: Math.max(...snapshots.map((s) => s.size)) },

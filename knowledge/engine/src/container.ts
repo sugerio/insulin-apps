@@ -86,10 +86,29 @@ export class ContainerError extends Error {
   }
 }
 
+/**
+ * Cloudflare had no container to give a start: the account's limits on containers running at once were reached, or
+ * too many were asked for in the same second. Nothing started, nothing is wrong with the collection, and the start is
+ * asked for again later (CollectionEngine.startContainer). The Durable Object-managed containers this engine runs have
+ * no `max_instances` of their own: they count against the account's limits (README, "Containers at once").
+ */
+export class NoContainer extends ContainerError {
+  constructor(message: string) {
+    super(message, 0, null)
+  }
+}
+
+/** Cloudflare's words for it (as its own Containers library matches them), in a refused start or monitor()'s error. */
+const NO_CONTAINER = ['there is no container instance that can be provided', 'you are requesting too many containers per second']
+export const isNoContainer = (error: unknown): boolean => error !== null && error !== undefined && NO_CONTAINER.some((words) => errorText(error).toLowerCase().includes(words))
+
 export class ContainerClient {
   container: Container
   /** Told of each call that dropped and is sent again (the Durable Object logs it). */
   onDrop: ((drop: Drop) => Promise<unknown>) | null = null
+  /** Why the container last stopped, as monitor() said (null while it runs, or after it stopped cleanly). */
+  exitError: unknown = null
+  private watching: Promise<void> | null = null
 
   constructor(container: Container) {
     this.container = container
@@ -105,14 +124,44 @@ export class ContainerClient {
     return images.map(([name, ref]) => `${name}=${ref}`).join(',') || 'unknown'
   }
 
+  /** Starts a container and watches it. NoContainer when Cloudflare refuses the start for want of one. */
   start(options: { snapshot: SnapshotHandle | null; instance: InstanceType; env?: Record<string, string>; labels?: Record<string, string> }): void {
     const common = { enableInternet: false, instance: options.instance, env: options.env, labels: options.labels }
-    if (options.snapshot) {
-      this.container.start({ ...common, containerSnapshot: { id: options.snapshot.id } })
-    } else {
-      const base = this.container.images?.base
-      this.container.start(base ? { ...common, image: base } : common)
+    // A new container gets a watch of its own, whether or not the last one's has settled yet.
+    this.exitError = null
+    this.watching = null
+    try {
+      if (options.snapshot) {
+        this.container.start({ ...common, containerSnapshot: { id: options.snapshot.id } })
+      } else {
+        const base = this.container.images?.base
+        this.container.start(base ? { ...common, image: base } : common)
+      }
+    } catch (error) {
+      if (isNoContainer(error)) throw new NoContainer(errorText(error))
+      throw error
     }
+    this.watch().catch(() => undefined)
+  }
+
+  /**
+   * The running container's exit: one monitor() per container, shared by every caller. It resolves when the container
+   * stops, or rejects with why (kept in exitError: a start Cloudflare had no container for ends that way).
+   */
+  watch(): Promise<void> {
+    if (!this.watching) {
+      const watching: Promise<void> = this.container
+        .monitor()
+        .catch((error: unknown) => {
+          this.exitError = error ?? new Error('the container stopped')
+          throw error
+        })
+        .finally(() => {
+          if (this.watching === watching) this.watching = null
+        })
+      this.watching = watching
+    }
+    return this.watching
   }
 
   async destroy(reason: string): Promise<boolean> {
@@ -160,11 +209,13 @@ export class ContainerClient {
       path,
       init,
       async (response) => {
-        const text = await response.text()
+        const text = await whole(response)
         let body: unknown
         try {
           body = text ? JSON.parse(text) : {}
         } catch {
+          // The server answers JSON: an answer that isn't was cut short on the way, and is asked for again.
+          if (response.ok) throw new Error(`the answer to ${path.split('?')[0]} was cut short`)
           body = { raw: text.slice(0, 500) }
         }
         if (!response.ok) throw new ContainerError(`container ${path} answered ${response.status}`, response.status, body)
@@ -181,17 +232,25 @@ export class ContainerClient {
   async waitHealthy(timeoutMs = SETTINGS.healthTimeoutMs): Promise<Health> {
     const deadline = clock.now() + timeoutMs
     while (clock.now() < deadline) {
-      if (!this.container.running) throw new ContainerError('container stopped while starting', 0, null)
+      if (!this.container.running) throw await this.stoppedWhileStarting()
       try {
         const response = await this.fetchOnce('/health', { signal: AbortSignal.timeout(2000) })
         if (response.ok) return (await response.json()) as Health
         await response.body?.cancel()
-      } catch {
+      } catch (error) {
+        if (isNoContainer(error)) throw new NoContainer(errorText(error))
         // Not listening yet.
       }
       await clock.wait(250)
     }
     throw new ContainerError('container did not become healthy', 0, null)
+  }
+
+  /** Why a container stopped while starting: monitor() says, a moment after `running` turns false. */
+  private async stoppedWhileStarting(): Promise<ContainerError> {
+    for (let i = 0; i < 20 && this.exitError === null; i++) await clock.wait(50)
+    if (isNoContainer(this.exitError)) return new NoContainer(errorText(this.exitError))
+    return new ContainerError(`container stopped while starting${this.exitError ? `: ${errorText(this.exitError)}` : ''}`, 0, null)
   }
 
   // ------------------------------------------------------------ jobs
@@ -244,12 +303,23 @@ export class ContainerClient {
     return this.call(`/inbox/${encodeURIComponent(batch)}`, { method: 'DELETE' })
   }
 
-  /** A learned document's text or another small file, read whole; null when the server has none (yet). */
+  /**
+   * A learned document's text or the facts (JSON files the Durable Object copies to R2), read whole; null when the
+   * server has none (yet). One cut short on the way is read again, never stored.
+   */
   readText(path: string): Promise<string | null> {
     return this.send(path, undefined, async (response) => {
-      if (response.ok) return response.text()
-      await response.body?.cancel()
-      return null
+      if (!response.ok) {
+        await response.body?.cancel()
+        return null
+      }
+      const text = await whole(response)
+      try {
+        JSON.parse(text)
+      } catch {
+        throw new Error(`${path.split('?')[0]} was cut short`)
+      }
+      return text
     })
   }
 
@@ -259,14 +329,21 @@ export class ContainerClient {
   }
 
   /**
-   * Streams a file under /data to `write` (a backup's upload). A drop, or an upload that fails because the stream
-   * broke (R2 refuses a body whose checksum doesn't match), reads the file again from the start.
+   * Streams a file under /data to `write` (a backup's upload), `bytes` long as its manifest says. A drop, or an
+   * upload that fails because the stream broke (R2 refuses a body whose checksum doesn't match: the first Engine-lane
+   * run's two refusals were streams cut short), reads the file again from the start. A file whose size is no longer
+   * the manifest's changed after it was taken: that fails the backup at once, since reading it again can't help.
    */
-  copyFile(path: string, write: (body: ReadableStream) => Promise<unknown>): Promise<void> {
+  copyFile(path: string, bytes: number, write: (body: ReadableStream) => Promise<unknown>): Promise<void> {
     return this.send(filePath(path), undefined, async (response) => {
       if (!response.ok || !response.body) {
         await response.body?.cancel()
         throw new ContainerError(`could not read ${path} for the backup`, response.status, null)
+      }
+      const length = response.headers.get('content-length')
+      if (length !== null && Number(length) !== bytes) {
+        await response.body.cancel()
+        throw new ContainerError(`${path} changed after its checksum was taken (${length} bytes, not ${bytes})`, 0, null)
       }
       await write(response.body)
     })
@@ -304,6 +381,17 @@ export class ContainerClient {
 }
 
 const filePath = (path: string) => `/files/${path.split('/').map(encodeURIComponent).join('/')}`
+
+/**
+ * An answer's body, read whole. The server says how long every answer is: one that ends short of that was cut on
+ * the way (a stream can end early without an error), so it throws, and the call is sent again like a drop.
+ */
+async function whole(response: Response): Promise<string> {
+  const bytes = new Uint8Array(await response.arrayBuffer())
+  const length = response.headers.get('content-length')
+  if (length !== null && Number(length) !== bytes.length) throw new Error(`the answer ended after ${bytes.length} of ${length} bytes`)
+  return new TextDecoder().decode(bytes)
+}
 
 const put = (body: Body): Init => (typeof body === 'string' ? { method: 'PUT', body } : async () => ({ method: 'PUT', body: await body() }))
 

@@ -21,6 +21,7 @@ import type {
 import type { CollectionCounts, HidingRules, ImportFile, ImportFileStatus, ImportNote, ImportStatus, RemoveResult } from './contract.ts'
 import type { CollectionEngine } from './collection.ts'
 import { EMPTY_STATE, isHeld, OnHold } from './collection.ts'
+import { NoContainer } from './container.ts'
 import { CAPACITY_NAME, callObject } from './env.ts'
 import { EngineFailure, fail, failWithStatus, requireId } from './http.ts'
 import { SETTINGS, instances } from './settings.ts'
@@ -471,23 +472,32 @@ export async function leaveGuardWhileHeld(e: CollectionEngine): Promise<void> {
   for (const id of (await e.meta()).queue) {
     const record = await e.store.getImport(id)
     if (!record || record.kind === 'remove' || record.capacity !== 'waiting') continue
-    await giveBack(e, record)
-    // Read again: a cancel may have won while the guard answered.
-    await e.state.storage.transaction(async (txn) => {
-      const current = await e.store.getImport(id, txn)
-      if (!current || current.capacity !== 'waiting') return
-      current.capacity = 'none'
-      current.status.waitingFor = null
-      current.status.queuePosition = null
-      await e.store.putImport(current, txn)
-    })
+    await leaveGuard(e, record)
   }
+}
+
+/**
+ * A queued import gives up its place in the guard's waiting list (or the slot the guard granted it there since), and
+ * asks again when it can start. A release the guard doesn't confirm is told again from the alarm (returnCapacity).
+ */
+async function leaveGuard(e: CollectionEngine, record: ImportRecord): Promise<void> {
+  const id = record.status.importId
+  await giveBack(e, record)
+  // Read again: a cancel may have won while the guard answered.
+  await e.state.storage.transaction(async (txn) => {
+    const current = await e.store.getImport(id, txn)
+    if (!current || current.capacity !== 'waiting') return
+    current.capacity = 'none'
+    current.status.waitingFor = null
+    current.status.queuePosition = null
+    await e.store.putImport(current, txn)
+  })
 }
 
 /**
  * The import the alarm asks the capacity guard for next, as drive() and whileHeld() pick it: the head of the queue, or
  * while held the first removal for good in it; none while an import is active, an operation runs first (not held),
- * or the one picked waits to be tried again later.
+ * or the one picked waits to be tried again later, or (a repair's re-learning) while people ask.
  */
 async function nextToAcquire(e: CollectionEngine, meta: Meta): Promise<string | null> {
   if (meta.active || meta.deleting) return null
@@ -497,6 +507,7 @@ async function nextToAcquire(e: CollectionEngine, meta: Meta): Promise<string | 
   if (!id) return null
   const record = await e.store.getImport(id)
   if (!record || record.phase !== 'queued' || (record.retryAt && record.retryAt > clock.now())) return null
+  if (await waitsForQuestions(e, meta, record)) return null
   return id
 }
 
@@ -713,7 +724,9 @@ export function plannedTextBytes(file: { bytes: number; type: string; textBytes?
 /**
  * One try's planned time, from its container's start to its commit (SETTINGS' planning values): the documents it
  * learns, re-reads or removes, and their text. A 2 MB text plans about half an hour, not the 48 seconds a count of
- * documents gives.
+ * documents gives. The documents are learned in groups, except on an import's later tries, which learn them one at
+ * a time (container/ops.py) and take longer. The collection's size doesn't count: Cognee's cost per document doesn't
+ * grow with it (README, "Service settings").
  */
 export function plannedSeconds(record: ImportRecord): number {
   // An export's import counts its documents (rereadDocumentIds), not its zip.
@@ -723,7 +736,8 @@ export function plannedSeconds(record: ImportRecord): number {
     fresh.reduce((sum, f) => sum + plannedTextBytes(f), 0) +
     record.notes.reduce((sum, n) => sum + (n.textBytes ?? utf8Bytes(n.text)), 0) +
     (record.storedTextBytes ?? 0)
-  return SETTINGS.containerStartSeconds + SETTINGS.importBaseSeconds + SETTINGS.perDocumentSeconds * documents + (SETTINGS.perTextMiBSeconds * bytes) / MiB
+  const perDocument = (record.kind === 'import' || record.kind === 'correction') && record.status.attempt > 1 ? SETTINGS.perDocumentOneByOneSeconds : SETTINGS.perDocumentSeconds
+  return SETTINGS.containerStartSeconds + SETTINGS.importBaseSeconds + perDocument * documents + (SETTINGS.perTextMiBSeconds * bytes) / MiB
 }
 
 /** Time left: the whole plan until this try's job starts, then counted down from its start (a new try starts over). */
@@ -1020,7 +1034,12 @@ export async function startNext(e: CollectionEngine, importId?: string): Promise
     return true
   }
   if (record.retryAt && record.retryAt > clock.now()) return false
-  if (await waitsForQuestions(e, meta, record)) return false
+  if (await waitsForQuestions(e, meta, record)) {
+    // It asks the guard for nothing while it waits: a place it took in the guard's list when nobody was asking (or
+    // the slot granted to it there since) goes back, so another import can have it.
+    if (record.capacity === 'waiting') await leaveGuard(e, record)
+    return false
+  }
   let answer: SlotAnswer
   try {
     answer = await callObject<SlotAnswer>(e.env.CAPACITY, CAPACITY_NAME, '/acquire', {
@@ -1128,6 +1147,8 @@ export async function advance(e: CollectionEngine, record: ImportRecord): Promis
     if (error instanceof Deferred) return
     // The hold landed while the old container stopped for this one: it stops, keeps nothing and waits.
     if (error instanceof OnHold) return stopForHold(e, record)
+    // Cloudflare had no container to give: no try is counted, and the import waits in the queue (startContainer).
+    if (error instanceof NoContainer) return waitForContainer(e, record)
     // A failure after the commit (tidying up) never turns a committed import into a failed try.
     if ((await e.store.getImport(record.status.importId))?.phase === 'done') {
       await e.store.log('after-commit-failed', { importId: record.status.importId, error: errorText(error) })
@@ -1145,6 +1166,17 @@ export async function stopForHold(e: CollectionEngine, record: ImportRecord): Pr
   await e.box.destroy('the organization is on hold')
   await e.store.deleteRuntime()
   await e.chargeUsage(null)
+}
+
+/**
+ * Cloudflare had no container to give this import's start (CollectionEngine.noContainer): it goes back to the head of
+ * the queue with its try not counted, gives its slot back, and is started again once the wait is over. The app hears it
+ * is queued, waiting for the service ("Insulin Knowledge is busy").
+ */
+async function waitForContainer(e: CollectionEngine, record: ImportRecord): Promise<void> {
+  record.retryAt = clock.now() + SETTINGS.noContainerRetryMs
+  record.status.waitingFor = 'service'
+  await preempt(e, record)
 }
 
 /** A removal for good goes first: the running import starts over after it, and the try isn't counted. */
@@ -1313,6 +1345,9 @@ async function startJob(e: CollectionEngine, record: ImportRecord): Promise<void
   } else if (record.kind === 'reread') {
     op = 'reread'
     const state = await e.currentState(meta)
+    // What it reads now (an import may have committed since it was queued): its plan and time limit count them.
+    record.rereadDocumentIds = state.documents.map((d) => d.documentId)
+    record.storedTextBytes = storedBytes(state.documents)
     batch = {
       importId,
       kind: 'reread',
@@ -1368,6 +1403,8 @@ async function startJob(e: CollectionEngine, record: ImportRecord): Promise<void
       notes: record.notes.map((n) => ({ noteId: n.noteId, documentId: n.documentId, title: n.title, outdated: n.outdated, ...(record.textsSaved ? { stored: true } : { text: n.text }) })),
       hiding: record.hiding,
       test: record.test ?? undefined,
+      // A later try learns one document at a time, so a file that stops the learning is named (container/ops.py).
+      attempt: record.status.attempt,
     }
   }
   await e.box.putInbox(importId, 'batch.json', JSON.stringify(batch))
@@ -1449,6 +1486,15 @@ async function poll(e: CollectionEngine, record: ImportRecord): Promise<void> {
   record.phase = 'saving'
   record.status.state = 'saving'
   await e.store.putImport(record)
+  // The job's time and Cognee's share of it, against the plan: what the planning times are measured from.
+  await e.store.log('job-done', {
+    importId: record.status.importId,
+    attempt: record.status.attempt,
+    documents: ((job.result as IngestResult | undefined)?.documents ?? []).length,
+    jobMs: job.durationMs ?? null,
+    learning: job.result?.learning ?? null,
+    plannedSeconds: Math.round(plannedSeconds(record)),
+  })
   await save(e, record)
 }
 

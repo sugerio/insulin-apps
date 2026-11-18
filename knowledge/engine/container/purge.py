@@ -3,14 +3,22 @@
 Cognee deletes a document's data by marking it deleted: LanceDB keeps the old data files and versions of every table
 until they are compacted and cleaned up, the graph database (Ladybug) keeps deleted nodes' strings in its file, and
 SQLite keeps deleted rows in free pages. Snapshots and backups copy those files whole. So after a removal for good or a
-re-read with stricter hiding, and before anything is saved, `purge()` rewrites each store without what was deleted,
-and `left()` searches every file under /data, byte by byte, for the removed or hidden text: what it finds fails the
-job, so nothing is committed or backed up.
+re-read with stricter hiding, and before anything is saved, `purge()` rewrites each store without what was deleted and
+checks that no store keeps an older version, a deleted row or a free page. Then `left()` reads what the stores hold
+now, decoded, and looks for the removed or hidden text: what it finds fails the job, so nothing is committed or backed
+up.
 
-What is searched for (`removed_probes`, `hidden_probes`): a hidden value itself; for a removed document, pieces of
-its text (runs of words between line breaks and sentence ends, at least PROBE_MIN characters, as a chunk, a summary
-or a graph node holds them), ignoring ASCII case, since entity names may be stored in lower case. A probe found that
-a kept document's text also holds doesn't count: it may rightly stay, in that document's data.
+What is looked for (`removed_probes`, `hidden_probes`): every value the stricter rules hid; for a removed document,
+every piece of its text (runs of words between line breaks and sentence ends, at least PROBE_MIN characters, as a
+chunk, a summary or a graph node holds them). A probe matches as the hiding detector matches a word: ignoring case
+(Unicode's, as `re.IGNORECASE`) and whole, with no letter or digit just before or after it. One that a kept document's
+text holds too doesn't count: it may rightly stay, in that document's data.
+
+Where it is looked for (`content()`): only values made from the documents, never keys, schemas or the stores' own
+bookkeeping (ids, types, paths, states): the stored texts, Cognee's copies of them, its chunks, entity names, summaries
+and relations in LanceDB and the graph, and the facts. Summaries, relations and facts also hold Cognee's own words
+(its entity labels and relation names, "is part of"): a single word found there that is one of those doesn't count.
+Any file under /data this module doesn't know is read whole, as text.
 
 This module never imports Cognee; the databases are opened with their own libraries, after the process that used
 Cognee has exited, so nothing else holds them open.
@@ -23,114 +31,204 @@ import os
 import re
 import shutil
 import sqlite3
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Iterator
 from datetime import timedelta
 from pathlib import Path
 
-PROBE_MIN = 24  # shortest piece of a removed document searched for
-PROBES_PER_DOCUMENT = 64
-PROBES_MAX = 512
-BLOCK = 8 << 20
+PROBE_MIN = 24  # shortest piece of a removed document looked for
 DELETED_SHARE = 1e-9  # a fragment with any deleted row is rewritten
 
-# Where a removed text is cut into pieces: line breaks, sentence ends, runs of spaces (a chunker may squeeze them),
-# and characters a JSON string escapes.
-CUTS = re.compile(r"\s{2,}|[\t\r\n\f\v]|(?<=[.!?])\s|[\"\\\x00-\x1f]")
+# Where a removed text is cut into pieces: line breaks, sentence ends and runs of spaces (a chunker may squeeze them).
+CUTS = re.compile(r"\s{2,}|[\t\r\n\f\v\x00-\x1f]|(?<=[.!?])\s")
+WORD = re.compile(r"\w+")
 
-
-def _key(value: str) -> bytes:
-    """A value as searched for: its UTF-8 bytes with ASCII letters in lower case (as bytes.lower() treats a file)."""
-    return value.encode("utf-8").lower()
-
-
-def _spread(items: list[str], count: int) -> list[str]:
-    if len(items) <= count:
-        return items
-    step = len(items) / count
-    return [items[int(i * step)] for i in range(count)]
+LANCEDB = Path("system/databases/cognee.lancedb")
+GRAPH = Path("system/databases/cognee_graph_ladybug")
+RELATIONAL = Path("system/databases/cognee_db")
+# LanceDB tables by what their `text` holds: document text, Cognee's own words (entity labels), document ids. Any
+# other table (summaries, relations) holds both document text and Cognee's words.
+DOCUMENT_TABLES = {"DocumentChunk_text", "Entity_name"}
+COGNEE_TABLES = {"EntityType_name"}
+ID_TABLES = {"TextDocument_name"}
 
 
 def removed_probes(removed: list[str]) -> list[str]:
-    """Pieces of the removed documents' texts, at most PROBES_PER_DOCUMENT each, spread over the whole text."""
-    out: list[str] = []
-    seen: set[bytes] = set()
+    """Every piece of the removed documents' texts (once, whatever its case: it is matched ignoring case)."""
+    out: dict[str, str] = {}
     for text in removed:
-        pieces = []
         for piece in CUTS.split(text):
             piece = piece.strip()
-            if len(piece) >= PROBE_MIN and _key(piece) not in seen:
-                seen.add(_key(piece))
-                pieces.append(piece)
-        out.extend(_spread(pieces, PROBES_PER_DOCUMENT))
-    return _spread(out, PROBES_MAX)
+            if len(piece) >= PROBE_MIN:
+                out.setdefault(piece.casefold(), piece)
+    return list(out.values())
 
 
 def hidden_probes(texts: list[str], rules: dict) -> list[str]:
-    """The values `rules` hide in `texts` (the stored texts before a stricter re-read)."""
+    """Every value `rules` hide in `texts` (the stored texts before a stricter re-read), once whatever its case."""
     import hide
 
-    out: dict[bytes, str] = {}
+    out: dict[str, str] = {}
     for text in texts:
         for span in hide.find_spans(text, rules):
             value = text[span.start : span.end].strip()
             if value:
-                out.setdefault(_key(value), value)
-    return _spread(list(out.values()), PROBES_MAX)
+                out.setdefault(value.casefold(), value)
+    return list(out.values())
 
 
-def found(root: Path, probes: list[str]) -> dict[bytes, dict[str, int]]:
-    """For each probe found under `root` (ignoring ASCII case): the files holding it, and how many times. Files are
-    read in blocks, so a large one never sits in memory whole; a probe across two blocks is found too."""
-    needles = sorted({_key(p) for p in probes if p})
-    if not needles or not root.exists():
+class Matcher:
+    """Finds many probes in a text at once, each as the hiding detector finds a word (hide.py `_words`): ignoring case
+    and whole. A probe is looked for only in a text holding its longest word, so the cost follows the text, not the
+    number of probes."""
+
+    def __init__(self, probes: Iterable[str]) -> None:
+        self.by_word: dict[str, list[tuple[str, re.Pattern]]] = {}
+        self.wordless: list[tuple[str, re.Pattern]] = []
+        for probe in dict.fromkeys(p for p in probes if p):
+            pattern = re.compile(r"(?<!\w)" + re.escape(probe) + r"(?!\w)", re.IGNORECASE)
+            words = WORD.findall(probe.casefold())
+            if words:
+                self.by_word.setdefault(max(words, key=len), []).append((probe, pattern))
+            else:
+                self.wordless.append((probe, pattern))
+
+    def counts(self, text: str) -> dict[str, int]:
+        out: dict[str, int] = {}
+        candidates = [pair for word in set(WORD.findall(text.casefold())) & self.by_word.keys() for pair in self.by_word[word]]
+        for probe, pattern in candidates + self.wordless:
+            found = len(pattern.findall(text))
+            if found:
+                out[probe] = found
+        return out
+
+
+def _json(path: Path):
+    try:
+        return json.loads(path.read_text())
+    except (OSError, ValueError):
+        return None
+
+
+def _decoded(path: Path) -> str:
+    return path.read_bytes().decode("utf-8", errors="replace")
+
+
+def _properties(value) -> dict:
+    """A graph row's properties (a JSON object in a string)."""
+    try:
+        parsed = json.loads(value) if isinstance(value, str) else value
+    except ValueError:
         return {}
-    overlap = max(len(n) for n in needles) - 1
-    out: dict[bytes, dict[str, int]] = {}
+    return parsed if isinstance(parsed, dict) else {}
+
+
+def _rows(connection, query: str) -> Iterator[list]:
+    result = connection.execute(query)
+    while result.has_next():
+        yield result.get_next()
+
+
+def _vector_tables(root: Path) -> Iterator[tuple[str, list[str]]]:
+    """Each LanceDB table's name and the `text` of each of its rows (what Cognee searches)."""
+    tables = sorted((root / LANCEDB).glob("*.lance")) if (root / LANCEDB).is_dir() else []
+    if not tables:
+        return
+    import lance
+
+    for table in tables:
+        payloads = lance.dataset(str(table)).to_table(columns=["payload"]).column("payload").to_pylist()
+        yield table.stem, [p["text"] for p in payloads if isinstance(p, dict) and isinstance(p.get("text"), str)]
+
+
+def _graph(root: Path) -> tuple[list[tuple[str, str]], set[str]]:
+    """The graph's values made from the documents, as (kind, text), and Cognee's own words in it (entity labels and
+    relation names)."""
+    values: list[tuple[str, str]] = []
+    own: set[str] = set()
+    if not (root / GRAPH).is_file():
+        return values, own
+    import ladybug
+
+    database = ladybug.Database(str(root / GRAPH))
+    connection = ladybug.Connection(database)
+    try:
+        for name, kind, properties in _rows(connection, "MATCH (n:Node) RETURN n.name, n.type, n.properties"):
+            props = _properties(properties)
+            if kind == "EntityType":
+                own.add(str(name or ""))
+            elif kind == "DocumentChunk":
+                values.append(("document", str(props.get("text") or "")))
+            elif kind == "Entity":
+                values.extend(("document", str(v or "")) for v in (name, props.get("description")))
+            elif kind != "TextDocument":  # a document's node is named by its id
+                values.extend(("derived", str(v or "")) for v in (name, props.get("text"), props.get("description")))
+        for relation, properties in _rows(connection, "MATCH ()-[r:EDGE]->() RETURN r.relationship_name, r.properties"):
+            own.add(str(relation or ""))
+            values.append(("derived", str(_properties(properties).get("edge_text") or "")))
+    finally:
+        connection.close()
+        database.close()
+    return values, own
+
+
+def content(root: Path) -> tuple[list[tuple[str, str, str]], set[str]]:
+    """What the stores under `root` hold that was made from the documents, decoded: (place, kind, text), where kind is
+    "document" (the documents' words only) or "derived" (with Cognee's own words too), and those words of Cognee's,
+    casefolded."""
+    out: list[tuple[str, str, str]] = []
+    own: set[str] = set()
+    known = {root / RELATIONAL, root / GRAPH}  # SQLite holds names, ids, paths and states (purge vacuums it)
+    for path in sorted((root / "text").glob("*.json")):
+        known.add(path)
+        stored = _json(path)
+        if isinstance(stored, dict) and isinstance(stored.get("text"), str):
+            out.append((f"text/{path.name}", "document", stored["text"]))  # its name isn't hidden: it isn't text
+    known.update((root / "passages").glob("*.json"))  # where each passage is, by id and hash
+    known.add(root / "ledger.json")  # which imports made which documents, by id
+    facts = _json(root / "facts.json")
+    known.add(root / "facts.json")
+    for fact in (facts or {}).get("facts", []) if isinstance(facts, dict) else []:
+        out.append(("facts.json", "document", str(fact.get("sourceSentence") or "")))
+        out.append(("facts.json", "derived", str(fact.get("sentence") or "")))
+    if (root / LANCEDB).is_dir():
+        known.update(p for p in (root / LANCEDB).rglob("*"))
+        for table, texts in _vector_tables(root):
+            if table in COGNEE_TABLES:
+                own.update(texts)
+            elif table not in ID_TABLES:
+                out.append((f"LanceDB {table}", "document" if table in DOCUMENT_TABLES else "derived", "\n".join(texts)))
+    values, graph_own = _graph(root)
+    own.update(graph_own)
+    for kind in ("document", "derived"):
+        texts = [text for k, text in values if k == kind and text]
+        if texts:
+            out.append(("graph", kind, "\n".join(texts)))
     for path in sorted(root.rglob("*")):
-        if path.is_symlink() or not path.is_file():
+        if path in known or path.is_symlink() or not path.is_file():
             continue
         name = str(path.relative_to(root))
-        tail = b""
-        for block in _blocks(path, name):
-            window = tail + block.lower()
-            for needle in needles:
-                at = window.find(needle)
-                while at >= 0:
-                    if at + len(needle) > len(tail):  # not wholly in the overlap, counted with the last block
-                        files = out.setdefault(needle, {})
-                        files[name] = files.get(name, 0) + 1
-                    at = window.find(needle, at + 1)
-            tail = window[-overlap:] if overlap else b""
-    return out
-
-
-def _blocks(path: Path, name: str):
-    """A file's bytes, block by block. A stored text (text/<id>.json) without its document's name: hiding applies to
-    a document's text, and its name is shown wherever the document is."""
-    if name.startswith("text/") and name.endswith(".json"):
-        try:
-            stored = json.loads(path.read_text())
-        except (OSError, ValueError):
-            stored = None
-        if isinstance(stored, dict):
-            stored.pop("name", None)
-            yield json.dumps(stored, ensure_ascii=False).encode("utf-8")
-            return
-    with path.open("rb") as handle:
-        while block := handle.read(BLOCK):
-            yield block
+        if name.startswith(str(RELATIONAL)) or name.startswith(str(GRAPH)) or name.startswith("system/databases/.cognee-migration-"):
+            continue  # the databases' own side files (write-ahead logs, locks): checked by purge()
+        out.append((name, "document" if name.startswith("documents/") else "derived", _decoded(path)))
+    words = {w for phrase in own for w in WORD.findall(phrase.replace("_", " ").casefold())}
+    return out, words
 
 
 def left(root: Path, probes: list[str], kept: Callable[[], Iterable[str]]) -> dict[str, int]:
-    """The files under `root` still holding removed or hidden text, with how many times: every probe found, except
-    one a kept document's text holds too (it may rightly stay, in that document's data). The kept texts are read
-    only for a probe found, one at a time."""
+    """The places under `root` still holding removed or hidden text, with how many times: every probe found, except
+    one a kept document's text holds too (it may rightly stay, in that document's data), and a single word of
+    Cognee's own found in what holds Cognee's words too. The kept texts are read one at a time."""
+    matcher = Matcher(probes)
+    exempt: set[str] = set()
+    for text in kept():
+        exempt.update(matcher.counts(text))
+    places, own = content(root)
     out: dict[str, int] = {}
-    for needle, files in found(root, probes).items():
-        if any(needle in _key(text) for text in kept()):
-            continue
-        for name, count in files.items():
-            out[name] = out.get(name, 0) + count
+    for place, kind, text in places:
+        for probe, count in matcher.counts(text).items():
+            if probe in exempt or (kind == "derived" and probe.casefold() in own):
+                continue
+            out[place] = out.get(place, 0) + count
     return out
 
 
@@ -155,10 +253,33 @@ def compact_vectors(lancedb_dir: Path) -> list[str]:
     return names
 
 
+def vector_problems(lancedb_dir: Path) -> list[str]:
+    """What keeps deleted data in a LanceDB table after compact_vectors: an older version, a fragment with deleted
+    rows, a data or deletion file no fragment of the current version uses."""
+    if not lancedb_dir.exists():
+        return []
+    import lance
+
+    problems = []
+    for table in sorted(lancedb_dir.glob("*.lance")):
+        dataset = lance.dataset(str(table))
+        fragments = [fragment.metadata for fragment in dataset.get_fragments()]
+        used = {getattr(file, "path", file) for metadata in fragments for file in metadata.files}
+        stored = {path.name for path in (table / "data").glob("*")} if (table / "data").is_dir() else set()
+        deletions = [path for path in (table / "_deletions").glob("*")] if (table / "_deletions").is_dir() else []
+        if len(dataset.versions()) > 1:
+            problems.append(f"{table.stem}: {len(dataset.versions())} versions")
+        if any(metadata.deletion_file is not None for metadata in fragments) or deletions:
+            problems.append(f"{table.stem}: deleted rows kept")
+        if stored - used:
+            problems.append(f"{table.stem}: {len(stored - used)} data files no version uses")
+    return problems
+
+
 GRAPH_COUNTS = ("MATCH (n) RETURN COUNT(n)", "MATCH ()-[r]->() RETURN COUNT(r)")
 
 
-def _graph(path: Path, statement: str) -> tuple[int, ...]:
+def _graph_statement(path: Path, statement: str) -> tuple[int, ...]:
     """Runs one statement on the graph database at `path`, checkpoints and closes it; returns its node and edge
     counts (taken after the statement)."""
     import ladybug
@@ -187,8 +308,8 @@ def rebuild_graph(graph_file: Path, work: Path) -> bool:
     for path in leftovers:
         path.unlink(missing_ok=True)
     try:
-        before = _graph(graph_file, f"EXPORT DATABASE '{export}'")
-        after = _graph(rebuilt, f"IMPORT DATABASE '{export}'")
+        before = _graph_statement(graph_file, f"EXPORT DATABASE '{export}'")
+        after = _graph_statement(rebuilt, f"IMPORT DATABASE '{export}'")
         if after != before:
             raise RuntimeError(f"the rebuilt graph holds {after} nodes and edges, not {before}")
         os.replace(rebuilt, graph_file)
@@ -213,6 +334,22 @@ def vacuum_relational(db_file: Path | None) -> bool:
     return True
 
 
+def relational_problems(db_file: Path | None) -> list[str]:
+    """What keeps deleted rows in SQLite after vacuum_relational: free pages, or pages waiting in its write-ahead log."""
+    if db_file is None or not db_file.exists():
+        return []
+    conn = sqlite3.connect(db_file)
+    try:
+        free = conn.execute("PRAGMA freelist_count").fetchone()[0]
+    finally:
+        conn.close()
+    wal = Path(f"{db_file}-wal")
+    problems = [f"SQLite: {free} free pages"] if free else []
+    if wal.exists() and wal.stat().st_size:
+        problems.append("SQLite: pages in its write-ahead log")
+    return problems
+
+
 def clear_logs(logs_dir: Path | None) -> int:
     """Cognee's log files deleted (outside /data, so in a snapshot but not a backup). They held no document text in any
     run, but an error message could quote one, and nothing reads them: the container's files can't be reached."""
@@ -227,10 +364,17 @@ def clear_logs(logs_dir: Path | None) -> int:
 
 
 def purge(databases_dir: Path, relational_db: Path | None, work: Path, logs_dir: Path | None = None) -> dict:
-    """Every store rewritten without what was deleted. Returns what was done, for the job's result."""
-    return {
+    """Every store rewritten without what was deleted, then checked: a store that still keeps an older version, a
+    deleted row or a free page raises. Returns what was done, for the job's result."""
+    done = {
         "vectorTables": len(compact_vectors(databases_dir / "cognee.lancedb")),
         "graphRebuilt": rebuild_graph(databases_dir / "cognee_graph_ladybug", work),
         "relationalVacuumed": vacuum_relational(relational_db),
         "logsCleared": clear_logs(logs_dir),
     }
+    problems = vector_problems(databases_dir / "cognee.lancedb") + relational_problems(relational_db)
+    if Path(f"{databases_dir / 'cognee_graph_ladybug'}.wal").exists():
+        problems.append("graph: a write-ahead log kept")
+    if problems:
+        raise RuntimeError("; ".join(problems))
+    return done

@@ -190,6 +190,12 @@ test("a container's image is a Dockerfile in the engine directory, never an imag
   assert.equal(await checkEngine(config((text) => text.replace('"image": "./container/Dockerfile"', '"images": { "base": { "dockerfile": "./container/Dockerfile" } }'))), '')
   assert.match(await checkEngine(config((text) => text.replace('"instance_type"', '"ssh": { "enabled": true }, "instance_type"'))), /containers\[0\]\.ssh is not allowed/)
   assert.match(await checkEngine(config((text) => text.replace('"class_name": "CollectionEngine", "image"', '"class_name": "Other", "image"'))), /containers\[0\]\.class_name must be a Durable Object class the engine binds/)
+  // A container its Durable Object starts takes no instance type or max_instances: Wrangler refuses them.
+  const started = '"scheduling_policy": "durable_object", "images": { "base": { "dockerfile": "./container/Dockerfile" } }'
+  assert.equal(await checkEngine(config((text) => text.replace('"image": "./container/Dockerfile", "instance_type": "standard-4", "max_instances": 20', started))), '')
+  const refused = await checkEngine(config((text) => text.replace('"image": "./container/Dockerfile", "instance_type": "standard-4", "max_instances": 20', `${started}, "instance_type": "standard-4", "max_instances": 24`)))
+  assert.match(refused, /containers\[0\]\.instance_type is not allowed for a container its Durable Object starts/)
+  assert.match(refused, /containers\[0\]\.max_instances is not allowed for a container its Durable Object starts \(scheduling_policy "durable_object"\): Wrangler refuses it/)
   // One image an engine: a second Dockerfile is refused.
   const two = await checkEngine(async (engine) => {
     await writeFile(join(engine, 'container', 'Dockerfile.other'), await readFile(join(engine, 'container', 'Dockerfile'), 'utf8'))

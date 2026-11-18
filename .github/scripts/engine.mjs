@@ -41,6 +41,10 @@ const CONTAINER_KEYS = new Set([
   'class_name', 'image', 'images', 'image_build_context', 'image_vars', 'max_instances', 'instance_type', 'scheduling_policy',
   'observability', 'rollout_step_percentage', 'rollout_active_grace_period', 'constraints',
 ])
+// A container its Durable Object starts (`scheduling_policy: "durable_object"`) takes only these: Wrangler refuses the
+// rest. Its instance type is chosen at ctx.container.start(), and it has no max_instances: its containers count
+// against the account's limits.
+const DURABLE_OBJECT_CONTAINER_KEYS = new Set(['class_name', 'scheduling_policy', 'images', 'observability'])
 export const R2_BINDING = /^[A-Z][A-Z0-9]*$/
 const BINDING = /^[A-Z][A-Z0-9_]*$/
 const CLASS_NAME = /^[A-Za-z_$][A-Za-z0-9_$]*$/
@@ -277,6 +281,9 @@ export function engineConfigProblems({ app, engineDirectory, config }) {
         if (!container || typeof container !== 'object' || Array.isArray(container)) return fail(`${at} must be an object`)
         for (const key of Object.keys(container)) {
           if (!CONTAINER_KEYS.has(key)) fail(`${at}.${key} is not allowed`)
+          else if (container.scheduling_policy === 'durable_object' && !DURABLE_OBJECT_CONTAINER_KEYS.has(key)) {
+            fail(`${at}.${key} is not allowed for a container its Durable Object starts (scheduling_policy "durable_object"): Wrangler refuses it`)
+          }
         }
         if (!objectClasses.has(container.class_name)) fail(`${at}.class_name must be a Durable Object class the engine binds`)
         if ((container.image === undefined) === (container.images === undefined)) fail(`${at} must have an image or images, not both`)

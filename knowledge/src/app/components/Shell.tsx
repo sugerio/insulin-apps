@@ -451,4 +451,3 @@ function PersonMenu({ me, platform, collapsed }: { me: Me; platform: PlatformAcc
     </SidebarMenu>
   )
 }
-

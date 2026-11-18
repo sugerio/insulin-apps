@@ -619,4 +619,3 @@ export function sourceRoutes() {
 
   return app
 }
-

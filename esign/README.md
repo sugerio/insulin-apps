@@ -70,6 +70,15 @@ time has come, finishes any envelope a request couldn't (a CPU limit, an outage)
 past their deadline and retries completion notices and invitations, for every organization. Hosts no longer need to schedule anything: `POST /api/process-due` stays, for a
 manager or a host's service account to finish their own organization's due work at once.
 
+**A scheduled send can wait after the platform's upgrade.** Esign checks whoever scheduled a send with the
+platform's member status, which answers only for organizations where the platform has recorded that Esign is used
+(`.github/hosting/DESIGN.md` §8.9). The gateway's migration `0012` records those from Esign's usage reports and mail
+before it, so an organization whose first use of Esign came after Esign's last report before that migration (under an
+hour: a release deploys Esign before the gateway) isn't recorded until someone opens Esign there. Until then its due
+drafts stay scheduled and say so (`sendWaiting: "organization_unconfirmed"`; "Waiting since … Insulin Apps is
+confirming your organization" on Envelopes, and why on the draft), tried again every ten minutes; opening Esign
+records the organization, and they are sent within a quarter of an hour. A known limit of that upgrade, nothing to do by hand.
+
 **Esign reports its usage every hour.** After the due work, the first tick of each hour sends the
 platform that hour's usage (`usage-metrics.ts`): for each organization, its envelopes in all and by
 status, its templates and signatures, and the bytes its documents take in storage; for the app, the

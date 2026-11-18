@@ -2,8 +2,7 @@
 // AI agent or an API client, is written to `app_orgs`. An isolate remembers the pairs it has written, so this costs one
 // D1 write per pair and isolate, not one per request. It is written before the request goes on, so an app never serves
 // an organization the limits and member endpoints don't yet answer for: when it can't be written, the request doesn't
-// go on (the caller answers 503), and the next one tries again. A usage report the app sends naming an organization
-// records it too (db/metrics.ts storeReport), and migration 0012 recorded where apps were used before it.
+// go on (the caller answers 503), and the next one tries again.
 import type { HostedApp } from '../config.ts'
 import type { Context } from '../context.ts'
 import { recordAppUse } from '../db/members.ts'

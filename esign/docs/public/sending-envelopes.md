@@ -52,7 +52,9 @@ If it can't be sent then (its template was made a draft, a signer no longer matc
 you left the organization or Esign, your role there no longer sends, or your account was suspended), it stays a draft,
 no longer scheduled, and **Envelopes** says **Not sent** and why. Fix it, then send or schedule it again. Esign asks the
 platform who can use it at that time; while the platform can't be asked, or your organization is suspended, the
-envelope waits for the next try.
+envelope waits for the next try. If Insulin Apps hasn't yet confirmed that your organization uses Esign (rare, and only
+just after an upgrade of the platform), **Envelopes** says **Waiting since** its time, and the draft says why. Opening
+Esign confirms it, and it is sent within a quarter of an hour.
 
 ## Upload and send
 

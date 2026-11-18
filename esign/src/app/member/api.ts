@@ -22,14 +22,17 @@ export type EnvelopeSummary = Owned & {
   id: string; templateId: string | null; status: string; createdAt: number; documentName?: string; metadata?: Metadata
   signers?: { role: string; name: string; email: string; status: string }[]; progress?: { signed: number; total: number }
   current?: { taskId: string; name: string; email: string; delivery: 'host' | 'email' }; lastChangeAt?: number
-  /** A draft to be sent later: when (ISO 8601), or why it wasn't sent then (server/esign/scheduled-send.ts). */
-  sendAt?: string; sendError?: string
+  /**
+   * A draft to be sent later: when (ISO 8601), or why it wasn't sent then, and why it still waits past its time
+   * (server/esign/scheduled-send.ts).
+   */
+  sendAt?: string; sendError?: string; sendWaiting?: string
 }
 export type Share = { email: string; name?: string; role: Exclude<DocumentRole, 'owner'>; sharedAt: number }
 /** `organization`: shared with everyone in the organization, as editor or viewer. */
 export type Sharing = { id: string; myRole: DocumentRole; owner: Owner; organization?: { role: 'editor' | 'viewer'; sharedAt: number }; client?: { people: { email: string; name?: string }[] }; shares: Share[] }
 export type Task = { id: string; role: string; recipientName: string; recipientEmail: string; routingOrder: number; status: string; expiresAt?: string; openedAt?: string; delivery?: 'host' | 'email'; invitedAt?: string; message?: { subject?: string; body?: string } }
-export type Envelope = Owned & { id: string; templateId: string | null; status: string; draft?: Record<string, unknown>; sendAt?: string; sendError?: string; upload?: { document: boolean; roles: string[]; fields: { role: string; type: string; required?: boolean }[] }; createdAt?: number; documentName?: string; metadata?: Metadata; message?: { subject?: string; body?: string }; tasks: Task[] }
+export type Envelope = Owned & { id: string; templateId: string | null; status: string; draft?: Record<string, unknown>; sendAt?: string; sendError?: string; sendWaiting?: string; upload?: { document: boolean; roles: string[]; fields: { role: string; type: string; required?: boolean }[] }; createdAt?: number; documentName?: string; metadata?: Metadata; message?: { subject?: string; body?: string }; tasks: Task[] }
 /** A contact (server/esign/contacts.ts): someone the organization's envelopes named, or a member added. Never evidence. */
 export type Contact = { id: string; email: string; name: string; title?: string; company?: string; envelopeCount: number; lastUsedAt?: number; createdAt: number; updatedAt: number }
 export type ContactEnvelope = { id: string; status: string; createdAt: number; documentName?: string; role: string; taskStatus: string }

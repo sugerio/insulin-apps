@@ -14,7 +14,7 @@ const ORIGIN = 'https://esign.example.test';
 const TICK = { 'x-suger-app-id': 'insulin-apps-esign', 'x-suger-access-via': 'schedule' };
 const HOUR = 60 * 60 * 1000;
 
-async function setup(platform: { status?: () => Response; report?: (body: unknown) => Response } = {}, accepts: (url: URL, body: unknown) => boolean = () => true) {
+async function setup(platform: { status?: (body: { org: string; ids: string[] }) => Response; report?: (body: unknown) => Response } = {}, accepts: (url: URL, body: unknown) => boolean = () => true) {
   const mf = new Miniflare({ modules: true, script: 'export default {fetch(){return new Response("ok")}}', d1Databases: ['DB'] });
   const db = await mf.getD1Database('DB');
   for (const name of (await readdir(MIGRATIONS_DIR)).filter((n) => n.endsWith('.sql')).sort()) await db.batch(splitSql(await readFile(new URL(name, MIGRATIONS_DIR), 'utf8')).map((s) => db.prepare(s)));
@@ -23,7 +23,7 @@ async function setup(platform: { status?: () => Response; report?: (body: unknow
     // Who can use Esign now, as the platform's member status answers (directory.ts); without it, as they scheduled.
     ...(platform.status ? {
       SUGER_MEMBER_STATUS_URL: 'https://apps.example.test/__insulin/members/status', SUGER_APP_TOKEN: 'app-token-for-esign',
-      MEMBERS_FETCH: (async (input: string, init: RequestInit) => accepts(new URL(input), JSON.parse(String(init.body))) ? platform.status!() : Response.json({ error: 'invalid_request' }, { status: 400 })) as unknown as typeof fetch,
+      MEMBERS_FETCH: (async (input: string, init: RequestInit) => accepts(new URL(input), JSON.parse(String(init.body))) ? platform.status!(JSON.parse(String(init.body))) : Response.json({ error: 'invalid_request' }, { status: 400 })) as unknown as typeof fetch,
     } : {}),
     // The hourly usage report (usage-metrics.ts), as the platform takes it.
     ...(platform.report ? {
@@ -45,7 +45,9 @@ async function setup(platform: { status?: () => Response; report?: (body: unknow
   const due = (id: string) => db.prepare("UPDATE envelopes SET draft_json = json_set(draft_json, '$.schedule.at', ?) WHERE id = ?").bind(Date.now() - 1000, id).run();
   const tick = async () => { const r = await req('/api/scheduled', TICK, { method: 'POST' }); assert.equal(r.status, 200, await r.clone().text()); return r.json() as Promise<{ scheduledSent: number; scheduledFailed: number }>; };
   const tasks = async (id: string) => (await db.prepare('SELECT role, recipient_name, status FROM tasks WHERE envelope_id = ? ORDER BY routing_order').bind(id).all<{ role: string; recipient_name: string; status: string }>()).results;
-  return { mf, db, req, post, ana, bo, templateId, row, due, tick, tasks };
+  // Lets a waiting draft (schedule.retryAt) be tried at the next tick, as ten minutes on.
+  const retry = (id: string) => db.prepare("UPDATE envelopes SET draft_json = json_set(draft_json, '$.schedule.retryAt', ?) WHERE id = ?").bind(Date.now() - 1000, id).run();
+  return { mf, db, req, post, ana, bo, templateId, row, due, retry, tick, tasks, pdf, form };
 }
 
 const whole = (templateId: string, extra: Record<string, unknown> = {}) => ({ templateId, recipients: [{ role: 'partner', name: 'Pat Partner', email: 'pat@partner.example' }, { role: 'seller', name: 'Sam Seller', email: 'sam@seller.example' }], documentName: 'Reseller agreement', ...extra });
@@ -190,6 +192,7 @@ test('when due, it is sent only while whoever scheduled it can still send: the p
       await h.tick();
       assert.deepEqual([(await h.row(waiting))?.status, await error(waiting)], ['DRAFT', undefined], key);
       now = status(editor);
+      await h.retry(waiting);
       await h.tick();
       assert.equal((await h.row(waiting))?.status, 'IN_PROGRESS', `${key}: still an editor, sent`);
     }
@@ -202,30 +205,78 @@ test('when due, it is sent only while whoever scheduled it can still send: the p
   } finally { await h.mf.dispose(); }
 });
 
-test('scheduled before the platform recorded where Esign is used: held until its usage report names the organization, then sent at the next tick', async () => {
-  // As the gateway answers after the upgrade (DESIGN.md §8.9): an organization with no trace of Esign but its data is
-  // none of Esign's business until Esign's own usage report names it, which records it.
-  let recorded = false;
-  const reports: unknown[] = [];
+test('due in an organization the platform has no record of Esign in: it waits, still scheduled, says why, and goes once the platform confirms it', async () => {
+  // As the gateway answers after its upgrade (DESIGN.md §8.9) for an organization whose only use of Esign came just
+  // before: unknown to it until someone opens Esign there. A usage report doesn't change that.
+  let confirmed = false, asked = 0;
   const h = await setup({
-    status: () => recorded ? status(editor)() : Response.json({ error: 'unknown_organization' }, { status: 404 }),
-    report: (body) => {
-      reports.push(body);
-      if ((body as { organizations?: { id: string }[] }).organizations?.some((org) => org.id === 'tenant')) recorded = true;
-      return Response.json({ status: 'accepted' }, { status: 202 });
-    },
+    status: () => { asked += 1; return confirmed ? status(editor)() : Response.json({ error: 'unknown_organization' }, { status: 404 }); },
+    report: () => Response.json({ status: 'accepted' }, { status: 202 }),
   });
   try {
-    const r = await h.post('/api/envelopes', h.ana, { ...whole(h.templateId), sendAt: later() }, { 'idempotency-key': 'before-the-record' });
+    const r = await h.post('/api/envelopes', h.ana, { ...whole(h.templateId), sendAt: later() }, { 'idempotency-key': 'unconfirmed' });
     assert.equal(r.status, 201, await r.clone().text());
+    const { id, sendAt } = await r.json() as { id: string; sendAt: string };
+    await h.due(id);
+    for (const n of [1, 2]) {
+      assert.deepEqual(await h.tick(), { expired: 0, completed: 0, waiting: 0, failed: 0, scheduledSent: 0, scheduledFailed: 0 }, `tick ${n}`);
+      assert.equal((await h.row(id))?.status, 'DRAFT');
+    }
+    assert.equal(asked, 1, 'tried again only ten minutes on, not at the very next tick');
+    // Its sender sees why: still scheduled for its time, waiting for the platform; never an error.
+    const shown = await (await h.req(`/api/envelopes/${id}`, h.ana)).json() as { sendAt?: string; sendError?: string; sendWaiting?: string };
+    assert.deepEqual([typeof shown.sendAt, shown.sendError, shown.sendWaiting], ['string', undefined, 'organization_unconfirmed']);
+    assert.notEqual(shown.sendAt, sendAt, 'the time it became due');
+    const [listed] = (await (await h.req('/api/envelopes?status=DRAFT', h.ana)).json() as { envelopes: { sendWaiting?: string }[] }).envelopes;
+    assert.equal(listed!.sendWaiting, 'organization_unconfirmed');
+    // Someone opens Esign there, so the platform confirms it: the next try sends it.
+    confirmed = true;
+    await h.retry(id);
+    assert.equal((await h.tick()).scheduledSent, 1);
+    assert.equal((await h.row(id))?.status, 'IN_PROGRESS');
+  } finally { await h.mf.dispose(); }
+});
+
+test('a waiting draft that then fails says why it failed, not that it waits', async () => {
+  let answer: () => Response = () => Response.json({ error: 'unknown_organization' }, { status: 404 });
+  const h = await setup({ status: () => answer() });
+  try {
+    const r = await h.post('/api/envelopes', h.ana, { ...whole(h.templateId), sendAt: later() }, { 'idempotency-key': 'waits-then-fails' });
     const { id } = await r.json() as { id: string };
     await h.due(id);
-    // The first tick: the platform doesn't answer for the organization yet, so the send waits; the hour's report goes.
-    assert.deepEqual(await h.tick(), { expired: 0, completed: 0, waiting: 0, failed: 0, scheduledSent: 0, scheduledFailed: 0 });
-    assert.deepEqual([(await h.row(id))?.status, JSON.parse((await h.row(id))!.draft_json!).schedule.error], ['DRAFT', undefined], 'waiting, not refused');
-    assert.equal(reports.length, 1, 'the report names the organization: its template');
-    // The next tick: sent.
-    assert.equal((await h.tick()).scheduledSent, 1);
+    await h.tick();
+    assert.equal(JSON.parse((await h.row(id))!.draft_json!).schedule.waiting, 'organization_unconfirmed');
+    answer = status({ type: 'person', status: 'left' });
+    await h.retry(id);
+    await h.tick();
+    const schedule = JSON.parse((await h.row(id))!.draft_json!).schedule;
+    assert.deepEqual([schedule.at, schedule.error, schedule.waiting, schedule.retryAt], [null, 'not_allowed', undefined, undefined]);
+    const shown = await (await h.req(`/api/envelopes/${id}`, h.ana)).json() as { sendError?: string; sendWaiting?: string };
+    assert.deepEqual([shown.sendError, shown.sendWaiting], ['not_allowed', undefined]);
+  } finally { await h.mf.dispose(); }
+});
+
+test("one organization's waiting drafts never take every run's places from another organization's", async () => {
+  const h = await setup({
+    status: (body) => body.org === 'tenant' ? Response.json({ error: 'unknown_organization' }, { status: 404 })
+      : Response.json({ org: body.org, standing: 'active', owners: [], members: [{ ...editor, id: body.ids[0] }] }),
+  });
+  try {
+    // 26 due drafts where the platform can't vouch for the organization yet, more than a run takes (25)...
+    for (let i = 0; i < 26; i += 1) {
+      const r = await h.post('/api/envelopes', h.ana, { ...whole(h.templateId), sendAt: later() }, { 'idempotency-key': `crowd-${i}` });
+      await h.due((await r.json() as { id: string }).id);
+    }
+    // ...and, due after them, one of another organization, where all is well.
+    const cy = identity('other', { userId: 'user-cy', email: 'cy@example.test', role: 'EDITOR' });
+    const created = await h.req('/api/templates', cy, { method: 'POST', body: h.form });
+    assert.equal(created.status, 201, await created.clone().text());
+    const otherTemplate = (await created.json() as { id: string }).id;
+    const r = await h.post('/api/envelopes', cy, { ...whole(otherTemplate), sendAt: later() }, { 'idempotency-key': 'other-org' });
+    const { id } = await r.json() as { id: string };
+    await h.due(id);
+    assert.equal((await h.tick()).scheduledSent, 0, 'the run takes the 25 oldest, all waiting');
+    assert.equal((await h.tick()).scheduledSent, 1, 'the next one passes over them, resting, to the other organization\'s');
     assert.equal((await h.row(id))?.status, 'IN_PROGRESS');
   } finally { await h.mf.dispose(); }
 });
@@ -291,7 +342,7 @@ test('sent when due, it is shared as the draft is then: a share removed after sc
 test('the tick finds the drafts due through the partial index on schedule.at', async () => {
   const h = await setup();
   try {
-    const plan = await h.db.prepare("EXPLAIN QUERY PLAN SELECT id FROM envelopes WHERE status = 'DRAFT' AND json_extract(draft_json, '$.schedule.at') <= ?1 AND (?2 IS NULL OR tenant_id = ?2) ORDER BY json_extract(draft_json, '$.schedule.at') LIMIT 25").bind(Date.now(), null).all<{ detail: string }>();
+    const plan = await h.db.prepare("EXPLAIN QUERY PLAN SELECT id FROM envelopes WHERE status = 'DRAFT' AND json_extract(draft_json, '$.schedule.at') <= ?1 AND (json_extract(draft_json, '$.schedule.retryAt') IS NULL OR json_extract(draft_json, '$.schedule.retryAt') <= ?1) AND (?2 IS NULL OR tenant_id = ?2) ORDER BY json_extract(draft_json, '$.schedule.at') LIMIT 25").bind(Date.now(), null).all<{ detail: string }>();
     assert.ok(plan.results.some((row) => /USING INDEX envelopes_scheduled/.test(row.detail)), JSON.stringify(plan.results));
   } finally { await h.mf.dispose(); }
 });

@@ -33,6 +33,16 @@ export function sendErrorText(code: string): string {
   return `it was refused (${code})`
 }
 
+/**
+ * Why a scheduled draft past its time hasn't gone yet, in plain words. `organization_unconfirmed`: Insulin Apps hadn't
+ * yet recorded that the organization uses Esign (it does at the next visit to Esign there), so Esign couldn't check
+ * that whoever scheduled it may still send.
+ */
+export function sendWaitingText(code: string): string {
+  if (code === 'organization_unconfirmed') return 'Insulin Apps hasn\'t yet confirmed that your organization uses Esign, which it does when someone opens Esign, as you have now. It sends within a quarter of an hour.'
+  return `It is waiting (${code}).`
+}
+
 /** The primary send button, and beside it a menu with Send later…. */
 export function SendButton({ busy, label, onSend, onLater }: { busy: boolean; label: string; onSend: () => void; onLater: () => void }) {
   return h('div', { className: 'inline-flex' },
@@ -43,8 +53,9 @@ export function SendButton({ busy, label, onSend, onLater }: { busy: boolean; la
     }))
 }
 
-/** Where a scheduled draft stands, above its form: when it sends, or why it didn't. */
-export function ScheduleNotice({ sendAt, sendError }: { sendAt?: string; sendError?: string }) {
+/** Where a scheduled draft stands, above its form: when it sends, why it hasn't yet past its time, or why it didn't. */
+export function ScheduleNotice({ sendAt, sendError, sendWaiting }: { sendAt?: string; sendError?: string; sendWaiting?: string }) {
+  if (sendAt && sendWaiting) return h(Notice, { message: `Scheduled for ${sendTime(sendAt)}, and not sent yet: ${sendWaitingText(sendWaiting)}` })
   if (sendAt) return h(Notice, { message: `Scheduled to send on ${sendTime(sendAt)}. Send it now, choose another time with Send later, or Save draft to cancel the scheduled send.` })
   if (sendError) return h(Notice, { error: true, message: `It wasn't sent at the scheduled time: ${sendErrorText(sendError)}. Fix it, then send it or schedule it again.` })
   return null

@@ -55,7 +55,11 @@ seals the finished envelope and emails each signer a link to their copy.
   says by their id, `SUGER_MEMBER_STATUS_URL` in `directory.ts`, someone who may still send: a
   member with Manage and an active account, or a live API client; while the organization is
   suspended, or the gateway can't be asked, it waits); one refused stays a draft, unscheduled,
-  with the reason in `schedule.error`. After the due work, whatever its outcome, the tick sends the hour's usage
+  with the reason in `schedule.error`. One the gateway can't vouch for yet (404
+  `unknown_organization`: an organization it hasn't recorded Esign's use in, DESIGN.md §8.9)
+  stays scheduled with `schedule.waiting: "organization_unconfirmed"`, which its readers see as
+  `sendWaiting`, and is tried again ten minutes on (`schedule.retryAt`, so waiting drafts never take
+  every run's places): the next request to Esign there records it. After the due work, whatever its outcome, the tick sends the hour's usage
   report (below), after its response when the request has a `waitUntil`.
 - **Mail.** There is no email binding: codes and completion notices go through the platform's mail
   relay (`mail.ts`), `POST $SUGER_MAIL_URL` with `SUGER_APP_TOKEN` and the organization, over the

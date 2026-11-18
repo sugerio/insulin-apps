@@ -67,16 +67,18 @@ export const memberStatusConfigured = (env: DirectoryEnv) => gatewayEndpoint(env
 /**
  * Someone Esign holds, as the platform says now: still able to use Esign (`member`), with their role and, as their
  * requests carry them, permissions in it, and whether the account and the organization are active; or no longer
- * (`away`: a person who left or lost Esign, a revoked or deleted API client, or the organization deleted).
+ * (`away`: a person who left or lost Esign, a revoked or deleted API client, or the organization deleted); or nothing
+ * yet (`unconfirmed`: the platform has no record that Esign is used in the organization, which it makes at the next
+ * request to Esign there, DESIGN.md §8.9).
  */
 export type MemberNow =
   | { status: 'member'; role?: string; permissions?: string[]; active: boolean; orgActive: boolean }
-  | { status: 'away' };
+  | { status: 'away' }
+  | { status: 'unconfirmed' };
 
 /**
  * One person's or API client's standing in Esign in the organization, by id (POST SUGER_MEMBER_STATUS_URL): null when
- * the platform can't be asked or didn't answer as agreed, an organization it has no record of Esign's use in included
- * (it records organizations that used Esign before it began to, from their usage reports and the like, DESIGN.md §8.9).
+ * the platform can't be asked or didn't answer as agreed.
  */
 export async function memberNow(env: DirectoryEnv, organizationId: string, id: string): Promise<MemberNow | null> {
   const endpoint = gatewayEndpoint(env.SUGER_MEMBER_STATUS_URL, env.SUGER_APP_TOKEN);
@@ -88,7 +90,12 @@ export async function memberNow(env: DirectoryEnv, organizationId: string, id: s
       body: JSON.stringify({ org: organizationId, ids: [id] }),
       signal: AbortSignal.timeout(5000),
     });
-    if (response.status === 404 && (await response.json().catch(() => ({})) as { error?: unknown }).error === 'org_deleted') return { status: 'away' };
+    if (response.status === 404) {
+      const error = (await response.json().catch(() => ({})) as { error?: unknown }).error;
+      if (error === 'org_deleted') return { status: 'away' };
+      if (error === 'unknown_organization') return { status: 'unconfirmed' };
+      return null;
+    }
     if (!response.ok) return null;
     const body = await response.json() as { standing?: unknown; members?: unknown };
     if (!Array.isArray(body.members)) return null;

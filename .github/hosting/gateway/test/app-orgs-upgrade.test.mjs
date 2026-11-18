@@ -1,10 +1,9 @@
 // Where each app is used, for a database an earlier release migrated and used (migration 0012, DESIGN.md §8.9): the
-// organizations that already used an app are recorded as it is created, from the app's own traces of use there (its
-// usage reports and its mail), so the app's endpoints answer for them before anyone opens the app again; configuration
-// alone (an API client, an AI agent's grant, a stored credential, a specific-apps grant) records nothing. An
-// organization whose only trace is the app's own data is recorded by the app's next usage report naming it. Esign's
-// tick checks whoever scheduled a send with member status, and gets its answer once either has happened, with no one
-// opening Esign. All data is synthetic.
+// organizations that already used an app are recorded as it is created, from the app's own traces of use there stored
+// before it (its usage reports and its mail), so the app's endpoints answer for them before anyone opens the app
+// again; configuration alone (an API client, an AI agent's grant, a stored credential, a specific-apps grant) records
+// nothing, and nor does a usage report after it. Esign's tick checks whoever scheduled a send with member status: an
+// organization whose only trace is Esign's own data waits until someone opens Esign there. All data is synthetic.
 import { after, before, test } from 'node:test'
 import assert from 'node:assert/strict'
 import { APPS, SECRET_KEY, startGateway } from './helpers/harness.mjs'
@@ -31,7 +30,7 @@ const ORGS = {
   credentials: id(105), // a stored credential for Cap Table: configuration
   granted: id(106), // a specific-apps member given Esign: configuration
   quiet: id(107), // members, no app evidence at all
-  dataOnly: id(108), // used Esign (a scheduled send in Esign's database), but before any report or mail of it
+  dataOnly: id(108), // used Esign (a scheduled send in Esign's database) after its last report before the upgrade
 }
 const GONE = id(199) // an organization since deleted, still in the reports
 const SCHEDULER = id(201)
@@ -112,17 +111,30 @@ test("Esign's tick gets its answer for an organization that used it before the r
   assert.equal((await status(CAPTABLE_TOKEN, ORGS.reports, [SCHEDULER])).status, 404, 'Cap Table was never used where only Esign was')
 })
 
-test("an organization whose only trace is Esign's data is recorded by Esign's next usage report, and its tick gets its answer then", async () => {
-  // After the upgrade, before any report: Esign's tick asks and is told the organization is none of its business.
+test("an organization whose only trace is Esign's data waits: no report admits it, the first visit does", async () => {
+  // After the upgrade: Esign's tick asks and is told the organization is none of its business (it waits, and says so).
   const before = await status(ESIGN_TOKEN, ORGS.dataOnly, [SCHEDULER])
   assert.deepEqual([before.status, JSON.parse(before.text).error], [404, 'unknown_organization'])
-  // Esign's hourly report names it (it holds its templates and the scheduled draft), and an id that is no organization.
-  const sent = await report(ESIGN_TOKEN, [{ id: ORGS.dataOnly, metrics: { templates: 1, envelopes: 0 } }, { id: id(198), metrics: { templates: 1 } }])
+  // Esign's hourly report names it: stored, but no proof Esign served it, so it admits nothing (an app's token alone
+  // can name any organization's id).
+  const sent = await report(ESIGN_TOKEN, [{ id: ORGS.dataOnly, metrics: { templates: 1, envelopes: 0 } }])
   assert.equal(sent.status, 202, sent.text)
+  assert.equal(JSON.parse(sent.text).organizations, 1, 'the report is stored')
+  assert.equal((await status(ESIGN_TOKEN, ORGS.dataOnly, [SCHEDULER])).status, 404, 'still not admitted')
+  assert.equal((await h.sql('SELECT COUNT(*) AS n FROM app_orgs WHERE org_id = ?1', ORGS.dataOnly))[0].n, 0)
+  // Someone of the organization opens Esign: from then on its tick gets its answer, and sends.
+  const visitor = await h.user({ name: 'Vic Visitor' })
+  await h.sql("INSERT INTO memberships (org_id, user_id, role, created_at, updated_at) VALUES (?1, ?2, 'VIEWER', ?3, ?3)", ORGS.dataOnly, visitor.id, Date.now())
+  assert.equal((await visitor.client.get(h.url('esign', '/api/echo'))).status, 200)
   const after = await status(ESIGN_TOKEN, ORGS.dataOnly, [SCHEDULER])
   assert.equal(after.status, 200, after.text)
   assert.deepEqual(JSON.parse(after.text).members.map((m) => [m.status, m.appRole, m.standing]), [['member', 'EDITOR', 'active']], 'so the next tick sends it')
-  assert.deepEqual((await h.sql('SELECT org_id FROM app_orgs WHERE org_id IN (?1, ?2)', ORGS.dataOnly, id(198))).map((row) => row.org_id), [ORGS.dataOnly], 'never an id that is no organization')
-  // Only for the app that reported: Cap Table still isn't used there.
-  assert.equal((await status(CAPTABLE_TOKEN, ORGS.dataOnly, [SCHEDULER])).status, 404)
+  assert.equal((await status(CAPTABLE_TOKEN, ORGS.dataOnly, [SCHEDULER])).status, 404, 'only the app opened')
+})
+
+test('a usage report never admits an organization, so an app token alone reads no unused organization', async () => {
+  const sent = await report(CAPTABLE_TOKEN, [{ id: ORGS.quiet, metrics: { records: 1 } }])
+  assert.equal(sent.status, 202, sent.text)
+  const answer = await status(CAPTABLE_TOKEN, ORGS.quiet, [])
+  assert.deepEqual([answer.status, JSON.parse(answer.text).error], [404, 'unknown_organization'], 'no owners, no member events')
 })

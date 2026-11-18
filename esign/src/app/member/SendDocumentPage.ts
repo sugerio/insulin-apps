@@ -56,7 +56,7 @@ export function SendDocumentPage({ me }: { me: Me }) {
   // Also save as a template, once sent: its document, fields and roles, named as the document.
   const [alsoTemplate, setAlsoTemplate] = useState(false)
   // A scheduled draft: when it sends, or why it didn't (Send later).
-  const [schedule, setSchedule] = useState<{ sendAt?: string; sendError?: string }>({})
+  const [schedule, setSchedule] = useState<{ sendAt?: string; sendError?: string; sendWaiting?: string }>({})
   const [picking, setPicking] = useState(false)
   const frame = useRef<HTMLIFrameElement | null>(null)
   const draftKey = useRef<string>(typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : String(Date.now()))
@@ -73,7 +73,7 @@ export function SendDocumentPage({ me }: { me: Me }) {
       setPeople(roles.length ? form.signers.map((s, i) => ({ role: roles[i] ?? '', name: s.name, email: s.email, title: s.title, company: s.company })) : [{ ...EMPTY }])
       setDocName(form.doc.name); setNote(form.note); setSignBy(form.signBy); setTags(form.tags)
       setHasDocument(!!envelope.upload?.document); setPlaced(envelope.upload?.fields ?? [])
-      setSchedule({ sendAt: envelope.sendAt, sendError: envelope.sendError })
+      setSchedule({ sendAt: envelope.sendAt, sendError: envelope.sendError, sendWaiting: envelope.sendWaiting })
       setLoaded(true)
     }).catch((error) => { setMessage({ text: describeError(error), error: true }); setLoaded(true) })
   }, [])

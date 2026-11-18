@@ -28,7 +28,7 @@ import { mountMemberRoutes, recordMember } from './members.ts';
 import { deleteDraftObjects, deleteReplacedDocuments, envelopeDocument, initialDocumentId, mountEnvelopeDocumentRoutes } from './envelope-documents.ts';
 import { parsePrefill, PrefillDoesNotFit, resolvePrefill, stampPrefill } from './prefill.ts';
 import type { DirectoryEnv } from './directory.ts';
-import { dueScheduled, parseSendAt, recordScheduleFailure, SCHEDULED_BUDGET_MS, scheduledBy, scheduledCaller, scheduleView, splitDraft, type Schedule } from './scheduled-send.ts';
+import { dueScheduled, parseSendAt, recordScheduleFailure, recordScheduleWaiting, SCHEDULED_BUDGET_MS, scheduledBy, scheduledCaller, scheduleView, splitDraft, type Schedule } from './scheduled-send.ts';
 
 const MAX_PDF_BYTES = 5 * 1024 * 1024;
 /**
@@ -635,6 +635,8 @@ async function sendScheduled(env: Bindings, tenantId: string | null): Promise<{ 
     if (!schedule || typeof schedule.at !== 'number') continue;
     const caller = await scheduledCaller(env, schedule.by, row.tenant_id);
     if (caller === 'unavailable') continue;
+    // Still scheduled, and its sender told why it hasn't gone: the platform can't vouch for the organization yet.
+    if (caller === 'unconfirmed') { await recordScheduleWaiting(env.DB, row.id, schedule.at, 'organization_unconfirmed', Date.now()); continue; }
     let error: string | null = null;
     try {
       if (!caller || !can(caller, 'esign.manage') || !atLeast((await documentRole(env.DB, row.tenant_id, caller, 'envelope', row.id))?.role ?? null, 'editor')) error = 'not_allowed';

@@ -76,12 +76,15 @@ CREATE INDEX app_orgs_by_org ON app_orgs (org_id);
 
 -- Where each app was used before this migration, so that its endpoints answer for those organizations from the start,
 -- before anyone opens the app there again: an app acts for some of them without a request (Esign's scheduled sends
--- check whoever scheduled them with member status). Only from the app's own traces of use there: its usage reports
--- for the organization (§8.6, the daily rows kept 400 days and the hourly) and its mail through the relay
--- (`app:<app>`). Configuration alone is no use (an API client, an AI agent's grant, a stored credential or a
--- specific-apps grant can exist where the app was never opened), and an organization whose only trace is the app's own
--- data is recorded by the app's next usage report naming it (db/metrics.ts). Never an organization that no longer
--- exists; the app-wide report rows (`''`) are no organization. `first_at` is the earliest trace.
+-- check whoever scheduled them with member status). Only from the app's own traces of use there, stored before this
+-- migration: its usage reports for the organization (§8.6, the daily rows kept 400 days and the hourly) and its mail
+-- through the relay (`app:<app>`). The app had no reason to name an organization it didn't serve in them, since they
+-- admitted nothing then; a report after it admits nothing either (an app's token alone can name any organization).
+-- Configuration alone is no use (an API client, an AI agent's grant, a stored credential or a specific-apps grant can
+-- exist where the app was never opened). An organization whose first use of the app came after the app's last report
+-- before this migration (under an hour: the release deploys apps before the gateway) is recorded at its next request
+-- to the app, as a new one is (DESIGN.md §8.9). Never an organization that no longer exists; the app-wide report rows
+-- (`''`) are no organization. `first_at` is the earliest trace.
 INSERT INTO app_orgs (app, org_id, first_at) SELECT r.app, r.org_id, MIN(r.hour) FROM app_metrics_daily r JOIN orgs o ON o.id = r.org_id WHERE r.app <> '' GROUP BY r.app, r.org_id ON CONFLICT (app, org_id) DO UPDATE SET first_at = MIN(first_at, excluded.first_at);
 INSERT INTO app_orgs (app, org_id, first_at) SELECT r.app, r.org_id, MIN(r.hour) FROM app_metrics_hourly r JOIN orgs o ON o.id = r.org_id WHERE r.app <> '' GROUP BY r.app, r.org_id ON CONFLICT (app, org_id) DO UPDATE SET first_at = MIN(first_at, excluded.first_at);
 INSERT INTO app_orgs (app, org_id, first_at) SELECT substr(m.kind, 5), m.org_id, MIN(m.created_at) FROM mail_log m JOIN orgs o ON o.id = m.org_id WHERE m.kind LIKE 'app:_%' GROUP BY substr(m.kind, 5), m.org_id ON CONFLICT (app, org_id) DO UPDATE SET first_at = MIN(first_at, excluded.first_at);

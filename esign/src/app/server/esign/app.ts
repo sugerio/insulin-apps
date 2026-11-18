@@ -27,8 +27,8 @@ import { mergeTags, mountTagRoutes, parseTagFilter, parseTags, taggedIds, tagsBy
 import { mountMemberRoutes, recordMember } from './members.ts';
 import { deleteDraftObjects, deleteReplacedDocuments, envelopeDocument, initialDocumentId, mountEnvelopeDocumentRoutes } from './envelope-documents.ts';
 import { parsePrefill, PrefillDoesNotFit, resolvePrefill, stampPrefill } from './prefill.ts';
-import { memberStatusConfigured, organizationNow, STATUS_IDS_MAX, type DirectoryEnv, type OrganizationNow } from './directory.ts';
-import { dueScheduled, parseSendAt, recordScheduleFailure, restWaiting, SCHEDULED_BUDGET_MS, SCHEDULED_PER_RUN, scheduledBy, scheduledCaller, scheduleView, splitDraft, type Schedule } from './scheduled-send.ts';
+import { memberStatusConfigured, organizationNow, STATUS_IDS_MAX, STATUS_TIMEOUT_MS, type DirectoryEnv, type OrganizationNow } from './directory.ts';
+import { deferOrganization, dueScheduled, parseSendAt, recordScheduleFailure, restWaiting, SCHEDULED_BUDGET_MS, SCHEDULED_PER_RUN, scheduledBy, scheduledCaller, scheduleView, splitDraft, type Schedule } from './scheduled-send.ts';
 
 const MAX_PDF_BYTES = 5 * 1024 * 1024;
 /**
@@ -621,24 +621,30 @@ async function scheduleSend(context: import('hono').Context<Env>, body: Record<s
   return saveDraft(context, body, target, { at: sendAt, by: scheduledBy(context.get('caller')) });
 }
 
+/** The least time left in a run's budget to start asking the platform about another organization. */
+const ASK_MIN_MS = 1000;
+
 /**
  * The scheduled drafts due now, of one organization or (null) all, sent as whoever scheduled them, who must still be
  * able to send in Esign (as the platform says now) and an editor of it (shares change); what the send refuses is
  * recorded on the draft (scheduled-send.ts). A draft sent or changed meanwhile is left alone.
  *
- * Oldest first, up to SCHEDULED_PER_RUN sent or refused, in batches. The platform is asked once per organization a run
- * (for every scheduler of its drafts in view; again only for one a later batch brings), and an organization it can't
- * answer for takes no place: one it has no record of Esign's use in has every due draft rest at once (restWaiting), and
- * one it didn't answer for, or that is suspended, is passed over until the next run. So no queue of one organization's
- * drafts holds up another's: each batch either sends or refuses a draft, or puts an organization aside.
+ * Up to SCHEDULED_PER_RUN sent or refused, by when each is next due, in batches, one organization at a time: the
+ * platform is asked about an organization when its first draft is reached (once a run, for every scheduler of its
+ * drafts in view; again only for one a later batch brings), and that organization's drafts are handled with the answer
+ * at once. Another organization is asked about only while the run's budget leaves time, its wait capped by what is
+ * left; the first answer a run gets is always acted on. An organization the platform has no record of Esign's use in
+ * has every due draft rest (restWaiting); one it didn't answer for in time, or that is suspended, steps back behind the
+ * drafts due before then (deferOrganization), so an organization slow to answer can't take every run's time. So no
+ * organization's queue or slowness holds up another's for long.
  */
 async function sendScheduled(env: Bindings, tenantId: string | null): Promise<{ scheduledSent: number; scheduledFailed: number }> {
-  let sent = 0, failed = 0;
+  let sent = 0, failed = 0, asked = false, answered = false;
   const until = Date.now() + SCHEDULED_BUDGET_MS;
   const asking = memberStatusConfigured(env);
   const answers = new Map<string, OrganizationNow | null>();
   const passed: string[] = [], seen = new Set<string>();
-  while (sent + failed < SCHEDULED_PER_RUN && Date.now() <= until) {
+  run: while (sent + failed < SCHEDULED_PER_RUN && Date.now() <= until) {
     const rows = await dueScheduled(env.DB, Date.now(), tenantId, { tenants: passed, ids: [...seen] });
     if (!rows.length) break;
     const drafts = rows.flatMap((row) => {
@@ -646,40 +652,49 @@ async function sendScheduled(env: Bindings, tenantId: string | null): Promise<{ 
       const { request, schedule } = splitDraft(row.draft_json);
       return schedule && typeof schedule.at === 'number' ? [{ row, request, schedule, at: schedule.at }] : [];
     });
-    if (asking) {
-      for (const org of new Set(drafts.map((draft) => draft.row.tenant_id))) {
+    for (const org of new Set(drafts.map((draft) => draft.row.tenant_id))) {
+      if (sent + failed >= SCHEDULED_PER_RUN) break run;
+      const mine = drafts.filter((draft) => draft.row.tenant_id === org);
+      // The first organization the platform answers for in a run is handled whatever the time; after that, only within it.
+      let exempt = false;
+      if (asking) {
         const known = answers.get(org);
-        if (known !== undefined && known?.status !== 'answered') continue;
-        const ids = [...new Set(drafts.filter((draft) => draft.row.tenant_id === org).map((draft) => draft.schedule.by.userId))]
-          .filter((id) => !known?.members.has(id)).slice(0, STATUS_IDS_MAX);
-        if (!ids.length) continue;
-        const now = await organizationNow(env, org, ids);
-        answers.set(org, known && now?.status === 'answered' ? { ...now, members: new Map([...known.members, ...now.members]) } : now);
-      }
-    }
-    for (const { row, request, schedule, at } of drafts) {
-      if (sent + failed >= SCHEDULED_PER_RUN || Date.now() > until) break;
-      if (passed.includes(row.tenant_id)) continue;
-      const answer = asking ? answers.get(row.tenant_id) ?? null : undefined;
-      // The platform didn't answer for the organization, or it is suspended: none of its drafts this run.
-      if (asking && (answer === null || (answer?.status === 'answered' && !answer.active))) { passed.push(row.tenant_id); continue; }
-      const caller = scheduledCaller(schedule.by, row.tenant_id, answer);
-      if (caller === 'unavailable') continue;
-      // It can't vouch for the organization yet: every due draft of it rests, still scheduled, and says why.
-      if (caller === 'unconfirmed') { await restWaiting(env.DB, row.tenant_id, 'organization_unconfirmed', Date.now()); passed.push(row.tenant_id); continue; }
-      let error: string | null = null;
-      try {
-        if (!caller || !can(caller, 'esign.manage') || !atLeast((await documentRole(env.DB, row.tenant_id, caller, 'envelope', row.id))?.role ?? null, 'editor')) error = 'not_allowed';
-        else {
-          const answer = await sendEnvelope({ env, tenantId: row.tenant_id, caller, json: (body, status = 200) => Response.json(body, { status }) }, request, { draftId: row.id }, { draftJson: row.draft_json });
-          if (answer.ok) { sent += 1; continue; }
-          const code = ((await answer.json().catch(() => ({}))) as { error?: unknown }).error;
-          if (code === 'not_draft' || code === 'draft_changed') continue;
-          error = typeof code === 'string' ? code : `status_${answer.status}`;
+        const have = known?.status === 'answered' ? known.members : null;
+        const ids = known === undefined || have
+          ? [...new Set(mine.map((draft) => draft.schedule.by.userId))].filter((id) => !have?.has(id)).slice(0, STATUS_IDS_MAX) : [];
+        if (ids.length) {
+          // The run's first question waits as long as any may; another only starts with time left, and waits no longer.
+          const left = until - Date.now();
+          if (asked && left < ASK_MIN_MS) break run;
+          const now = await organizationNow(env, org, ids, asked ? Math.min(left, STATUS_TIMEOUT_MS) : STATUS_TIMEOUT_MS);
+          asked = true;
+          if (now && !answered) { answered = true; exempt = true; }
+          answers.set(org, have && now?.status === 'answered' ? { ...now, members: new Map([...have, ...now.members]) } : now);
         }
-      } catch { error = 'send_failed'; }
-      failed += 1;
-      await recordScheduleFailure(env.DB, row.id, at, error);
+        const answer = answers.get(org) ?? null;
+        // No answer in time, or a suspended organization: its drafts step back, behind those due before then.
+        if (answer === null || (answer.status === 'answered' && !answer.active)) { await deferOrganization(env.DB, org, Date.now()); passed.push(org); continue; }
+        // No record of Esign's use there yet: every due draft of it rests, still scheduled, and says why.
+        if (answer.status === 'unconfirmed') { await restWaiting(env.DB, org, 'organization_unconfirmed', Date.now()); passed.push(org); continue; }
+      }
+      for (const { row, request, schedule, at } of mine) {
+        if (sent + failed >= SCHEDULED_PER_RUN || (!exempt && Date.now() > until)) break run;
+        const caller = scheduledCaller(schedule.by, row.tenant_id, asking ? answers.get(row.tenant_id) ?? null : undefined);
+        if (caller === 'unavailable' || caller === 'unconfirmed') continue;
+        let error: string | null = null;
+        try {
+          if (!caller || !can(caller, 'esign.manage') || !atLeast((await documentRole(env.DB, row.tenant_id, caller, 'envelope', row.id))?.role ?? null, 'editor')) error = 'not_allowed';
+          else {
+            const answer = await sendEnvelope({ env, tenantId: row.tenant_id, caller, json: (body, status = 200) => Response.json(body, { status }) }, request, { draftId: row.id }, { draftJson: row.draft_json });
+            if (answer.ok) { sent += 1; continue; }
+            const code = ((await answer.json().catch(() => ({}))) as { error?: unknown }).error;
+            if (code === 'not_draft' || code === 'draft_changed') continue;
+            error = typeof code === 'string' ? code : `status_${answer.status}`;
+          }
+        } catch { error = 'send_failed'; }
+        failed += 1;
+        await recordScheduleFailure(env.DB, row.id, at, error);
+      }
     }
   }
   return { scheduledSent: sent, scheduledFailed: failed };

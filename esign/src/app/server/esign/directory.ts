@@ -86,21 +86,27 @@ export type OrganizationNow =
 
 /** The most ids one member status request takes (the platform's limit). */
 export const STATUS_IDS_MAX = 100;
+/** The longest one member status request may take. */
+export const STATUS_TIMEOUT_MS = 5000;
 
 /**
  * The organization, and up to 100 of its people or API clients by id, as the platform says now, in one request: null
- * when the platform can't be asked or didn't answer as agreed.
+ * when the platform can't be asked, didn't answer as agreed, or took longer than `timeoutMs` (at most
+ * STATUS_TIMEOUT_MS: an answer that comes late is no answer).
  */
-export async function organizationNow(env: DirectoryEnv, organizationId: string, ids: string[]): Promise<OrganizationNow | null> {
+export async function organizationNow(env: DirectoryEnv, organizationId: string, ids: string[], timeoutMs = STATUS_TIMEOUT_MS): Promise<OrganizationNow | null> {
   const endpoint = gatewayEndpoint(env.SUGER_MEMBER_STATUS_URL, env.SUGER_APP_TOKEN);
-  if (!endpoint || ids.length > STATUS_IDS_MAX) return null;
+  const limit = Math.min(timeoutMs, STATUS_TIMEOUT_MS);
+  if (!endpoint || ids.length > STATUS_IDS_MAX || limit <= 0) return null;
+  const started = Date.now();
   try {
     const response = await (env.MEMBERS_FETCH ?? fetch)(endpoint.url, {
       method: 'POST',
       headers: { authorization: `Bearer ${endpoint.token}`, 'content-type': 'application/json' },
       body: JSON.stringify({ org: organizationId, ids }),
-      signal: AbortSignal.timeout(5000),
+      signal: AbortSignal.timeout(limit),
     });
+    if (Date.now() - started > limit) return null;
     if (response.status === 404) {
       const error = (await response.json().catch(() => ({})) as { error?: unknown }).error;
       if (error === 'org_deleted') return { status: 'deleted' };

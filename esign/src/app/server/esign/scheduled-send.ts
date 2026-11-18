@@ -2,7 +2,7 @@
 // then; what it needs is kept in its own request, `draft_json`, under `schedule`, never in a column of its own:
 //
 //   schedule: { at: epoch ms, by: who scheduled it, error?: why it couldn't be sent, waiting?: why it hasn't been yet,
-//               retryAt?: epoch ms, when a waiting one is tried again }
+//               retryAt?: epoch ms, when a waiting or deferred one is tried again }
 //
 // The platform's five-minute tick (and POST /api/process-due, for one organization) sends the drafts whose time has
 // come, as the person who scheduled them, through the very send a person's Send runs (app.ts). One the send refuses
@@ -32,7 +32,13 @@ export const SCHEDULED_BUDGET_MS = 10_000;
  * drafts never take the places of other organizations' (app.ts sendScheduled).
  */
 export const WAITING_RETRY_MS = 10 * 60 * 1000;
-/** When a waiting draft is tried again: write it only as this, as SCHEDULE_AT. */
+/**
+ * How long an organization's due drafts step back when the platform didn't answer for it in time, or it is suspended:
+ * less than a tick, so the next run tries them again, but behind drafts due before then, so an organization slow to
+ * answer can't take every run's time from the others (dueScheduled takes drafts by when they are next due).
+ */
+export const DEFER_MS = 4 * 60 * 1000;
+/** When a waiting or deferred draft is tried again: write it only as this, as SCHEDULE_AT. */
 const RETRY_AT = "json_extract(draft_json, '$.schedule.retryAt')";
 
 /** Who scheduled a send: the caller then, as the send needs them when no one is calling. */
@@ -45,8 +51,8 @@ export interface ScheduledBy {
   accessVia: AccessVia;
 }
 /**
- * `waiting`: a due draft the platform can't vouch for yet (`organization_unconfirmed`), still scheduled and tried
- * again from `retryAt` on.
+ * `waiting`: a due draft the platform can't vouch for yet (`organization_unconfirmed`), still scheduled. `retryAt`: when
+ * a waiting draft, or one deferred because the platform didn't answer in time (DEFER_MS), is tried again.
  */
 export interface Schedule { at: number | null; by: ScheduledBy; error?: string; waiting?: string; retryAt?: number }
 
@@ -118,14 +124,15 @@ export function scheduleView(schedule: Schedule | null): { sendAt?: string; send
 }
 
 /**
- * Up to SCHEDULED_PER_RUN drafts due now, oldest time first, of one organization or (null) all; a waiting one only once
- * its rest is over, and none of the organizations or drafts in `skip` (those a run has passed over already).
+ * Up to SCHEDULED_PER_RUN drafts due now, of one organization or (null) all, by when each is next due (its retryAt, or
+ * else its time): a waiting or deferred one only once that has come, and none of the organizations or drafts in `skip`
+ * (those a run has handled or passed over already).
  */
 export async function dueScheduled(db: D1Database, now: number, tenantId: string | null, skip: { tenants: string[]; ids: string[] } = { tenants: [], ids: [] }): Promise<{ id: string; tenant_id: string; draft_json: string }[]> {
   const { results } = await db.prepare(`SELECT id, tenant_id, draft_json FROM envelopes
       WHERE status = 'DRAFT' AND ${SCHEDULE_AT} <= ?1 AND (${RETRY_AT} IS NULL OR ${RETRY_AT} <= ?1) AND (?2 IS NULL OR tenant_id = ?2)
         AND tenant_id NOT IN (SELECT value FROM json_each(?3)) AND id NOT IN (SELECT value FROM json_each(?4))
-      ORDER BY ${SCHEDULE_AT} LIMIT ${SCHEDULED_PER_RUN}`)
+      ORDER BY COALESCE(${RETRY_AT}, ${SCHEDULE_AT}), id LIMIT ${SCHEDULED_PER_RUN}`)
     .bind(now, tenantId, JSON.stringify(skip.tenants), JSON.stringify(skip.ids)).all<{ id: string; tenant_id: string; draft_json: string }>();
   return results;
 }
@@ -145,7 +152,17 @@ export async function recordScheduleFailure(db: D1Database, id: string, at: numb
  * whatever their number.
  */
 export async function restWaiting(db: D1Database, tenantId: string, reason: string, now: number): Promise<void> {
-  await db.prepare(`UPDATE envelopes SET draft_json = json_set(draft_json, '$.schedule.waiting', ?2, '$.schedule.retryAt', ?4)
+  await stepBack(db, tenantId, now, now + WAITING_RETRY_MS, reason);
+}
+
+/** Every draft of the organization due now and not resting steps back DEFER_MS (sendScheduled), its note unchanged. */
+export async function deferOrganization(db: D1Database, tenantId: string, now: number): Promise<void> {
+  await stepBack(db, tenantId, now, now + DEFER_MS, null);
+}
+
+async function stepBack(db: D1Database, tenantId: string, now: number, retryAt: number, reason: string | null): Promise<void> {
+  const set = reason === null ? "json_set(draft_json, '$.schedule.retryAt', ?4)" : "json_set(draft_json, '$.schedule.retryAt', ?4, '$.schedule.waiting', ?2)";
+  await db.prepare(`UPDATE envelopes SET draft_json = ${set}
       WHERE tenant_id = ?1 AND status = 'DRAFT' AND ${SCHEDULE_AT} <= ?3 AND (${RETRY_AT} IS NULL OR ${RETRY_AT} <= ?3)`)
-    .bind(tenantId, reason, now, now + WAITING_RETRY_MS).run();
+    .bind(tenantId, reason ?? '', now, retryAt).run();
 }

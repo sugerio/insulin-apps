@@ -55,14 +55,19 @@ seals the finished envelope and emails each signer a link to their copy.
   says by their id, `SUGER_MEMBER_STATUS_URL` in `directory.ts`, someone who may still send: a
   member with Manage and an active account, or a live API client; while the organization is
   suspended, or the gateway can't be asked, it waits); one refused stays a draft, unscheduled,
-  with the reason in `schedule.error`. A run asks the gateway once per organization, for every
-  scheduler of its drafts in view (`organizationNow`). One the gateway can't vouch for yet (404
-  `unknown_organization`: an organization it hasn't recorded Esign's use in, DESIGN.md §8.9) has
-  every due draft rest at once, still scheduled, with `schedule.waiting:
+  with the reason in `schedule.error`. A run takes drafts by when each is next due
+  (`schedule.retryAt`, else its time) and goes one organization at a time: it asks the gateway
+  about an organization when its first draft is reached, once, for every scheduler of its drafts in
+  view (`organizationNow`), and handles that organization's drafts with the answer at once. After
+  the first question it asks only while its 10-second budget leaves a second, and waits no longer
+  than what is left; the first answer it gets is always acted on. One the gateway can't vouch for
+  yet (404 `unknown_organization`: an organization it hasn't recorded Esign's use in, DESIGN.md
+  §8.9) has every due draft rest at once, still scheduled, with `schedule.waiting:
   "organization_unconfirmed"` (readers see `sendWaiting`) and `schedule.retryAt` ten minutes on;
-  one the gateway didn't answer for, or that is suspended, is passed over until the next run. So
-  neither takes another organization's places: the next request to Esign there records it, and the
-  next try sends them. After the due work, whatever its outcome, the tick sends the hour's usage
+  one the gateway didn't answer for in time, or that is suspended, steps back four minutes
+  (`retryAt`), behind the drafts due before then. So no organization's queue or slowness takes
+  another's places for long: the next request to Esign there records it, and the next try sends
+  them. After the due work, whatever its outcome, the tick sends the hour's usage
   report (below), after its response when the request has a `waitUntil`.
 - **Mail.** There is no email binding: codes and completion notices go through the platform's mail
   relay (`mail.ts`), `POST $SUGER_MAIL_URL` with `SUGER_APP_TOKEN` and the organization, over the

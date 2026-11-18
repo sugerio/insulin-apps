@@ -55,19 +55,19 @@ seals the finished envelope and emails each signer a link to their copy.
   says by their id, `SUGER_MEMBER_STATUS_URL` in `directory.ts`, someone who may still send: a
   member with Manage and an active account, or a live API client; while the organization is
   suspended, or the gateway can't be asked, it waits); one refused stays a draft, unscheduled,
-  with the reason in `schedule.error`. A run takes drafts by when each is next due
-  (`schedule.retryAt`, else its time) and goes one organization at a time: it asks the gateway
-  about an organization when its first draft is reached, once, for every scheduler of its drafts in
-  view (`organizationNow`), and handles that organization's drafts with the answer at once. After
-  the first question it asks only while its 10-second budget leaves a second, and waits no longer
-  than what is left; the first answer it gets is always acted on. One the gateway can't vouch for
-  yet (404 `unknown_organization`: an organization it hasn't recorded Esign's use in, DESIGN.md
-  §8.9) has every due draft rest at once, still scheduled, with `schedule.waiting:
-  "organization_unconfirmed"` (readers see `sendWaiting`) and `schedule.retryAt` ten minutes on;
-  one the gateway didn't answer for in time, or that is suspended, steps back four minutes
-  (`retryAt`), behind the drafts due before then. So no organization's queue or slowness takes
-  another's places for long: the next request to Esign there records it, and the next try sends
-  them. After the due work, whatever its outcome, the tick sends the hour's usage
+  with the reason in `schedule.error`. A run takes due drafts in batches: up to 25 of the ten
+  organizations whose next draft is due soonest (`schedule.retryAt`, else its time), each
+  organization's next draft before any one's following, and asks the gateway about all of a
+  batch's organizations at once (`organizationNow`, each with the full 5-second wait, once a run,
+  for every scheduler of its drafts in view), so a slow organization delays a batch by its own
+  answer only. Each is handled by its answer: active, its drafts are sent or refused; one the
+  gateway can't vouch for yet (404 `unknown_organization`: an organization it hasn't recorded
+  Esign's use in, DESIGN.md §8.9) has every due draft rest at once, still scheduled, with
+  `schedule.waiting: "organization_unconfirmed"` (readers see `sendWaiting`) and `schedule.retryAt`
+  ten minutes on; suspended, its drafts step back four minutes and wait; no answer in time, its
+  drafts are left as they are, in their place, for the next run. Then the next batch while the
+  10-second budget lasts. Sending claims a draft in the batch that sends it, so two runs at once
+  never send one twice. After the due work, whatever its outcome, the tick sends the hour's usage
   report (below), after its response when the request has a `waitUntil`.
 - **Mail.** There is no email binding: codes and completion notices go through the platform's mail
   relay (`mail.ts`), `POST $SUGER_MAIL_URL` with `SUGER_APP_TOKEN` and the organization, over the

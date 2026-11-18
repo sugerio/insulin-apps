@@ -79,11 +79,13 @@ And from the design:
 - **A start Cloudflare has no container for waits.** A start can be refused when the account's containers at once
   are used up, or too many are asked for in the same second (Cloudflare's words: "there is no container instance that
   can be provided", "you are requesting too many containers per second"; below, "Containers at once"). That is no
-  failure of the collection: nothing is charged, no import's try is counted, no snapshot is given up (a wake's failed
-  starts otherwise count towards it) and no go back or repair is dropped. No container is asked for again for 30
-  seconds (`noContainerRetryMs`); meanwhile an import goes back to the head of the queue and gives its capacity slot
-  back, and the app hears it is queued, waiting for the service ("Insulin Knowledge is busy"); a question answers
-  `waking`; a go back or repair waits, and a backup while asleep is taken later. Each refusal is logged
+  failure of the collection: nothing is charged (the time spent asking is dropped, however long the refusal took; a
+  container it was to replace is charged up to the start), no import's try is counted, no snapshot is given up (a
+  wake's failed starts otherwise count towards it) and no go back or repair is dropped. No container is asked for
+  again for 30 seconds (`noContainerRetryMs`); meanwhile an import goes back to the head of the queue and gives its
+  capacity slot back, and the app hears it is queued, waiting for the service ("Insulin Knowledge is busy"), and
+  once it starts its job is polled every 3 seconds like any other's (a try's wait ends when it starts); a question
+  answers `waking`; a go back or repair waits, and a backup while asleep is taken later. Each refusal is logged
   (`no-container`).
 - **Changes within 5 minutes share one restore point** (the earlier one folds into the new one; undo takes both back).
 - **Remove for good** deletes the document's text and its facts (in every stored facts file) at once, blocks every
@@ -384,16 +386,21 @@ a database open), then `container/purge.py` cleans each store, checks it, and re
   they are deleted anyway, since nothing reads them.
 
 Then what the stores hold now is read, decoded, for every piece of the removed documents' text (runs of words of at
-least 24 characters) or every newly hidden value, each matched as the hiding detector matches a word: ignoring case as
-Python's `re.IGNORECASE` does (so `Éclair` finds `éclair`, an entity name kept in lower case) and whole. Only values
-made from the documents are read, never keys, schemas or bookkeeping (a hidden word "text" is no JSON key's or
-column's): the stored texts (not their names), Cognee's copies of them, the chunks and entity names, the summaries
-and relations in LanceDB and the graph, and the facts. Summaries, relations and facts also hold Cognee's own words
-(its entity labels and relation names, from the graph); a single word of those found there doesn't count. A file
+least 24 characters) or every newly hidden value, each matched as the hiding detector matches a word: ignoring case
+exactly as Python's `re.IGNORECASE` does (`fold()` in `purge.py` uses the regular expression engine's own rule, so
+`Éclair` finds `éclair`, an entity name kept in lower case, and `Pin` finds `pın`; a test checks every character with
+a case against `re`) and whole. Only values made from the documents are read, never keys, schemas or bookkeeping (a
+hidden word "text" is no JSON key's or column's): the stored texts (not their names), Cognee's copies of them, the
+chunks and entity names, the summaries and relations in LanceDB and the graph, and the facts. Summaries, relations
+and facts also hold Cognee's own words, its entity labels and relation names (from the graph): one found there as
+stored (`headquartered_in`), as written ("headquartered in") or as some of its words in a row doesn't count. A file
 under `/data` none of these covers is read whole. A probe a kept document's text also holds may stay. Anything left
-fails the try with the number of places (logged by name, never the text). Every value and piece is looked for, each
-only in what holds its longest word, so the cost follows the data: on the 30-document corpus (34 MB under `/data`)
-cleaning and reading take about a second.
+fails the try with the number of places (logged by name, never the text). Every value and piece is looked for: each
+is filed under its rarest word among the probes, and the folded text is compared with a probe only where that word
+stands, so the cost follows the data however many probes share a word (20,000 addresses removed, all at
+`example.com`, against 2 MiB of kept text: 0.1 s, where looking for each one through the whole text took ten
+minutes; 32 MiB of kept text: about 2 s). On the 30-document corpus (34 MB under `/data`) cleaning and reading take
+about a second.
 
 **The control server's connections.** `server.py` serves one request per connection and says so in every answer
 (`connection: close`). Without that, the Durable Object's fetch, which keeps connections for the next call, sent a

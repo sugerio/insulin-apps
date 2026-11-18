@@ -7,6 +7,7 @@ from __future__ import annotations
 import asyncio
 import io
 import json
+import re
 import sys
 import tempfile
 import types
@@ -307,6 +308,22 @@ class Probes(unittest.TestCase):
                 (root / "facts.json").write_text(json.dumps({"facts": [fact]}))
                 self.assertEqual(purge.left(root, ["part"], lambda: []), {"facts.json": 1})
 
+    def test_f202_cognees_relation_names_as_stored_and_as_written_are_its_own(self):
+        # A correct re-read hiding "headquartered_in": the document's words are hidden, but Cognee names a relation it
+        # found elsewhere that way, in its relations and summaries. As stored, as written, or a run of its words, it
+        # is Cognee's there; in what only documents write (a text Cognee keeps, a chunk) it still counts.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            fact = {"sentence": "Hawser gateway headquartered in port 8443. It is part of billing.", "sourceSentence": "The Hawser gateway listens on port 8443."}
+            (root / "facts.json").write_text(json.dumps({"facts": [fact]}))
+            (root / "documents").mkdir()
+            (root / "documents" / "text_1.txt").write_text("The fields [hidden] and [hidden] link each record.")
+            probes = ["headquartered_in", "is_part_of", "headquartered in", "part of"]
+            with mock.patch.object(purge, "_graph", lambda root: ([("derived", "Hawser gateway headquartered_in port 8443")], {"headquartered_in", "is_part_of"})):
+                self.assertEqual(purge.left(root, probes, lambda: []), {})
+                (root / "documents" / "text_1.txt").write_text("The fields is_part_of and headquartered_in link each record.")
+                self.assertEqual(purge.left(root, probes, lambda: []), {"documents/text_1.txt": 2})
+
     def test_a_file_purge_doesnt_know_is_read_whole(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -322,6 +339,46 @@ class Probes(unittest.TestCase):
             probes = purge.removed_probes(["Contact the help desk for anything else."])
             self.assertEqual(purge.left(root, probes, lambda: ["Kept: contact the help desk for anything else. Bye."]), {})
             self.assertEqual(purge.left(root, probes, lambda: ["Another text."]), {"documents/text_1.txt": 1})
+
+    def test_f204_case_is_ignored_exactly_as_re_ignorecase_ignores_it(self):
+        # The hiding detector matches "Pin" in "pın" (dotless i), "İ" as "i", "ſ" as "s", the Kelvin sign as "k".
+        for probe, text in (("Pin", "Every pın code"), ("istanbul", "İSTANBUL office"), ("Seal", "ſeal"), ("kiln", "\u212Ailn")):
+            self.assertTrue(re.search(r"(?<!\w)" + re.escape(probe) + r"(?!\w)", text, re.IGNORECASE), (probe, text))
+            self.assertEqual(purge.Matcher([probe]).counts(text), {probe: 1}, (probe, text))
+        self.assertEqual(purge.Matcher(["straße"]).counts("STRASSE"), {}, "two letters for one: re doesn't match them either")
+
+    def test_f204_fold_is_re_ignorecase_for_every_character_with_a_case(self):
+        import itertools
+
+        related: dict[str, set[str]] = {}
+        for code in range(0x110000):
+            if 0xD800 <= code <= 0xDFFF:
+                continue
+            char = chr(code)
+            for key in {char.lower(), char.upper(), char.casefold(), purge.fold(char)}:
+                related.setdefault(key, set()).add(char)
+        pairs = 0
+        for chars in related.values():
+            for a, b in itertools.combinations(sorted(chars), 2):
+                pairs += 1
+                same = bool(re.fullmatch(re.escape(a), b, re.IGNORECASE))
+                self.assertEqual(purge.fold(a) == purge.fold(b), same, (a, b))
+        self.assertGreater(pairs, 2000)
+        self.assertTrue(all(len(purge.fold(chr(c))) == 1 for c in (0x130, 0x131, 0x17F, 0x212A, 0xDF, 0x1E9E)))
+
+    def test_f203_probes_sharing_a_word_cost_what_the_text_costs(self):
+        # 20,000 removed lines, every one holding "example", and 2 MiB of kept text full of it: each probe rescanning
+        # the text took 18 s per 64 KiB (about ten minutes here, eight hours at 100 MiB).
+        import time
+
+        lines = [f"Mail a{i:05d}@example.com today about the plan." for i in range(20000)]
+        probes = purge.removed_probes(["\n".join(lines)])
+        self.assertEqual(len(probes), 20000)
+        kept = ("An example of the plan: write to someone@example.com about it. " * 40000)[: 2 * 1024 * 1024] + "\n" + lines[12345]
+        started = time.monotonic()
+        counts = purge.Matcher(probes).counts(kept)
+        self.assertEqual(counts, {lines[12345]: 1})
+        self.assertLess(time.monotonic() - started, 10)
 
     def test_many_probes_cost_what_the_text_costs(self):
         import time

@@ -572,7 +572,8 @@ export class CollectionEngine {
     if (meta.op && !held) times.push(startAt)
     if (meta.active) {
       const record = await this.store.getImport(meta.active)
-      if (record?.retryAt) times.push(record.retryAt)
+      // A try waits for its retry time only while it is ahead: one past it is no reason to come back at once.
+      if (record?.retryAt && record.retryAt > now) times.push(record.retryAt)
       else times.push(record?.phase === 'running' ? now + SETTINGS.pollMs : now)
     }
     if (meta.queue.length && (!held || meta.removals.length)) times.push(now + SETTINGS.capacityRetryMs)
@@ -645,12 +646,14 @@ export class CollectionEngine {
     await this.box.destroy('replaced')
     const instance = instances(this.env)[purpose]
     const started = clock.now()
-    // Running time counts from the start: starting, checking and putting files back are paid for too.
+    // Running time counts from the start: starting, checking and putting files back are paid for too. The time of
+    // the container it replaces is charged up to here; from here the segment is provisional until a container runs:
+    // a start that gets none (held, or Cloudflare has none to give) drops it (dropUsage).
     await this.chargeUsage(purpose === 'learning' || fromBackup ? 'learning' : await this.questionsUsageKind())
     if (!options.removal && isHeld(await this.meta())) {
       // The old container is gone and none starts: nothing runs, and no time is counted.
       await this.store.deleteRuntime()
-      await this.chargeUsage(null)
+      await this.dropUsage()
       await this.store.log('start-refused-held', { purpose })
       throw new OnHold()
     }
@@ -658,7 +661,7 @@ export class CollectionEngine {
     const waitUntil = (await this.state.storage.get<number>(NO_CONTAINER_UNTIL)) ?? 0
     if (waitUntil > clock.now()) {
       await this.store.deleteRuntime()
-      await this.chargeUsage(null)
+      await this.dropUsage()
       throw new NoContainer('Waiting for Cloudflare to have a container to give.')
     }
     let health: Health
@@ -709,7 +712,8 @@ export class CollectionEngine {
   async noContainer(purpose: 'questions' | 'learning', error: NoContainer): Promise<void> {
     await this.box.destroy('no container to give')
     await this.store.deleteRuntime()
-    await this.chargeUsage(null)
+    // However long Cloudflare took to say so: the start's segment is dropped, not charged.
+    await this.dropUsage()
     await this.state.storage.put(NO_CONTAINER_UNTIL, clock.now() + SETTINGS.noContainerRetryMs)
     await this.store.log('no-container', { purpose, error: errorText(error), retryInSeconds: SETTINGS.noContainerRetryMs / 1000 })
   }
@@ -1000,6 +1004,17 @@ export class CollectionEngine {
       ledger.lastFlushAt = now
     }
     await this.store.addEvents(events)
+    await this.store.putLedger(ledger)
+  }
+
+  /**
+   * Ends the running segment without charging it: a container start that got no container (startContainer opens the
+   * segment as it asks for one). What was charged before the segment opened stays charged.
+   */
+  async dropUsage(): Promise<void> {
+    const ledger = await this.store.getLedger()
+    ledger.kind = null
+    ledger.since = null
     await this.store.putLedger(ledger)
   }
 

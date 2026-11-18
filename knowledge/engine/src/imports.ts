@@ -1074,6 +1074,7 @@ export async function startNext(e: CollectionEngine, importId?: string): Promise
     current.status.state = 'reading'
     current.status.waitingFor = null
     current.status.queuePosition = null
+    current.retryAt = null // its wait (for a container, or after a removal's failed round) is over: it starts
     current.turns = (current.turns ?? 0) + 1
     await e.store.putImport(current, txn)
     latest.queue = latest.queue.filter((q) => q !== id)
@@ -1415,6 +1416,7 @@ async function startJob(e: CollectionEngine, record: ImportRecord): Promise<void
   const job = await e.box.startJob(op, { batchId: importId })
   record.jobId = job.id
   record.phase = 'running'
+  record.retryAt = null // a try made after a failed one waited for this moment: from now on the job is polled
   record.jobStartedAt = clock.now()
   record.learningStartedAt ??= clock.now()
   record.status.files = record.status.files.map((f) => (f.state === 'waiting' ? { ...f, state: 'reading' } : f))

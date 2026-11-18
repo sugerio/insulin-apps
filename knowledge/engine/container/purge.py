@@ -11,13 +11,16 @@ up.
 What is looked for (`removed_probes`, `hidden_probes`): every value the stricter rules hid; for a removed document,
 every piece of its text (runs of words between line breaks and sentence ends, at least PROBE_MIN characters, as a
 chunk, a summary or a graph node holds them). A probe matches as the hiding detector matches a word: ignoring case
-(Unicode's, as `re.IGNORECASE`) and whole, with no letter or digit just before or after it. One that a kept document's
-text holds too doesn't count: it may rightly stay, in that document's data.
+exactly as `re.IGNORECASE` does (`fold()`: "Pin" is "pın", "İ" is "i", "ſ" is "s") and whole, with no letter or digit
+just before or after it. One that a kept document's text holds too doesn't count: it may rightly stay, in that
+document's data. Each probe is looked for only where the rarest of its words stands (`Matcher`), so the cost follows
+the data, however many probes share a word.
 
 Where it is looked for (`content()`): only values made from the documents, never keys, schemas or the stores' own
 bookkeeping (ids, types, paths, states): the stored texts, Cognee's copies of them, its chunks, entity names, summaries
 and relations in LanceDB and the graph, and the facts. Summaries, relations and facts also hold Cognee's own words
-(its entity labels and relation names, "is part of"): a single word found there that is one of those doesn't count.
+(its entity labels and relation names, as stored, `headquartered_in`, and as written, "is part of"): a probe found
+there that is one of those, or some of its words in a row, doesn't count.
 Any file under /data this module doesn't know is read whole, as text.
 
 This module never imports Cognee; the databases are opened with their own libraries, after the process that used
@@ -59,7 +62,7 @@ def removed_probes(removed: list[str]) -> list[str]:
         for piece in CUTS.split(text):
             piece = piece.strip()
             if len(piece) >= PROBE_MIN:
-                out.setdefault(piece.casefold(), piece)
+                out.setdefault(fold(piece), piece)
     return list(out.values())
 
 
@@ -72,33 +75,86 @@ def hidden_probes(texts: list[str], rules: dict) -> list[str]:
         for span in hide.find_spans(text, rules):
             value = text[span.start : span.end].strip()
             if value:
-                out.setdefault(value.casefold(), value)
+                out.setdefault(fold(value), value)
     return list(out.values())
+
+
+_FOLD: dict[int, int] | None = None
+
+
+def _fold_table() -> dict[int, int]:
+    """Every character `re.IGNORECASE` matches to another, mapped to one of its class: the regular expression engine's
+    own rule (its simple lower case, then its extra equivalences, re/_casefix.py), so two strings fold alike exactly
+    when one matches the other ignoring case, character for character."""
+    global _FOLD
+    if _FOLD is None:
+        import _sre
+        from re._casefix import _EXTRA_CASES
+
+        smallest = {lower: min((lower, *others)) for lower, others in _EXTRA_CASES.items()}
+        table = {}
+        for code in range(0x110000):
+            if _sre.unicode_iscased(code):
+                folded = _sre.unicode_tolower(code)
+                folded = smallest.get(folded, folded)
+                if folded != code:
+                    table[code] = folded
+        _FOLD = table
+    return _FOLD
+
+
+def fold(text: str) -> str:
+    """`text` with every character replaced by its class under `re.IGNORECASE` (one character for one)."""
+    return text.translate(_fold_table())
 
 
 class Matcher:
     """Finds many probes in a text at once, each as the hiding detector finds a word (hide.py `_words`): ignoring case
-    and whole. A probe is looked for only in a text holding its longest word, so the cost follows the text, not the
-    number of probes."""
+    and whole. Each probe is filed under its rarest word among the probes (and that word's place in it); the text is
+    folded once, and only where one of those words stands is the folded text there compared with the probes filed
+    under it, of each length, then each match confirmed with the probe's own expression. The cost follows the text,
+    however many probes share a word."""
 
     def __init__(self, probes: Iterable[str]) -> None:
-        self.by_word: dict[str, list[tuple[str, re.Pattern]]] = {}
+        probes = list(dict.fromkeys(p for p in probes if p))
+        words = {p: [(m.group(), m.start()) for m in WORD.finditer(fold(p))] for p in probes}
+        shared: dict[str, int] = {}
+        for probe in probes:
+            for word in {w for w, _ in words[probe]}:
+                shared[word] = shared.get(word, 0) + 1
+        # word -> its place in the probe -> the probe's length -> the folded probe -> [(probe, expression)]
+        self.filed: dict[str, dict[int, dict[int, dict[str, list[tuple[str, re.Pattern]]]]]] = {}
         self.wordless: list[tuple[str, re.Pattern]] = []
-        for probe in dict.fromkeys(p for p in probes if p):
+        for probe in probes:
             pattern = re.compile(r"(?<!\w)" + re.escape(probe) + r"(?!\w)", re.IGNORECASE)
-            words = WORD.findall(probe.casefold())
-            if words:
-                self.by_word.setdefault(max(words, key=len), []).append((probe, pattern))
-            else:
+            if not words[probe]:
                 self.wordless.append((probe, pattern))
+                continue
+            word, at = min(words[probe], key=lambda w: (shared[w[0]], -len(w[0])))
+            folded = fold(probe)
+            self.filed.setdefault(word, {}).setdefault(at, {}).setdefault(len(folded), {}).setdefault(folded, []).append((probe, pattern))
 
     def counts(self, text: str) -> dict[str, int]:
         out: dict[str, int] = {}
-        candidates = [pair for word in set(WORD.findall(text.casefold())) & self.by_word.keys() for pair in self.by_word[word]]
-        for probe, pattern in candidates + self.wordless:
-            found = len(pattern.findall(text))
-            if found:
-                out[probe] = found
+        folded = fold(text)
+        present = set(WORD.findall(folded)) & self.filed.keys()
+        if present:
+            for found in WORD.finditer(folded):
+                word = found.group()
+                if word not in present:
+                    continue
+                for at, by_length in self.filed[word].items():
+                    start = found.start() - at
+                    if start < 0:
+                        continue
+                    for length, by_text in by_length.items():
+                        for probe, pattern in by_text.get(folded[start : start + length], ()):
+                            if pattern.match(text, start):
+                                out[probe] = out.get(probe, 0) + 1
+        for probe, pattern in self.wordless:
+            count = len(pattern.findall(text))
+            if count:
+                out[probe] = count
         return out
 
 
@@ -173,8 +229,8 @@ def _graph(root: Path) -> tuple[list[tuple[str, str]], set[str]]:
 
 def content(root: Path) -> tuple[list[tuple[str, str, str]], set[str]]:
     """What the stores under `root` hold that was made from the documents, decoded: (place, kind, text), where kind is
-    "document" (the documents' words only) or "derived" (with Cognee's own words too), and those words of Cognee's,
-    casefolded."""
+    "document" (the documents' words only) or "derived" (with Cognee's own words too), and Cognee's own labels and
+    relation names, as stored."""
     out: list[tuple[str, str, str]] = []
     own: set[str] = set()
     known = {root / RELATIONAL, root / GRAPH}  # SQLite holds names, ids, paths and states (purge vacuums it)
@@ -210,23 +266,35 @@ def content(root: Path) -> tuple[list[tuple[str, str, str]], set[str]]:
         if name.startswith(str(RELATIONAL)) or name.startswith(str(GRAPH)) or name.startswith("system/databases/.cognee-migration-"):
             continue  # the databases' own side files (write-ahead logs, locks): checked by purge()
         out.append((name, "document" if name.startswith("documents/") else "derived", _decoded(path)))
-    words = {w for phrase in own for w in WORD.findall(phrase.replace("_", " ").casefold())}
-    return out, words
+    return out, own
+
+
+def _phrases(labels: Iterable[str]) -> list[tuple[str, ...]]:
+    """Cognee's labels and relation names as the words it writes them with, folded: `is_part_of` is (is, part, of)."""
+    return [tuple(WORD.findall(fold(label.replace("_", " ")))) for label in labels if label]
+
+
+def _cognees(probe: str, phrases: list[tuple[str, ...]]) -> bool:
+    """Whether `probe` is Cognee's own: one of its labels or relation names, as stored (`headquartered_in`) or as
+    written ("headquartered in"), or some of their words in a row ("part of")."""
+    words = tuple(WORD.findall(fold(probe.replace("_", " "))))
+    return bool(words) and any(phrase[i : i + len(words)] == words for phrase in phrases for i in range(len(phrase) - len(words) + 1))
 
 
 def left(root: Path, probes: list[str], kept: Callable[[], Iterable[str]]) -> dict[str, int]:
     """The places under `root` still holding removed or hidden text, with how many times: every probe found, except
-    one a kept document's text holds too (it may rightly stay, in that document's data), and a single word of
-    Cognee's own found in what holds Cognee's words too. The kept texts are read one at a time."""
+    one a kept document's text holds too (it may rightly stay, in that document's data), and one of Cognee's own
+    words (`_cognees`) found in what holds Cognee's words too. The kept texts are read one at a time."""
     matcher = Matcher(probes)
     exempt: set[str] = set()
     for text in kept():
         exempt.update(matcher.counts(text))
-    places, own = content(root)
+    places, labels = content(root)
+    phrases = _phrases(labels)
     out: dict[str, int] = {}
     for place, kind, text in places:
         for probe, count in matcher.counts(text).items():
-            if probe in exempt or (kind == "derived" and probe.casefold() in own):
+            if probe in exempt or (kind == "derived" and _cognees(probe, phrases)):
                 continue
             out[place] = out.get(place, 0) + count
     return out

@@ -27,6 +27,7 @@ async function bindings(request: Request): Promise<Bindings> {
     ...(dev ? { TEST_MAIL: new D1BlobStore(db, 'test-mail') } : {}),
     ESIGN_ENV: dev ? 'dev' : 'prod',
     IDENTITY_PREVIEW: dev,
+    TRUST_ORG_ROLE: secret('SUGER_TRUST_ORG_ROLE') === 'true',
     COMPLETE_AFTER_SIGN: 'true',
     // Nitro on Workers puts the invocation's waitUntil on the request (srvx does in the local preview, when it has one).
     WAIT_UNTIL: waitUntilOf(request),
@@ -42,9 +43,13 @@ async function bindings(request: Request): Promise<Bindings> {
     // Where the hourly usage report goes (usage-metrics.ts); without it, nothing is reported.
     SUGER_METRICS_URL: secret('SUGER_METRICS_URL'),
     SUGER_APP_TOKEN: secret('SUGER_APP_TOKEN'),
+    // Who in an organization can use Esign (directory.ts): the member lookup, without which people to share with are
+    // those Esign has seen, and member status, without which a scheduled send goes out as whoever scheduled it was.
+    SUGER_MEMBERS_URL: secret('SUGER_MEMBERS_URL'),
+    SUGER_MEMBER_STATUS_URL: secret('SUGER_MEMBER_STATUS_URL'),
     // The relay and the usage reports are called through the gateway's service binding when the deploy gave the app
     // one (gateway-fetch.ts).
-    ...(gatewayFetch ? { MAIL_FETCH: gatewayFetch, METRICS_FETCH: gatewayFetch } : {}),
+    ...(gatewayFetch ? { MAIL_FETCH: gatewayFetch, METRICS_FETCH: gatewayFetch, MEMBERS_FETCH: gatewayFetch } : {}),
   }
 }
 

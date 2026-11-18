@@ -366,7 +366,7 @@ test('dry-run writes private app configs, the complete gateway config, and a red
   assert.deepEqual(alpha.compatibility_flags, ['nodejs_compat'])
   assert.deepEqual(alpha.rules, [{ type: 'ESModule', globs: ['**/*.mjs'], fallthrough: true }])
   assert.equal(alpha.no_bundle, true)
-  assert.deepEqual(alpha.vars, { SUGER_ACCESS_MODE: 'console', SUGER_TRUST_ORG_ROLE: '1' }, 'the gateway sets x-suger-org-role (DESIGN.md §2.4)')
+  assert.deepEqual(alpha.vars, { SUGER_ACCESS_MODE: 'console', SUGER_TRUST_ORG_ROLE: 'true' }, 'the gateway sets x-suger-org-role (DESIGN.md §2.4)')
   assert.equal(alpha.workers_dev, false)
   assert.equal(alpha.preview_urls, false)
   for (const key of ['build', 'unsafe', 'routes']) assert.ok(!(key in alpha), `${key} leaked from the generated config`)
@@ -646,16 +646,19 @@ test("an app's declared secrets come from the environment's secrets, then its va
   const alpha = JSON.parse(readFileSync(join(result.outputDirectory, 'apps', 'alpha-app.wrangler.json'), 'utf8'))
   assert.equal(alpha.vars.SUGER_MAIL_URL, 'https://apps.example.com/__insulin/mail')
   assert.equal(alpha.vars.SUGER_METRICS_URL, 'https://apps.example.com/__insulin/metrics', 'where the app reports its usage every hour')
+  assert.equal(alpha.vars.SUGER_MEMBERS_URL, 'https://apps.example.com/__insulin/members', 'where the app looks up members for a sharing dialog (DESIGN.md §8.9)')
+  assert.equal(alpha.vars.SUGER_TRUST_ORG_ROLE, 'true', 'the gateway sends x-suger-org-role, so the app may honour it')
   assert.deepEqual(alpha.services, [{ binding: 'SUGER_GATEWAY', service: 'insulin-apps-gateway' }], 'the app calls the gateway over a service binding, not its public URL')
   const gatewayConfig = JSON.parse(readFileSync(join(result.outputDirectory, 'gateway.wrangler.json'), 'utf8'))
   const site = gatewayConfig.vars.SITE_APPS.find((app) => app.name === 'alpha-app')
   assert.deepEqual(site.publicPaths, ['/sign', '/api/public/'])
   assert.equal(site.scheduled, '/api/scheduled', 'the path the gateway ticks')
-  assert.equal(gatewayConfig.vars.SITE_APPS.find((app) => app.name === 'beta').scheduled, null, 'an app without one has none')
+  assert.equal('scheduled' in gatewayConfig.vars.SITE_APPS.find((app) => app.name === 'beta'), false, 'an app without one has none (SITE_APPS leaves it out)')
+  assert.equal('binding' in site, false, 'the gateway works the binding out from the name')
   assert.deepEqual(site.navigation, [{
     key: 'envelopes', label: 'Envelopes', icon: 'inbox', path: '/envelopes',
   }], "the gateway renders the app's level 1 on its settings pages (DESIGN.md §3.2), never its level 2, and fills in the defaults")
-  assert.deepEqual(gatewayConfig.vars.SITE_APPS.find((app) => app.name === 'beta').navigation, [], 'an app without a manifest has none')
+  assert.equal('navigation' in gatewayConfig.vars.SITE_APPS.find((app) => app.name === 'beta'), false, 'an app without a manifest has none')
   assert.equal('secrets' in site, false, "the gateway never learns an app's secret names")
 
   const out = await tempDirectory('deploy-apps-app-secrets-plan-')
@@ -679,6 +682,7 @@ test("an app's declared secrets come from the environment's secrets, then its va
   const plainAlpha = JSON.parse(readFileSync(join(plain.outputDirectory, 'apps', 'alpha-app.wrangler.json'), 'utf8'))
   assert.equal(plainAlpha.services, undefined, 'without the gateway key there is no relay or proxy to bind')
   assert.equal(plainAlpha.vars.SUGER_METRICS_URL, undefined, 'nor anywhere to report usage')
+  assert.equal(plainAlpha.vars.SUGER_MEMBERS_URL, undefined, 'nor anywhere to look up members')
   await assert.rejects(
     () => deployApps({ root, environment: { ...environment, APP_SECRETS_JSON: '{"ALPHA_APP_KMS_KEY": "kms-secret-value-1234"' }, dryRun: true, skipBuild: true, only: 'alpha-app' }),
     (error) => /APP_SECRETS_JSON is not valid JSON/.test(error.message) && !error.message.includes('kms-secret-value-1234'),
@@ -895,7 +899,7 @@ test("an app's platform variables and bindings: the gateway's URLs, the support 
   const plain = { name: 'beta', engine: null, engineApi: null }
   const withEngine = { name: 'knowledge', engine: 'engine', engineApi: 3 }
   const config = (app, options) => buildAppConfig({ appDirectory: '/repository/app', app, databaseId: 'db', ...options })
-  assert.deepEqual(config(plain).vars, { SUGER_ACCESS_MODE: 'console', SUGER_TRUST_ORG_ROLE: '1' })
+  assert.deepEqual(config(plain).vars, { SUGER_ACCESS_MODE: 'console', SUGER_TRUST_ORG_ROLE: 'true' })
   assert.equal(config(plain).services, undefined, 'no gateway key, no engine: no binding')
   // PLT-04: the engine is bound as SUGER_ENGINE, with or without the gateway's key.
   assert.deepEqual(config(withEngine).services, [{ binding: 'SUGER_ENGINE', service: 'insulin-apps-knowledge-engine' }])
@@ -912,7 +916,7 @@ test("an app's platform variables and bindings: the gateway's URLs, the support 
     SUGER_MEMBER_STATUS_URL: 'https://apps.example.com/__insulin/members/status',
     SUGER_MEMBER_EVENTS_URL: 'https://apps.example.com/__insulin/member-events',
     SUGER_SUPPORT_EMAIL: 'help@example.com',
-    SUGER_TRUST_ORG_ROLE: '1',
+    SUGER_TRUST_ORG_ROLE: 'true',
     SUGER_ENGINE_API: '3',
   })
   assert.deepEqual(full.services, [

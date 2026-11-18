@@ -547,3 +547,52 @@ test('Back and Continue again keep the signature preview\'s image alive: the Sig
   await act(async()=>{r.unmount();});
  } finally {URL.createObjectURL=oldCreate;URL.revokeObjectURL=oldRevoke;globalThis.fetch=oldFetch;(globalThis as any).window=oldWindow;delete (globalThis as any).IS_REACT_ACT_ENVIRONMENT;}
 });
+
+test('each field is signed by selecting it: Sign waits for every required one, an optional one may stay empty, and only the signed ones are sent', async()=>{
+ const {default:Renderer,act}=await import('react-test-renderer');(globalThis as any).IS_REACT_ACT_ENVIRONMENT=true;
+ const oldCreate=URL.createObjectURL,oldRevoke=URL.revokeObjectURL,oldFetch=globalThis.fetch,oldWindow=(globalThis as any).window;
+ let made=0,signed:any=null;
+ URL.createObjectURL=()=>`blob:test/${++made}`;URL.revokeObjectURL=()=>{};
+ const rect=(y:number)=>({x:0.1,y,width:0.4,height:0.08});
+ try{
+  (globalThis as any).window={location:{origin:'http://127.0.0.1:5173',hash:'#code=test',pathname:'/'},history:{replaceState(){}}};
+  globalThis.fetch=async(input:any,init?:any)=>{const path=new URL(String(input)).pathname;
+   if(path.endsWith('/signing-page'))return Response.json({hosts:[],signingEnabled:true});
+   if(path.endsWith('/exchange'))return Response.json({token:'token'});
+   if(path.endsWith('/otp'))return Response.json({messageId:'test'});
+   if(path.endsWith('/verify'))return new Response(null,{status:204});
+   if(path.endsWith('/current'))return Response.json({id:'d0',sha256:'hash',fields:[{id:'s1',type:'Signature',page:1,required:true,rect:rect(0.1)},{id:'s2',type:'Signature',page:1,required:false,rect:rect(0.3)},{id:'t1',type:'Title',page:1,required:false,rect:rect(0.5)}]});
+   if(path.endsWith('/pdf'))return new Response(new Blob(['pdf']));
+   if(path.endsWith('/api/public/signing/preview'))return new Response(new Blob(['png']),{headers:{'X-Signature-Preview':'a'.repeat(64),'X-Signature-Width':'0.4','X-Signature-Height':'0.08'}});
+   if(path.endsWith('/api/public/signing/sign')){signed=JSON.parse(init.body);return Response.json({});}
+   throw new Error(path);};
+  const node=():any=>({nodeType:1,style:{},dataset:{},children:[] as any[],appendChild(child:any){this.children.push(child);},replaceChildren(...nodes:any[]){this.children=nodes;},replaceWith(){},querySelectorAll(){return this.children.filter((c:any)=>c.canvas);},ownerDocument:{createElement:()=>node(),querySelector:()=>null}});
+  const render=async(_blob:Blob,target:any)=>{target.appendChild({...node(),canvas:true});};
+  let r:any;await act(async()=>{r=Renderer.create(React.createElement(page.RecipientPage,{renderDocument:render}),{createNodeMock:()=>node()});}); await settle(act);
+  const button=(s:string)=>r.root.findAllByType('button').find((b:any)=>b.children.includes(s));
+  const text=()=>r.root.findAll((n:any)=>typeof n.type==='string').flatMap((n:any)=>n.children.filter((c:any)=>typeof c==='string')).join(' ');
+  const item=(i:number)=>r.root.findAll((n:any)=>n.type==='li'&&n.props['data-field-state'])[i];
+  await toSignStep(r,act);
+  await act(async()=>{r.root.findAll((n:any)=>n.props?.['aria-label']==='Full name')[0].props.onChange({target:{value:'Ana Ribeiro'}});}); await settle(act);
+  await act(async()=>{r.root.findAll((n:any)=>n.props?.['aria-label']==='Consent to sign'&&n.type==='input')[0].props.onChange({target:{checked:true}});}); await settle(act);
+  // Nothing is signed yet: the required signature holds Sign back.
+  assert.deepEqual([0,1,2].map(i=>item(i).props['data-field-state']),['required','optional','optional']);
+  assert.match(text(),/1 required field left to sign/);
+  assert.equal(button('Sign document').props.disabled,true,'a required field is not signed');
+  // Signing the optional one alone isn't enough; removing it again leaves it empty.
+  await act(async()=>{item(1).findAllByType('button')[0].props.onClick();}); await settle(act);
+  assert.equal(item(1).props['data-field-state'],'signed');
+  assert.equal(button('Sign document').props.disabled,true);
+  await act(async()=>{item(1).findAllByType('button')[0].props.onClick();}); await settle(act);
+  assert.equal(item(1).props['data-field-state'],'optional');
+  // The required one signed: Sign goes ahead, with that field and its preview only.
+  await act(async()=>{item(0).findAllByType('button')[0].props.onClick();}); await settle(act);
+  assert.match(text(),/Every required field is signed/);
+  assert.equal(button('Sign document').props.disabled,false);
+  await act(async()=>{await button('Sign document').props.onClick();}); await settle(act);
+  assert.deepEqual(signed.signatures,{s1:'Ana Ribeiro'});
+  assert.deepEqual(Object.keys(signed.signaturePreviews),['s1']);
+  assert.deepEqual(signed.textPreviews,{});
+  await act(async()=>{r.unmount();});
+ } finally {URL.createObjectURL=oldCreate;URL.revokeObjectURL=oldRevoke;globalThis.fetch=oldFetch;(globalThis as any).window=oldWindow;delete (globalThis as any).IS_REACT_ACT_ENVIRONMENT;}
+});

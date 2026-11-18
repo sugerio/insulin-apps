@@ -72,8 +72,8 @@ or AI agent management.
 
 **What an app receives and must do.** Every request carries `x-suger-app-role` (`ADMIN`, `EDITOR` or `VIEWER`; the
 Insulin console may still send `OWNER`, treated as `ADMIN`, and `USER`, treated as `VIEWER`), `x-suger-app-permissions`
-and `x-suger-access-via`; a person's (browser and MCP) also `x-suger-org-role`, and a browser's `x-suger-member-lookup`
-(DESIGN.md §2.4).
+and `x-suger-access-via`; a person's (browser and MCP) also `x-suger-org-role` (`OWNER`, `ADMIN`, `EDITOR`, `VIEWER`,
+or `APPS` for specific apps), and a browser's `x-suger-member-lookup` (DESIGN.md §2.4).
 
 - **Admin** can do everything in the app, except open records that have roles of their own (below). **Editor** can use
   every function except people, roles, permissions and integrations. **Viewer** is read only, and the app decides what
@@ -85,10 +85,11 @@ and `x-suger-access-via`; a person's (browser and MCP) also `x-suger-org-role`, 
   `x-suger-app-permissions`, and a missing header means the role's full set. Read both headers through one helper, as
   Cap Table does in `src/app/server/lib/identity.ts`.
 - **The organization role can give powers**, so trust it only on purpose. `x-suger-org-role` (`OWNER`, `ADMIN`,
-  `EDITOR`, `VIEWER`, or `APPS` for specific apps) counts only when `SUGER_TRUST_ORG_ROLE` is set (the deploy sets it)
-  and only for people (API clients have none); a missing or unknown value is no organization role. Use it only for
+  `EDITOR`, `VIEWER`, or `APPS` for specific apps) counts only when `SUGER_TRUST_ORG_ROLE` is `true` (the deploy sets
+  it) and only for people (API clients have none); a missing or unknown value is no organization role. Use it only for
   powers over the app's records that no app role gives, such as Knowledge's owners seeing every collection's basic
-  information and deleting one.
+  information and deleting one, or Esign's owners taking over what someone owns. An app Admin by grant is `APPS` there,
+  not an organization admin. Esign's `identity.ts` and Knowledge's are the reference.
 - **Records with roles of their own** (DESIGN.md §2.5), such as Knowledge's collections, narrow Admin: an app role opens
   no record by itself, so an app Admin without a role on a record can't read it. Without the app permission to change,
   every resource role only reads. Sharing, unsharing and deleting such a record are browser-only (below). Say in the
@@ -158,11 +159,13 @@ owns an engine (below), which only it reaches. It asks the platform for the rest
   `{ "error": "quota_exceeded", "limit", "resets_at", "message" }`, the message naming Insulin Apps support from
   `SUGER_SUPPORT_EMAIL`, never an address in source. Knowledge (`src/app/server/limits.ts`, `limits-sync.ts`) is the
   reference.
-- **Members, for sharing** (DESIGN.md §8.9). The member lookup (`SUGER_MEMBERS_URL`, with the request's
-  `x-suger-member-lookup`) fills a sharing dialog and nothing else; member status (`SUGER_MEMBER_STATUS_URL`) and member
-  events (`SUGER_MEMBER_EVENTS_URL`: save the cursor after each page, resync after 410) keep the app's shares in step
-  with who leaves, returns or changes role. All with `SUGER_APP_TOKEN` over `SUGER_GATEWAY`, and only for
-  organizations where the app is used. Knowledge's `src/app/server/members.ts` is the reference.
+- **Members** (DESIGN.md §8.9). An app has no directory of its own. The member lookup (`SUGER_MEMBERS_URL`, with the
+  request's `x-suger-member-lookup`) fills a sharing dialog or checks the people someone typed, and nothing else;
+  member status (`SUGER_MEMBER_STATUS_URL`) and member events (`SUGER_MEMBER_EVENTS_URL`: save the cursor after each
+  page, resync after 410) keep the app's shares in step with who leaves, returns or changes role, and tell it whether
+  someone it acts for later may still do so. All with `SUGER_APP_TOKEN` over `SUGER_GATEWAY`, and only for
+  organizations where the app is used. Knowledge's `src/app/server/members.ts` and Esign's `directory.ts` are the
+  reference.
 - **Usage reports** are required of every app (DESIGN.md §8.6): Insulin Apps' operator console never reads an app's
   database, so each app declares `insulin.scheduled` and, on the first tick of each UTC hour, `POST`s its gauges to
   `SUGER_METRICS_URL` with `SUGER_APP_TOKEN` over the `SUGER_GATEWAY` binding: app-wide ones (`database_bytes`) and

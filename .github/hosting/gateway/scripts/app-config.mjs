@@ -19,9 +19,9 @@ import { createHash } from 'node:crypto'
 import { existsSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
-import { appToken, gatewayUrls, platformAppBindings } from '../../../scripts/deploy-apps.mjs'
+import { appToken, gatewayUrls, platformAppBindings, siteAppEntry } from '../../../scripts/deploy-apps.mjs'
 import { ENGINE_CONFIG, engineWorkerName, parseJsonc } from '../../../scripts/engine.mjs'
-import { gatewayNavigation, listApps } from '../../../scripts/list-apps.mjs'
+import { listApps } from '../../../scripts/list-apps.mjs'
 
 export const gatewayDir = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const repositoryDir = resolve(gatewayDir, '..', '..', '..')
@@ -114,11 +114,9 @@ export async function gatewayConfig(apps = ['stub'], vars = {}) {
   if (apps.includes('stub')) return config
   const known = await listApps(repositoryDir)
   config.services = apps.map((app) => ({ binding: bindingName(app), service: workerName(app) }))
-  // As the deploy's SITE_APPS: never an app's secret names, engine or limit catalog (the catalogs go to the local D1).
-  config.vars.SITE_APPS = apps.map((app) => {
-    const { secrets: _secrets, engine: _engine, engineApi: _engineApi, limits: _limits, ...entry } = known.find(({ name }) => name === app)
-    return { ...entry, navigation: gatewayNavigation(entry.navigation), binding: bindingName(app) }
-  })
+  // As the deploy's SITE_APPS (siteAppEntry): never an app's secret names, engine or limit catalog (the catalogs go to
+  // the local D1).
+  config.vars.SITE_APPS = apps.map((app) => siteAppEntry(known.find(({ name }) => name === app)))
   config.vars.GATEWAY_SECRET_KEY ??= LOCAL_GATEWAY_SECRET_KEY
   return config
 }

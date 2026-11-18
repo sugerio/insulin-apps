@@ -204,7 +204,8 @@ export function platformAppBindings({ app, gatewayVars = null, supportEmail = ''
   const vars = {
     ...(gatewayVars ?? {}),
     ...(supportEmail ? { SUGER_SUPPORT_EMAIL: supportEmail } : {}),
-    SUGER_TRUST_ORG_ROLE: '1',
+    // This gateway sends x-suger-org-role, which apps honour only with this (DESIGN.md §2.4): 'true', as Esign reads it.
+    SUGER_TRUST_ORG_ROLE: 'true',
     ...(app.engine ? { [ENGINE_API_VAR]: String(app.engineApi) } : {}),
   }
   const services = [
@@ -320,16 +321,21 @@ export function sanitizeAppBaseConfig(baseConfig) {
   return { config, ignoredKeys: [...new Set(ignoredKeys)].sort() }
 }
 
+/**
+ * An app's SITE_APPS entry, for the deploy and the local stack alike: what the gateway needs (the permissions, public
+ * paths, scheduled path, client settings page and level 1 of the navigation), never the names of an app's secrets, its
+ * engine or its limit catalog (that goes to the gateway's D1, writeLimitCatalogs). Cloudflare holds a variable to 5 KB,
+ * so what the gateway works out for itself is left out too: the binding (APP_<NAME>, from the name) and every field
+ * that is null or an empty list (no public paths, tick, client settings page, permissions or navigation).
+ */
+export function siteAppEntry({ secrets: _secrets, engine: _engine, engineApi: _engineApi, limits: _limits, binding: _binding, ...app }, extra = {}) {
+  const entry = { ...app, navigation: gatewayNavigation(app.navigation ?? []), ...extra }
+  return Object.fromEntries(Object.entries(entry).filter(([, value]) => value !== null && value !== undefined && !(Array.isArray(value) && value.length === 0)))
+}
+
 export function buildGatewayConfig({ root, apps, settings, databaseId }) {
   const gatewayDirectory = join(root, '.github', 'hosting', 'gateway')
-  // The gateway needs the permissions, public paths, scheduled path and navigation, never the names of an app's secrets.
-  // An app's limit catalog goes to the gateway's D1 instead (writeLimitCatalogs): SITE_APPS holds at most 5 KB.
-  const siteApps = apps.map(({ secrets: _secrets, engine: _engine, engineApi: _engineApi, limits: _limits, ...app }) => ({
-    ...app,
-    navigation: gatewayNavigation(app.navigation),
-    binding: serviceBinding(app.name),
-    source: `https://github.com/sugerio/insulin-apps/tree/main/${app.name}`,
-  }))
+  const siteApps = apps.map((app) => siteAppEntry(app, { source: `https://github.com/sugerio/insulin-apps/tree/main/${app.name}` }))
 
   return {
     name: GATEWAY_NAME,

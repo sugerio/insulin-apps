@@ -1,12 +1,18 @@
-// The members' pages: the two-level navigation (Shell.ts: Envelopes and Templates from package.json
+// The members' pages: the two-level navigation (Shell.ts: Envelopes, Templates, Contacts and Ownership from package.json
 // `insulin.navigation`, Docs and Settings) beside the page the address names. Who the member is comes from /api/me, the
 // platform's identity; the server checks every request again, so what a role can't do is hidden here and refused there.
 // The Docs need no identity: they open for every role, and before sign-in.
 import React, { useEffect, useState } from 'react'
-import { apiJson, describeError, RequestError, STATUS_LABELS, statusFilter, type Me } from './api.ts'
+import { apiJson, describeError, RequestError, statusFilter, type Me } from './api.ts'
+import { ClientSettingsPage } from './ClientSettingsPage.ts'
+import { ContactPage } from './ContactPage.ts'
+import { ContactsPage } from './ContactsPage.ts'
 import { EnvelopePage } from './EnvelopePage.ts'
+import { TemplatePage } from './TemplatePage.ts'
+import { SendDocumentPage } from './SendDocumentPage.ts'
 import { EnvelopesPage } from './EnvelopesPage.ts'
 import { NewEnvelopePage } from './NewEnvelopePage.ts'
+import { OwnershipPage } from './OwnershipPage.ts'
 import { Notice } from './parts.ts'
 import { Link, usePath, useSearch } from './router.ts'
 import { Shell } from './Shell.ts'
@@ -15,12 +21,18 @@ import { Docs } from '../components/Docs.ts'
 import { docTopic } from '../pages/docs/topics.ts'
 
 const h = React.createElement
+const CLIENT_ID = /^[A-Za-z0-9_-]{1,128}$/
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 
 type Route =
-  | { section: 'envelopes'; page: 'list' | 'new' }
+  | { section: 'envelopes'; page: 'list' | 'new' | 'send' }
   | { section: 'envelopes'; page: 'envelope'; id: string }
   | { section: 'templates'; page: 'list' }
+  | { section: 'templates'; page: 'template'; id: string }
+  | { section: 'contacts'; page: 'list' }
+  | { section: 'contacts'; page: 'contact'; id: string }
+  | { section: 'ownership'; page: 'ownership' }
+  | { section: null; page: 'client-settings'; id: string }
   | { section: 'docs'; page: 'docs'; topic: string | undefined }
   | { section: null; page: 'missing' }
 
@@ -30,19 +42,32 @@ export function route(path: string): Route {
   if (parts.length === 0 || (parts.length === 1 && parts[0] === 'envelopes')) return { section: 'envelopes', page: 'list' }
   if (parts[0] === 'envelopes' && parts.length === 2) {
     if (parts[1] === 'new') return { section: 'envelopes', page: 'new' }
+    if (parts[1] === 'send') return { section: 'envelopes', page: 'send' }
     if (UUID.test(parts[1])) return { section: 'envelopes', page: 'envelope', id: parts[1] }
   }
   if (parts.length === 1 && parts[0] === 'templates') return { section: 'templates', page: 'list' }
+  if (parts[0] === 'templates' && parts.length === 2 && UUID.test(parts[1])) return { section: 'templates', page: 'template', id: parts[1] }
+  if (parts.length === 1 && parts[0] === 'contacts') return { section: 'contacts', page: 'list' }
+  if (parts[0] === 'contacts' && parts.length === 2 && UUID.test(parts[1])) return { section: 'contacts', page: 'contact', id: parts[1] }
+  if (parts.length === 1 && parts[0] === 'ownership') return { section: 'ownership', page: 'ownership' }
+  // An OAuth client's settings: linked only from the platform's API access page, never from Esign's navigation.
+  if (parts[0] === 'client-settings' && parts.length === 2 && CLIENT_ID.test(parts[1])) return { section: null, page: 'client-settings', id: parts[1] }
   if (parts[0] === 'docs' && parts.length <= 2) return { section: 'docs', page: 'docs', topic: parts[1] }
   return { section: null, page: 'missing' }
 }
 
 /** The page's name, the breadcrumb's last part. */
 export function pageTitle(current: Route, status: string): string {
-  if (current.page === 'list' && current.section === 'envelopes') return status ? STATUS_LABELS[status]! : 'All envelopes'
+  // The list's own filters (Status among them) narrow it: no level 2, so the page is its section.
+  if (current.page === 'list' && current.section === 'envelopes') return 'Envelopes'
   if (current.page === 'new') return 'New envelope'
+  if (current.page === 'send') return 'Upload and send'
   if (current.page === 'envelope') return 'Envelope'
-  if (current.page === 'list') return 'Templates'
+  if (current.page === 'template') return 'Template'
+  if (current.page === 'contact') return 'Contact'
+  if (current.page === 'ownership') return 'Ownership'
+  if (current.page === 'client-settings') return 'API client'
+  if (current.page === 'list') return current.section === 'contacts' ? 'Contacts' : 'Templates'
   if (current.page === 'docs') return docTopic(current.topic)?.title ?? 'Topic not found'
   return 'Page not found'
 }
@@ -64,7 +89,13 @@ export function MemberApp() {
   else if (failure) page = failure instanceof RequestError && failure.status === 401 ? h(SignIn) : h(Notice, { message: describeError(failure), error: true })
   else if (!me) page = h('p', { role: 'status', className: 'text-sm text-muted-foreground' }, 'Loading…')
   else if (current.page === 'new') page = h(NewEnvelopePage, { me })
+  else if (current.page === 'send') page = h(SendDocumentPage, { me })
   else if (current.page === 'envelope') page = h(EnvelopePage, { key: current.id, me, id: current.id })
+  else if (current.page === 'template') page = h(TemplatePage, { key: current.id, me, id: current.id })
+  else if (current.page === 'contact') page = h(ContactPage, { key: current.id, me, id: current.id })
+  else if (current.page === 'ownership') page = h(OwnershipPage, { me })
+  else if (current.page === 'client-settings') page = h(ClientSettingsPage, { key: current.id, me, id: current.id, name: new URLSearchParams(search).get('name') ?? undefined })
+  else if (current.section === 'contacts') page = h(ContactsPage, { me })
   else if (current.section === 'templates') page = h(TemplatesPage, { me })
   else page = h(EnvelopesPage, { me, status })
 

@@ -21,7 +21,7 @@ Run from `knowledge/` unless noted.
 | Before you finish, and after every behaviour change | `npm test` (Node 22.22 or later: the tests use `node:sqlite`) |
 | After changing `src/app/db/schema.ts` | `npm run db:generate` (CI fails if `drizzle-kit generate` would write anything) |
 | To check what publishing will build | `NITRO_PRESET=cloudflare_module npm run build` (it ends with `scripts/check-no-stub.mjs`) |
-| To try it | `npm run dev` (port 3000; you are the preview organization's owner, with the in-memory engine). As someone else: `SUGER_ACCESS_MODE=console SUGER_TRUST_ORG_ROLE=1 npm run dev` and send the `x-suger-*` identity headers (test/support/harness.ts `headersOf`) |
+| To try it | `npm run dev` (port 3000; you are the preview organization's owner, with the in-memory engine). As someone else: `SUGER_ACCESS_MODE=console SUGER_TRUST_ORG_ROLE=true npm run dev` and send the `x-suger-*` identity headers (test/support/harness.ts `headersOf`) |
 | From the repository root, before you finish | `node .github/scripts/check-insulin-app.mjs knowledge` and `node .github/scripts/check-public-content.mjs` |
 
 ## Where things live

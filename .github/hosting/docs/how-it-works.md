@@ -116,10 +116,12 @@ permissions that are also in the header. Apps also refuse changes to their own p
 unless `x-suger-access-via` is `browser`.
 
 `x-suger-org-role` is the one header that can give a power rather than take one away: an app may let organization
-owners do something no app role allows (Knowledge lets them see every collection's name and delete one). So an app
-honours it only when its deploy says to (`SUGER_TRUST_ORG_ROLE`, which Insulin Apps sets), treats a missing or unknown
-value as no organization role, and still checks everything on the server. Like every `x-suger-*` header, both are
-removed from what the caller sends, so nobody can claim a role or another person's lookup.
+owners or admins do something no app role allows (Knowledge lets owners see every collection's name and delete one;
+Esign lets owners take over what someone owns). An Admin of an app by specific-apps access is `APPS` there, not an
+organization admin. So an app honours it only when its deploy says to (`SUGER_TRUST_ORG_ROLE`, which Insulin Apps
+sets), treats a missing or unknown value as no organization role, and still checks everything on the server. Like
+every `x-suger-*` header, both are removed from what the caller sends, so nobody can claim a role or another person's
+lookup.
 
 AI agents and OAuth clients also send a `User-Agent` that names them: `Insulin Apps MCP: <client name>` or
 `Insulin Apps API: <OAuth client name>`, for the app's audit trail.
@@ -266,20 +268,23 @@ usage under the same keys, so the console shows usage beside each limit.
 
 ## Members and member events
 
-Apps that let people share their own records (Knowledge's collections) need to know who is still in the organization.
-Three endpoints, called by the app with its platform token over the gateway's service binding, answer only about
+Apps that let people share their own records (Knowledge's collections, Esign's templates and envelopes) need to know
+who is in the organization: an app has no directory of its own. Three endpoints, called by the app with its platform token over the gateway's service binding, answer only about
 organizations where the app is used:
 
 - **Member lookup**, `GET https://insulinapps.com/__insulin/members?q=<text>` with the `x-suger-member-lookup` header of
   the browser request the app is serving: at most 20 people who can use the app (id, name, e-mail address and role in
   the app) and the app's OAuth clients (id and name) whose name or address contains the text. The organization and the
   person come from the signed header, never from the app, and the person must still be able to use the app. It fills a
-  sharing dialog, and is limited per person.
+  sharing dialog (or checks the people someone typed, as Esign does for an OAuth client's people), and is limited per
+  person. Requests from AI agents and OAuth clients carry no header, so there an app uses the people it has seen.
 - **Member status**, `POST https://insulinapps.com/__insulin/members/status` with `{ "org", "ids" }` (at most 100):
   for each person or OAuth client, whether it can still use the app (`member`, with its roles), has left (`left`, or
   `revoked` for an OAuth client) or no longer exists (`gone`), and the organization's owners and since when; `404
   org_deleted` for a deleted organization. No names or addresses. A suspended account or organization still counts as a
-  member: suspension isn't a departure.
+  member: suspension isn't a departure. But each member's `standing` (`active`, `suspended` or `disabled`) and the
+  organization's are given, so an app acting for someone later can hold back: Esign sends a scheduled envelope only
+  while whoever scheduled it may still send, with an active account in an active organization.
 - **Member events**, `GET https://insulinapps.com/__insulin/member-events?since=<cursor>`: what changed, oldest first, at
   most 1,000 a page with `cursor` and `more`. `left` (removed from the organization or the app, or the account deleted),
   `returned` (joined or given the app), `role_changed` (with the new app and organization roles), `owners` (the owners

@@ -58,8 +58,12 @@ export async function memberLookup(ctx: Context): Promise<Response> {
   return jsonResponse({ members: [...people, ...clients].slice(0, LOOKUP_LIMIT) }, 200, { 'Cache-Control': 'no-store' })
 }
 
+/** An account's or organization's standing (DESIGN.md §11.3). */
+type Standing = 'active' | 'suspended' | 'disabled'
+const standingOf = (value: string | null): Standing => (value === 'suspended' || value === 'disabled' ? value : 'active')
+
 type Status =
-  | { id: string; type: 'person'; status: 'member'; orgRole: Role; appRole: AppRole; permissions?: string[] }
+  | { id: string; type: 'person'; status: 'member'; orgRole: Role; appRole: AppRole; permissions?: string[]; standing: Standing }
   | { id: string; type: 'person'; status: 'left' }
   | { id: string; type: 'client'; status: 'member'; appRole: AppRole; permissions?: string[] }
   | { id: string; type: 'client'; status: 'revoked' }
@@ -71,7 +75,10 @@ function statusOf(app: HostedApp, row: MemberStatusRow): Status {
   if (row.user_id) {
     const access = row.member_role ? accessFromRow(app, { ...row, member_role: row.member_role }) : null
     if (!access || !row.member_role) return { id: row.id, type: 'person', status: 'left' }
-    return { id: row.id, type: 'person', status: 'member', orgRole: row.member_role, appRole: access.role, ...(catalog ? { permissions: access.permissions } : {}) }
+    return {
+      id: row.id, type: 'person', status: 'member', orgRole: row.member_role, appRole: access.role, ...(catalog ? { permissions: access.permissions } : {}),
+      standing: standingOf(row.user_status),
+    }
   }
   if (row.client_id && row.client_role) {
     if (row.client_revoked_at !== null) return { id: row.id, type: 'client', status: 'revoked' }
@@ -85,9 +92,9 @@ function statusOf(app: HostedApp, row: MemberStatusRow): Status {
 
 /**
  * POST /__insulin/members/status `{ "org", "ids" }`: for at most 100 people or API clients the app holds, whether each
- * can still use the app (a suspended account or organization still counts), with its roles, or `gone`; and the
- * organization's owners with since when. 404 `org_deleted` for an organization that no longer exists. No names or
- * addresses: apps resync with it, never search.
+ * can still use the app (a suspended account or organization still counts), with its roles and, for a person, the
+ * account's standing, or `gone`; the organization's standing; and its owners with since when. 404 `org_deleted` for an
+ * organization that no longer exists. No names or addresses: apps resync with it, never search.
  */
 export async function memberStatus(ctx: Context): Promise<Response> {
   const app = await appCaller(ctx, 'POST', 'member-status')
@@ -102,7 +109,7 @@ export async function memberStatus(ctx: Context): Promise<Response> {
   }
   const { org, ids } = (typeof body === 'object' && body !== null && !Array.isArray(body) ? body : {}) as Record<string, unknown>
   if (!isId(org) || !Array.isArray(ids) || ids.length > STATUS_LIMIT || !ids.every(isId)) return problem('invalid_request', 400)
-  const exists = await ctx.config.db.prepare('SELECT 1 AS found FROM orgs WHERE id = ?1').bind(org).first()
+  const exists = await ctx.config.db.prepare('SELECT status FROM orgs WHERE id = ?1').bind(org).first<{ status: string }>()
   if (!exists) return problem('org_deleted', 404)
   if (!(await appUsedIn(ctx.config.db, app.name, org))) return problem('unknown_organization', 404)
   const unique = [...new Set(ids as string[])]
@@ -112,6 +119,7 @@ export async function memberStatus(ctx: Context): Promise<Response> {
   ])
   return jsonResponse({
     org,
+    standing: standingOf(exists.status),
     owners: owners.map((owner) => ({ user: owner.user_id, since: new Date(owner.since).toISOString() })),
     members: rows.map((row) => statusOf(app, row)),
   }, 200, { 'Cache-Control': 'no-store' })

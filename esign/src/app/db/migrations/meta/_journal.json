@@ -19,22 +19,29 @@
     {
       "idx": 2,
       "version": "6",
-      "when": 1794383423288,
-      "tag": "0002_seal_key",
+      "when": 1794798337090,
+      "tag": "0002_envelope_documents",
       "breakpoints": true
     },
     {
       "idx": 3,
       "version": "6",
-      "when": 1794404403452,
-      "tag": "0003_labels",
+      "when": 1794801641381,
+      "tag": "0003_api_client_people",
       "breakpoints": true
     },
     {
       "idx": 4,
       "version": "6",
-      "when": 1794591619024,
-      "tag": "0004_metrics_reports",
+      "when": 1794801701381,
+      "tag": "0004_scheduled_send",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1794823003604,
+      "tag": "0005_prefill_catalog",
       "breakpoints": true
     }
   ]

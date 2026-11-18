@@ -11,10 +11,15 @@ import { getCurrentUser, type AppRole } from '@fours/app/server';
  *   `public` for the signer pages the gateway forwards without an identity, or `schedule` for the
  *   platform's five-minute tick. A public or scheduled request never reaches a management route,
  *   whatever else it carries; the tick reaches `POST /api/scheduled` only (`isScheduleTick`).
+ * - `x-suger-org-role`: a person's organization role (`OWNER`, `ADMIN`, `EDITOR`, `VIEWER`, or `APPS` for
+ *   specific apps). Unlike the others it gives powers (taking over documents, an API client's people), so it is
+ *   read only when the deploy says the gateway sends it (`SUGER_TRUST_ORG_ROLE`); anything else is no role.
  */
 export const PERMISSIONS = ['esign.manage', 'esign.view'] as const;
 export type Permission = (typeof PERMISSIONS)[number];
 export type AccessVia = 'browser' | 'mcp' | 'api';
+export type OrgRole = 'OWNER' | 'ADMIN' | 'EDITOR' | 'VIEWER' | 'APPS';
+const ORG_ROLES: readonly string[] = ['OWNER', 'ADMIN', 'EDITOR', 'VIEWER', 'APPS'];
 
 /** OWNER, ADMIN and EDITOR send and manage envelopes; USER and VIEWER see them. */
 export function rolePermissions(role: AppRole): Permission[] {
@@ -28,6 +33,8 @@ export interface Caller {
   email: string | null;
   name: string | null;
   role: AppRole;
+  /** The organization role, when the platform is trusted to say it; never an API client's. */
+  orgRole: OrgRole | null;
   permissions: ReadonlySet<Permission>;
   accessVia: AccessVia;
   preview: boolean;
@@ -42,9 +49,10 @@ export const can = (caller: Caller, permission: Permission): boolean =>
 
 /**
  * The caller of a management route, or null: a public request, no identity, or an identity the
- * platform contract doesn't recognise. `preview` allows the local preview's stand-in owner.
+ * platform contract doesn't recognise. `preview` allows the local preview's stand-in owner; `trustOrgRole`
+ * reads `x-suger-org-role`.
  */
-export function readCaller(request: Request, preview: boolean): Caller | null {
+export function readCaller(request: Request, preview: boolean, trustOrgRole = false): Caller | null {
   const via = request.headers.get('x-suger-access-via')?.trim().toLowerCase();
   if (via === 'public' || via === 'schedule') return null;
   const user = getCurrentUser(request);
@@ -56,12 +64,15 @@ export function readCaller(request: Request, preview: boolean): Caller | null {
   const permissions = new Set(listed === null ? own : own.filter((permission) => listed.has(permission)));
   // Absent (the Insulin console) means the browser; anything unrecognised counts as an API client.
   const accessVia: AccessVia = via === undefined || via === 'browser' ? 'browser' : via === 'mcp' ? 'mcp' : 'api';
+  const orgRoleHeader = user && trustOrgRole && accessVia !== 'api' ? request.headers.get('x-suger-org-role')?.trim().toUpperCase() : undefined;
+  const orgRole = !user ? 'OWNER' : orgRoleHeader && ORG_ROLES.includes(orgRoleHeader) ? orgRoleHeader as OrgRole : null;
   return {
     userId: current.userId,
     organizationId: current.organizationId,
     email: current.email,
     name: current.name,
     role: current.role,
+    orgRole,
     permissions,
     accessVia,
     preview: !user,
@@ -69,7 +80,7 @@ export function readCaller(request: Request, preview: boolean): Caller | null {
 }
 
 /** The headers that carry a person, an organization, a role or permissions: the tick carries none of them. */
-const IDENTITY_HEADERS = ['x-suger-user-id', 'x-suger-organization-id', 'x-suger-app-role', 'x-suger-app-permissions', 'x-suger-user-email', 'x-suger-user-name'];
+const IDENTITY_HEADERS = ['x-suger-user-id', 'x-suger-organization-id', 'x-suger-app-role', 'x-suger-app-permissions', 'x-suger-org-role', 'x-suger-user-email', 'x-suger-user-name'];
 
 /**
  * Whether a request is the platform's own tick (package.json `insulin.scheduled`): `x-suger-access-via`

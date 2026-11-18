@@ -20,8 +20,8 @@ export interface AppAccess {
   admin: boolean
   customRole: { id: string; name: string } | null
   /**
-   * Their membership's role in the organization (x-suger-org-role, DESIGN.md §2.4): OWNER, ADMIN, EDITOR, VIEWER, or
-   * APPS for a specific-apps member. Null for a service account, which has no membership.
+   * What the app is told (x-suger-org-role, DESIGN.md §2.4): their membership's role in the organization, OWNER, ADMIN,
+   * EDITOR, VIEWER, or APPS for a specific-apps member. Null for a service account, which has no membership.
    */
   orgRole: Role | null
 }

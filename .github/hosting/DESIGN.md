@@ -99,11 +99,13 @@ Apps treat `x-suger-app-permissions` as a **narrowing** of the role, never a wid
 role's permissions intersected with the header. Behind the gateway the header is always set; elsewhere (the Insulin
 console) it may be missing, and then the role alone decides. A forged header can only take access away.
 
-**The organization role can give powers**, unlike the other headers. An app may give the organization's owners powers
-over its records that no app role gives (Knowledge lets them see every collection's basic information, turn keeping
-one ready off and delete one), and still enforces them on the server. So an app honours `x-suger-org-role` only when
-its deploy sets `SUGER_TRUST_ORG_ROLE`, as this repository's deploy does for every app (§10), only for people, and
-treats a missing or unknown value as no organization role.
+**The organization role can give powers**, unlike the other headers. An app may give the organization's owners or
+admins powers over its records that no app role gives (Knowledge lets owners see every collection's basic information,
+turn keeping one ready off and delete one; Esign lets owners take over what someone owns, and owners and admins choose
+who sees an API client's documents), and still enforces them on the server. An app Admin by a specific-apps grant is
+`ADMIN` in `x-suger-app-role` but `APPS` here. So an app honours `x-suger-org-role` only when its deploy sets
+`SUGER_TRUST_ORG_ROLE` to `true`, as this repository's deploy and local stack do for every app (§10), only for people,
+and treats a missing or unknown value as no organization role.
 
 Apps refuse mutations of their own people, roles, billing or integrations unless `x-suger-access-via` is `browser`
 (§4), and, in an app with resource roles, sharing, unsharing and deleting a record (§2.5). The gateway's own pages
@@ -420,6 +422,24 @@ role in that app (Admin, Editor, Viewer or a custom role).
 - **Revoked.** A client revoked on `/settings/oauth-clients` (§5.4) stays on the page, marked Revoked with the day, and
   can't be renamed, given another role or rotated; Delete still removes it.
 
+#### 5.3.1 An app's settings for each client
+
+An app can keep settings of its own for each of its OAuth clients, such as who in the organization sees what the client
+creates (Esign's), on a page of its own. It declares the page in `insulin.clientSettings`: its path, or
+`{path, description}` with one line (1 to 160 characters of plain text) on what is set there. The API access page shows,
+under each live client and for the organization's owners and admins only, an outlined button **<App> settings** to
+`https://<app host><path>/<service account id>?name=<client name>`, with that line below it (without one, a generic
+line). That is all the gateway does: it neither reads nor stores the settings, and calls nothing.
+
+- **The path.** A page a navigation item could link to (§3.2: on the app's own host, never one of the gateway's
+  paths), without a query or a trailing slash, outside `/api/`, and neither one of the app's public paths nor under one,
+  so whoever opens it is signed in. `list-apps.mjs`, `check-insulin-app.mjs` and the gateway's configuration check it.
+- **The id and the name.** The service account id is the `x-suger-user-id` the client's calls carry, so the app can
+  match the settings to them; the name lets the app show a client that hasn't called it yet.
+- **What the app checks.** The link is only a way there: anyone could type the address. The app shows and saves the
+  settings only for the organization's owners and admins (`x-suger-access-via: browser`), and an id it knows as a
+  person's is not a client's. A client deleted on the platform isn't announced; settings left for it are harmless.
+
 ### 5.4 OAuth clients across the organization
 
 `insulinapps.com/settings/oauth-clients` (Settings › OAuth clients, §3.2) lists every OAuth client of the organization in
@@ -527,13 +547,14 @@ declared in the app's `package.json` under `insulin`:
   "permissions": [ … ],
   "publicPaths": ["/sign", "/api/public/", "/assets/"],
   "scheduled": "/api/scheduled",
+  "clientSettings": { "path": "/client-settings", "description": "Choose who in your organization sees … in Esign." },
   "secrets": ["ESIGN_OTP_KEY", "ESIGN_FRAME_ANCESTORS"]
 }
 ```
 
-The deploy reads these with `list-apps.mjs` and refuses a malformed list; the gateway checks `publicPaths` and
-`scheduled` again and fails closed. An app may also declare an engine (`engine` and `engineApi`, §8.7) and limits
-(`limits`, §8.8), and read its organizations' members (§8.9).
+The deploy reads these with `list-apps.mjs` and refuses a malformed list; the gateway checks `publicPaths`,
+`scheduled` and `clientSettings` again and fails closed. An app may also declare an engine (`engine` and `engineApi`,
+§8.7) and limits (`limits`, §8.8), and read its organizations' members (§8.9).
 
 ### 8.1 Public paths
 
@@ -758,8 +779,9 @@ app enforces them.
 
 ### 8.9 Organization members
 
-Apps that let people share their records (§2.5) need to know who is still in the organization. The gateway answers
-them on three endpoints, which, with the limits of §8.8, are the **app endpoints**:
+Apps that let people share their records (§2.5), or pick people of the organization at all, need to know who is in
+it: an app has no directory of its own, since the gateway tells it who calls at each request. The gateway answers them
+on three endpoints, which, with the limits of §8.8, are the **app endpoints**:
 
 - **Who may call.** An app Worker, with its own `SUGER_APP_TOKEN` as a bearer token, over `SUGER_GATEWAY`, on the apex
   only. The gateway takes the app from the token and accepts no session, OAuth or client token (401). Without
@@ -782,16 +804,26 @@ them on three endpoints, which, with the limits of §8.8, are the **app endpoint
   `{ "members": [ … ] }`: at most 20 matches, whose name or address contains the text (1 to 100 characters), among
   people who can use the app now with an active account (`type: "person"`, id, name, address, app role) and the app's
   live API clients (`type: "client"`, id, name). The app's token alone reads no one. It fills a sharing dialog and shows
-  no more than that dialog needs.
+  no more than that dialog needs; an app may also check that addresses someone typed are its people, one lookup each
+  (Esign: who sees an API client's documents, `422 not_members` otherwise). Requests by AI agents and API clients
+  carry no header, so there the app falls back on the people it has seen. (Before this lookup was built, the same
+  address answered with up to 500 of the organization's people for the app's token and an organization the app named
+  in `x-suger-organization-id`; the lookup replaced that answer, and an app calling it so now gets 403
+  `invalid_member_lookup`.)
 - **Member status.** `POST https://insulinapps.com/__insulin/members/status` (`SUGER_MEMBER_STATUS_URL`) with
-  `{ "org", "ids" }`, at most 100 people or API clients the app already holds, returns `{ "org", "owners", "members" }`.
+  `{ "org", "ids" }`, at most 100 people or API clients the app already holds, returns
+  `{ "org", "standing", "owners", "members" }`.
   Each id comes back with its `type` and `status`: `member`, with its app role (and, for a person, organization role;
   permissions for an app with a catalog); `left` for a person who can no longer use the app; `revoked` for a revoked
   API client; or `gone` (no type) for an id that is neither an account nor one of the app's API clients there. A
   suspended account or organization still counts as a member: suspension is the gateway's to enforce, not a
-  departure. `owners` are the organization's owners and since when, the time their membership last changed role. An
-  organization that no longer exists answers 404 `org_deleted`, and one where the app isn't used 404
-  `unknown_organization`. It returns no names or addresses. Apps use it to resync, never to search.
+  departure. Each person who is a member also has `standing`, the account's (`active`, `suspended` or `disabled`,
+  §11.3), and the answer the organization's `standing`, for an app that acts for someone later, without a request of
+  theirs: Esign sends a scheduled envelope only while whoever scheduled it is a member who may still send, with an
+  active account, and holds it while the organization isn't active. `owners` are the organization's owners and since
+  when, the time their membership last changed role. An organization that no longer exists answers 404 `org_deleted`,
+  and one where the app isn't used 404 `unknown_organization`. It returns no names or addresses. Apps use it to resync
+  and to check someone they hold, never to search.
 - **Member events.** `GET https://insulinapps.com/__insulin/member-events?since=<cursor>` (`SUGER_MEMBER_EVENTS_URL`)
   returns `{ "events": [ { "id", "type", "org", "at", … } ], "cursor", "more" }`, oldest first, at most 1,000 a page:
   - `left` (`user`): removed from the organization or from the app, moved to specific apps without this one, or the
@@ -843,7 +875,7 @@ All in the gateway's D1 database; migrations are forward-only.
 | Name | Kind | Notes |
 |---|---|---|
 | `GATEWAY_SECRET_KEY` | secret | 32 random bytes, base64. Encrypts TOTP secrets, stored credentials and OIDC client secrets; derives the apps' `SUGER_APP_TOKEN`; signs `x-suger-member-lookup` (§8.9). Without it MFA, stored credentials and OIDC can't be set up, browser requests carry no member lookup and the apps' endpoints answer 503 (the rest works) |
-| `SITE_APPS[].permissions`, `SITE_APPS[].publicPaths`, `SITE_APPS[].scheduled` | var | From each app's `package.json` (§2.3, §8.1, §8.5). An app's engine and limits stay out of it: the limits go to the gateway's D1 (§8.8) |
+| `SITE_APPS[].permissions`, `SITE_APPS[].publicPaths`, `SITE_APPS[].scheduled`, `SITE_APPS[].clientSettings` | var | From each app's `package.json` (§2.3, §8.1, §8.5, §5.3.1). An app's engine and limits stay out of it: the limits go to the gateway's D1 (§8.8) |
 | `RL_PUBLIC` | ratelimit | Requests to public paths that aren't GET or HEAD, per app and IP; 60 a minute suggested (§8.1) |
 | `ORG_REQUEST_EMAIL` | var | Optional: Insulin Apps support's address for requests for more organizations (§3.1). A GitHub variable, never written in the repository |
 | Cron triggers | trigger | `*/5 * * * *` (the apps' tick, §8.5, and the console's hourly work, §11.5) and `17 3 * * *` (the daily cleanup) |
@@ -853,7 +885,7 @@ All in the gateway's D1 database; migrations are forward-only.
 | `SUGER_METRICS_URL` | app var | Where each app sends its hourly usage report (§8.6) |
 | `SUGER_LIMITS_URL`, `SUGER_MEMBERS_URL`, `SUGER_MEMBER_STATUS_URL`, `SUGER_MEMBER_EVENTS_URL` | app var | Where each app reads its limits (§8.8) and its organizations' members (§8.9); like the other gateway URLs, only when `GATEWAY_SECRET_KEY` is set |
 | `SUGER_SUPPORT_EMAIL` | app var | The platform's `SUPPORT_EMAIL`, which an app's limit messages name (§8.8); absent when that isn't set |
-| `SUGER_TRUST_ORG_ROLE` | app var | `1`, for every app: the gateway sets `x-suger-org-role` (§2.4) |
+| `SUGER_TRUST_ORG_ROLE` | app var | `true`, for every app: the gateway sets `x-suger-org-role` (§2.4). Esign reads only exactly `true` |
 | `SUGER_ENGINE` | app binding | An app with an engine: the service binding to `insulin-apps-<app>-engine` (§8.7) |
 | `SUGER_ENGINE_API`, `SUGER_ENGINE_SERVES` | app var, engine var | The engine API version the app calls, and the versions its engine serves (`<min>-<max>`), which a later deploy reads back from production (§10.1) |
 | `CLOUDFLARE_API_TOKEN` | secret | The deploy's token. For an app's engine it also needs Workers R2 Storage: Edit (its buckets) and Containers: Edit (its image's registry credential and its containers) (§10.1) |

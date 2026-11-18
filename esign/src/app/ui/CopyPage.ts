@@ -29,7 +29,9 @@ export function CopyPage(){
       const response=await fetch('/api/public/copies/open',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({token}),cache:'no-store'});
       if(!response.ok)throw new Error('Unavailable');
       const blob=await response.blob();
-      setDownload({url:URL.createObjectURL(blob),name:'signed-document.pdf'});setState('done');
+      // Named by the server: the document and the day it was completed.
+      const named=/filename\*=UTF-8''([^;]+)/i.exec(response.headers.get('content-disposition')??'');let name='Signed document.pdf';if(named){try{name=decodeURIComponent(named[1]!.trim());}catch{/* malformed: the default */}}
+      setDownload({url:URL.createObjectURL(blob),name});setState('done');
     }catch{setState('unavailable');}
   }
   return h('main',{className:'mx-auto flex min-h-svh w-full max-w-lg items-center px-4 py-12'},

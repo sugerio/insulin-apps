@@ -20,7 +20,7 @@ test('signature atomically requires persisted verified session, consent and the 
     await bucket.put('d0.pdf',bytes);
     await db.exec(`INSERT INTO tenants (id) VALUES ('a');
 INSERT INTO templates (id,tenant_id,object_key,roles_json,created_at) VALUES ('template', 'a', 'source', '["ana"]', 1);
-INSERT INTO envelopes (id,tenant_id,template_id,status,created_at,request_sha256) VALUES ('env', 'a', 'template', 'IN_PROGRESS', 1,'hash');
+INSERT INTO envelopes (id,tenant_id,template_id,status,created_at,request_sha256) VALUES ('env', 'a', 'template', 'IN_PROGRESS', 1,'hash'); UPDATE envelopes SET roles_json = (SELECT roles_json FROM templates WHERE id = envelopes.template_id), fields_json = (SELECT fields_json FROM templates WHERE id = envelopes.template_id);
 INSERT INTO tasks (id,envelope_id,role,recipient_name,recipient_email,routing_order,status) VALUES ('ana', 'env', 'ana', 'Ana', 'ana@example.com', 1, 'ACTIVE');
 INSERT INTO artifacts VALUES ('d0', 'env', 'd0.pdf', '${h0}');
 `);

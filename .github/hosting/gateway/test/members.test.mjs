@@ -363,14 +363,16 @@ test('ACC-13: member status: who can still use the app with their roles, who lef
   assert.equal(answer.status, 200, answer.text)
   const body = parsed(answer)
   assert.equal(body.org, orgId)
+  assert.equal(body.standing, 'active', "the organization's standing")
   assert.deepEqual(body.owners.map((entry) => entry.user), [owner.id])
   assert.match(body.owners[0].since, /^\d{4}-\d{2}-\d{2}T/)
   const byId = Object.fromEntries(body.members.map((entry) => [entry.id, entry]))
-  assert.deepEqual(byId[owner.id], { id: owner.id, type: 'person', status: 'member', orgRole: 'OWNER', appRole: 'ADMIN', permissions: ['captable.view', 'captable.edit', 'captable.people'] })
-  assert.deepEqual(byId[editor.id], { id: editor.id, type: 'person', status: 'member', orgRole: 'EDITOR', appRole: 'EDITOR', permissions: ['captable.view', 'captable.edit'] })
+  assert.deepEqual(byId[owner.id], { id: owner.id, type: 'person', status: 'member', orgRole: 'OWNER', appRole: 'ADMIN', permissions: ['captable.view', 'captable.edit', 'captable.people'], standing: 'active' })
+  assert.deepEqual(byId[editor.id], { id: editor.id, type: 'person', status: 'member', orgRole: 'EDITOR', appRole: 'EDITOR', permissions: ['captable.view', 'captable.edit'], standing: 'active' })
   assert.deepEqual(byId[leaver.id], { id: leaver.id, type: 'person', status: 'left' })
   assert.deepEqual(byId[ledgerOnly.id], { id: ledgerOnly.id, type: 'person', status: 'left' }, 'a member without this app')
   assert.equal(byId[suspended.id].status, 'member', 'a suspended account still counts')
+  assert.equal(byId[suspended.id].standing, 'suspended', 'and says so, for an app that acts for it later (Esign: a send it scheduled)')
   assert.deepEqual(byId[live.id], { id: live.id, type: 'client', status: 'member', appRole: 'EDITOR', permissions: ['captable.view', 'captable.edit'] })
   assert.deepEqual(byId[revoked.id], { id: revoked.id, type: 'client', status: 'revoked' })
   assert.deepEqual(byId[other.owner.id], { id: other.owner.id, type: 'person', status: 'left' }, 'someone of another organization is no member here')
@@ -379,12 +381,13 @@ test('ACC-13: member status: who can still use the app with their roles, who lef
 
   // A suspended organization still counts; Ledger sees the member who has it.
   await setOrgStatus(h.db, { orgId, status: 'suspended', reason: 'Synthetic check', operator: OPERATOR, label: 'Status Org', now: Date.now() })
-  assert.equal(parsed(await appPost('/__insulin/members/status', { org: orgId, ids: [editor.id] })).members[0].status, 'member')
+  const held = parsed(await appPost('/__insulin/members/status', { org: orgId, ids: [editor.id] }))
+  assert.deepEqual([held.members[0].status, held.members[0].standing, held.standing], ['member', 'active', 'suspended'])
   assert.equal((await appPost('/__insulin/members/status', { org: orgId, ids: [ledgerOnly.id] }, { token: LEDGER_TOKEN })).status, 404, 'Ledger has not been used there')
   await setOrgStatus(h.db, { orgId, status: 'active', reason: 'Synthetic check', operator: OPERATOR, label: 'Status Org', now: Date.now() })
   await echo(ledgerOnly, 'ledger')
   assert.deepEqual(parsed(await appPost('/__insulin/members/status', { org: orgId, ids: [ledgerOnly.id] }, { token: LEDGER_TOKEN })).members[0],
-    { id: ledgerOnly.id, type: 'person', status: 'member', orgRole: 'APPS', appRole: 'EDITOR' }, 'Ledger has no catalog, so no permissions')
+    { id: ledgerOnly.id, type: 'person', status: 'member', orgRole: 'APPS', appRole: 'EDITOR', standing: 'active' }, 'Ledger has no catalog, so no permissions')
   assert.deepEqual(parsed(await appPost('/__insulin/members/status', { org: orgId, ids: [live.id] }, { token: LEDGER_TOKEN })).members[0],
     { id: live.id, type: null, status: 'gone' }, "another app's client is none of Ledger's")
 

@@ -1,3 +1,4 @@
+import { ENVELOPE_FIELDS, ENVELOPE_ROLES } from './envelope-fields.ts';
 import { PDFDocument } from 'pdf-lib';
 import { RECIPIENT_SESSION_FROM } from './access.ts';
 import { canonicalJson } from './canonical-json.ts';
@@ -40,8 +41,9 @@ const isObject = (value: unknown): value is Record<string, unknown> => !!value &
 export async function recordSignature(db: D1Database, bucket: BlobStore, cmd: SignCommand): Promise<string> {
   if (cmd.consent !== true || !/^[a-f0-9]{64}$/.test(cmd.token) || !Number.isSafeInteger(cmd.now)) throw new Error('Invalid signing request');
   const sessionHash = await digestHex(cmd.token);
-  const signer = await db.prepare(`SELECT e.id AS envelope_id,t.id AS task_id,t.role,t.recipient_name,t.recipient_email,s.otp_verified_at AS verified_at,p.roles_json,p.fields_json
-    FROM ${RECIPIENT_SESSION_FROM} JOIN templates p ON p.id=e.template_id AND p.tenant_id=e.tenant_id
+  // The roles and fields the envelope is signed with: its own (envelope-fields.ts).
+  const signer = await db.prepare(`SELECT e.id AS envelope_id,t.id AS task_id,t.role,t.recipient_name,t.recipient_email,s.otp_verified_at AS verified_at,${ENVELOPE_ROLES} AS roles_json,${ENVELOPE_FIELDS} AS fields_json
+    FROM ${RECIPIENT_SESSION_FROM}
     WHERE s.scope='recipient' AND s.token_hash=? AND s.otp_verified_at IS NOT NULL`).bind(sessionHash).first<Signer>();
   if (!signer) throw new Error('Unverified session');
 
@@ -97,9 +99,9 @@ export async function recordSignature(db: D1Database, bucket: BlobStore, cmd: Si
   const [inserted] = await db.batch([
     db.prepare(`INSERT INTO signatures (id,envelope_id,task_id,sequence,status,input_artifact_id,input_sha256,previous_hash,event_hash,facts_json,render_json)
       SELECT ?,e.id,t.id,?,'PENDING',?,?,?,?,?,? FROM ${RECIPIENT_SESSION_FROM}
-      JOIN templates p ON p.id=e.template_id AND p.tenant_id=e.tenant_id
+     
       WHERE s.scope='recipient' AND s.token_hash=? AND s.origin=? AND s.expires_at>? AND s.otp_verified_at=? AND s.otp_verified_at<=? AND t.recipient_email=? COLLATE BINARY
-      AND e.id=? AND t.id=? AND e.status='IN_PROGRESS' AND t.status='ACTIVE' AND t.role=? AND t.recipient_name=? AND p.roles_json=? AND p.fields_json=?
+      AND e.id=? AND t.id=? AND e.status='IN_PROGRESS' AND t.status='ACTIVE' AND t.role=? AND t.recipient_name=? AND ${ENVELOPE_ROLES}=? AND ${ENVELOPE_FIELDS}=?
       AND COALESCE((SELECT MAX(sequence) FROM signatures WHERE envelope_id=e.id),0)=?
       AND (SELECT event_hash FROM signatures WHERE envelope_id=e.id ORDER BY sequence DESC LIMIT 1) IS ?
       AND ${input.sql} ${names.sql}`)

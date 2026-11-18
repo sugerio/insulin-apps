@@ -95,6 +95,8 @@ export interface MemberStatusRow {
   id: string
   /** Set when the id is an account. */
   user_id: string | null
+  /** The account's standing (DESIGN.md §11.3): active, suspended or disabled. */
+  user_status: string | null
   member_role: Role | null
   grant_role: GrantRole | null
   custom_role_id: string | null
@@ -110,13 +112,13 @@ export interface MemberStatusRow {
 }
 
 /**
- * Each id's account and its access to `app` in the organization, or the app's API client of the organization with that
- * id. Standing isn't looked at: a suspended account or organization still counts (suspension is the gateway's to
- * enforce, not a departure).
+ * Each id's account, its standing and its access to `app` in the organization, or the app's API client of the
+ * organization with that id. Standing doesn't decide membership: a suspended account or organization still counts
+ * (suspension is the gateway's to enforce, not a departure); it is only reported.
  */
 export async function memberStatusRows(db: D1Database, app: string, orgId: string, ids: string[]): Promise<MemberStatusRow[]> {
   const { results } = await db.prepare(
-    `SELECT j.value AS id, u.id AS user_id, m.role AS member_role, g.role AS grant_role, g.custom_role_id, c.name AS custom_role_name,
+    `SELECT j.value AS id, u.id AS user_id, u.status AS user_status, m.role AS member_role, g.role AS grant_role, g.custom_role_id, c.name AS custom_role_name,
        c.permissions AS custom_permissions, s.id AS client_id, s.role AS client_role, s.custom_role_id AS client_custom_role_id,
        sc.name AS client_custom_role_name, sc.permissions AS client_custom_permissions, s.revoked_at AS client_revoked_at
      FROM json_each(?3) j

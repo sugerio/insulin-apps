@@ -5,7 +5,7 @@ order: 2
 ---
 
 This page takes you from an empty Esign to your first completed envelope. It is for the person in your organization
-who sends documents for signature. Use a synthetic PDF and test addresses: Esign is experimental.
+who sends documents for signature.
 
 ## Before you start
 
@@ -27,20 +27,18 @@ navigation on the left shows your organization at the top and your name and role
 A template is a PDF and the roles that sign it, in signing order.
 
 1. Open **Templates**.
-2. Under **New template**, choose the **PDF** (up to 5 MB and 100 pages).
+2. Choose **New template**, and in the dialog choose the **PDF** (up to 5 MB and 100 pages). Its **Name** starts as
+   the file's name; change it if you like.
 3. Under **Signer roles, in signing order**, name each role, such as `partner` and `seller`. Use letters, digits, `-` and
    `_`, with no spaces. Choose **Add a role** for another one.
-4. Choose **Upload with a signature page** for the quickest start. Signers then sign on a page Esign adds after the
-   document's last page.
-
-Or choose **Upload and place fields** to put each role's signature, title and date exactly where they belong. See
-[Templates and fields](/docs/esign/templates).
+4. Choose **Upload and place fields**, and put each role's signature, and its title and date if you want them, where they
+   belong. See [Templates and fields](/docs/esign/templates).
 
 ![The Templates page with the New template form and one template](/docs/assets/screenshots/esign-templates.png "Templates: upload a PDF with its roles, then send it")
 
 ## 2. Send an envelope
 
-1. On **Templates**, choose **Send** next to your template, or open **Envelopes** and choose **New envelope**.
+1. On **Templates**, choose **Use** next to your template, or open **Envelopes** and choose **New envelope** › **From a template**.
 2. Under **Template**, choose the template if it isn't chosen already.
 3. Under **Signers**, give a **Name** and an **Email** for each role. They sign in this order.
 4. Optionally, under **Document**, give a **Document name**, a **Version**, the **Sender name** and **Sender company**,
@@ -52,12 +50,12 @@ The envelope's page opens. Its status is **Out for signature**, and the first si
 
 ## 3. Have each signer sign
 
-Esign doesn't email an invitation to sign. The signer whose turn it is opens the signing page in one of two ways:
+The signer whose turn it is opens the signing page in one of two ways:
 
+- **From the invitation Esign emails them** when their turn comes. **Resend invitation** on the envelope's page sends it
+  again, with a new link.
 - **In your host product**, the system your organization uses Esign from, which shows the signing page inside its own
-  pages.
-- **From the envelope's page**: choose **Open** *name*'s **signing page** next to the active signer (for example
-  **Open Avery Patel's signing page**). Use this when the signer is with you, or to try Esign out.
+  pages (a host can choose that for each signer).
 
 The signer reviews the document, enters the 6-digit code Esign emails them, types their name to adopt their signature,
 agrees to sign electronically and chooses **Sign document**. Then the next signer's turn starts. See
@@ -72,7 +70,7 @@ When the last signer has signed, the envelope shows **Finishing** for a few seco
 **Completed**. Then:
 
 - choose **Signed PDF with certificate** to download the signed document followed by its certificate of completion;
-- choose **Certificate of completion** to see the seal, checked against the stored files, with the signers and the audit
+- choose **Certificate of completion** to see, in a dialog, the seal, checked against the stored files, with the signers and the audit
   trail;
 - each signer gets an email with a link to download their own copy, once, within 30 days.
 
@@ -80,9 +78,10 @@ When the last signer has signed, the envelope shows **Finishing** for a few seco
 
 ## If your role only views
 
-With a role that only views, you see the same pages: every envelope with its status, signers and audit trail, the
-templates, and the signed PDF and certificate of a completed envelope. You can't upload templates, send, void or open a
-signing page; those buttons aren't shown, and Esign refuses them on the server however they are asked.
+With a role that only views, you see the same pages, for what is shared with you: each envelope's status, signers and
+audit trail, the templates, and the signed PDF and certificate of a completed envelope. You can't upload templates,
+send, void or resend an invitation; those buttons aren't shown, and Esign refuses them on the server however they are
+asked.
 
 If there are no templates or envelopes yet, the pages say so. Nothing is missing: nobody has sent anything yet.
 

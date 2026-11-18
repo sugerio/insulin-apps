@@ -14,7 +14,7 @@
 import { existsSync, lstatSync, readFileSync, readdirSync } from 'node:fs'
 import { basename, join, relative, resolve, sep } from 'node:path'
 import { ENGINE_BUNDLE, engineProblems } from './engine.mjs'
-import { readEngine, readLimits, readNavigation, readPermissions, readPublicPaths, readScheduled, readSecretNames } from './list-apps.mjs'
+import { readClientSettings, readEngine, readLimits, readNavigation, readPermissions, readPublicPaths, readScheduled, readSecretNames } from './list-apps.mjs'
 
 const [appArg, ...flags] = process.argv.slice(2)
 if (!appArg) {
@@ -144,6 +144,11 @@ for (const [field, readField] of [['permissions', readPermissions], ['publicPath
 const declaredPublicPaths = declared.publicPaths ?? (Array.isArray(manifest.insulin?.publicPaths) ? manifest.insulin.publicPaths.filter((entry) => typeof entry === 'string') : [])
 try {
   readScheduled(appName, manifest.insulin?.scheduled, declaredPublicPaths)
+} catch (error) {
+  fail(error.message)
+}
+try {
+  readClientSettings(appName, manifest.insulin?.clientSettings, declaredPublicPaths)
 } catch (error) {
   fail(error.message)
 }

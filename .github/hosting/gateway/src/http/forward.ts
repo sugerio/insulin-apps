@@ -48,6 +48,7 @@ export function identityHeaders(actor: Actor, orgId: string, app: HostedApp, acc
     'x-suger-access-via': via,
   }
   if (app.permissions.length) headers['x-suger-app-permissions'] = access.permissions.join(' ')
+  // It can give an app's owners powers no app role gives, so apps honour it only with SUGER_TRUST_ORG_ROLE.
   if ((via === 'browser' || via === 'mcp') && access.orgRole) headers['x-suger-org-role'] = access.orgRole
   if (via === 'browser' && memberLookup) headers[MEMBER_LOOKUP_HEADER] = memberLookup
   return headers

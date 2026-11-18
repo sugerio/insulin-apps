@@ -178,7 +178,7 @@ test('an hour is reported once: a second tick in that hour sends nothing, the ne
     assert.equal(sent.length, 0, 'only the tick reports');
     const first = await tick();
     assert.equal(first.status, 200);
-    assert.deepEqual(await first.json(), { expired: 0, completed: 0, waiting: 0, failed: 0 }, 'the tick answers as before');
+    assert.deepEqual(await first.json(), { expired: 0, completed: 0, waiting: 0, failed: 0, scheduledSent: 0, scheduledFailed: 0 }, 'the tick answers as before');
     assert.equal(sent.length, 1);
     assert.ok([hour, hour + HOUR].map((at) => new Date(at).toISOString().replace('.000Z', 'Z')).includes(sent[0]!.body.hour), 'the hour of the tick');
     assert.equal((await tick()).status, 200);
@@ -303,7 +303,7 @@ test('a failed report never fails the tick\'s due work, and a tick that can\'t s
       await late(db);
       const ran = await tick();
       assert.equal(ran.status, 200);
-      assert.deepEqual(await ran.json(), { expired: 1, completed: 0, waiting: 0, failed: 0 }, 'the request failing changes nothing');
+      assert.deepEqual(await ran.json(), { expired: 1, completed: 0, waiting: 0, failed: 0, scheduledSent: 0, scheduledFailed: 0 }, 'the request failing changes nothing');
       assert.equal((await db.prepare("SELECT status FROM envelopes WHERE id = 'late-a'").first<{ status: string }>())?.status, 'EXPIRED');
     } finally { await mf.dispose(); }
   }
@@ -315,7 +315,7 @@ test('a failed report never fails the tick\'s due work, and a tick that can\'t s
       await db.prepare('DROP TABLE metrics_reports').run();
       const ran = await tick();
       assert.equal(ran.status, 200);
-      assert.deepEqual(await ran.json(), { expired: 1, completed: 0, waiting: 0, failed: 0 }, 'nor does the database refusing the claim');
+      assert.deepEqual(await ran.json(), { expired: 1, completed: 0, waiting: 0, failed: 0, scheduledSent: 0, scheduledFailed: 0 }, 'nor does the database refusing the claim');
       assert.equal(sent.length, 0);
     } finally { await mf.dispose(); }
   }

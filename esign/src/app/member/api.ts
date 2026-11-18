@@ -2,13 +2,37 @@
 // platform's identity; no key of our own).
 
 export type Permission = 'esign.manage' | 'esign.view'
-export type Me = { organizationId: string; user?: { id: string; email: string | null; name: string | null }; role?: string; permissions: Permission[]; signingEnabled?: boolean }
+export type Me = { organizationId: string; user?: { id: string; email: string | null; name: string | null }; role?: string; orgRole?: string | null; permissions: Permission[]; signingEnabled?: boolean }
 /** The host's own labels for a template or envelope (server/esign/metadata.ts): kept, returned, never used. */
 export type Metadata = Record<string, string>
-export type TemplateSummary = { id: string; name?: string; metadata?: Metadata; roles: string[]; fields: { type: string; role: string; page: number }[]; createdAt: number }
-export type EnvelopeSummary = { id: string; templateId: string; status: string; createdAt: number; documentName?: string; metadata?: Metadata }
-export type Task = { id: string; role: string; recipientName: string; recipientEmail: string; routingOrder: number; status: string; expiresAt?: string; openedAt?: string }
-export type Envelope = { id: string; templateId: string; status: string; createdAt?: number; documentName?: string; metadata?: Metadata; tasks: Task[] }
+/** Who usually signs as a template's role (server/esign/default-signers.ts): the send form fills them in. */
+export type DefaultSigner = { name?: string; email?: string }
+/**
+ * Who owns a template or an envelope, the member's role in it and their own tags (server/esign/ownership.ts, tags.ts):
+ * an owner is a person or an API client; nobody else's tags are shown.
+ */
+export type Owner = { id: string; kind: 'person' | 'client'; name?: string; email?: string }
+export type DocumentRole = 'owner' | 'admin' | 'editor' | 'viewer'
+export type Owned = { owner?: Owner; myRole?: DocumentRole; tags?: string[] }
+/** A template's pre-filled field (server fields.ts): given a value when an envelope is sent, else its default. */
+export type PrefillDefinition = { name: string; label: string; required: boolean; default?: string }
+export type TemplateSummary = Owned & { id: string; name?: string; metadata?: Metadata; defaultSigners?: Record<string, DefaultSigner>; roles: string[]; fields: { type: string; role: string; page: number }[]; prefill?: PrefillDefinition[]; createdAt: number; status?: 'active' | 'draft' }
+/** A list's envelope: its signers in order, how many have signed, whose turn it is (and how they are invited), and when it last changed. */
+export type EnvelopeSummary = Owned & {
+  id: string; templateId: string | null; status: string; createdAt: number; documentName?: string; metadata?: Metadata
+  signers?: { role: string; name: string; email: string; status: string }[]; progress?: { signed: number; total: number }
+  current?: { taskId: string; name: string; email: string; delivery: 'host' | 'email' }; lastChangeAt?: number
+  /** A draft to be sent later: when (ISO 8601), or why it wasn't sent then (server/esign/scheduled-send.ts). */
+  sendAt?: string; sendError?: string
+}
+export type Share = { email: string; name?: string; role: Exclude<DocumentRole, 'owner'>; sharedAt: number }
+/** `organization`: shared with everyone in the organization, as editor or viewer. */
+export type Sharing = { id: string; myRole: DocumentRole; owner: Owner; organization?: { role: 'editor' | 'viewer'; sharedAt: number }; client?: { people: { email: string; name?: string }[] }; shares: Share[] }
+export type Task = { id: string; role: string; recipientName: string; recipientEmail: string; routingOrder: number; status: string; expiresAt?: string; openedAt?: string; delivery?: 'host' | 'email'; invitedAt?: string; message?: { subject?: string; body?: string } }
+export type Envelope = Owned & { id: string; templateId: string | null; status: string; draft?: Record<string, unknown>; sendAt?: string; sendError?: string; upload?: { document: boolean; roles: string[]; fields: { role: string; type: string; required?: boolean }[] }; createdAt?: number; documentName?: string; metadata?: Metadata; message?: { subject?: string; body?: string }; tasks: Task[] }
+/** A contact (server/esign/contacts.ts): someone the organization's envelopes named, or a member added. Never evidence. */
+export type Contact = { id: string; email: string; name: string; title?: string; company?: string; envelopeCount: number; lastUsedAt?: number; createdAt: number; updatedAt: number }
+export type ContactEnvelope = { id: string; status: string; createdAt: number; documentName?: string; role: string; taskStatus: string }
 export type AuditEvent = { type: string; at: string; recipient?: { role: string; name: string; email: string }; ip?: string; userAgent?: string; detail?: Record<string, unknown> }
 
 export class RequestError extends Error {
@@ -44,6 +68,11 @@ export function describeError(error: unknown): string {
     if (error.status === 403) return 'Your role in Esign doesn\'t allow that.'
     if (error.status === 404 && error.code === 'signing_disabled') return 'Signing isn\'t set up on this deployment yet.'
     if (error.status === 404) return 'That isn\'t here any more, or belongs to another organization.'
+    if (error.status === 409 && error.code === 'template_draft') return 'That template is a draft: save it as ready in the field editor before using it.'
+    if (error.status === 422 && error.code === 'not_members') return 'Only people of your organization who can use Esign can be added.'
+    if (error.status === 422 && error.code === 'prefill_too_long') return 'A pre-filled value is too long for its box on the document: shorten it.'
+    if (error.status === 422 && error.code === 'prefill_missing') return 'Fill in every required pre-filled field.'
+    if (error.status === 422 && error.code === 'invalid_prefill') return 'Pre-filled values can hold plain English letters, digits and punctuation, at most 128 characters.'
     if (error.status === 409) return 'That changed meanwhile. Reload and try again.'
     if (error.status === 422 || error.status === 400) return `The request wasn't accepted (${error.code || 'invalid'}). Check the values and try again.`
     return `Request failed (${error.message}).`
@@ -51,10 +80,69 @@ export function describeError(error: unknown): string {
   return error instanceof Error ? error.message : 'Request failed.'
 }
 
+/** A page of contacts, most recently used first: those whose name or email contains `q`, after `cursor`. */
+export function contactsPath(q: string, limit: number, cursor = ''): string {
+  const query = new URLSearchParams({ limit: String(limit) })
+  if (q.trim()) query.set('q', q.trim())
+  if (cursor) query.set('cursor', cursor)
+  return `/api/contacts?${query}`
+}
+
+/**
+ * The default signers a template form gives, keyed by role: the name and email typed for each role, trimmed, leaving
+ * out empty ones; null when there are none. An email that isn't one is the problem returned instead.
+ */
+export function defaultSignersOf(roles: string[], people: { name: string; email: string }[]): Record<string, DefaultSigner> | null | string {
+  const entries: [string, DefaultSigner][] = []
+  for (const [i, role] of roles.entries()) {
+    const name = people[i]?.name.trim() ?? '', email = people[i]?.email.trim() ?? ''
+    if (email && !EMAIL.test(email)) return `Enter a valid email address for ${role.trim() || `role ${i + 1}`}, or leave it empty.`
+    if (name || email) entries.push([role.trim(), { ...(name ? { name } : {}), ...(email ? { email } : {}) }])
+  }
+  return entries.length ? Object.fromEntries(entries) : null
+}
+
 export const canManage = (me: Me | null) => !!me?.permissions.includes('esign.manage')
 
+const RANK: Record<DocumentRole, number> = { viewer: 1, editor: 2, admin: 3, owner: 4 }
+/** Whether a role in a document allows what `needed` may do (server/esign/ownership.ts). */
+export const allows = (role: DocumentRole | undefined, needed: DocumentRole) => !!role && RANK[role] >= RANK[needed]
+export const ROLE_NAMES: Record<DocumentRole, string> = { owner: 'Owner', admin: 'Admin', editor: 'Editor', viewer: 'Viewer' }
+/** How an owner is named: their name, else their email; an API client by its name. */
+export const ownerName = (owner: Owner | undefined, me?: Me | null) =>
+  !owner ? '' : owner.id === me?.user?.id ? 'You' : owner.name ?? owner.email ?? (owner.kind === 'client' ? 'An API client' : 'Someone')
+
+/** Which documents a list shows: all the member sees, theirs, or those shared with them. */
+export type Scope = '' | 'mine' | 'shared'
+/** A list's address: `/api/templates` or `/api/envelopes` with the filters given, and nothing else when there are none. */
+export function listPath(base: string, filters: { status?: string; scope?: Scope; tags?: string[]; q?: string; since?: number; view?: string; limit?: number; cursor?: string }): string {
+  const query = new URLSearchParams()
+  if (filters.status) query.set('status', filters.status)
+  if (filters.scope) query.set('scope', filters.scope)
+  for (const tag of filters.tags ?? []) query.append('tag', tag)
+  if (filters.q?.trim()) query.set('q', filters.q.trim())
+  if (filters.since !== undefined) query.set('since', String(filters.since))
+  if (filters.view) query.set('view', filters.view)
+  if (filters.limit !== undefined) query.set('limit', String(filters.limit))
+  if (filters.cursor !== undefined) query.set('cursor', filters.cursor)
+  const text = query.toString()
+  return text ? `${base}?${text}` : base
+}
+/** Tags as typed: separated by commas, trimmed, each once (compared case-insensitively). */
+export function tagsOf(text: string): string[] {
+  const seen = new Set<string>()
+  return text.split(',').map((t) => t.trim()).filter((t) => t && !seen.has(t.toLowerCase()) && seen.add(t.toLowerCase()))
+}
+
 /** A signer as the send form collects them: the facts a host may give about a signer, each optional but name and email. */
-export type Signer = { name: string; email: string; title: string; company: string; after: string }
+/**
+ * `delivery` 'email': Esign emails them an invitation; otherwise ('host', the default) the page is opened for them.
+ * `subject` and `body`: a message to this signer alone, instead of the envelope's.
+ * `fromTemplate`: the name and email are still the template's default signer's, untouched.
+ */
+export type Signer = { name: string; email: string; title: string; company: string; after: string; delivery?: 'host' | 'email'; subject?: string; body?: string; fromTemplate?: boolean }
+/** The sender's message to the signers: an invitation's subject, and a body shown in it and on the signing page. */
+export type EnvelopeMessage = { subject: string; body: string }
 /** What the sender says about the document and who sent it. */
 export type DocumentFacts = { name: string; version: string; published: string; senderName: string; senderCompany: string }
 
@@ -66,7 +154,7 @@ export function signByTime(day: string): string {
 }
 
 /** The body of POST /api/envelopes: one recipient per role, in order, leaving out what is empty. A sign-by day applies to every signer. */
-export function envelopeRequest(templateId: string, roles: string[], people: Signer[], doc: DocumentFacts, signBy = '') {
+export function envelopeRequest(templateId: string, roles: string[], people: Signer[], doc: DocumentFacts, signBy = '', message: EnvelopeMessage = { subject: '', body: '' }) {
   const text = (v: string) => v.trim()
   const deadline = signByTime(signBy)
   const published = text(doc.published) && !Number.isNaN(Date.parse(text(doc.published))) ? new Date(text(doc.published)).toISOString() : ''
@@ -80,12 +168,52 @@ export function envelopeRequest(templateId: string, roles: string[], people: Sig
         ...(text(s.title) ? { title: text(s.title) } : {}),
         ...(text(s.company) ? { onBehalfOf: text(s.company) } : {}),
         ...(after.length ? { afterSigning: after } : {}),
+        ...(s.delivery === 'email' ? { delivery: 'email' } : {}),
+        ...(text(s.subject ?? '') || text(s.body ?? '') ? { message: { ...(text(s.subject ?? '') ? { subject: text(s.subject ?? '') } : {}), ...(text(s.body ?? '') ? { body: text(s.body ?? '') } : {}) } } : {}),
       }
     }),
     ...(text(doc.name) ? { documentName: text(doc.name) } : {}),
     ...(text(doc.version) ? { documentVersion: { label: text(doc.version), ...(published ? { publishedAt: published } : {}) } } : {}),
     ...(text(doc.senderName) ? { sender: { name: text(doc.senderName), ...(text(doc.senderCompany) ? { organization: text(doc.senderCompany) } : {}) } } : {}),
+    ...(text(message.subject) || text(message.body) ? { message: { ...(text(message.subject) ? { subject: text(message.subject) } : {}), ...(text(message.body) ? { body: text(message.body) } : {}) } } : {}),
   }
+}
+
+/**
+ * The New envelope form, from a draft's request (`envelopeRequest`'s, as saved): each role's signer, the document, the
+ * sign-by day (from the first signer's deadline, in the member's time zone), the message to everyone or to each signer,
+ * and the tags. What the request doesn't have is left empty.
+ */
+export function formFromRequest(request: Record<string, unknown>, roles: string[]): { signers: Signer[]; doc: DocumentFacts; signBy: string; note: EnvelopeMessage; perSigner: boolean; tags: string[] } {
+  const text = (v: unknown) => (typeof v === 'string' ? v : '')
+  const object = (v: unknown) => (v && typeof v === 'object' && !Array.isArray(v) ? v as Record<string, unknown> : {})
+  const day = (iso: string) => { const at = new Date(iso); return iso && !Number.isNaN(at.getTime()) ? `${at.getFullYear()}-${String(at.getMonth() + 1).padStart(2, '0')}-${String(at.getDate()).padStart(2, '0')}` : '' }
+  const recipients = Array.isArray(request.recipients) ? request.recipients.map(object) : []
+  const signers = roles.map((role): Signer => {
+    const r = recipients.find((x) => x.role === role) ?? {}
+    const message = object(r.message)
+    return { name: text(r.name), email: text(r.email), title: text(r.title), company: text(r.onBehalfOf), after: Array.isArray(r.afterSigning) ? r.afterSigning.map(text).join('\n') : '', delivery: r.delivery === 'host' ? 'host' : 'email', subject: text(message.subject), body: text(message.body) }
+  })
+  const version = object(request.documentVersion), sender = object(request.sender), message = object(request.message)
+  return {
+    signers,
+    doc: { name: text(request.documentName), version: text(version.label), published: text(version.publishedAt).slice(0, 10), senderName: text(sender.name), senderCompany: text(sender.organization) },
+    signBy: day(text(recipients[0]?.expiresAt)),
+    note: { subject: text(message.subject), body: text(message.body) },
+    perSigner: recipients.some((r) => Object.keys(object(r.message)).length > 0),
+    tags: Array.isArray(request.tags) ? request.tags.filter((t): t is string => typeof t === 'string') : [],
+  }
+}
+
+/**
+ * The document's name when none is typed: the template's (or the uploaded PDF's) name, else "Document" and today's date, so that no envelope
+ * is "Untitled document" in the lists, in the signers' statement and on the signed PDF's name.
+ */
+export function defaultDocumentName(template: { name?: string } | null, today = new Date()): string {
+  const name = template?.name?.trim()
+  if (name) return name.slice(0, 200)
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `Document ${today.getFullYear()}-${pad(today.getMonth() + 1)}-${pad(today.getDate())}`
 }
 
 export const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -93,7 +221,7 @@ export const MAX_PDF_BYTES = 5 * 1024 * 1024
 
 /** Envelope statuses in plain words, and how a badge shows them. */
 export const STATUS_LABELS: Record<string, string> = {
-  IN_PROGRESS: 'Out for signature', FINALIZING: 'Finishing', COMPLETED: 'Completed', VOIDED: 'Voided', DECLINED: 'Declined', EXPIRED: 'Expired',
+  DRAFT: 'Draft', IN_PROGRESS: 'Out for signature', FINALIZING: 'Finishing', COMPLETED: 'Completed', VOIDED: 'Voided', DECLINED: 'Declined', EXPIRED: 'Expired',
 }
 export const TASK_LABELS: Record<string, string> = {
   PENDING: 'Waiting for an earlier signer', ACTIVE: 'Asked to sign', SIGNED: 'Signed', DECLINED: 'Declined', EXPIRED: 'Expired', VOIDED: 'Voided',
@@ -114,4 +242,30 @@ export const dateTime = (value: number | string | undefined) => {
   if (value === undefined) return ''
   const d = new Date(value)
   return Number.isNaN(d.getTime()) ? '' : d.toLocaleString('en-US', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+}
+
+/** Saves a file the app fetched (a signed PDF) to the member's downloads, named `name`. */
+export function saveBlob(blob: Blob, name: string): void {
+  if (typeof document === 'undefined' || typeof URL.createObjectURL !== 'function') return
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = name
+  link.click()
+  setTimeout(() => URL.revokeObjectURL(url), 10_000)
+}
+/**
+ * The name a response gives its file (Content-Disposition: `filename*`, else `filename`), or `fallback`. The server
+ * names a signed PDF by its document and the day it was completed (server/esign/signed-file-name.ts).
+ */
+export function fileNameOf(response: Response, fallback: string): string {
+  const header = response.headers.get('content-disposition') ?? ''
+  const exact = /filename\*=UTF-8''([^;]+)/i.exec(header)
+  if (exact) { try { return decodeURIComponent(exact[1]!.trim()) } catch { /* malformed: the plain name */ } }
+  return /filename="([^"]+)"/i.exec(header)?.[1] ?? fallback
+}
+/** Downloads a completed envelope's signed PDF with its certificate, under the name the server gives it. */
+export async function saveSignedPdf(envelopeId: string): Promise<void> {
+  const response = await api(`/api/envelopes/${envelopeId}/delivery-pdf`)
+  saveBlob(await response.blob(), fileNameOf(response, 'Signed document.pdf'))
 }

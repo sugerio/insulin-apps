@@ -148,7 +148,7 @@ export const routes = {
     method: "POST",
     path: "/api/years/:year/documents",
     summary:
-      "Upload one file (PDF, PNG or JPEG, up to 10 MiB) for AI to read into slips: send its bytes as the body with its Content-Type, and its name in an X-File-Name header (URI-encoded), and the adult whose return it is uploaded in as an X-Person-Id header (the person preparing without it). Slips found are added unconfirmed to the adult whose name is on them, or to that adult when no name matches. The same file, or the same slips, already in the year are not saved again (status duplicate).",
+      "Upload one file (PDF, PNG or JPEG, up to 10 MiB) for AI to read into slips: send its bytes as the body with its Content-Type, and its name in an X-File-Name header (URI-encoded), and the adult whose return it is uploaded in as an X-Person-Id header (the person preparing without it). Slips found are added unconfirmed to the adult whose name is on them, or to that adult when no name matches. The same file, or the same slips, already in the year are not saved again (status duplicate). A file with the name of one in the same return and other content replaces it and its slips once read into slips (listed in replaced); if it can't be, the earlier one is kept.",
     permission: "taxi.prepare",
     params: yearParams,
     body: null,

@@ -74,6 +74,23 @@ describe("Upload documents", () => {
     expect(screen.getAllByRole("link", { name: /^T4/ }).map((link) => link.textContent)).toEqual(["T4.pdf"]);
   });
 
+  it("says when a file replaced an earlier version of the same name", async () => {
+    let box = "60000.00";
+    const changing: SlipReader = {
+      read: async () => ({ kind: "read", taxYear: 2025, model: "m", slips: [{ type: "T4", person: "Alex Martin", issuer: "Maple Corp", boxes: { 14: box }, unsure: [] }] }),
+    };
+    await renderApp("/returns/2025/upload", { seed, server: { reader: () => changing } });
+    const input = await screen.findByLabelText("Choose files");
+    fireEvent.change(input, { target: { files: [new File(["%PDF-1.4 v1"], "T4.pdf", { type: "application/pdf" })] } });
+    expect(await screen.findByText("T4 from Maple Corp")).toBeTruthy();
+    box = "61000.00";
+    fireEvent.change(input, { target: { files: [new File(["%PDF-1.4 v2"], "T4.pdf", { type: "application/pdf" })] } });
+    const upload = await screen.findByRole("list", { name: "This upload" });
+    expect(await within(upload).findByText("Replaced the earlier T4.pdf and its slip. T4 from Maple Corp")).toBeTruthy();
+    expect(within(upload).getByText("Replaced")).toBeTruthy();
+    await waitFor(() => expect(screen.getAllByRole("link", { name: "T4.pdf" })).toHaveLength(1));
+  });
+
   it("deletes a file with its slips, after saying which slips go", async () => {
     const { server } = await renderApp("/returns/2025/upload", {
       server: { reader: () => reader },

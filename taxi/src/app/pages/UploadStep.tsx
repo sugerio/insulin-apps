@@ -15,13 +15,27 @@ import { uploadFile, uploadType } from "../lib/upload.ts";
 import { useResource } from "../lib/useResource.ts";
 
 // Step 2, `/returns/:year/:personId/upload`: pick a folder (or files, or drop them), and each PDF, PNG or JPEG is sent
-// on its own, three at a time, into the open return for AI to read into slips. A file being read, or one that wasn't
-// saved (skipped, already here, an error), shows in the list of this upload; a saved file moves to "Uploaded files",
-// where it can be read again (when reading it failed) or deleted with the slips read from it.
+// on its own, three at a time, into the open return for AI to read into slips. A file being read, one that wasn't saved
+// (skipped, already here, an error) and one that replaced an earlier version of the same name show in the list of this
+// upload; a saved file is under "Uploaded files", where it can be read again (when reading it failed) or deleted with
+// the slips read from it.
 
 const PARALLEL = 3;
 
-type Row = { key: string; name: string } & ({ state: "waiting" } | { state: "reading" } | { state: "skipped" | "duplicate" | "error"; message: string });
+type Row = { key: string; name: string } & (
+  | { state: "waiting" }
+  | { state: "reading" }
+  | { state: "skipped"; message: string }
+  | { state: "error"; message: string }
+  | { state: "note"; badge: string; message: string }
+);
+
+/** What to keep in this upload's list for a file read: nothing for a file saved as is (it is under "Uploaded files"). */
+function noteOf(result: ReadResult): { badge: string; message: string } | null {
+  if (result.replaced.length > 0) return { badge: "Replaced", message: result.message };
+  if (result.document) return null;
+  return { badge: result.status === "duplicate" ? "Already here" : "Not saved", message: result.message };
+}
 
 export function UploadStep() {
   const { year } = useYear();
@@ -78,8 +92,9 @@ function Uploader({ onUploading }: { onUploading: (uploading: boolean) => void }
       update(item.key, { key: item.key, name: item.file.name, state: "reading" });
       try {
         const result: ReadResult = await uploadFile(year.year, person.id, item.file, item.type);
-        // A saved file is listed under "Uploaded files"; one that wasn't stays here with why.
-        update(item.key, result.document ? null : { key: item.key, name: item.file.name, state: "duplicate", message: result.message });
+        // A saved file is listed under "Uploaded files"; one that wasn't, or that replaced another, stays here with why.
+        const note = noteOf(result);
+        update(item.key, note ? { key: item.key, name: item.file.name, state: "note", ...note } : null);
         // Uploads finish in any order: keep the newest year.
         if (result.year.revision > latest.current) {
           latest.current = result.year.revision;
@@ -182,7 +197,7 @@ function RowStatus({ row }: { row: Row }) {
   if (row.state === "error") return <span className="text-destructive">{row.message}</span>;
   return (
     <span className="flex min-w-0 basis-full flex-wrap items-baseline gap-2 sm:basis-auto">
-      <Badge variant="outline">Already here</Badge>
+      <Badge variant={row.badge === "Not saved" ? "destructive" : "outline"}>{row.badge}</Badge>
       <span className="text-muted-foreground">{row.message}</span>
     </span>
   );

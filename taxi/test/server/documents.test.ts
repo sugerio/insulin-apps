@@ -82,6 +82,62 @@ describe("uploading a slip", () => {
     expect((await json<DocumentList>(server.call("GET", "/api/years/2025/documents"))).documents.map((document) => document.name)).toEqual(["first.pdf"]);
   });
 
+  it("replaces a file of the same name in the return with a changed one, and its slips", async () => {
+    const { sam } = await couple();
+    answers.push({ kind: "read", taxYear: 2025, slips: [T4], model: "m" });
+    const first = await json<ReadResult>(upload(pdf("v1"), "T4.pdf", undefined, undefined, sam.id));
+    await json<TaxYear>(server.call("POST", "/api/years/2025/slips/confirm", { body: { revision: first.year.revision, personId: sam.id } }));
+    // The corrected slip: one box changed.
+    answers.push({ kind: "read", taxYear: 2025, slips: [{ ...T4, boxes: { 14: "32000", 22: "2400" } }], model: "m" });
+    const second = await json<ReadResult>(upload(pdf("v2"), "T4.pdf", undefined, undefined, sam.id));
+    expect(second).toMatchObject({
+      status: "read",
+      message: "Replaced the earlier T4.pdf and its slip (1 confirmed). T4 from Island Grocers",
+      replaced: [{ id: first.document!.id, name: "T4.pdf" }],
+    });
+    expect(second.document!.message).toBe("T4 from Island Grocers");
+    const slips = (await json<SlipList>(server.call("GET", "/api/years/2025/slips"))).slips;
+    expect(slips).toEqual([expect.objectContaining({ documentId: second.document!.id, status: "unconfirmed", boxes: { 14: "32000", 22: "2400" } })]);
+    expect((await json<DocumentList>(server.call("GET", "/api/years/2025/documents"))).documents.map((document) => document.id)).toEqual([second.document!.id]);
+    // The same slips as the version replaced still count: they are the new version's now.
+    answers.push({ kind: "read", taxYear: 2025, slips: [{ ...T4, boxes: { 14: "32000", 22: "2400" } }], model: "m" });
+    const third = await json<ReadResult>(upload(pdf("v3, rescanned"), "T4.pdf", undefined, undefined, sam.id));
+    expect(third).toMatchObject({ status: "read", replaced: [{ id: second.document!.id }] });
+    expect((await json<SlipList>(server.call("GET", "/api/years/2025/slips"))).slips).toHaveLength(1);
+  });
+
+  it("says a file of the same name and content is unchanged, without reading it", async () => {
+    await couple();
+    answers.push({ kind: "read", taxYear: 2025, slips: [T4], model: "m" });
+    const first = await json<ReadResult>(upload(pdf("one"), "T4.pdf"));
+    const again = await json<ReadResult>(upload(pdf("one"), "T4.pdf"));
+    expect(again).toMatchObject({ status: "duplicate", message: "T4.pdf is unchanged. Nothing to update.", document: null, replaced: [] });
+    expect(again.year.revision).toBe(first.year.revision);
+    expect(contexts).toHaveLength(1);
+  });
+
+  it("keeps the earlier version when the new one can't be read into slips", async () => {
+    await couple();
+    answers.push({ kind: "read", taxYear: 2025, slips: [T4], model: "m" }, { kind: "failed", message: "AI reading failed (500). Try again." });
+    const first = await json<ReadResult>(upload(pdf("v1"), "T4.pdf"));
+    const second = await json<ReadResult>(upload(pdf("v2"), "T4.pdf"));
+    expect(second).toMatchObject({ status: "failed", message: "AI reading failed (500). Try again. The earlier T4.pdf is kept.", document: null, replaced: [] });
+    expect((await json<DocumentList>(server.call("GET", "/api/years/2025/documents"))).documents.map((document) => document.id)).toEqual([first.document!.id]);
+    expect((await json<SlipList>(server.call("GET", "/api/years/2025/slips"))).slips).toHaveLength(1);
+  });
+
+  it("doesn't replace a file of the same name in the other return", async () => {
+    const { alex, sam } = await couple();
+    answers.push(
+      { kind: "read", taxYear: 2025, slips: [T4], model: "m" },
+      { kind: "read", taxYear: 2025, slips: [{ ...T4, person: "Alex Martin", issuer: "Maple Corp" }], model: "m" },
+    );
+    await json<ReadResult>(upload(pdf("sam's"), "scan.pdf", undefined, undefined, sam.id));
+    const alexs = await json<ReadResult>(upload(pdf("alex's"), "scan.pdf", undefined, undefined, alex.id));
+    expect(alexs).toMatchObject({ status: "read", replaced: [] });
+    expect((await json<DocumentList>(server.call("GET", "/api/years/2025/documents"))).documents).toHaveLength(2);
+  });
+
   it("skips a slip already typed in by hand, even when the file shows more boxes", async () => {
     const { sam } = await couple();
     const year = await json<TaxYear>(server.call("GET", "/api/years/2025"));
@@ -106,7 +162,7 @@ describe("uploading a slip", () => {
       { kind: "not_available", message: "AI reading isn't available here." },
     );
     const statuses = [];
-    for (const tag of ["receipt", "old", "broken", "off"]) statuses.push((await json<ReadResult>(upload(pdf(tag)))).document!);
+    for (const tag of ["receipt", "old", "broken", "off"]) statuses.push((await json<ReadResult>(upload(pdf(tag), `${tag}.pdf`))).document!);
     expect(statuses.map((document) => [document.status, document.message])).toEqual([
       ["not_a_slip", "No slip this app reads was found in this file."],
       ["not_a_slip", "This is a slip for 2024, not 2025."],
@@ -120,7 +176,7 @@ describe("uploading a slip", () => {
     const names = (await json<DocumentList>(server.call("GET", "/api/years/2025/documents"))).documents.map((document) => [document.name, document.status]);
     expect(names).toHaveLength(4);
     expect(names).toContainEqual(["broken again.pdf", "read"]);
-    expect(names).not.toContainEqual(["slip.pdf", "failed"]);
+    expect(names).not.toContainEqual(["broken.pdf", "failed"]);
   });
 
   it("puts a slip with the other adult's name in their return, and says so", async () => {

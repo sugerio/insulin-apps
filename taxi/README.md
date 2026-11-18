@@ -32,7 +32,8 @@ uploaded slips read by AI (or typed in), what applies, deductions and the result
 - **Step 2, AI reading.** Upload a folder or files into a return; Claude reads each one into slips (a slip with the other
   person's name goes to their return), using
   the organization's Anthropic credential (Settings › Integrations, key `anthropic`). The same file (by content) or the same
-  slip isn't saved twice, and every slip starts unconfirmed. A file can be deleted with the slips read from it, and one
+  slip isn't saved twice; a changed file of the same name replaces the earlier one and its slips. Every slip starts
+  unconfirmed. A file can be deleted with the slips read from it, and one
   that couldn't be read can be read again.
 - **Steps 3 to 6.** What applies (the slips found, the kinds not found and whether you have them, what is still missing, and what the app
   doesn't handle), Confirm (each slip entered box by

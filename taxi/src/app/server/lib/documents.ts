@@ -1,4 +1,4 @@
-import { DOCUMENT_TYPES, MAX_DOCUMENT_BYTES, type DocumentList, type DocumentRecord, type Person, type ReadResult, type TaxYear } from "#shared";
+import { DOCUMENT_TYPES, MAX_DOCUMENT_BYTES, type DocumentList, type DocumentRecord, type Person, type ReadResult, type Slip, type TaxYear } from "#shared";
 import { Dec } from "../../shared/engine/decimal.ts";
 import { rulesFor } from "../../shared/rules/index.ts";
 import { audit, bumpRevision, getYear, runGuarded, yearRow, type YearRow } from "./household.ts";
@@ -10,7 +10,8 @@ import { loadWorkspace } from "./workspace.ts";
 // Step 2: one uploaded file per request. The file is checked (type, size, its first bytes), stored in D1 in 256 KiB
 // pieces, and read by AI into slips. What comes back is checked against the year's slip types before anything is
 // saved; slips are added unconfirmed to the adult whose name is on them. The same file uploaded again (its SHA-256,
-// whatever its name), or a file whose slips are all in the year already (same type, issuer and boxes), isn't saved.
+// whatever its name), or a file whose slips are all in the year already (same type, issuer and boxes), isn't saved. A
+// file with the name of one in the same return, and other content, is a new version: it replaces that one and its slips.
 // A file that couldn't be read can be read again from its stored bytes; any file can be deleted with its slips.
 
 type Db = D1Database;
@@ -110,30 +111,63 @@ export async function uploadDocument(db: Db, caller: Caller, year: number, reque
   const view = await getYear(db, caller.orgId, year);
   const uploader = uploaderOf(view, request.headers.get("X-Person-Id"));
 
+  // A file of the same name in this return (uploaded in it, or holding a slip of its adult) is an earlier version of
+  // this one: the same content is unchanged; other content replaces it, with its slips, once this one is read.
+  const sameName = (
+    await db
+      .prepare(
+        `SELECT id, sha256, status FROM documents d WHERE org_id = ? AND tax_year_id = ? AND name = ?
+           AND (person_id = ? OR EXISTS (SELECT 1 FROM slips s WHERE s.document_id = d.id AND s.person_id = ?))`,
+      )
+      .bind(caller.orgId, row.id, name, uploader.id, uploader.id)
+      .all<{ id: string; sha256: string; status: string }>()
+  ).results;
+  const unread = (status: string) => (UNREAD as readonly string[]).includes(status);
+  if (sameName.some((each) => each.sha256 === sha256 && !unread(each.status))) {
+    return { status: "duplicate", message: `${name} is unchanged. Nothing to update.`, document: null, replaced: [], year: view };
+  }
   const earlier = await db
     .prepare(`SELECT name FROM documents WHERE org_id = ? AND tax_year_id = ? AND sha256 = ? AND status NOT IN (${UNREAD_SQL}) LIMIT 1`)
     .bind(caller.orgId, row.id, sha256)
     .first<{ name: string }>();
-  if (earlier) return { status: "duplicate", message: `The same file is already here, as ${earlier.name}.`, document: null, year: view };
-  const reading = await readInto(db, caller.orgId, row.id, year, view, uploader, { bytes, contentType: contentType as FileToRead["contentType"] }, reader);
-  if (reading.status === "duplicate") return { status: "duplicate", message: reading.message, document: null, year: view };
+  if (earlier) return { status: "duplicate", message: `The same file is already here, as ${earlier.name}.`, document: null, replaced: [], year: view };
 
-  // The same file uploaded before that couldn't be read is replaced by this one: it has no slips.
-  const replaced = (
+  const workspace = await loadWorkspace(db, caller.orgId, row.id);
+  const previous = sameName.map((each) => each.id);
+  const reading = await readInto(year, view, uploader, { bytes, contentType: contentType as FileToRead["contentType"] }, reader, workspace.slips, previous);
+  // An earlier version is replaced only by a file read into slips: one that couldn't be read keeps it, and isn't saved.
+  if (previous.length > 0 && reading.status !== "read" && reading.status !== "duplicate") {
+    return { status: reading.status, message: `${reading.message} The earlier ${name} is kept.`, document: null, replaced: [], year: view };
+  }
+  const replacing = previous.length > 0 ? `Replaced the earlier ${name}${slipsNote(workspace.slips.filter((slip) => slip.documentId !== null && previous.includes(slip.documentId)))}. ` : "";
+  const replaced = previous.map((id) => ({ id, name }));
+  const removePrevious = previous.flatMap((old) => [...deleteDocumentRows(db, caller.orgId, row.id, old), audit(db, caller, "document.replaced", old, now)]);
+  const bump = db.prepare("UPDATE tax_years SET revision = revision + 1, updated_at = ? WHERE id = ? AND org_id = ?").bind(now, row.id, caller.orgId);
+  if (reading.status === "duplicate") {
+    if (previous.length === 0) return { status: "duplicate", message: reading.message, document: null, replaced: [], year: view };
+    await db.batch([...removePrevious, bump]);
+    return { status: "duplicate", message: `${replacing}${reading.message} This file wasn't saved.`, document: null, replaced, year: await getYear(db, caller.orgId, year) };
+  }
+
+  // The same file uploaded before that couldn't be read is replaced by this one too: it has no slips.
+  const unreadCopies = (
     await db
       .prepare(`SELECT id FROM documents WHERE org_id = ? AND tax_year_id = ? AND sha256 = ? AND status IN (${UNREAD_SQL})`)
       .bind(caller.orgId, row.id, sha256)
       .all<{ id: string }>()
-  ).results.map((each) => each.id);
+  ).results
+    .map((each) => each.id)
+    .filter((id) => !previous.includes(id));
 
-  // The file, its first pieces and the slips in one batch; then the rest of the pieces two at a time (a D1 batch has
-  // a size limit). The year's revision goes up without a check: an upload adds slips and overwrites nothing, so
-  // uploads running side by side don't refuse each other.
+  // The earlier versions out, then the file, its first pieces and the slips, in one batch; then the rest of the pieces
+  // two at a time (a D1 batch has a size limit). The year's revision goes up without a check, so uploads running side
+  // by side don't refuse each other.
   const id = crypto.randomUUID();
   const chunks = split(bytes);
   const slipIds = reading.found.map(() => crypto.randomUUID());
   await db.batch([
-    ...replaced.flatMap((old) => deleteDocumentRows(db, caller.orgId, row.id, old)),
+    ...removePrevious,
+    ...unreadCopies.flatMap((old) => deleteDocumentRows(db, caller.orgId, row.id, old)),
     db
       .prepare(
         `INSERT INTO documents (id, org_id, tax_year_id, name, content_type, byte_size, sha256, status, message, model_id, person_id, created_at)
@@ -142,7 +176,7 @@ export async function uploadDocument(db: Db, caller: Caller, year: number, reque
       .bind(id, caller.orgId, row.id, name, contentType, bytes.byteLength, sha256, reading.status, reading.message, reading.modelId, uploader.id, now),
     ...chunks.slice(0, CHUNKS_PER_BATCH).map((chunk, index) => insertChunk(db, caller.orgId, id, index, chunk)),
     ...reading.found.map((slip, index) => insertSlip(db, caller.orgId, row.id, slipIds[index]!, slip, id, now)),
-    db.prepare("UPDATE tax_years SET revision = revision + 1, updated_at = ? WHERE id = ? AND org_id = ?").bind(now, row.id, caller.orgId),
+    bump,
     audit(db, caller, "document.uploaded", id, now),
   ]);
   for (let start = CHUNKS_PER_BATCH; start < chunks.length; start += CHUNKS_PER_BATCH) {
@@ -160,7 +194,14 @@ export async function uploadDocument(db: Db, caller: Caller, year: number, reque
     slips: reading.found.map((slip, index) => ({ id: slipIds[index]!, type: slip.type, personId: slip.personId, issuer: slip.issuer, status: "unconfirmed" })),
     createdAt: now,
   };
-  return { status: reading.status, message: reading.message, document, year: await getYear(db, caller.orgId, year) };
+  return { status: reading.status, message: `${replacing}${reading.message}`, document, replaced, year: await getYear(db, caller.orgId, year) };
+}
+
+/** " and its 2 slips (1 confirmed)", for saying what replacing a file took with it. */
+function slipsNote(slips: { status: string }[]): string {
+  if (slips.length === 0) return "";
+  const confirmed = slips.filter((slip) => slip.status === "confirmed").length;
+  return ` and its ${slips.length === 1 ? "slip" : `${slips.length} slips`}${confirmed > 0 ? ` (${confirmed} confirmed)` : ""}`;
 }
 
 /**
@@ -176,7 +217,7 @@ export async function readDocumentAgain(db: Db, caller: Caller, year: number, id
   const view = await getYear(db, caller.orgId, year);
   const adults = view.adults.map((adult) => adult.personId);
   const uploader = uploaderOf(view, document.person_id !== null && adults.includes(document.person_id) ? document.person_id : null);
-  const reading = await readInto(db, caller.orgId, row.id, year, view, uploader, { bytes: file.bytes, contentType: file.contentType as FileToRead["contentType"] }, reader);
+  const reading = await readInto(year, view, uploader, { bytes: file.bytes, contentType: file.contentType as FileToRead["contentType"] }, reader, (await loadWorkspace(db, caller.orgId, row.id)).slips);
 
   const stillUnread = `EXISTS (SELECT 1 FROM documents WHERE id = ? AND org_id = ? AND status IN (${UNREAD_SQL}))`;
   const slipIds = reading.found.map(() => crypto.randomUUID());
@@ -198,9 +239,9 @@ export async function readDocumentAgain(db: Db, caller: Caller, year: number, id
   if ((results[statements.length - 1]?.meta.changes ?? 0) === 0) throw conflict("This file was read already");
 
   const updated = await getYear(db, caller.orgId, year);
-  if (reading.status === "duplicate") return { status: "duplicate", message: reading.message, document: null, year: updated };
+  if (reading.status === "duplicate") return { status: "duplicate", message: reading.message, document: null, replaced: [], year: updated };
   const saved = await documentRow(db, caller.orgId, row.id, id);
-  return { status: reading.status, message: reading.message, document: recordOf(saved, (await loadWorkspace(db, caller.orgId, row.id)).slips), year: updated };
+  return { status: reading.status, message: reading.message, document: recordOf(saved, (await loadWorkspace(db, caller.orgId, row.id)).slips), replaced: [], year: updated };
 }
 
 /** Deletes an uploaded file and every slip read from it, in whichever return it is, under the year's revision. */
@@ -240,8 +281,8 @@ interface Reading {
   found: Planned[];
 }
 
-/** AI's reading of a file, checked against the year's rules and the slips already in it. */
-async function readInto(db: Db, orgId: string, taxYearId: string, year: number, view: TaxYear, uploader: Person, file: FileToRead, reader: SlipReader): Promise<Reading> {
+/** AI's reading of a file, checked against the year's rules and the slips already in it (less those of the files it replaces). */
+async function readInto(year: number, view: TaxYear, uploader: Person, file: FileToRead, reader: SlipReader, slips: Slip[], replacing: string[] = []): Promise<Reading> {
   const rules = rulesFor(year)!;
   const outcome = await reader.read(file, {
     year,
@@ -253,7 +294,7 @@ async function readInto(db: Db, orgId: string, taxYearId: string, year: number, 
   if (outcome.taxYear !== null && outcome.taxYear !== year) return { status: "not_a_slip", message: `This is a slip for ${outcome.taxYear}, not ${year}.`, modelId, found: [] };
   const planned = plan(outcome.slips, view, year, uploader);
   if (planned.length === 0) return { status: "not_a_slip", message: "No slip this app reads was found in this file.", modelId, found: [] };
-  const existing = (await loadWorkspace(db, orgId, taxYearId)).slips;
+  const existing = slips.filter((slip) => slip.documentId === null || !replacing.includes(slip.documentId));
   const found = planned.filter((slip) => !existing.some((other) => sameSlip(other, slip)));
   if (found.length === 0) return { status: "duplicate", message: "The slips in this file are already in this year.", modelId, found: [] };
   const message = found

@@ -35,13 +35,17 @@ export const documentListSchema = z.strictObject({ documents: z.array(documentSc
 export type DocumentList = z.infer<typeof documentListSchema>;
 
 /**
- * What uploading (or reading again) gave. `duplicate`: the same file, or the same slips, are already in the year, and
- * nothing was saved (`document` is null). Otherwise `document` is the file as saved, with the same status.
+ * What uploading (or reading again) gave. `document` is the file as saved, or null when nothing was saved: a
+ * `duplicate` (the same file, the same slips, or a file of the same name and content in the return), or a new version
+ * of a file that couldn't be read into slips (the earlier one is kept).
  */
 export const readResultSchema = z.strictObject({
   status: z.enum(READ_STATUSES),
+  /** What happened, for people: what was found, and what was replaced. */
   message: z.string(),
   document: documentSchema.nullable(),
+  /** The earlier versions of the file, of the same name in the same return, deleted with their slips. */
+  replaced: z.array(z.strictObject({ id: idSchema, name: z.string() })),
   year: taxYearSchema,
 });
 export type ReadResult = z.infer<typeof readResultSchema>;

@@ -134,11 +134,14 @@ export interface FoundMember {
 /**
  * People who can use Knowledge in the caller's organization, and the app's API clients, matching `q`: at most 20, with
  * name, address and role in Knowledge only. The platform decides who matches from the browser request's signed
- * `x-suger-member-lookup` header; the app's token alone reads no one. Null when the platform can't answer.
+ * `x-suger-member-lookup` header; the app's token alone reads no one. `too_varied` when the platform refuses the search
+ * for having more different letters with a case than it can compare (400 `search_too_varied`, DESIGN.md §8.9); null
+ * when it can't answer.
  */
-export async function lookupMembers(env: Bindings, caller: Caller, q: string, lookupHeader: string | null, now: number): Promise<FoundMember[] | null> {
+export async function lookupMembers(env: Bindings, caller: Caller, q: string, lookupHeader: string | null, now: number): Promise<FoundMember[] | 'too_varied' | null> {
   if (!lookupHeader) return null
   const response = await callPlatform(env, 'SUGER_MEMBERS_URL', { query: { q }, headers: { 'x-suger-member-lookup': lookupHeader } })
+  if (response?.status === 400 && (await response.clone().json().catch(() => ({})) as { error?: unknown }).error === 'search_too_varied') return 'too_varied'
   if (!response || response.status !== 200) return null
   const body = (await response.json().catch(() => ({}))) as Record<string, unknown>
   const list = (Array.isArray(body.members) ? body.members : Array.isArray(body.results) ? body.results : Array.isArray(body.matches) ? body.matches : []) as Record<string, unknown>[]

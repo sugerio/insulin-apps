@@ -35,7 +35,6 @@ export function recordMember(db: D1Database, tenantId: string, caller: Caller, n
     .bind(tenantId, caller.userId, client ? 'client' : 'person', email, email ? emailKey(email) : null, caller.name, caller.role, now, now - TOUCH_INTERVAL_MS).run();
 }
 
-const likeContaining = (text: string) => `%${text.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
 /**
  * An organization owner, or owner or admin (x-suger-org-role, identity.ts: an Admin of Esign by grant is neither), who
  * may also manage Esign (a custom role that only views may not).
@@ -53,10 +52,12 @@ export function mountMemberRoutes(app: Hono<Env>) {
     if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100 || q.length > MAX_QUERY) return context.json({ error: 'invalid_query' }, 400);
     const directory = q ? await lookupMembers(context.env, context.req.header(MEMBER_LOOKUP_HEADER), q) : null;
     if (directory) return context.json({ members: directory.slice(0, limit).map(({ id, email, name }) => ({ id, email, ...(name ? { name } : {}) })) });
-    const pattern = q ? likeContaining(q.toLowerCase()) : null;
-    const { results } = await context.env.DB.prepare(`SELECT user_id, email, name FROM members WHERE tenant_id = ? AND kind = 'person' AND email IS NOT NULL
-        AND (? IS NULL OR email_key LIKE ? ESCAPE '\\' OR lower(name) LIKE ? ESCAPE '\\') ORDER BY last_seen_at DESC, user_id LIMIT ?`)
-      .bind(context.get('tenantId'), pattern, pattern, pattern, limit).all<{ user_id: string; email: string; name: string | null }>();
+    // The text as typed, found with instr(), not LIKE: D1 refuses a LIKE pattern over 50 bytes, and the text may be 100
+    // characters (or a search the platform found too varied to fold, which comes here).
+    const text = q ? q.toLowerCase() : null;
+    const { results } = await context.env.DB.prepare(`SELECT user_id, email, name FROM members WHERE tenant_id = ?1 AND kind = 'person' AND email IS NOT NULL
+        AND (?2 IS NULL OR instr(email_key, ?2) > 0 OR instr(lower(COALESCE(name, '')), ?2) > 0) ORDER BY last_seen_at DESC, user_id LIMIT ?3`)
+      .bind(context.get('tenantId'), text, limit).all<{ user_id: string; email: string; name: string | null }>();
     return context.json({ members: results.map((row) => ({ id: row.user_id, email: row.email, ...(row.name ? { name: row.name } : {}) })) });
   });
 

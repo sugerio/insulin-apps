@@ -66,6 +66,8 @@ export class FakeGateway {
   mail: Mail[] = []
   reports: { body: Record<string, unknown> }[] = []
   metricsStatus = 202
+  /** The member lookup's answer when it isn't a search (an outage, say: 503); null answers as the gateway does. */
+  lookupStatus: number | null = null
   limits: { status: number; pages: { defaults: Record<string, number | null>; organizations: { id: string; limits: Record<string, { value: number | null; until: string | null }> }[] }[] } = { status: 503, pages: [] }
   limitCalls: (string | null)[] = []
   /** Who can use Knowledge, per organization (member status and the lookup). */
@@ -119,8 +121,11 @@ export class FakeGateway {
         if (!lookup) return Response.json({ error: 'unauthorized' }, { status: 401 })
         const org = lookup.split('.')[0] ?? ''
         const q = (url.searchParams.get('q') ?? '').toLowerCase()
-        // As the gateway answers (src/members/endpoints.ts): a search names someone.
+        if (this.lookupStatus !== null) return Response.json({ error: 'unavailable' }, { status: this.lookupStatus })
+        // As the gateway answers (src/members/endpoints.ts): a search names someone, and one with more letters to fold
+        // than a statement holds (over 48 capitals beyond ASCII) is refused.
         if (!q.trim()) return Response.json({ error: 'invalid_request' }, { status: 400 })
+        if (new Set([...q].filter((c) => c.codePointAt(0)! >= 0x80 && c.toUpperCase() !== c)).size > 48) return Response.json({ error: 'search_too_varied' }, { status: 400 })
         const found = [...(this.members.get(org)?.entries() ?? [])]
           .filter(([, entry]) => entry.member && entry.appRole && `${entry.name ?? ''} ${entry.email ?? ''}`.toLowerCase().includes(q))
           .slice(0, 20)

@@ -86,6 +86,24 @@ test('without an answer from the platform, or a request it can answer for, the p
   } finally { await quiet.mf.dispose(); }
 });
 
+test('a search the platform finds too varied, or one of 49 characters and more, falls back on the people Esign has seen, never a 500', async () => {
+  const varied = 'αβγδεζηθικλμνξοπρστυφχψωабвгдежзийклмнопрстуфхцчшщъыьэюя';
+  const h = await setup((url, init) => (url.searchParams.get('q') ?? '') === varied ? Response.json({ error: 'search_too_varied' }, { status: 400 }) : directoryAnswer(url, init));
+  try {
+    await h.req('/api/me', h.ana);
+    const tooVaried = await h.req(`/api/members?q=${encodeURIComponent(varied)}`, h.ana);
+    assert.deepEqual([tooVaried.status, await tooVaried.json()], [200, { members: [] }], 'nobody Esign has seen holds it');
+    // An API client's search (no lookup header) of 49 characters and more: the people Esign has seen, by instr().
+    const client = identity('tenant', { userId: 'sa-host', role: 'EDITOR', via: 'api' });
+    const long = await h.req(`/api/members?q=${'x'.repeat(49)}`, client);
+    assert.deepEqual([long.status, await long.json()], [200, { members: [] }]);
+    const found = await h.req(`/api/members?q=${encodeURIComponent('ANA@EXAMPLE')}`, client);
+    assert.deepEqual((await found.json() as { members: { email: string }[] }).members.map((m) => m.email), ['ana@example.test'], 'still found by what it holds, in any case');
+    const literal = await h.req(`/api/members?q=${encodeURIComponent('a%a')}`, client);
+    assert.deepEqual((await literal.json() as { members: unknown[] }).members, [], 'as typed: % is no wildcard');
+  } finally { await h.mf.dispose(); }
+});
+
 test("an API client's people must be people who can use Esign, each address looked up", async () => {
   const h = await setup(directoryAnswer);
   try {

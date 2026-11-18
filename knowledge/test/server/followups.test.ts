@@ -33,6 +33,18 @@ describe('sharing', () => {
     expect((await h.json<{ members: { id: string }[] }>(PEOPLE.maya, 'GET', '/api/members?q=eli')).body.members.map((member) => member.id)).toEqual([PEOPLE.eli.id])
   })
 
+  it('a search the platform finds too varied says so plainly (400); an outage keeps the general message (503)', async () => {
+    const varied = 'αβγδεζηθικλμνξοπρστυφχψωабвгдежзийклмнопрстуфхцчшщъыьэюя'
+    const refused = await h.json<{ error: string; message: string }>(PEOPLE.maya, 'GET', `/api/members?q=${encodeURIComponent(varied)}`)
+    expect(refused.status).toBe(400)
+    expect(refused.body.error).toBe('bad_request')
+    expect(refused.body.message).toBe('That search has too many different letters to look up at once. Try a shorter one, such as part of a name or an address.')
+    h.gateway.lookupStatus = 503
+    const down = await h.json<{ error: string; message: string }>(PEOPLE.maya, 'GET', '/api/members?q=eli')
+    expect([down.status, down.body.error, down.body.message]).toEqual([503, 'not_configured', "The list of people isn't available right now. Try again in a minute."])
+    h.gateway.lookupStatus = null
+  })
+
   it('without the platform, the search finds a long address by its whole text, and takes the text as typed', async () => {
     h.close()
     h = await createHarness({ gateway: false })

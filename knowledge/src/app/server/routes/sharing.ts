@@ -150,6 +150,7 @@ export function sharingRoutes() {
     // A search names someone: an empty one finds no one (the platform refuses it, so it isn't asked).
     if (!q) return json(c, { members: [] })
     const found = await lookupMembers(c.env, caller, q, c.req.header('x-suger-member-lookup') ?? null, now(c))
+    if (found === 'too_varied') throw new ApiError('bad_request', 'That search has too many different letters to look up at once. Try a shorter one, such as part of a name or an address.')
     if (found) return json(c, { members: found })
     if (c.env.SUGER_MEMBERS_URL) throw new ApiError('not_configured', "The list of people isn't available right now. Try again in a minute.")
     // The local preview has no platform: the people Knowledge has seen, whose name or address holds the text as typed

@@ -259,10 +259,50 @@ describe("Deductions and credits", () => {
     expect(answers).toMatchObject({ rrspDeduction: "2500", fhsaDeduction: "0", hasWorkFromHome: false, hasMovingExpenses: false });
   });
 
+  it("starts the RRSP deduction from the receipts, up to the limit on the notice of assessment", async () => {
+    const { router, server } = await renderApp("/returns/2025/deductions", {
+      seed: async (s) => {
+        const alex = await seed(s, { applies: true });
+        const add = async (type: string, issuer: string, boxes: Record<string, string>) => {
+          const year = (await (await s.call("GET", "/api/years/2025", { as: OWNER })).json()) as TaxYear;
+          await s.call("POST", "/api/years/2025/slips", { as: OWNER, body: { revision: year.revision, personId: alex.id, type, issuer, boxes } });
+        };
+        await add("RRSP", "Lakeview Credit Union", { 1: "4000" });
+        await add("NOA", "Canada Revenue Agency", { 1: "3000" });
+      },
+    });
+    const onReturn = await screen.findByRole("region", { name: "On your return" });
+    expect(within(onReturn).getByRole("button", { name: /RRSP contribution receipt from Lakeview Credit Union/ })).toBeTruthy();
+    expect((within(onReturn).getByLabelText("RRSP contributions to deduct for 2025") as HTMLInputElement).value).toBe("3000");
+    expect(within(onReturn).getByText(/From your documents: \$3,000\.00/)).toBeTruthy();
+    // A receipt's amounts have no box numbers.
+    fireEvent.click(within(onReturn).getByRole("button", { name: /RRSP contribution receipt from/ }));
+    expect(within(within(onReturn).getByRole("table")).queryByText("Box")).toBeNull();
+    const credits = stepOf(router, "credits");
+    fireEvent.click(screen.getByRole("button", { name: "Save and continue" }));
+    await waitFor(() => expect(router.state.location.pathname).toBe(credits));
+    expect(Object.values((await estimate(server)).input.answers)[0]).toMatchObject({ rrspDeduction: "3000" });
+  });
+
+  it("adds donation receipts to what is entered", async () => {
+    await renderApp("/returns/2025/credits", {
+      seed: async (s) => {
+        const alex = await seed(s, { applies: true });
+        const year = (await (await s.call("GET", "/api/years/2025", { as: OWNER })).json()) as TaxYear;
+        await s.call("POST", "/api/years/2025/slips", { as: OWNER, body: { revision: year.revision, personId: alex.id, type: "DONATION", issuer: "Lakeview Food Bank", boxes: { 1: "450" } } });
+      },
+    });
+    const onReturn = await screen.findByRole("region", { name: "On your return" });
+    expect(within(onReturn).getByRole("heading", { name: /^Donations/ })).toBeTruthy();
+    expect(within(onReturn).getByRole("button", { name: /Official donation receipt from Lakeview Food Bank/ })).toBeTruthy();
+    expect(within(onReturn).getByLabelText("Not on an uploaded receipt")).toBeTruthy();
+    expect(within(onReturn).queryByRole("button", { name: "Remove Donations" })).toBeNull();
+  });
+
   it("asks only the credits the return reads", async () => {
     await renderApp("/returns/2025/credits", { seed: (s) => seed(s, { applies: true, slip: true }).then(() => undefined) });
     const add = await screen.findByRole("region", { name: "Add to your return" });
-    expect(within(add).getByRole("button", { name: "Add Medical expenses you paid for yourself" })).toBeTruthy();
+    expect(within(add).getByRole("button", { name: "Add Medical expenses" })).toBeTruthy();
     // Alex is single: nothing to transfer, and no spouse's income to ask.
     expect(within(add).queryByRole("button", { name: /Tuition to transfer/ })).toBeNull();
     expect(screen.queryByText(/spouse's or partner's 2025 net income/)).toBeNull();

@@ -13,6 +13,7 @@ import { StepLayout } from "../components/StepLayout.tsx";
 import { stepPath, useReturn, useYear } from "../components/YearFrame.tsx";
 import { byBox, formatMoney } from "../lib/format.ts";
 import { useSlips } from "../lib/useYearData.ts";
+import { documentName } from "../shared/engine/rules.ts";
 import { rulesFor } from "../shared/rules/index.ts";
 
 // Step 4, `/returns/:year/:personId/confirm`: the slips of the open return, read by AI from the uploads or typed in,
@@ -105,13 +106,14 @@ function PersonSlips({ personId, slips, editable }: { personId: string; slips: S
               <li key={slip.id} className="flex flex-wrap items-start gap-3 py-3">
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-medium">
-                    {slip.type} · {slip.issuer}
+                    {documentName(types.get(slip.type), slip.type)} · {slip.issuer}
                   </p>
                   <p className="text-xs text-muted-foreground">
                     {byBox(Object.entries(slip.boxes)).map(([box, amount], index) => (
                       <span key={box} className={slip.unsure.includes(box) && slip.status !== "confirmed" ? "font-medium text-amber-700 dark:text-amber-400" : undefined}>
                         {index > 0 ? " · " : ""}
-                        Box {box} {types.get(slip.type)?.boxes[box] ?? ""}: {formatMoney(amount)}
+                        {types.get(slip.type)?.receipt ? "" : `Box ${box} `}
+                        {types.get(slip.type)?.boxes[box] ?? ""}: {formatMoney(amount)}
                         {slip.unsure.includes(box) && slip.status !== "confirmed" ? " (check)" : ""}
                       </span>
                     ))}

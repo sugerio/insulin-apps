@@ -49,8 +49,8 @@ export const gettingStarted: DocTopic = {
               <DocLink to="household">The household</DocLink>.
             </li>
             <li>
-              <b>Upload documents.</b> Choose a folder or files (PDF, PNG or JPEG). AI reads each file into slips. A slip with the other
-              person's name on it goes to their return. A file with the same name as one in this return replaces it and the slips read from it, and is read again. A file
+              <b>Upload documents.</b> Choose a folder or files (PDF, PNG or JPEG). AI reads each file: slips, RRSP, donation and medical receipts,
+              and last year's notice of assessment. A document with the other person's name on it goes to their return. A file with the same name as one in this return replaces it and the slips read from it, and is read again. A file
               with the same content as one under another name isn't saved again. A file uploaded by mistake can be deleted,
               with the slips read from it. You can also type slips in at Confirm.
             </li>
@@ -62,15 +62,17 @@ export const gettingStarted: DocTopic = {
               says it isn't included. What you don't add counts as none.
             </li>
             <li>
-              <b>Deductions.</b> RRSP and FHSA contributions, and what the app doesn't handle yet (working from home, child care,
+              <b>Deductions.</b> RRSP and FHSA contributions (RRSP receipts and your notice of assessment give a starting amount, up to
+              your deduction limit), and what the app doesn't handle yet (working from home, child care,
               moving). <b>From your slips</b> shows what your slips already deduct, such as union dues.
             </li>
             <li>
               <b>Credits.</b> Tuition (T2202, and unused tuition from last year), medical expenses and donations, and what your slips
-              already claim, such as CPP and EI contributions. Only the amounts that can change the return appear.
+              already claim, such as CPP and EI contributions. Uploaded donation and medical receipts are added; enter only what isn't on
+              one. Only the amounts that can change the return appear.
             </li>
             <li>
-              <b>Confirm.</b> The slips (T4, T5, T3, T5008, T2202), read by AI or entered box by box. Check each one against the paper slip (a
+              <b>Confirm.</b> The slips (T4, T5, T3, T5008, T2202), receipts and notices of assessment, read by AI or entered. Check each one against the paper slip (a
               box AI wasn't sure of is marked), then confirm them. Changing a slip makes it unconfirmed again. A slip that is the other
               person's can be moved to their return.
             </li>

@@ -4,7 +4,8 @@
 # - a yes/no question with a `slip` is a kind of income or expense shown by that slip: finding the slip adds it to the
 #   return, and a yes without the slip is missing;
 # - a yes/no question without one names something the app doesn't handle: never ignored, the return says so;
-# - a money question is an amount to enter.
+# - a money question is an amount to enter. Its `receipts` are shown with it; a line that adds them makes the amount
+#   what isn't on an uploaded receipt, and a `suggest` line works out the amount from the receipts to start from.
 
 questions:
   # Income
@@ -73,6 +74,8 @@ questions:
   rrspDeduction:
     type: money
     module: deductions
+    receipts: RRSP
+    suggest: SUGGEST.rrspDeduction
     ask: RRSP contributions to deduct for 2025
     help: Contributions from March 4, 2025 to March 2, 2026, up to your limit on last year's notice of assessment.
     default: 0
@@ -110,6 +113,8 @@ questions:
   unusedTuition:
     type: money
     module: credits
+    receipts: NOA
+    suggest: SUGGEST.unusedTuition
     ask: Unused federal tuition from your 2024 notice of assessment
     default: 0
   tuitionTransfer:
@@ -121,14 +126,16 @@ questions:
   medicalExpenses:
     type: money
     module: credits
-    ask: Medical expenses you paid for yourself
-    help: Either spouse can claim the family's medical expenses; it usually saves more on the lower income.
+    receipts: MEDICAL
+    ask: Medical expenses
+    help: For you, your spouse or your children. Uploaded receipts are added; enter what isn't on one. Either spouse can claim the family's medical expenses; it usually saves more on the lower income.
     default: 0
   donations:
     type: money
     module: credits
-    ask: Donations on official receipts (not on a T4)
-    help: Either spouse can claim both spouses' donations; claiming them together usually saves more.
+    receipts: DONATION
+    ask: Donations
+    help: On official receipts. Uploaded receipts and box 46 of your T4 are added; enter what isn't on one. Either spouse can claim both spouses' donations; claiming them together usually saves more.
     default: 0
 
   # About the person (Personal info)

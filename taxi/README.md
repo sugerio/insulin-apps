@@ -29,8 +29,8 @@ uploaded slips read by AI (or typed in), income, deductions, credits and the res
   dependant amounts, transfers between spouses (Schedule 2), and provincial tax: ON428 (surtax, tax reduction, LIFT
   credit, health premium), BC428 (BC tax reduction) and AB428 (supplemental credit). Above each step but
   Finish, the estimate shows the refund or balance owing; Details opens each result line, and selecting a line shows why.
-- **Step 2, AI reading.** Upload a folder or files into a return; Claude reads each one into slips (a slip with the other
-  person's name goes to their return), using
+- **Step 2, AI reading.** Upload a folder or files into a return; Claude reads each one into slips, receipts (RRSP, donation,
+  medical) and last year's notice of assessment (a document with the other person's name goes to their return), using
   the organization's Anthropic credential (Settings › Integrations, key `anthropic`). A file with the same name as one in the
   return replaces it and its slips; the same content under another name, or the same slip, isn't saved twice. Every slip starts
   unconfirmed. A file can be deleted with the slips read from it, and one

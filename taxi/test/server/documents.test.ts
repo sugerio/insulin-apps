@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { DocumentList, Estimate, Person, SlipList, TaxYear, ReadResult } from "#shared";
 import type { ReadContext, ReadOutcome, SlipReader } from "../../src/app/server/lib/reader.ts";
+import { Evaluation } from "../../src/app/shared/engine/evaluate.ts";
+import { rulesFor } from "../../src/app/shared/rules/index.ts";
 import { VIEWER, startServer, type TestServer } from "../support/server.ts";
 
 // Uploads with a reader that gives recorded answers: no test calls the model.
@@ -169,7 +171,7 @@ describe("uploading a slip", () => {
     for (const tag of ["receipt", "old", "broken", "off"]) statuses.push((await json<ReadResult>(upload(pdf(tag), `${tag}.pdf`))).document!);
     expect(statuses.map((document) => [document.status, document.message])).toEqual([
       ["not_a_slip", "No slip this app reads was found in this file."],
-      ["not_a_slip", "This is a slip for 2024, not 2025."],
+      ["not_a_slip", "This is for 2024, not 2025."],
       ["failed", "AI reading failed (500). Try again."],
       ["not_available", "AI reading isn't available here."],
     ]);
@@ -181,6 +183,34 @@ describe("uploading a slip", () => {
     expect(names).toHaveLength(4);
     expect(names).toContainEqual(["broken again.pdf", "read"]);
     expect(names).not.toContainEqual(["broken.pdf", "failed"]);
+  });
+
+  it("reads receipts and last year's notice of assessment, each with the years it may carry", async () => {
+    await couple();
+    const noa = { type: "NOA", person: "Alex Martin", issuer: "Canada Revenue Agency", boxes: { 1: "17,000.00", 3: "3000" }, unsure: [] };
+    const rrsp = { type: "RRSP", person: "Alex Martin", issuer: "Lakeview Credit Union", boxes: { 2: "2000.00" }, unsure: [] };
+    const medical = { type: "MEDICAL", person: "Alex Martin", issuer: "Lakeview Pharmacy", boxes: { 1: "25.00" }, unsure: [] };
+    answers.push(
+      { kind: "read", taxYear: 2024, slips: [noa], model: "m" },
+      { kind: "read", taxYear: 2026, slips: [rrsp], model: "m" },
+      { kind: "read", taxYear: 2024, slips: [rrsp], model: "m" },
+      { kind: "read", taxYear: 2025, slips: [medical], model: "m" },
+      { kind: "read", taxYear: 2025, slips: [medical], model: "m" },
+    );
+    expect(await json<ReadResult>(upload(pdf("noa"), "noa.pdf"))).toMatchObject({ status: "read", message: "Notice of assessment for 2024 from Canada Revenue Agency" });
+    expect((await json<ReadResult>(upload(pdf("rrsp 2026"), "rrsp.pdf"))).status).toBe("read");
+    // An RRSP receipt for 2024 belongs to last year's return.
+    expect(await json<ReadResult>(upload(pdf("rrsp 2024"), "old rrsp.pdf"))).toMatchObject({ status: "not_a_slip", message: "This is for 2024, not 2025." });
+    // The same amount from the same pharmacy twice is two receipts, not a copy.
+    expect((await json<ReadResult>(upload(pdf("march"), "march.pdf"))).status).toBe("read");
+    expect((await json<ReadResult>(upload(pdf("april"), "april.pdf"))).status).toBe("read");
+    const slips = (await json<SlipList>(server.call("GET", "/api/years/2025/slips"))).slips;
+    expect(slips.map((slip) => slip.type).sort()).toEqual(["MEDICAL", "MEDICAL", "NOA", "RRSP"]);
+    expect(slips.find((slip) => slip.type === "NOA")!.boxes).toEqual({ 1: "17000", 3: "3000" });
+    // Medical receipts count toward the medical expenses claimed.
+    const result = await json<Estimate>(server.call("GET", "/api/years/2025/estimate"));
+    const alex = result.input.people.find((person) => person.name === "Alex Martin")!.id;
+    expect(new Evaluation(rulesFor(2025)!, result.input).line(alex, "T1.33099").value?.toString()).toBe("50");
   });
 
   it("puts a slip with the other adult's name in their return, and says so", async () => {

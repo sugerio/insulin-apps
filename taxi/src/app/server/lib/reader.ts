@@ -94,9 +94,9 @@ export function promptFor(context: ReadContext): string {
         .join(", ")}.`,
   );
   return [
-    `You read Canadian personal tax slips for the ${context.year} tax year.`,
+    `You read Canadian personal tax slips, receipts and notices for the ${context.year} tax year.`,
     `The household: ${context.people.map((person) => `${person.name} (${person.relationship})`).join(", ")}.`,
-    "Slip types this app reads:",
+    "Document types this app reads:",
     ...types,
     "",
     "Return every slip in this file. A file may hold one slip, or several (for example one per page); if the same slip appears more than once, as copies do, return it once.",
@@ -106,8 +106,10 @@ export function promptFor(context: ReadContext): string {
     "- issuer: who issued the slip (the employer, payer, trust, broker or institution).",
     "- boxes: each box from that type's list that shows an amount, with the amount exactly as printed but without $ signs, spaces or thousands separators (for example 60000.00). Leave out empty boxes and boxes not in the list. Copy amounts; never add them up.",
     "- unsure: the numbers of any boxes you could not read clearly.",
-    "taxYear: the tax year printed on the slips, or null if none is printed.",
-    "Never return a social insurance number. If the file holds none of these slip types (a receipt, a letter, another form), return no slips.",
+    "Receipts and notices (RRSP, DONATION, MEDICAL, NOA) have no box numbers printed: the numbers in their list are this app's. Put each amount under the number of the matching description. For a medical receipt, person is the patient; for a notice of assessment, the taxpayer, and issuer is Canada Revenue Agency.",
+    `An RRSP receipt shows contributions for one period: report those from March 4 to December 31, ${context.year} as box 1, and those from January 1 to March 2, ${context.year + 1} as box 2. Contributions from January 1 to March 3, ${context.year} belong to the year before: leave them out.`,
+    `taxYear: the tax year printed on the document (for a notice of assessment, the year it assesses, such as ${context.year - 1}; for an RRSP receipt, the year of the contributions), or null if none is printed.`,
+    "Never return a social insurance number. If the file holds none of these types (a letter, another form), return no slips.",
   ].join("\n");
 }
 

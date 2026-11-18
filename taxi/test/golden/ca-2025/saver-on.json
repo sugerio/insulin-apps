@@ -1,5 +1,5 @@
 {
-  "about": "An employee who saves: RPP contributions on the T4, RRSP and FHSA deductions, and union dues. Synthetic data.",
+  "about": "An employee who saves: RPP contributions on the T4, RRSP and FHSA deductions, and union dues. The RRSP deduction matches the receipts, within the limit on the notice of assessment. Synthetic data.",
   "input": {
     "year": 2025,
     "people": [
@@ -51,6 +51,33 @@
           "20": "5700.00",
           "44": "600.00",
           "52": "11400.00"
+        }
+      },
+      {
+        "id": "s2",
+        "person": "p1",
+        "type": "RRSP",
+        "issuer": "Lakeview Credit Union",
+        "boxes": {
+          "1": "4000.00"
+        }
+      },
+      {
+        "id": "s3",
+        "person": "p1",
+        "type": "RRSP",
+        "issuer": "Lakeview Credit Union",
+        "boxes": {
+          "2": "2000.00"
+        }
+      },
+      {
+        "id": "s4",
+        "person": "p1",
+        "type": "NOA",
+        "issuer": "Canada Revenue Agency",
+        "boxes": {
+          "1": "17000.00"
         }
       }
     ]

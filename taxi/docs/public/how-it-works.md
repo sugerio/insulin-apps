@@ -38,6 +38,13 @@ read clearly. It is told never to return a social insurance number. Taxi then ch
 types and boxes are kept, amounts must be numbers, a slip for another year is refused, and a slip already in the year
 isn't added again. Every slip read this way starts unconfirmed: someone checks it against the paper slip at Confirm.
 
+Receipts and last year's notice of assessment are read the same way: RRSP contribution receipts (for March 4, 2025 to
+March 2, 2026), official donation receipts, medical receipts, and the 2024 notice of assessment. Donation and medical
+receipts are added to the amounts claimed; what is entered by hand is what isn't on an uploaded receipt. RRSP receipts
+and the notice of assessment give a starting amount for the RRSP deduction (the contributions, up to the deduction
+limit) and for unused tuition, which the person checks and saves. Two receipts with the same amount from the same place
+are both kept: a receipt is skipped only when the same file is uploaded again.
+
 A file with the name of one already in the same return is a new version, changed or not: once it is read into slips,
 it replaces the earlier file and every slip read from it (those start unconfirmed again). If the new version can't be
 read into slips, the earlier one is kept. Files of the same name in two people's returns don't replace each other. A

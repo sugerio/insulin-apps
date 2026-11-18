@@ -1,5 +1,5 @@
 {
-  "about": "An employee in British Columbia with donations on receipts: BC428 brackets and the BC donation rates. Synthetic data.",
+  "about": "An employee in British Columbia with donations on receipts: BC428 brackets and the BC donation rates. Most of the donations are on an uploaded receipt. Synthetic data.",
   "input": {
     "year": 2025,
     "people": [
@@ -20,7 +20,7 @@
         "rrspDeduction": "0",
         "fhsaDeduction": "0",
         "medicalExpenses": "0",
-        "donations": "600",
+        "donations": "150",
         "unusedTuition": "0",
         "tuitionTransfer": "0",
         "hasSelfEmployment": false,
@@ -47,6 +47,15 @@
           "22": "8500.00",
           "24": "55000.00",
           "26": "55000.00"
+        }
+      },
+      {
+        "id": "s2",
+        "person": "p1",
+        "type": "DONATION",
+        "issuer": "Lakeview Food Bank",
+        "boxes": {
+          "1": "450.00"
         }
       }
     ]

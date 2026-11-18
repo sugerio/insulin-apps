@@ -1,5 +1,5 @@
 {
-  "about": "A student with a part-time job: tuition from a T2202 and unused tuition from last year. Last year's amount is used first, and this year's only up to what brings federal tax to zero. Synthetic data.",
+  "about": "A student with a part-time job: tuition from a T2202 and unused tuition from last year. Last year's amount is used first, and this year's only up to what brings federal tax to zero. Last year's unused tuition is on the notice of assessment too. Synthetic data.",
   "input": {
     "year": 2025,
     "people": [
@@ -57,6 +57,15 @@
         "boxes": {
           "25": "8",
           "26": "9800.00"
+        }
+      },
+      {
+        "id": "s3",
+        "person": "p1",
+        "type": "NOA",
+        "issuer": "Canada Revenue Agency",
+        "boxes": {
+          "3": "3000.00"
         }
       }
     ]

@@ -266,7 +266,8 @@ lines:
     source: "Schedule 2: their unused age amount and the tuition they designate to you"
   T1.33099:
     label: Medical expenses for you
-    formula: "answer.medicalExpenses"
+    formula: "answer.medicalExpenses + sum(MEDICAL.box1)"
+    source: "Medical expense receipts, and the amount entered that isn't on one"
   T1.33200:
     label: Allowable medical expenses
     formula: "max(0, line.T1.33099 - min(param.medicalThresholdMax, round(line.T1.23600 * param.medicalThresholdRate, 2)))"
@@ -372,8 +373,8 @@ lines:
   # Schedule 9 – Donations and gifts
   S9.5:
     label: Total eligible amount of charitable donations
-    formula: "answer.donations + sum(T4.box46)"
-    source: "Schedule 9 line 5: official receipts, and box 46 of T4 slips"
+    formula: "answer.donations + sum(DONATION.box1) + sum(T4.box46)"
+    source: "Schedule 9 line 5: official receipts (uploaded, or entered), and box 46 of T4 slips"
   S9.10:
     label: Donations claimed (within the limit)
     formula: "min(line.S9.5, round(line.T1.23600 * param.donationIncomeLimit, 2))"
@@ -435,3 +436,14 @@ lines:
     label: Tuition transferred to your spouse or common-law partner
     formula: "if(line.HH.partner == 1 and household.partnerInYear and line.S11.8 > 0, min(answer.tuitionTransfer, line.S11.23), 0)"
     source: "Schedule 11 line 24: the amount you designate on your T2202, up to line 23"
+
+  # Starting amounts worked out from receipts and last year's notice of assessment, for the person to check: not lines
+  # of the return. The RRSP deduction is the contributions (with unused ones from earlier years) up to the limit.
+  SUGGEST.rrspDeduction:
+    label: RRSP contributions you can deduct for 2025
+    formula: "if(sum(NOA.box1) > 0, min(sum(RRSP.box1) + sum(RRSP.box2) + sum(NOA.box2), sum(NOA.box1)), sum(RRSP.box1) + sum(RRSP.box2) + sum(NOA.box2))"
+    source: "RRSP receipts, and the unused contributions and deduction limit on your 2024 notice of assessment"
+  SUGGEST.unusedTuition:
+    label: Unused federal tuition carried forward
+    formula: "sum(NOA.box3)"
+    source: "Your 2024 notice of assessment"

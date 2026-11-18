@@ -63,3 +63,35 @@ slips:
       25: Number of months full-time
       26: Eligible tuition fees
     informational: [24, 25]
+
+  # Receipts and notices: amounts with no box number printed beside them. The numbers below are this app's, so the
+  # amounts can be read and stored like a slip's boxes.
+  RRSP:
+    title: RRSP contribution receipt
+    about: Contributions to a registered retirement savings plan, from the plan's issuer, for March 4, 2025 to March 2, 2026 (contributions from January 1 to March 3, 2025 belong to the 2024 return)
+    receipt: true
+    printedYears: [0, 1]
+    boxes:
+      1: Contributions from March 4 to December 31, 2025
+      2: Contributions from January 1 to March 2, 2026
+  DONATION:
+    title: Official donation receipt
+    about: A receipt for income tax purposes from a registered charity or other qualified donee, for a gift made in 2025
+    receipt: true
+    boxes:
+      1: Eligible amount of the gift
+  MEDICAL:
+    title: Medical expense receipt
+    about: A receipt for medical or dental care, prescriptions or devices paid for in 2025, for you, your spouse or your children
+    receipt: true
+    boxes:
+      1: Amount paid
+  NOA:
+    title: Notice of assessment for 2024
+    about: The CRA's notice of assessment for last year's (2024) return, which carries the RRSP deduction limit and the amounts to carry forward to 2025
+    receipt: true
+    printedYears: [-1]
+    boxes:
+      1: RRSP deduction limit for 2025
+      2: Unused RRSP contributions available to deduct for 2025
+      3: Unused federal tuition, education and textbook amounts available for 2025

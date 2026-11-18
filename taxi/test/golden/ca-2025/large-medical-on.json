@@ -1,5 +1,5 @@
 {
-  "about": "An employee with very large medical expenses: credit amounts above the first bracket get the top-up tax credit. Synthetic data.",
+  "about": "An employee with very large medical expenses: credit amounts above the first bracket get the top-up tax credit. Most of the medical expenses are on an uploaded receipt. Synthetic data.",
   "input": {
     "year": 2025,
     "people": [
@@ -19,7 +19,7 @@
       "p1": {
         "rrspDeduction": "0",
         "fhsaDeduction": "0",
-        "medicalExpenses": "52000",
+        "medicalExpenses": "2000",
         "donations": "0",
         "unusedTuition": "0",
         "tuitionTransfer": "0",
@@ -48,6 +48,15 @@
           "24": "65700.00",
           "26": "71300.00",
           "16A": "396.00"
+        }
+      },
+      {
+        "id": "s2",
+        "person": "p1",
+        "type": "MEDICAL",
+        "issuer": "Lakeview Hospital",
+        "boxes": {
+          "1": "50000.00"
         }
       }
     ]

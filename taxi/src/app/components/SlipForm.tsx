@@ -37,7 +37,7 @@ export function SlipBoxTable({
     <Table aria-label={`${slipType.id} boxes`}>
       <TableHeader>
         <TableRow>
-          <TableHead className="w-16">Box</TableHead>
+          {slipType.receipt ? null : <TableHead className="w-16">Box</TableHead>}
           <TableHead>Description</TableHead>
           <TableHead className="w-40 text-right">Amount</TableHead>
         </TableRow>
@@ -48,7 +48,7 @@ export function SlipBoxTable({
           const issue = issueFor(`boxes.${box}`);
           return (
             <TableRow key={box} className={cn(check && "bg-amber-50 dark:bg-amber-950/30")}>
-              <TableCell className="font-medium tabular-nums">{box}</TableCell>
+              {slipType.receipt ? null : <TableCell className="font-medium tabular-nums">{box}</TableCell>}
               <TableCell className="whitespace-normal">
                 <label htmlFor={onChange ? `${id}-${box}` : undefined}>{label}</label>
                 {check ? (
@@ -66,7 +66,7 @@ export function SlipBoxTable({
                     className="h-8 text-right tabular-nums"
                     value={boxes[box] ?? ""}
                     onChange={(event) => onChange(box, event.target.value)}
-                    aria-label={`Box ${box} ${label}`}
+                    aria-label={slipType.receipt ? label : `Box ${box} ${label}`}
                     aria-invalid={issue ? true : undefined}
                   />
                 ) : boxes[box] !== undefined ? (

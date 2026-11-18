@@ -6,7 +6,8 @@ import { rulesFor } from "../src/app/shared/rules/index.ts";
 // npm run sample-slips -- [--out <dir>] [--self <name>] [--spouse <name>]
 //
 // Writes sample 2025 slips as PDFs, for trying the app and for testing AI reading: a T4 for each adult, a T5 for the
-// person preparing, and a T2202 for the spouse. Every page says it is a synthetic sample. The repository keeps no
+// person preparing, a T2202 for the spouse, and receipts and notices: a donation receipt, a dental receipt for the
+// spouse, an RRSP receipt for early 2026, and each adult's 2024 notice of assessment. Every page says it is a synthetic sample. The repository keeps no
 // binary files, so the PDFs are made here and never committed; the default folder is ignored by git and by the app
 // checks. Box labels come from the year's rules (slips.yaml), so a sample shows the boxes the app reads.
 
@@ -94,6 +95,91 @@ const samples: Sample[] = [
   },
 ];
 
+/** A receipt or notice: no numbered boxes, but labelled amounts, as these are printed. */
+interface Receipt {
+  file: string;
+  heading: string;
+  /** The year printed on it (an RRSP receipt for early next year, a notice of assessment for last year). */
+  year: number;
+  issuer: { name: string; lines: string[] };
+  who: { label: string; name: string; lines: string[] };
+  rows: [string, string][];
+}
+
+const receipts: Receipt[] = [
+  {
+    file: `Donation-${slug(self)}-Lakeview-Food-Bank.pdf`,
+    heading: "Official receipt for income tax purposes",
+    year: YEAR,
+    issuer: { name: "Lakeview Food Bank", lines: ["Registered charity 12345 6789 RR0001", "20 Market Street, Toronto ON  M5E 1M6"] },
+    who: { label: "Donor", name: self, lines: home },
+    rows: [["Date the gift was received", `${YEAR}-11-20`], ["Total amount of the gift", "450.00"], ["Eligible amount of the gift", "450.00"]],
+  },
+  {
+    file: `Medical-${slug(spouse)}-Lakeview-Dental.pdf`,
+    heading: "Receipt for payment",
+    year: YEAR,
+    issuer: { name: "Lakeview Dental Clinic", lines: ["300 Queen Street East", "Toronto ON  M5A 1S7"] },
+    who: { label: "Patient", name: spouse, lines: home },
+    rows: [["Date of service", `${YEAR}-05-14`], ["Service", "Dental cleaning and filling"], ["Amount paid", "1,280.00"]],
+  },
+  {
+    file: `RRSP-${slug(self)}-Lakeview-Credit-Union.pdf`,
+    heading: "Contribution receipt: registered retirement savings plan",
+    year: YEAR + 1,
+    issuer: { name: "Lakeview Credit Union", lines: ["8 Lakeshore Boulevard", "Toronto ON  M5E 1A1"] },
+    who: { label: "Annuitant and contributor", name: self, lines: home },
+    rows: [["Contribution period", `First 60 days of ${YEAR + 1}`], ["Date of contribution", `${YEAR + 1}-02-10`], ["Amount of contribution", "2,000.00"]],
+  },
+  {
+    file: `NOA-${slug(self)}-${YEAR - 1}.pdf`,
+    heading: `Notice of assessment, tax year ${YEAR - 1}`,
+    year: YEAR - 1,
+    issuer: { name: "Canada Revenue Agency", lines: ["Sample office", "Ottawa ON  K1A 0L5"] },
+    who: { label: "Taxpayer", name: self, lines: home },
+    rows: [
+      [`RRSP deduction limit for ${YEAR}`, "17,000.00"],
+      [`Unused RRSP contributions available to deduct for ${YEAR}`, "0.00"],
+      ["Federal: unused tuition, education and textbook amounts available for future years", "0.00"],
+    ],
+  },
+  {
+    file: `NOA-${slug(spouse)}-${YEAR - 1}.pdf`,
+    heading: `Notice of assessment, tax year ${YEAR - 1}`,
+    year: YEAR - 1,
+    issuer: { name: "Canada Revenue Agency", lines: ["Sample office", "Ottawa ON  K1A 0L5"] },
+    who: { label: "Taxpayer", name: spouse, lines: home },
+    rows: [
+      [`RRSP deduction limit for ${YEAR}`, "5,580.00"],
+      [`Unused RRSP contributions available to deduct for ${YEAR}`, "0.00"],
+      ["Federal: unused tuition, education and textbook amounts available for future years", "1,500.00"],
+    ],
+  },
+];
+
+async function renderReceipt(receipt: Receipt): Promise<Uint8Array> {
+  const pdf = await PDFDocument.create();
+  pdf.setTitle(`${receipt.heading} (sample)`);
+  pdf.setSubject("Synthetic sample for testing Taxi. Not a real tax document.");
+  const page = pdf.addPage([612, 792]);
+  const font = await pdf.embedFont(StandardFonts.Helvetica);
+  const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
+  const muted = rgb(0.4, 0.4, 0.45);
+  page.drawText(receipt.heading, { x: 40, y: 740, size: 16, font: bold });
+  page.drawText(`${receipt.year}`, { x: 40, y: 718, size: 13, font, color: muted });
+  page.drawText("SAMPLE - synthetic test data, not issued by any charity, clinic, plan or government", { x: 40, y: 700, size: 9, font: bold, color: rgb(0.75, 0.1, 0.1) });
+  block(page, "Issued by", receipt.issuer, 40, 670, font, bold);
+  block(page, receipt.who.label, receipt.who, 320, 670, font, bold);
+  receipt.rows.forEach(([label, value], index) => {
+    const y = 540 - index * 28;
+    page.drawLine({ start: { x: 40, y: y - 8 }, end: { x: 572, y: y - 8 }, thickness: 0.5, color: muted });
+    page.drawText(fit(label, font, 10, 400), { x: 40, y, size: 10, font });
+    page.drawText(value, { x: 572 - bold.widthOfTextAtSize(value, 11), y, size: 11, font: bold });
+  });
+  page.drawText("This page was made by Taxi's sample-slips script for testing. It has no value for filing.", { x: 40, y: 40, size: 8, font, color: muted });
+  return pdf.save();
+}
+
 function slug(name: string): string {
   return name.trim().replace(/[^A-Za-z0-9]+/g, "-").replace(/^-|-$/g, "") || "person";
 }
@@ -168,4 +254,8 @@ mkdirSync(out, { recursive: true });
 for (const sample of samples) {
   writeFileSync(join(out, sample.file), await render(sample));
   console.log(`sample-slips: wrote ${join(out, sample.file)}`);
+}
+for (const receipt of receipts) {
+  writeFileSync(join(out, receipt.file), await renderReceipt(receipt));
+  console.log(`sample-slips: wrote ${join(out, receipt.file)}`);
 }

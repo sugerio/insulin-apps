@@ -18,7 +18,7 @@ import { saveAnswersFor } from "../lib/saveAnswers.ts";
 import { uploadFile, uploadType } from "../lib/upload.ts";
 import { useEstimate, useSlips } from "../lib/useYearData.ts";
 import { Evaluation } from "../shared/engine/evaluate.ts";
-import type { Question } from "../shared/engine/rules.ts";
+import { documentName, type Question } from "../shared/engine/rules.ts";
 import { rulesFor } from "../shared/rules/index.ts";
 
 // Steps 3 to 5, `/returns/:year/:personId/{income,deductions,credits}`: one part of the open return, built from the
@@ -93,6 +93,14 @@ function ModuleForm({
   const result = estimate.result.people.find((each) => each.personId === person.id);
   const reached = new Set(result?.questions ?? []);
   const slipsOf = (type: string) => slips.slips.filter((slip) => slip.personId === person.id && slip.type === type);
+  const evaluation = useMemo(() => new Evaluation(rules, estimate.input), [rules, estimate.input]);
+  /** A starting amount the rules work out from documents (receipts, a notice of assessment), when there is one. */
+  const suggestionOf = (question: Question): string | null => {
+    if (!question.suggest || !result) return null;
+    const value = evaluation.line(person.id, question.suggest).value;
+    return value && !value.isZero() ? value.toString() : null;
+  };
+  const receiptsOf = (question: Question) => (question.receipts ? slipsOf(question.receipts) : []);
   // An amount is asked only when the return reads it (tuition to transfer needs a T2202 and a spouse), or was entered.
   const items: Item[] = [...rules.questions.values()]
     .filter((question) => question.module === module)
@@ -104,13 +112,22 @@ function ModuleForm({
       items.map(({ question, kind }) => {
         const answer = given[question.id];
         if (kind === "slip") return [question.id, slipsOf(question.slip!).length > 0 || answer === true];
-        if (kind === "amount") return [question.id, typeof answer === "string" && Number(answer) !== 0];
+        if (kind === "amount") return [question.id, (typeof answer === "string" && Number(answer) !== 0) || receiptsOf(question).length > 0 || (answer === undefined && suggestionOf(question) !== null)];
         return [question.id, answer === true];
       }),
     ),
   );
   const [amounts, setAmounts] = useState<Record<string, string>>(() =>
-    Object.fromEntries(items.filter((item) => item.kind === "amount").map(({ question }) => [question.id, typeof given[question.id] === "string" && Number(given[question.id]) !== 0 ? (given[question.id] as string) : ""])),
+    Object.fromEntries(
+      items
+        .filter((item) => item.kind === "amount")
+        .map(({ question }) => {
+          const answer = given[question.id];
+          // Not answered yet: start from what the documents show.
+          if (answer === undefined) return [question.id, suggestionOf(question) ?? ""];
+          return [question.id, typeof answer === "string" && Number(answer) !== 0 ? answer : ""];
+        }),
+    ),
   );
   const [state, setState] = useState<{ status: "idle" | "saving" } | { status: "error"; error: unknown }>({ status: "idle" });
 
@@ -181,7 +198,9 @@ function ModuleForm({
             question={question}
             kind={kind}
             editable={editable}
-            onRemove={kind === "slip" && slipsOf(question.slip!).length > 0 ? undefined : () => setAdded((current) => ({ ...current, [question.id]: false }))}
+            onRemove={
+              (kind === "slip" && slipsOf(question.slip!).length > 0) || receiptsOf(question).length > 0 ? undefined : () => setAdded((current) => ({ ...current, [question.id]: false }))
+            }
           >
             {kind === "slip" ? (
               <SlipItem
@@ -196,13 +215,19 @@ function ModuleForm({
                 before={saveModule}
               />
             ) : kind === "amount" ? (
-              <AmountField
-                label={question.ask}
-                labelHidden
+              <AmountItem
+                question={question}
+                receipts={receiptsOf(question)}
+                suggestion={suggestionOf(question)}
                 value={amounts[question.id] ?? ""}
-                disabled={!editable}
+                editable={editable}
+                busy={busy}
                 issue={issues.find((issue) => issue.path === `answers.${question.id}`)?.message}
                 onChange={(value) => setAmounts((current) => ({ ...current, [question.id]: value }))}
+                open={open}
+                onToggle={onToggle}
+                onFile={(file) => void upload(file)}
+                before={saveModule}
               />
             ) : (
               <p className="text-sm text-amber-700 dark:text-amber-400">This app doesn't handle this yet, so the result leaves it out. Prepare this part of the return another way.</p>
@@ -356,7 +381,7 @@ function FoundSlip({ slip, open, onToggle, editable, before }: { slip: Slip; ope
       <button type="button" className="flex w-full items-center gap-2 rounded-md py-1.5 text-left hover:bg-muted/50" aria-expanded={open} aria-controls={panel} onClick={onToggle}>
         <ChevronRight className={cn("size-4 shrink-0 text-muted-foreground transition-transform", open && "rotate-90")} aria-hidden="true" />
         <span className="min-w-0 flex-1">
-          {slip.type} from {slip.issuer}
+          {documentName(slipType, slip.type)} from {slip.issuer}
         </span>
         <Badge variant={confirmed ? "secondary" : "outline"}>{confirmed ? "Confirmed" : "To confirm"}</Badge>
       </button>
@@ -367,6 +392,90 @@ function FoundSlip({ slip, open, onToggle, editable, before }: { slip: Slip; ope
         </div>
       ) : null}
     </li>
+  );
+}
+
+/**
+ * An amount on the return, with its receipts when the year's rules name some: each receipt opens into its amounts, and
+ * more can be uploaded or entered. Receipts a line adds make the amount entered what isn't on one; receipts that only
+ * suggest a starting amount (RRSP, a notice of assessment) show it, to use or change.
+ */
+function AmountItem({
+  question,
+  receipts,
+  suggestion,
+  value,
+  editable,
+  busy,
+  issue,
+  onChange,
+  open,
+  onToggle,
+  onFile,
+  before,
+}: {
+  question: Question;
+  receipts: Slip[];
+  suggestion: string | null;
+  value: string;
+  editable: boolean;
+  busy: boolean;
+  issue?: string;
+  onChange: (value: string) => void;
+  open: ReadonlySet<string>;
+  onToggle: (slipId: string) => void;
+  onFile: (file: File) => void;
+  before: () => Promise<TaxYear>;
+}) {
+  const { year } = useYear();
+  const { person } = useReturn();
+  const [entering, setEntering] = useState(false);
+  const type = question.receipts ? rulesFor(year.year)!.slips.get(question.receipts)! : null;
+  const added = type !== null && question.suggest === undefined;
+  const noun = type?.title.replace(/^Official /, "").toLowerCase() ?? "";
+  return (
+    <div className="flex flex-col gap-3">
+      {receipts.length > 0 ? (
+        <ul className="flex flex-col divide-y" aria-label={`${question.ask} receipts`}>
+          {receipts.map((slip) => (
+            <FoundSlip key={slip.id} slip={slip} open={open.has(slip.id)} onToggle={() => onToggle(slip.id)} editable={editable} before={before} />
+          ))}
+        </ul>
+      ) : null}
+      {type && editable ? (
+        entering ? (
+          <div className="rounded-lg border bg-muted/30 p-4">
+            <SlipForm personId={person.id} type={type.id} before={before} onDone={() => setEntering(false)} />
+          </div>
+        ) : (
+          <div className="flex flex-wrap items-center gap-2">
+            <UploadSlip label={`Upload ${receipts.length > 0 ? "another" : "a"} ${noun}`} busy={busy} onFile={onFile} />
+            <Button variant="ghost" size="sm" onClick={() => setEntering(true)} disabled={busy}>
+              <PencilLine aria-hidden="true" />
+              Enter {receipts.length > 0 ? "another" : "a"} {noun}
+            </Button>
+          </div>
+        )
+      ) : null}
+      <AmountField
+        label={added ? "Not on an uploaded receipt" : question.ask}
+        labelHidden={!added}
+        value={value}
+        disabled={!editable}
+        issue={issue}
+        onChange={onChange}
+      />
+      {suggestion !== null ? (
+        <p className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+          From your documents: {formatMoney(suggestion)}.
+          {editable && cleanAmount(value) !== suggestion ? (
+            <Button variant="link" size="sm" className="h-auto p-0 text-xs" onClick={() => onChange(suggestion)}>
+              Use {formatMoney(suggestion)}
+            </Button>
+          ) : null}
+        </p>
+      ) : null}
+    </div>
   );
 }
 

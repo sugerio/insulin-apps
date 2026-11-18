@@ -69,6 +69,10 @@ export interface Question {
   help?: string;
   /** For a question about a kind of income or expense: the slip type that shows it. Found slips answer it. */
   slip?: string;
+  /** For an amount: the receipts (a slip type) that go with it, shown beside it (and, where its line adds them, added). */
+  receipts?: string;
+  /** For an amount: a line that works out a starting amount from documents (receipts, a notice of assessment). */
+  suggest?: string;
   /** Used, and the result marked an estimate, while the question has no answer. */
   default?: string | boolean;
   options?: string[];
@@ -80,6 +84,15 @@ export interface SlipType {
   boxes: Record<string, string>;
   /** Boxes that never change a return (the CRA's checks, next year's limits): not reported as unhandled. */
   informational: string[];
+  /** A receipt or notice rather than a numbered slip: its "boxes" are amounts with no number printed beside them. */
+  receipt: boolean;
+  /** The years it may carry, relative to the tax year (0 the year itself; -1 last year's notice of assessment). */
+  printedYears: number[];
+}
+
+/** What to call a document of this type on screen: a slip by its type (T4), a receipt or notice by its title. */
+export function documentName(slipType: SlipType | undefined, id: string): string {
+  return slipType?.receipt ? slipType.title : id;
 }
 
 export interface RuleSet {
@@ -120,13 +133,22 @@ export const compiledRulesSchema = z.strictObject({
       module: z.enum(MODULES).optional(),
       help: z.string().optional(),
       slip: z.string().optional(),
+      receipts: z.string().optional(),
+      suggest: z.string().optional(),
       default: z.union([z.string(), z.boolean()]).optional(),
       options: z.array(z.string()).optional(),
     }),
   ),
   slips: z.record(
     z.string(),
-    z.strictObject({ title: z.string(), about: z.string(), boxes: z.record(z.string(), z.string()), informational: z.array(z.string()) }),
+    z.strictObject({
+      title: z.string(),
+      about: z.string(),
+      boxes: z.record(z.string(), z.string()),
+      informational: z.array(z.string()),
+      receipt: z.boolean(),
+      printedYears: z.array(z.number().int()).min(1),
+    }),
   ),
 });
 export type CompiledRules = z.infer<typeof compiledRulesSchema>;
@@ -265,6 +287,12 @@ function checkRuleSet(ruleSet: RuleSet, fail: (entry: string, message: string, c
     if (question.type !== "choice" && question.options) fail(entry, "Only a choice has options");
     if (question.slip !== undefined && (question.type !== "boolean" || !ruleSet.slips.has(question.slip))) {
       fail(entry, "A question's slip must be a slip type, on a yes/no question");
+    }
+    if (question.receipts !== undefined && (question.type !== "money" || !ruleSet.slips.has(question.receipts))) {
+      fail(entry, "A question's receipts must be a slip type, on an amount");
+    }
+    if (question.suggest !== undefined && (question.type !== "money" || !ruleSet.lines.has(question.suggest))) {
+      fail(entry, "A question's suggest must be a line, on an amount");
     }
     if (question.default !== undefined) {
       const ok =

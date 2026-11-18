@@ -13,6 +13,8 @@ import { StepLayout } from "../components/StepLayout.tsx";
 import { stepPath, useReturn, useYear } from "../components/YearFrame.tsx";
 import { uploadFile, uploadType } from "../lib/upload.ts";
 import { useResource } from "../lib/useResource.ts";
+import { documentName } from "../shared/engine/rules.ts";
+import { rulesFor } from "../shared/rules/index.ts";
 
 // Step 2, `/returns/:year/:personId/upload`: pick a folder (or files, or drop them), and each PDF, PNG or JPEG is sent
 // on its own, three at a time, into the open return for AI to read into slips. A file being read, one that wasn't saved
@@ -329,7 +331,7 @@ function UploadedFile({ document, uploading, onNotice }: { document: DocumentRec
               <ul className="mt-1 list-disc pl-5">
                 {document.slips.map((slip) => (
                   <li key={slip.id}>
-                    {slip.type} from {slip.issuer}, on {nameOf(slip.personId)}'s return{slip.status === "confirmed" ? " (confirmed)" : ""}
+                    {documentName(rulesFor(year.year)!.slips.get(slip.type), slip.type)} from {slip.issuer}, on {nameOf(slip.personId)}'s return{slip.status === "confirmed" ? " (confirmed)" : ""}
                   </li>
                 ))}
               </ul>

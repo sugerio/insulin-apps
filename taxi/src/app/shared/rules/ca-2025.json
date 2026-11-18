@@ -856,7 +856,8 @@
     },
     "T1.33099": {
       "label": "Medical expenses for you",
-      "formula": "answer.medicalExpenses"
+      "formula": "answer.medicalExpenses + sum(MEDICAL.box1)",
+      "source": "Medical expense receipts, and the amount entered that isn't on one"
     },
     "T1.33200": {
       "label": "Allowable medical expenses",
@@ -982,8 +983,8 @@
     },
     "S9.5": {
       "label": "Total eligible amount of charitable donations",
-      "formula": "answer.donations + sum(T4.box46)",
-      "source": "Schedule 9 line 5: official receipts, and box 46 of T4 slips"
+      "formula": "answer.donations + sum(DONATION.box1) + sum(T4.box46)",
+      "source": "Schedule 9 line 5: official receipts (uploaded, or entered), and box 46 of T4 slips"
     },
     "S9.10": {
       "label": "Donations claimed (within the limit)",
@@ -1061,6 +1062,16 @@
       "label": "Tuition transferred to your spouse or common-law partner",
       "formula": "if(line.HH.partner == 1 and household.partnerInYear and line.S11.8 > 0, min(answer.tuitionTransfer, line.S11.23), 0)",
       "source": "Schedule 11 line 24: the amount you designate on your T2202, up to line 23"
+    },
+    "SUGGEST.rrspDeduction": {
+      "label": "RRSP contributions you can deduct for 2025",
+      "formula": "if(sum(NOA.box1) > 0, min(sum(RRSP.box1) + sum(RRSP.box2) + sum(NOA.box2), sum(NOA.box1)), sum(RRSP.box1) + sum(RRSP.box2) + sum(NOA.box2))",
+      "source": "RRSP receipts, and the unused contributions and deduction limit on your 2024 notice of assessment"
+    },
+    "SUGGEST.unusedTuition": {
+      "label": "Unused federal tuition carried forward",
+      "formula": "sum(NOA.box3)",
+      "source": "Your 2024 notice of assessment"
     },
     "ON428.8": {
       "label": "Ontario tax on taxable income",
@@ -1293,6 +1304,8 @@
       "ask": "RRSP contributions to deduct for 2025",
       "module": "deductions",
       "help": "Contributions from March 4, 2025 to March 2, 2026, up to your limit on last year's notice of assessment.",
+      "receipts": "RRSP",
+      "suggest": "SUGGEST.rrspDeduction",
       "default": "0"
     },
     "fhsaDeduction": {
@@ -1333,6 +1346,8 @@
       "type": "money",
       "ask": "Unused federal tuition from your 2024 notice of assessment",
       "module": "credits",
+      "receipts": "NOA",
+      "suggest": "SUGGEST.unusedTuition",
       "default": "0"
     },
     "tuitionTransfer": {
@@ -1344,16 +1359,18 @@
     },
     "medicalExpenses": {
       "type": "money",
-      "ask": "Medical expenses you paid for yourself",
+      "ask": "Medical expenses",
       "module": "credits",
-      "help": "Either spouse can claim the family's medical expenses; it usually saves more on the lower income.",
+      "help": "For you, your spouse or your children. Uploaded receipts are added; enter what isn't on one. Either spouse can claim the family's medical expenses; it usually saves more on the lower income.",
+      "receipts": "MEDICAL",
       "default": "0"
     },
     "donations": {
       "type": "money",
-      "ask": "Donations on official receipts (not on a T4)",
+      "ask": "Donations",
       "module": "credits",
-      "help": "Either spouse can claim both spouses' donations; claiming them together usually saves more.",
+      "help": "On official receipts. Uploaded receipts and box 46 of your T4 are added; enter what isn't on one. Either spouse can claim both spouses' donations; claiming them together usually saves more.",
+      "receipts": "DONATION",
       "default": "0"
     },
     "spouseNetIncome": {
@@ -1384,6 +1401,10 @@
         "24",
         "26",
         "52"
+      ],
+      "receipt": false,
+      "printedYears": [
+        0
       ]
     },
     "T5": {
@@ -1402,6 +1423,10 @@
       "informational": [
         "10",
         "24"
+      ],
+      "receipt": false,
+      "printedYears": [
+        0
       ]
     },
     "T3": {
@@ -1421,6 +1446,10 @@
       "informational": [
         "23",
         "49"
+      ],
+      "receipt": false,
+      "printedYears": [
+        0
       ]
     },
     "T5008": {
@@ -1430,7 +1459,11 @@
         "20": "Proceeds of disposition or settlement amount",
         "21": "Cost or book value"
       },
-      "informational": []
+      "informational": [],
+      "receipt": false,
+      "printedYears": [
+        0
+      ]
     },
     "T2202": {
       "title": "T2202 Tuition and Enrolment Certificate",
@@ -1443,8 +1476,64 @@
       "informational": [
         "24",
         "25"
+      ],
+      "receipt": false,
+      "printedYears": [
+        0
       ]
+    },
+    "RRSP": {
+      "title": "RRSP contribution receipt",
+      "about": "Contributions to a registered retirement savings plan, from the plan's issuer, for March 4, 2025 to March 2, 2026 (contributions from January 1 to March 3, 2025 belong to the 2024 return)",
+      "boxes": {
+        "1": "Contributions from March 4 to December 31, 2025",
+        "2": "Contributions from January 1 to March 2, 2026"
+      },
+      "receipt": true,
+      "printedYears": [
+        0,
+        1
+      ],
+      "informational": []
+    },
+    "DONATION": {
+      "title": "Official donation receipt",
+      "about": "A receipt for income tax purposes from a registered charity or other qualified donee, for a gift made in 2025",
+      "boxes": {
+        "1": "Eligible amount of the gift"
+      },
+      "receipt": true,
+      "informational": [],
+      "printedYears": [
+        0
+      ]
+    },
+    "MEDICAL": {
+      "title": "Medical expense receipt",
+      "about": "A receipt for medical or dental care, prescriptions or devices paid for in 2025, for you, your spouse or your children",
+      "boxes": {
+        "1": "Amount paid"
+      },
+      "receipt": true,
+      "informational": [],
+      "printedYears": [
+        0
+      ]
+    },
+    "NOA": {
+      "title": "Notice of assessment for 2024",
+      "about": "The CRA's notice of assessment for last year's (2024) return, which carries the RRSP deduction limit and the amounts to carry forward to 2025",
+      "boxes": {
+        "1": "RRSP deduction limit for 2025",
+        "2": "Unused RRSP contributions available to deduct for 2025",
+        "3": "Unused federal tuition, education and textbook amounts available for 2025"
+      },
+      "receipt": true,
+      "printedYears": [
+        -1
+      ],
+      "informational": []
     }
   },
-  "version": "31924a325740fc8c"
+  "version": "2254af3ec803c4b8"
 }

@@ -41,6 +41,8 @@ const sourceQuestion = z.strictObject({
   module: z.enum(MODULES).optional(),
   help: z.string().min(1).optional(),
   slip: z.string().min(1).optional(),
+  receipts: z.string().min(1).optional(),
+  suggest: z.string().min(1).optional(),
   default: z.union([sourceNumber, z.boolean()]).optional(),
   options: z.array(z.string()).optional(),
 });
@@ -49,6 +51,8 @@ const sourceSlip = z.strictObject({
   about: z.string().min(1),
   boxes: z.record(z.string(), z.string()),
   informational: z.array(sourceNumber).optional(),
+  receipt: z.boolean().optional(),
+  printedYears: z.array(z.number().int()).optional(),
 });
 
 const manifestSchema = z.strictObject({
@@ -138,6 +142,8 @@ export function compileRules(chain: SourceYear[], hash: (text: string) => string
     slips: mapValues(merged.slips as Record<string, z.infer<typeof sourceSlip>>, (slip) => ({
       ...slip,
       informational: (slip.informational ?? []).map(String),
+      receipt: slip.receipt ?? false,
+      printedYears: slip.printedYears ?? [0],
     })),
   };
   const compiled: CompiledRules = { ...content, version: hash(JSON.stringify(content)) };

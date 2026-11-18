@@ -1,5 +1,6 @@
 import { DOCUMENT_TYPES, MAX_DOCUMENT_BYTES, type DocumentList, type DocumentRecord, type Person, type ReadResult, type Slip, type TaxYear } from "#shared";
 import { Dec } from "../../shared/engine/decimal.ts";
+import { documentName } from "../../shared/engine/rules.ts";
 import { rulesFor } from "../../shared/rules/index.ts";
 import { audit, bumpRevision, getYear, runGuarded, yearRow, type YearRow } from "./household.ts";
 import { ApiError, conflict, notFound } from "./http.ts";
@@ -290,14 +291,19 @@ async function readInto(year: number, view: TaxYear, uploader: Person, file: Fil
   });
   if (outcome.kind !== "read") return { status: outcome.kind, message: outcome.message, modelId: null, found: [] };
   const modelId = outcome.model;
-  if (outcome.taxYear !== null && outcome.taxYear !== year) return { status: "not_a_slip", message: `This is a slip for ${outcome.taxYear}, not ${year}.`, modelId, found: [] };
   const planned = plan(outcome.slips, view, year, uploader);
+  // The year printed must be one the documents found may carry: the tax year, or last year on a notice of assessment.
+  const years = new Set(planned.flatMap((slip) => rules.slips.get(slip.type)!.printedYears.map((offset) => year + offset)));
+  if (outcome.taxYear !== null && !years.has(outcome.taxYear) && !(planned.length === 0 && outcome.taxYear === year)) {
+    return { status: "not_a_slip", message: `This is for ${outcome.taxYear}, not ${year}.`, modelId, found: [] };
+  }
   if (planned.length === 0) return { status: "not_a_slip", message: "No slip this app reads was found in this file.", modelId, found: [] };
   const existing = slips.filter((slip) => slip.documentId === null || !replacing.includes(slip.documentId));
-  const found = planned.filter((slip) => !existing.some((other) => sameSlip(other, slip)));
+  // Two receipts can hold the same amount from the same place (a monthly prescription): only slips are matched.
+  const found = planned.filter((slip) => rules.slips.get(slip.type)!.receipt || !existing.some((other) => sameSlip(other, slip)));
   if (found.length === 0) return { status: "duplicate", message: "The slips in this file are already in this year.", modelId, found: [] };
   const message = found
-    .map((slip) => `${slip.type} from ${slip.issuer}${slip.personId === uploader.id ? "" : `, added to ${slip.personName}'s return`}${slip.guessed ? " (check whose it is)" : ""}`)
+    .map((slip) => `${documentName(rules.slips.get(slip.type), slip.type)} from ${slip.issuer}${slip.personId === uploader.id ? "" : `, added to ${slip.personName}'s return`}${slip.guessed ? " (check whose it is)" : ""}`)
     .join("; ");
   return { status: "read", message, modelId, found };
 }

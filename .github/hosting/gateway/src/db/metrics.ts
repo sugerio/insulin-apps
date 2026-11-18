@@ -34,8 +34,9 @@ const PRUNE_PER_REPORT = 1000
 
 /**
  * Stores a report: each value it carries replaces the one for that hour, so a resent report changes nothing, and a
- * day keeps its latest hour. Organizations the gateway doesn't know are skipped. It also deletes the app's rows past
- * their retention. Returns how many organizations were stored.
+ * day keeps its latest hour. Organizations the gateway doesn't know are skipped; each one it does is recorded as using
+ * the app (app_orgs), if it wasn't yet. It also deletes the app's rows past their retention. Returns how many
+ * organizations were stored.
  */
 export async function storeReport(db: D1Database, report: MetricsReport): Promise<number> {
   const day = dayOf(report.hour)
@@ -77,6 +78,15 @@ export async function storeReport(db: D1Database, report: MetricsReport): Promis
          ON CONFLICT (app, day, org_id) DO UPDATE SET hour = excluded.hour, metrics = excluded.metrics
          WHERE excluded.hour >= app_metrics_daily.hour`,
       ).bind(report.app, day, report.hour, rows),
+      // The app's own report of an organization's records is its use there (DESIGN.md §8.9): one it was used in before
+      // the gateway recorded where apps are used, with no request since, is recorded now. An app knows only the
+      // organization ids its requests carried.
+      db.prepare(
+        `INSERT INTO app_orgs (app, org_id, first_at)
+         SELECT ?1, json_extract(j.value, '$.id'), ?2 FROM json_each(?3) j
+         WHERE EXISTS (SELECT 1 FROM orgs o WHERE o.id = json_extract(j.value, '$.id'))
+         ON CONFLICT (app, org_id) DO NOTHING`,
+      ).bind(report.app, report.hour, rows),
     ])
     stored = results[statements.length]?.meta.changes ?? 0
   } else if (statements.length) {

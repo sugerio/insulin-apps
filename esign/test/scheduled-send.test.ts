@@ -14,7 +14,7 @@ const ORIGIN = 'https://esign.example.test';
 const TICK = { 'x-suger-app-id': 'insulin-apps-esign', 'x-suger-access-via': 'schedule' };
 const HOUR = 60 * 60 * 1000;
 
-async function setup(platform: { status?: () => Response } = {}, accepts: (url: URL, body: unknown) => boolean = () => true) {
+async function setup(platform: { status?: () => Response; report?: (body: unknown) => Response } = {}, accepts: (url: URL, body: unknown) => boolean = () => true) {
   const mf = new Miniflare({ modules: true, script: 'export default {fetch(){return new Response("ok")}}', d1Databases: ['DB'] });
   const db = await mf.getD1Database('DB');
   for (const name of (await readdir(MIGRATIONS_DIR)).filter((n) => n.endsWith('.sql')).sort()) await db.batch(splitSql(await readFile(new URL(name, MIGRATIONS_DIR), 'utf8')).map((s) => db.prepare(s)));
@@ -24,6 +24,11 @@ async function setup(platform: { status?: () => Response } = {}, accepts: (url: 
     ...(platform.status ? {
       SUGER_MEMBER_STATUS_URL: 'https://apps.example.test/__insulin/members/status', SUGER_APP_TOKEN: 'app-token-for-esign',
       MEMBERS_FETCH: (async (input: string, init: RequestInit) => accepts(new URL(input), JSON.parse(String(init.body))) ? platform.status!() : Response.json({ error: 'invalid_request' }, { status: 400 })) as unknown as typeof fetch,
+    } : {}),
+    // The hourly usage report (usage-metrics.ts), as the platform takes it.
+    ...(platform.report ? {
+      SUGER_METRICS_URL: 'https://apps.example.test/__insulin/metrics',
+      METRICS_FETCH: (async (_input: string, init: RequestInit) => platform.report!(JSON.parse(String(init.body)))) as unknown as typeof fetch,
     } : {}),
   };
   const person = (name: string, role: 'EDITOR' | 'VIEWER' = 'EDITOR') => identity('tenant', { userId: `user-${name}`, email: `${name}@example.test`, role });
@@ -194,6 +199,34 @@ test('when due, it is sent only while whoever scheduled it can still send: the p
     const sent = await schedule('older-platform');
     await h.tick();
     assert.equal((await h.row(sent))?.status, 'IN_PROGRESS');
+  } finally { await h.mf.dispose(); }
+});
+
+test('scheduled before the platform recorded where Esign is used: held until its usage report names the organization, then sent at the next tick', async () => {
+  // As the gateway answers after the upgrade (DESIGN.md §8.9): an organization with no trace of Esign but its data is
+  // none of Esign's business until Esign's own usage report names it, which records it.
+  let recorded = false;
+  const reports: unknown[] = [];
+  const h = await setup({
+    status: () => recorded ? status(editor)() : Response.json({ error: 'unknown_organization' }, { status: 404 }),
+    report: (body) => {
+      reports.push(body);
+      if ((body as { organizations?: { id: string }[] }).organizations?.some((org) => org.id === 'tenant')) recorded = true;
+      return Response.json({ status: 'accepted' }, { status: 202 });
+    },
+  });
+  try {
+    const r = await h.post('/api/envelopes', h.ana, { ...whole(h.templateId), sendAt: later() }, { 'idempotency-key': 'before-the-record' });
+    assert.equal(r.status, 201, await r.clone().text());
+    const { id } = await r.json() as { id: string };
+    await h.due(id);
+    // The first tick: the platform doesn't answer for the organization yet, so the send waits; the hour's report goes.
+    assert.deepEqual(await h.tick(), { expired: 0, completed: 0, waiting: 0, failed: 0, scheduledSent: 0, scheduledFailed: 0 });
+    assert.deepEqual([(await h.row(id))?.status, JSON.parse((await h.row(id))!.draft_json!).schedule.error], ['DRAFT', undefined], 'waiting, not refused');
+    assert.equal(reports.length, 1, 'the report names the organization: its template');
+    // The next tick: sent.
+    assert.equal((await h.tick()).scheduledSent, 1);
+    assert.equal((await h.row(id))?.status, 'IN_PROGRESS');
   } finally { await h.mf.dispose(); }
 });
 

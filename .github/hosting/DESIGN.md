@@ -676,9 +676,10 @@ of each kind and the bytes of files stored. Counts and sizes only: never a name,
   ending in `_bytes` is shown as a size.
 - **What the gateway does.** It checks the token (401), the size (413), the shape (400 `invalid_request`, with a
   `detail` naming the rule, never echoing a value) and `RL_APP` per app (429), then stores what the request carries,
-  replacing that hour's values, so a resent report changes nothing. Organizations it doesn't know are skipped. It
-  answers 202 `{ "status": "accepted", "organizations": <stored>, "skipped": <unknown> }`, and 503 `not_configured`
-  without `GATEWAY_SECRET_KEY`. Reports for a suspended organization are still stored. Hourly values are kept three
+  replacing that hour's values, so a resent report changes nothing. Organizations it doesn't know are skipped; one it
+  does is recorded as using the app, if it wasn't yet (§8.9). It answers 202
+  `{ "status": "accepted", "organizations": <stored>, "skipped": <unknown> }`, and 503 `not_configured` without
+  `GATEWAY_SECRET_KEY`. Reports for a suspended organization are still stored. Hourly values are kept three
   days, the last report of each UTC day 400 days; each report also deletes up to 1,000 of its app's expired rows from
   each table, more than one report adds, so an app's reports keep its retention whatever the rest of the traffic.
 - **Configuration.** The deploy gives each app `SUGER_METRICS_URL` next to `SUGER_MAIL_URL`, when `GATEWAY_SECRET_KEY`
@@ -790,11 +791,12 @@ on three endpoints, which, with the limits of §8.8, are the **app endpoints**:
 - **Where each app is used.** They answer only about organizations where the app is used: `app_orgs` records the
   gateway's first request to the app for an organization (a page, an AI agent or an API client; never a public path or
   the tick), written before that request goes on, so an app never serves an organization these endpoints don't yet
-  answer for. Migration `0012` fills it for the organizations that used an app before it, from what the gateway held
-  of the app there (its usage reports, its mail through the relay, its API clients and AI agents' grants, its stored
-  credentials, specific-apps members given it), so an app that acts without a request (Esign's scheduled sends) has
-  its answers at once; any other organization gets a row at its next request. Deleting an organization forgets its
-  rows.
+  answer for, and the first usage report (§8.6) the app sends naming an organization the gateway knows: its own
+  account of records it holds there. Configuration alone (an API client, an AI agent's grant, a stored credential, a
+  specific-apps grant) is no use. Migration `0012` fills it for the organizations that used an app before it, from the
+  app's traces of use there (its usage reports and its mail through the relay), so an app that acts without a request
+  (Esign's scheduled sends) has its answers at once; one whose only trace is the app's own data is recorded by the
+  app's next report. Deleting an organization forgets its rows.
 - **Member lookup.** `GET https://insulinapps.com/__insulin/members?q=<text>` (`SUGER_MEMBERS_URL`), with the
   `x-suger-member-lookup` header of the browser request the app is serving. The gateway adds that header to every
   request with `x-suger-access-via: browser`: `v1.<organization>.<person>.<expiry>.<signature>`, the expiry five

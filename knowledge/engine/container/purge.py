@@ -13,15 +13,17 @@ every piece of its text (runs of words between line breaks and sentence ends, at
 chunk, a summary or a graph node holds them). A probe matches as the hiding detector matches a word: ignoring case
 exactly as `re.IGNORECASE` does (`fold()`: "Pin" is "pın", "İ" is "i", "ſ" is "s") and whole, with no letter or digit
 just before or after it. One that a kept document's text holds too doesn't count: it may rightly stay, in that
-document's data. Each probe is looked for only where the rarest of its words stands (`Matcher`), so the cost follows
-the data, however many probes share a word.
+document's data. All probes are looked for at once (`Matcher`, Aho-Corasick over the text's words and the runs between
+them), so the cost is the text's length plus the matches, whatever the probes share.
 
 Where it is looked for (`content()`): only values made from the documents, never keys, schemas or the stores' own
 bookkeeping (ids, types, paths, states): the stored texts, Cognee's copies of them, its chunks, entity names, summaries
-and relations in LanceDB and the graph, and the facts. Summaries, relations and facts also hold Cognee's own words
-(its entity labels and relation names, as stored, `headquartered_in`, and as written, "is part of"): a probe found
-there that is one of those, or some of its words in a row, doesn't count.
-Any file under /data this module doesn't know is read whole, as text.
+and relations in LanceDB and the graph, and the facts. Cognee also writes values of its own, from its fixed words
+(`ENTITY_LABELS`, `RELATIONS`: in this setup GLiNER picks them from Cognee's label banks, never from a document): an
+entity type's name and a relation's name are skipped when they are one of those, and a summary, a relation's text or a
+fact's sentence is skipped only when it is exactly what Cognee's template makes from the graph's live records (whose
+own values are read where they stand). Anything else, a summary that isn't such, a text that only shares words with a
+label, is read in full. Any file under /data this module doesn't know is read whole, as text.
 
 This module never imports Cognee; the databases are opened with their own libraries, after the process that used
 Cognee has exited, so nothing else holds them open.
@@ -29,14 +31,18 @@ Cognee has exited, so nothing else holds them open.
 
 from __future__ import annotations
 
+import ast
 import json
 import os
 import re
 import shutil
 import sqlite3
+from collections import deque
 from collections.abc import Callable, Iterable, Iterator
 from datetime import timedelta
 from pathlib import Path
+
+import facts
 
 PROBE_MIN = 24  # shortest piece of a removed document looked for
 DELETED_SHARE = 1e-9  # a fragment with any deleted row is rewritten
@@ -44,15 +50,31 @@ DELETED_SHARE = 1e-9  # a fragment with any deleted row is rewritten
 # Where a removed text is cut into pieces: line breaks, sentence ends and runs of spaces (a chunker may squeeze them).
 CUTS = re.compile(r"\s{2,}|[\t\r\n\f\v\x00-\x1f]|(?<=[.!?])\s")
 WORD = re.compile(r"\w+")
+TOKEN = re.compile(r"\w+|\W+")  # a text as Matcher reads it: words and the runs between them
 
 LANCEDB = Path("system/databases/cognee.lancedb")
 GRAPH = Path("system/databases/cognee_graph_ladybug")
 RELATIONAL = Path("system/databases/cognee_db")
-# LanceDB tables by what their `text` holds: document text, Cognee's own words (entity labels), document ids. Any
-# other table (summaries, relations) holds both document text and Cognee's words.
-DOCUMENT_TABLES = {"DocumentChunk_text", "Entity_name"}
-COGNEE_TABLES = {"EntityType_name"}
-ID_TABLES = {"TextDocument_name"}
+# Cognee's own words in this setup, for the version the image pins (a test keeps COGNEE_VERSION equal to it): with no
+# LLM, GLiNER draws entity labels and relation names only from Cognee's fixed label banks
+# (cognee/tasks/graph/gliner_demo/banks.py, LABEL_BANK and RELATION_BANK), dates become Timestamp nodes, and Cognee links
+# its own records with four relations. Never a document's words: a label outside these is read as the document's.
+COGNEE_VERSION = "1.6.8"
+ENTITY_LABELS = frozenset(
+    {
+        "person", "organization", "location", "event", "date", "year", "time_period", "product", "technology",
+        "software", "programming_language", "concept", "document", "project", "role", "industry", "money", "quantity",
+        "percentage", "law", "disease", "drug", "chemical", "animal", "plant", "artwork", "award", "facility",
+        "vehicle", "food", "nationality", "Timestamp",
+    }
+)
+RELATIONS = frozenset(
+    {
+        "works_for", "founded_by", "located_in", "headquartered_in", "part_of", "member_of", "owns", "acquired",
+        "produces", "uses", "created_by", "leads", "collaborates_with", "born_in", "participates_in", "occurred_on",
+        "contains", "is_a", "is_part_of", "made_from",
+    }
+)
 
 
 def removed_probes(removed: list[str]) -> list[str]:
@@ -110,47 +132,66 @@ def fold(text: str) -> str:
 
 class Matcher:
     """Finds many probes in a text at once, each as the hiding detector finds a word (hide.py `_words`): ignoring case
-    and whole. Each probe is filed under its rarest word among the probes (and that word's place in it); the text is
-    folded once, and only where one of those words stands is the folded text there compared with the probes filed
-    under it, of each length, then each match confirmed with the probe's own expression. The cost follows the text,
-    however many probes share a word."""
+    and whole. Aho-Corasick over the folded text's tokens (its words and the runs between them): each probe, from its
+    first word to its last, is a path of tokens in one trie; the text is read once, token by token, following failure
+    links, and every end of a probe's path is confirmed with the probe's own expression (its edges included). The cost
+    is the text's length plus the matches, whatever the probes share: a word, a prefix, every length."""
 
     def __init__(self, probes: Iterable[str]) -> None:
-        probes = list(dict.fromkeys(p for p in probes if p))
-        words = {p: [(m.group(), m.start()) for m in WORD.finditer(fold(p))] for p in probes}
-        shared: dict[str, int] = {}
-        for probe in probes:
-            for word in {w for w, _ in words[probe]}:
-                shared[word] = shared.get(word, 0) + 1
-        # word -> its place in the probe -> the probe's length -> the folded probe -> [(probe, expression)]
-        self.filed: dict[str, dict[int, dict[int, dict[str, list[tuple[str, re.Pattern]]]]]] = {}
+        goto: list[dict[str, int]] = [{}]
+        ends: list[list[tuple[str, re.Pattern, int, int]]] = [[]]  # per state: (probe, expression, lead, tokens)
         self.wordless: list[tuple[str, re.Pattern]] = []
-        for probe in probes:
+        self.depth = 1
+        for probe in dict.fromkeys(p for p in probes if p):
             pattern = re.compile(r"(?<!\w)" + re.escape(probe) + r"(?!\w)", re.IGNORECASE)
-            if not words[probe]:
+            tokens = TOKEN.findall(fold(probe))
+            words = [i for i, token in enumerate(tokens) if WORD.match(token)]
+            if not words:
                 self.wordless.append((probe, pattern))
                 continue
-            word, at = min(words[probe], key=lambda w: (shared[w[0]], -len(w[0])))
-            folded = fold(probe)
-            self.filed.setdefault(word, {}).setdefault(at, {}).setdefault(len(folded), {}).setdefault(folded, []).append((probe, pattern))
+            path = tokens[words[0] : words[-1] + 1]
+            state = 0
+            for token in path:
+                if token not in goto[state]:
+                    goto[state][token] = len(goto)
+                    goto.append({})
+                    ends.append([])
+                state = goto[state][token]
+            ends[state].append((probe, pattern, sum(len(t) for t in tokens[: words[0]]), len(path)))
+            self.depth = max(self.depth, len(path))
+        fail = [0] * len(goto)
+        found_next = [0] * len(goto)  # the nearest state down the failure links where a probe ends
+        queue = deque(goto[0].values())
+        while queue:
+            state = queue.popleft()
+            for token, target in goto[state].items():
+                queue.append(target)
+                back = fail[state]
+                while back and token not in goto[back]:
+                    back = fail[back]
+                fail[target] = goto[back].get(token, 0) if state else 0
+                found_next[target] = fail[target] if ends[fail[target]] else found_next[fail[target]]
+        self.goto, self.fail, self.ends, self.found_next = goto, fail, ends, found_next
 
     def counts(self, text: str) -> dict[str, int]:
         out: dict[str, int] = {}
-        folded = fold(text)
-        present = set(WORD.findall(folded)) & self.filed.keys()
-        if present:
-            for found in WORD.finditer(folded):
-                word = found.group()
-                if word not in present:
-                    continue
-                for at, by_length in self.filed[word].items():
-                    start = found.start() - at
-                    if start < 0:
-                        continue
-                    for length, by_text in by_length.items():
-                        for probe, pattern in by_text.get(folded[start : start + length], ()):
-                            if pattern.match(text, start):
-                                out[probe] = out.get(probe, 0) + 1
+        goto, fail, ends, found_next = self.goto, self.fail, self.ends, self.found_next
+        if len(goto) > 1:
+            starts: deque[int] = deque(maxlen=self.depth)  # where the last tokens start
+            state = 0
+            for token in TOKEN.finditer(fold(text)):
+                word = token.group()
+                starts.append(token.start())
+                while state and word not in goto[state]:
+                    state = fail[state]
+                state = goto[state].get(word, 0)
+                end = state if ends[state] else found_next[state]
+                while end:
+                    for probe, pattern, lead, length in ends[end]:
+                        start = starts[-length] - lead
+                        if start >= 0 and pattern.match(text, start):
+                            out[probe] = out.get(probe, 0) + 1
+                    end = found_next[end]
         for probe, pattern in self.wordless:
             count = len(pattern.findall(text))
             if count:
@@ -196,107 +237,197 @@ def _vector_tables(root: Path) -> Iterator[tuple[str, list[str]]]:
         yield table.stem, [p["text"] for p in payloads if isinstance(p, dict) and isinstance(p.get("text"), str)]
 
 
-def _graph(root: Path) -> tuple[list[tuple[str, str]], set[str]]:
-    """The graph's values made from the documents, as (kind, text), and Cognee's own words in it (entity labels and
-    relation names)."""
-    values: list[tuple[str, str]] = []
-    own: set[str] = set()
+def _graph(root: Path) -> tuple[dict[str, dict], list[tuple[str, str, str, dict]]]:
+    """The graph's nodes (id -> name, type, properties) and edges (source, target, relation name, properties)."""
+    nodes: dict[str, dict] = {}
+    edges: list[tuple[str, str, str, dict]] = []
     if not (root / GRAPH).is_file():
-        return values, own
+        return nodes, edges
     import ladybug
 
     database = ladybug.Database(str(root / GRAPH))
     connection = ladybug.Connection(database)
     try:
-        for name, kind, properties in _rows(connection, "MATCH (n:Node) RETURN n.name, n.type, n.properties"):
-            props = _properties(properties)
-            if kind == "EntityType":
-                own.add(str(name or ""))
-            elif kind == "DocumentChunk":
-                values.append(("document", str(props.get("text") or "")))
-            elif kind == "Entity":
-                values.extend(("document", str(v or "")) for v in (name, props.get("description")))
-            elif kind != "TextDocument":  # a document's node is named by its id
-                values.extend(("derived", str(v or "")) for v in (name, props.get("text"), props.get("description")))
-        for relation, properties in _rows(connection, "MATCH ()-[r:EDGE]->() RETURN r.relationship_name, r.properties"):
-            own.add(str(relation or ""))
-            values.append(("derived", str(_properties(properties).get("edge_text") or "")))
+        for node_id, name, kind, properties in _rows(connection, "MATCH (n:Node) RETURN n.id, n.name, n.type, n.properties"):
+            nodes[str(node_id)] = {"name": str(name or ""), "type": str(kind or ""), "props": _properties(properties)}
+        query = "MATCH (a:Node)-[r:EDGE]->(b:Node) RETURN a.id, b.id, r.relationship_name, r.properties"
+        for source, target, relation, properties in _rows(connection, query):
+            edges.append((str(source), str(target), str(relation or ""), _properties(properties)))
     finally:
         connection.close()
         database.close()
-    return values, own
+    return nodes, edges
 
 
-def content(root: Path) -> tuple[list[tuple[str, str, str]], set[str]]:
-    """What the stores under `root` hold that was made from the documents, decoded: (place, kind, text), where kind is
-    "document" (the documents' words only) or "derived" (with Cognee's own words too), and Cognee's own labels and
-    relation names, as stored."""
-    out: list[tuple[str, str, str]] = []
-    own: set[str] = set()
+def _label(node: dict) -> str:
+    """How Cognee names a node in a relation's text (prepare_edges_for_storage.py `_get_node_label`): its first
+    indexed field, on one line and cut at 80 characters, else its name, else its type."""
+    metadata = node["props"].get("metadata")
+    if isinstance(metadata, str):
+        try:
+            metadata = ast.literal_eval(metadata)
+        except (ValueError, SyntaxError):
+            metadata = {}
+    fields = metadata.get("index_fields") or [] if isinstance(metadata, dict) else []
+    for field in fields:
+        value = node["name"] if field == "name" else node["props"].get(field)
+        value = str(value).strip() if value is not None else ""
+        if value:
+            return " ".join(value.split())[:80]
+    return node["name"].strip() or node["type"]
+
+
+def _relation_text(source: dict, relation: str, target: dict, text: str) -> bool:
+    """Whether `text` is exactly what Cognee writes for this relation: "<source> <relation as words> <target>.", or for
+    a chunk's mention of an entity, "Document chunk mentions <name>: <name as the chunk spelled it>"."""
+    phrase = relation.strip().replace("_", " ") or "related to"
+    if text == f"{_label(source)} {phrase} {_label(target)}.":
+        return True
+    mention = f"Document chunk mentions {target['name']}: "
+    spelled = {fold(target["name"]), fold(str(target["props"].get("description") or ""))}
+    return relation == "contains" and text.startswith(mention) and fold(text[len(mention) :]) in spelled
+
+
+def _summary(text: str, names: set[str]) -> bool:
+    """Whether `text` is exactly what Cognee writes as a chunk's summary (gliner_demo/summary.py): a line of
+    "<entity> <relation> <entity>" and a line of "<label>: <entity>, <entity>", each part "; "-separated, with only live
+    entities' names (`names`, folded) and Cognee's own labels and relation names."""
+    lines = text.split("\n")
+    return 0 < len(lines) <= 2 and all(_summary_line(line, names) for line in lines)
+
+
+def _summary_line(line: str, names: set[str]) -> bool:
+    def cuts(start: int, separators: tuple[str, ...]) -> set[int]:
+        found = {len(line)}
+        for separator in separators:
+            at = line.find(separator, start)
+            while at >= 0:
+                found.add(at)
+                at = line.find(separator, at + 1)
+        return found
+
+    def name_ends(start: int) -> set[int]:
+        """Where a list of names ("a, b") from `start` can end."""
+        out, todo, seen = set(), {start}, set()
+        while todo:
+            at = todo.pop()
+            if at in seen:
+                continue
+            seen.add(at)
+            for end in cuts(at, ("; ", ", ")):
+                if fold(line[at:end]) in names:
+                    if line.startswith(", ", end):
+                        todo.add(end + 2)
+                    out.add(end)
+        return out
+
+    def item_ends(start: int) -> set[int]:
+        out: set[int] = set()
+        for label in ENTITY_LABELS:
+            if line.startswith(f"{label}: ", start):
+                out |= name_ends(start + len(label) + 2)
+        for relation in RELATIONS:
+            at = line.find(f" {relation} ", start)
+            while at >= 0:
+                if fold(line[start:at]) in names:
+                    tail = at + len(relation) + 2
+                    out |= {end for end in cuts(tail, ("; ",)) if fold(line[tail:end]) in names}
+                at = line.find(f" {relation} ", at + 1)
+        return out
+
+    done: dict[int, bool] = {}
+
+    def rest(start: int) -> bool:
+        if start not in done:
+            done[start] = any(end == len(line) or (line.startswith("; ", end) and rest(end + 2)) for end in item_ends(start))
+        return done[start]
+
+    return bool(line) and rest(0)
+
+
+def content(root: Path) -> list[tuple[str, str]]:
+    """What the stores under `root` hold that was made from the documents, decoded, as (place, text): everything but
+    Cognee's own values (its labels where they stand alone, and texts exactly as its templates make them from the live
+    records)."""
+    out: list[tuple[str, str]] = []
     known = {root / RELATIONAL, root / GRAPH}  # SQLite holds names, ids, paths and states (purge vacuums it)
     for path in sorted((root / "text").glob("*.json")):
         known.add(path)
         stored = _json(path)
         if isinstance(stored, dict) and isinstance(stored.get("text"), str):
-            out.append((f"text/{path.name}", "document", stored["text"]))  # its name isn't hidden: it isn't text
+            out.append((f"text/{path.name}", stored["text"]))  # its name isn't hidden: it isn't text
     known.update((root / "passages").glob("*.json"))  # where each passage is, by id and hash
     known.add(root / "ledger.json")  # which imports made which documents, by id
-    facts = _json(root / "facts.json")
+
+    nodes, edges = _graph(root)
+    names = {fold(v) for n in nodes.values() if n["type"] in ("Entity", "Timestamp") for v in (n["name"], str(n["props"].get("description") or "")) if v}
+    graph: list[str] = []
+    for node in nodes.values():
+        props = node["props"]
+        if node["type"] == "EntityType":
+            graph.extend([] if node["name"] in ENTITY_LABELS else [node["name"]])
+        elif node["type"] == "TextSummary":
+            text = str(props.get("text") or "")
+            graph.extend([] if _summary(text, names) else [text])
+        elif node["type"] != "TextDocument":  # a document's node is named by its id
+            graph.extend(str(v) for v in (node["name"], props.get("text"), props.get("description")) if v)
+    made: set[str] = set()  # relation texts exactly as Cognee writes them
+    sentences: set[str] = set()  # facts' sentences as facts.py writes them
+    for source, target, relation, props in edges:
+        if relation not in RELATIONS:
+            graph.append(relation)
+        text = str(props.get("edge_text") or "")
+        if source in nodes and target in nodes and relation in RELATIONS and _relation_text(nodes[source], relation, nodes[target], text):
+            made.add(text)
+        elif text:
+            graph.append(text)
+        if nodes.get(source, {}).get("type") == "Entity" and nodes.get(target, {}).get("type") == "Entity":
+            sentences.add(facts.fact_sentence(nodes[source]["name"], relation, nodes[target]["name"]))
+    if graph:
+        out.append(("graph", "\n".join(graph)))
+
     known.add(root / "facts.json")
-    for fact in (facts or {}).get("facts", []) if isinstance(facts, dict) else []:
-        out.append(("facts.json", "document", str(fact.get("sourceSentence") or "")))
-        out.append(("facts.json", "derived", str(fact.get("sentence") or "")))
+    stored_facts = _json(root / "facts.json")
+    for fact in (stored_facts or {}).get("facts", []) if isinstance(stored_facts, dict) else []:
+        out.append(("facts.json", str(fact.get("sourceSentence") or "")))
+        if str(fact.get("sentence") or "") not in sentences:
+            out.append(("facts.json", str(fact.get("sentence") or "")))
     if (root / LANCEDB).is_dir():
         known.update(p for p in (root / LANCEDB).rglob("*"))
         for table, texts in _vector_tables(root):
-            if table in COGNEE_TABLES:
-                own.update(texts)
-            elif table not in ID_TABLES:
-                out.append((f"LanceDB {table}", "document" if table in DOCUMENT_TABLES else "derived", "\n".join(texts)))
-    values, graph_own = _graph(root)
-    own.update(graph_own)
-    for kind in ("document", "derived"):
-        texts = [text for k, text in values if k == kind and text]
-        if texts:
-            out.append(("graph", kind, "\n".join(texts)))
+            if table == "TextDocument_name":
+                continue  # documents' ids
+            if table == "EntityType_name":
+                texts = [t for t in texts if t not in ENTITY_LABELS]
+            elif table == "TextSummary_text":
+                texts = [t for t in texts if not _summary(t, names)]
+            elif table == "EdgeType_relationship_name":
+                texts = [t for t in texts if t not in made and t not in RELATIONS]  # a relation's text, or its name
+            if texts:
+                out.append((f"LanceDB {table}", "\n".join(texts)))
     for path in sorted(root.rglob("*")):
         if path in known or path.is_symlink() or not path.is_file():
             continue
         name = str(path.relative_to(root))
         if name.startswith(str(RELATIONAL)) or name.startswith(str(GRAPH)) or name.startswith("system/databases/.cognee-migration-"):
             continue  # the databases' own side files (write-ahead logs, locks): checked by purge()
-        out.append((name, "document" if name.startswith("documents/") else "derived", _decoded(path)))
-    return out, own
-
-
-def _phrases(labels: Iterable[str]) -> list[tuple[str, ...]]:
-    """Cognee's labels and relation names as the words it writes them with, folded: `is_part_of` is (is, part, of)."""
-    return [tuple(WORD.findall(fold(label.replace("_", " ")))) for label in labels if label]
-
-
-def _cognees(probe: str, phrases: list[tuple[str, ...]]) -> bool:
-    """Whether `probe` is Cognee's own: one of its labels or relation names, as stored (`headquartered_in`) or as
-    written ("headquartered in"), or some of their words in a row ("part of")."""
-    words = tuple(WORD.findall(fold(probe.replace("_", " "))))
-    return bool(words) and any(phrase[i : i + len(words)] == words for phrase in phrases for i in range(len(phrase) - len(words) + 1))
+        out.append((name, _decoded(path)))
+    return out
 
 
 def left(root: Path, probes: list[str], kept: Callable[[], Iterable[str]]) -> dict[str, int]:
     """The places under `root` still holding removed or hidden text, with how many times: every probe found, except
-    one a kept document's text holds too (it may rightly stay, in that document's data), and one of Cognee's own
-    words (`_cognees`) found in what holds Cognee's words too. The kept texts are read one at a time."""
+    one a kept document's text holds too (it may rightly stay, in that document's data). The kept texts are read one
+    at a time."""
     matcher = Matcher(probes)
     exempt: set[str] = set()
     for text in kept():
         exempt.update(matcher.counts(text))
-    places, labels = content(root)
-    phrases = _phrases(labels)
     out: dict[str, int] = {}
-    for place, kind, text in places:
+    for place, text in content(root):
         for probe, count in matcher.counts(text).items():
-            if probe in exempt or (kind == "derived" and _cognees(probe, phrases)):
-                continue
-            out[place] = out.get(place, 0) + count
+            if probe not in exempt:
+                out[place] = out.get(place, 0) + count
     return out
 
 

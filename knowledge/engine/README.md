@@ -391,16 +391,25 @@ exactly as Python's `re.IGNORECASE` does (`fold()` in `purge.py` uses the regula
 `Éclair` finds `éclair`, an entity name kept in lower case, and `Pin` finds `pın`; a test checks every character with
 a case against `re`) and whole. Only values made from the documents are read, never keys, schemas or bookkeeping (a
 hidden word "text" is no JSON key's or column's): the stored texts (not their names), Cognee's copies of them, the
-chunks and entity names, the summaries and relations in LanceDB and the graph, and the facts. Summaries, relations
-and facts also hold Cognee's own words, its entity labels and relation names (from the graph): one found there as
-stored (`headquartered_in`), as written ("headquartered in") or as some of its words in a row doesn't count. A file
-under `/data` none of these covers is read whole. A probe a kept document's text also holds may stay. Anything left
-fails the try with the number of places (logged by name, never the text). Every value and piece is looked for: each
-is filed under its rarest word among the probes, and the folded text is compared with a probe only where that word
-stands, so the cost follows the data however many probes share a word (20,000 addresses removed, all at
-`example.com`, against 2 MiB of kept text: 0.1 s, where looking for each one through the whole text took ten
-minutes; 32 MiB of kept text: about 2 s). On the 30-document corpus (34 MB under `/data`) cleaning and reading take
-about a second.
+chunks and entity names, the summaries and relations in LanceDB and the graph, and the facts. Cognee also writes
+values of its own, from fixed words: with no LLM, GLiNER takes entity labels and relation names only from Cognee's
+label banks, never from a document, and Cognee links its records with four relations of its own (`ENTITY_LABELS` and
+`RELATIONS` in `purge.py`, for the Cognee the image pins; a test ties them to the pin). An entity type's name or a
+relation's name is skipped when it is one of those words; a summary, a relation's text or a fact's sentence is
+skipped only when it is exactly what Cognee's templates make from the graph's live records (whose own values, the
+entities' names, chunks and summaries, are read where they stand). Anything else is read in full, whatever words it
+shares with a label: a summary that isn't Cognee's ("The project uses Part Of as its supplier.") counts, even though
+the graph has `is_part_of`. So a hidden word that is also one of Cognee's labels or relation names (`person`,
+`headquartered_in`) doesn't count where Cognee wrote it as its label for other documents, and counts wherever a
+document wrote it: a chunk, an entity's name, a sentence a fact was taken from. On the 30-document corpus every
+summary, relation text and fact Cognee wrote is recognised as its own. A file under `/data` none of these covers is
+read whole. A probe a kept document's text also holds may stay. Anything left fails the try with the number of places
+(logged by name, never the text). All the values and pieces are looked for at once, by Aho-Corasick over the folded
+text's words and the runs between them (pure Python, so no new dependency in the image), so the cost is the text's
+length plus the matches, whatever the probes share: 32 MiB of kept text takes 3 to 5 s, with 20,000 removed
+addresses all at `example.com` or 1,000 removed lines "the the … and" of every length (looking for each probe, or
+each length, wherever their word stood took ten minutes for the first at 2 MiB, and 106 minutes for the second). On the 30-document corpus (34 MB under `/data`)
+cleaning and reading take about a second.
 
 **The control server's connections.** `server.py` serves one request per connection and says so in every answer
 (`connection: close`). Without that, the Durable Object's fetch, which keeps connections for the next call, sent a

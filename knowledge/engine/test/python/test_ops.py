@@ -295,34 +295,77 @@ class Probes(unittest.TestCase):
             (root / "documents" / "text_9.txt").write_text("Use text for the launch plan.")
             self.assertEqual(purge.left(root, ["text"], lambda: []), {"documents/text_9.txt": 1}, "a document's own words still count")
 
-    def test_cognees_own_words_count_only_where_documents_alone_write(self):
-        # "is part of" is Cognee's (a relation name), in a fact's sentence; in the sentence the fact was taken from, a
-        # document wrote it. Cognee's words come from the graph's labels and relation names.
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            fact = {"sentence": "Hawser is part of billing.", "sourceSentence": "Hawser belongs to billing."}
-            (root / "facts.json").write_text(json.dumps({"facts": [fact]}))
-            with mock.patch.object(purge, "_graph", lambda root: ([], {"is_part_of", "person"})):
-                self.assertEqual(purge.left(root, ["part"], lambda: []), {})
-                fact["sourceSentence"] = "Hawser is part of billing."
-                (root / "facts.json").write_text(json.dumps({"facts": [fact]}))
-                self.assertEqual(purge.left(root, ["part"], lambda: []), {"facts.json": 1})
+    @staticmethod
+    def graph(*, summaries=(), relations=(), entities=("Hawser gateway", "port 8443", "Dana Reyes"), types=("organization", "location", "person")):
+        """A graph as Cognee writes it: entities (named in lower case, spelled as found), their type labels, summaries
+        and relations; a relation's text is Cognee's own template unless given."""
+        meta = lambda field: {"metadata": str({"index_fields": [field]})}  # noqa: E731 - as Cognee stores it
+        nodes = {f"e{i}": {"name": name.lower(), "type": "Entity", "props": {**meta("name"), "description": name}} for i, name in enumerate(entities)}
+        nodes.update({f"t{i}": {"name": label, "type": "EntityType", "props": meta("name")} for i, label in enumerate(types)})
+        nodes.update({f"s{i}": {"name": "", "type": "TextSummary", "props": {**meta("text"), "text": text}} for i, text in enumerate(summaries)})
+        edges = []
+        by_name = {n["props"].get("description", n["name"]): node_id for node_id, n in nodes.items()}
+        for source, relation, target, *text in relations:
+            src, tgt = nodes[by_name[source]], nodes[by_name[target]]
+            edges.append((by_name[source], by_name[target], relation, {"edge_text": text[0] if text else f"{src['name']} {relation.replace('_', ' ')} {tgt['name']}."}))
+        return lambda root: (nodes, edges)
 
-    def test_f202_cognees_relation_names_as_stored_and_as_written_are_its_own(self):
+    def test_f202_a_hidden_word_cognee_also_uses_as_a_relation_name_is_cognees_where_cognee_wrote_it(self):
         # A correct re-read hiding "headquartered_in": the document's words are hidden, but Cognee names a relation it
-        # found elsewhere that way, in its relations and summaries. As stored, as written, or a run of its words, it
-        # is Cognee's there; in what only documents write (a text Cognee keeps, a chunk) it still counts.
+        # found in another document that way: in the relation, its text, the summary and the fact made from it. All
+        # exactly as Cognee writes them from live records: they don't count. In a text Cognee keeps, they do.
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            fact = {"sentence": "Hawser gateway headquartered in port 8443. It is part of billing.", "sourceSentence": "The Hawser gateway listens on port 8443."}
+            fact = {"sentence": "Hawser gateway headquartered in port 8443.", "sourceSentence": "The Hawser gateway listens on port 8443."}
             (root / "facts.json").write_text(json.dumps({"facts": [fact]}))
             (root / "documents").mkdir()
             (root / "documents" / "text_1.txt").write_text("The fields [hidden] and [hidden] link each record.")
-            probes = ["headquartered_in", "is_part_of", "headquartered in", "part of"]
-            with mock.patch.object(purge, "_graph", lambda root: ([("derived", "Hawser gateway headquartered_in port 8443")], {"headquartered_in", "is_part_of"})):
+            summary = "Hawser gateway headquartered_in port 8443\nlocation: port 8443; organization: Hawser gateway"
+            graph = self.graph(summaries=[summary], relations=[("Hawser gateway", "headquartered_in", "port 8443")])
+            probes = ["headquartered_in", "is_part_of", "headquartered in"]
+            with mock.patch.object(purge, "_graph", graph):
                 self.assertEqual(purge.left(root, probes, lambda: []), {})
                 (root / "documents" / "text_1.txt").write_text("The fields is_part_of and headquartered_in link each record.")
                 self.assertEqual(purge.left(root, probes, lambda: []), {"documents/text_1.txt": 2})
+
+    def test_f205_text_that_only_shares_words_with_a_label_is_read(self):
+        # A company called "Part Of", hidden; the graph has Cognee's is_part_of and part_of. A summary or a fact that
+        # isn't what Cognee's templates make from the live records is read in full, whatever words it shares.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            fact = {"sentence": "The project uses Part Of.", "sourceSentence": "A sentence without it."}
+            (root / "facts.json").write_text(json.dumps({"facts": [fact]}))
+            graph = self.graph(summaries=["The project uses Part Of as its supplier."], relations=[("Hawser gateway", "part_of", "port 8443")])
+            with mock.patch.object(purge, "_graph", graph):
+                self.assertEqual(purge.left(root, ["Part Of"], lambda: []), {"graph": 1, "facts.json": 1})
+            # Named by Cognee, it is an entity: its summary is Cognee's, but the entity's own name is read.
+            graph = self.graph(summaries=["organization: Hawser gateway, Part Of"], entities=("Hawser gateway", "Part Of"))
+            with mock.patch.object(purge, "_graph", graph):
+                self.assertEqual(purge.left(root, ["Part Of"], lambda: []), {"graph": 2, "facts.json": 1})
+
+    def test_a_hidden_word_that_is_one_of_cognees_labels_counts_only_where_documents_wrote_it(self):
+        # "person" hidden: Cognee's label "person" stays (an entity type, "<name> is a person.", a summary's
+        # "person: ..."), and isn't the documents'. A document's own "person" (an entity, a chunk) is read.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            graph = self.graph(summaries=["person: Dana Reyes"], relations=[("Dana Reyes", "is_a", "person")])
+            with mock.patch.object(purge, "_graph", graph):
+                self.assertEqual(purge.left(root, ["person"], lambda: []), {})
+            graph = self.graph(summaries=["person: Dana Reyes"], entities=("Dana Reyes", "the person in charge"))
+            with mock.patch.object(purge, "_graph", graph):
+                self.assertEqual(purge.left(root, ["person"], lambda: []), {"graph": 2})
+
+    def test_a_label_or_relation_name_cognee_doesnt_have_is_read(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            graph = self.graph(types=("person", "ledgerline"), relations=[("Hawser gateway", "ledgerline_of", "port 8443")])
+            with mock.patch.object(purge, "_graph", graph):
+                self.assertEqual(purge.left(Path(tmp), ["Ledgerline"], lambda: []), {"graph": 2}, "the type's name, the relation's text")
+
+    def test_the_vocabulary_is_the_pinned_cognees(self):
+        dockerfile = (Path(_paths.CONTAINER) / "Dockerfile").read_text()
+        requirements = (Path(_paths.CONTAINER) / "requirements.in").read_text()
+        self.assertIn(f"KNOWLEDGE_DATA_FORMAT=cognee-{purge.COGNEE_VERSION}+", dockerfile)
+        self.assertIn(f"cognee[gliner]=={purge.COGNEE_VERSION}", requirements, "a new Cognee: check ENTITY_LABELS and RELATIONS against it")
 
     def test_a_file_purge_doesnt_know_is_read_whole(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -379,6 +422,32 @@ class Probes(unittest.TestCase):
         counts = purge.Matcher(probes).counts(kept)
         self.assertEqual(counts, {lines[12345]: 1})
         self.assertLess(time.monotonic() - started, 10)
+
+    def test_f206_probes_of_every_length_on_one_common_word_cost_what_the_text_costs(self):
+        # 1,000 removed lines "the the ... and" of 6 to 1,005 words, against 4 MiB of kept "the ": looking at every
+        # length wherever "the" stands took 12.3 s per 64 KiB (about 13 minutes here, 106 at 32 MiB).
+        import time
+
+        probes = purge.removed_probes(["\n".join("the " * i + "and" for i in range(6, 1006))])
+        self.assertEqual(len(probes), 1000)
+        matcher = purge.Matcher(probes)
+        kept = "the " * (1024 * 1024) + "end. " + "the " * 600 + "and"
+        started = time.monotonic()
+        counts = matcher.counts(kept)
+        self.assertLess(time.monotonic() - started, 10)
+        self.assertEqual(sorted(len(p.split()) for p in counts), list(range(7, 602)), "those of 600 words or fewer, once")
+        self.assertEqual(set(counts.values()), {1})
+
+    def test_the_matcher_finds_what_re_finds(self):
+        import random
+
+        random.seed(7)
+        words = ["Pin", "pın", "the", "and", "Éclair", "éclair", "x", "A", "a", "is_part_of"]
+        for _ in range(400):
+            probes = [" ".join(random.choice(words) for _ in range(random.randint(1, 4))) + random.choice(["", ".", ")"]) for _ in range(5)]
+            text = " ".join(random.choice(words + ["(", ".", "  ", "-"]) for _ in range(60))
+            wanted = {p: len(re.findall(r"(?=(?<!\w)" + re.escape(p) + r"(?!\w))", text, re.IGNORECASE)) for p in dict.fromkeys(probes)}
+            self.assertEqual(purge.Matcher(probes).counts(text), {p: n for p, n in wanted.items() if n}, (probes, text))
 
     def test_many_probes_cost_what_the_text_costs(self):
         import time

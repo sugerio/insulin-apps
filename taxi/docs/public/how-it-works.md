@@ -91,6 +91,19 @@ the lower income); transfer this year's tuition the student doesn't need to thei
 later year when this year's income is in the lowest bracket; RRSP contributions over the limit; and interest without a
 T5. Moving claims between the returns works only when both spouses' returns are prepared here.
 
+## The CRA's forms
+
+A finished return (every slip confirmed, every line worked out from answers, nothing the app doesn't handle) downloads
+as one PDF: the CRA's own T1 and the provincial form (ON428, BC428 or AB428), then a worksheet.
+
+- The forms are the CRA's print versions. The first time an organization prints a return, Taxi downloads them from
+  canada.ca and keeps them in its database. It checks each file against the one it was measured on, and refuses to fill
+  a form the CRA has changed, rather than write amounts in the wrong places.
+- Each amount is written in its box, by row number, from the same lines as the estimate. A box that is zero is left
+  blank. The tax bracket tables are filled in the column of your bracket.
+- Step 1 (identification) and the schedules aren't filled in. The worksheet lists the slips, the answers, the hints
+  applied and every line with its formula, to copy onto the schedules.
+
 ## How saves stay consistent
 
 Each change is written in one step with its history entry: either all of it is saved, or none of it. A year's household
@@ -105,7 +118,7 @@ a name, a birth date, an amount or a document.
 
 ## Limits today
 
-- The filled-in CRA forms to download come later.
+- The forms leave Step 1 of the T1 and the schedules to fill in by hand.
 - The 2025 rules cover the T1 and the Ontario, British Columbia and Alberta forms for one or two adults: employment,
   interest, dividends, trust income and capital gains; RRSP, FHSA, pension plan and union dues; the basic, age, CPP,
   EI, employment, tuition, medical and donation credits; the spouse and eligible dependant amounts; and a spouse's

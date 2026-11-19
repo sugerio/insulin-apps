@@ -1,6 +1,8 @@
 import { useMemo } from "react";
 import { Link } from "react-router";
-import type { Estimate, SlipList, Step } from "#shared";
+import { FileDown } from "lucide-react";
+import { printBlockers, type Estimate, type SlipList, type Step } from "#shared";
+import { Button } from "@/components/ui/button.tsx";
 import { Card, CardContent } from "@/components/ui/card.tsx";
 import { ResultLine } from "../components/EstimateCard.tsx";
 import { HintList } from "../components/HintList.tsx";
@@ -45,13 +47,10 @@ function Results({ estimate, slips }: { estimate: Estimate; slips: SlipList }) {
     const module = rules.questions.get(id)?.module;
     return module === "income" || module === "deductions" || module === "credits" ? module : "household";
   };
-  const toConfirm = slips.slips.filter((slip) => slip.personId === owner.id && slip.status === "unconfirmed").length;
-  const checks = [
-    ...(toConfirm > 0 ? [{ text: `${toConfirm} ${toConfirm === 1 ? "slip is" : "slips are"} not confirmed yet.`, step: "confirm" as const }] : []),
-    ...person.missing.map((item) => ({ text: `Needed: ${item.ask}.`, step: stepOfQuestion(item.question) })),
-    ...person.estimates.map((item) => ({ text: `Not answered yet: ${item.ask}.`, step: stepOfQuestion(item.question) })),
-    ...person.unhandled.map((note) => ({ text: note, step: null })),
-  ];
+  const checks = printBlockers(person, slips.slips).map((blocker) => ({
+    text: blocker.text,
+    step: blocker.confirm ? ("confirm" as const) : blocker.question ? stepOfQuestion(blocker.question) : null,
+  }));
   return (
     <Card>
       <CardContent className="flex flex-col gap-5">
@@ -80,6 +79,7 @@ function Results({ estimate, slips }: { estimate: Estimate; slips: SlipList }) {
             </ul>
           </section>
         ) : null}
+        <Download ready={checks.length === 0} href={`/api/years/${year.year}/returns/${owner.id}/forms`} />
       </CardContent>
     </Card>
   );
@@ -95,5 +95,28 @@ function Headline({ refund, owing }: { refund: string | null; owing: string | nu
       <p className="text-sm text-muted-foreground">{isRefund ? "Refund" : "Balance owing"}</p>
       <p className="text-2xl font-semibold tabular-nums">{formatMoney(isRefund ? refund : owing)}</p>
     </div>
+  );
+}
+
+/** The return on the CRA's forms, with its worksheet: only a finished return can be printed. */
+function Download({ ready, href }: { ready: boolean; href: string }) {
+  return (
+    <section aria-label="Your forms" className="flex flex-col gap-2 rounded-lg border p-4">
+      <h2 className="text-sm font-medium">Your forms</h2>
+      <p className="text-xs text-muted-foreground">
+        The CRA's T1 and provincial form with your amounts filled in, and a worksheet that shows how each amount was worked out. Fill in Step 1 of the
+        T1 (your name, address and social insurance number) by hand, sign it and mail it; or copy the amounts into NETFILE-certified software.
+      </p>
+      {ready ? (
+        <Button asChild size="sm" className="self-start">
+          <a href={href} download>
+            <FileDown aria-hidden="true" />
+            Download the forms (PDF)
+          </a>
+        </Button>
+      ) : (
+        <p className="text-xs text-muted-foreground">Finish the items under Before you file, above, to download them.</p>
+      )}
+    </section>
   );
 }

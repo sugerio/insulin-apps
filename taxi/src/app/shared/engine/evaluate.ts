@@ -153,6 +153,18 @@ export class Evaluation {
     return { value: Array.isArray(value) ? null : (value as Dec | string | boolean | null), status: computed.status };
   }
 
+  /** The lines a person's result reads, in the rules' order: what their return is made of (not another province's). */
+  linesOf(personId: string): string[] {
+    const reached = new Set<string>();
+    const walk = (key: string) => {
+      if (reached.has(key)) return;
+      reached.add(key);
+      for (const next of this.node(key).reads) walk(next);
+    };
+    for (const id of this.rules.result) walk(this.key(personId, ["line", ...splitLine(id)]));
+    return [...this.rules.lines.keys()].filter((id) => reached.has(this.key(personId, ["line", ...splitLine(id)])));
+  }
+
   /** The other adult of the year, if both returns are prepared together. */
   spouse(personId: string): string | undefined {
     return this.spouseOf(personId);

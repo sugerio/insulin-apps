@@ -1,0 +1,286 @@
+# The CRA forms a return is printed on, and what goes in each row. A row is the number printed at the right of its box
+# (or the line code of a box without one); form-layout.yaml says where it is on the CRA's print PDF. Each amount is a
+# formula from the return's side, like a line's. A zero or a missing amount is left blank, as the CRA asks ("complete
+# only the lines that apply to you"). Rows the app has nothing for (a pension, a foreign tax credit) are left out.
+#
+# A bracket table fills, in the column of the bracket the amount falls in, the amount, the amount over the column's
+# floor, that times the rate, and that plus the printed base; its parts are the printed tables, in bracket order.
+#
+# The PDFs come from canada.ca on first use (url) and must match the layout's SHA-256: a form the CRA changes is
+# measured again with npm run form-layout before it is filled.
+
+forms:
+  T1:
+    title: T1 Income Tax and Benefit Return
+    url: https://www.canada.ca/content/dam/cra-arc/formspubs/pbg/5006-r/5006-r-25e.pdf
+    applies: "true"
+    fields:
+      # Step 2 – Total income
+      "1": line.T1.10100
+      "9": line.T1.12000
+      "12010": line.T1.12010
+      "10": line.T1.12100
+      "14": line.T1.12700
+      "19": line.T1.13000
+      "21": line.T1.15000
+      "28": line.T1.15000
+      "33": line.T1.15000
+      # Step 3 – Net income
+      "34": line.T1.15000
+      "35": line.T1.20700
+      "36": line.T1.20800
+      "37": line.T1.20805
+      "39": line.T1.21200
+      "48": line.T1.22215
+      "53": line.T1.23300
+      "54": line.T1.23400
+      "56": line.T1.23600
+      # Step 4 – Taxable income
+      "57": line.T1.23600
+      "69": line.T1.26000
+      # Step 5 – Federal tax: Part B, non-refundable tax credits
+      "77": line.T1.30000
+      "78": line.T1.30100
+      "79": line.T1.30300
+      "80": line.T1.30400
+      "84": line.T1.30000 + line.T1.30100 + line.T1.30300 + line.T1.30400
+      "85": line.T1.30000 + line.T1.30100 + line.T1.30300 + line.T1.30400
+      "86": line.T1.30800
+      "88": line.T1.31200
+      "92": line.T1.31260
+      "96": line.T1.30800 + line.T1.31200 + line.T1.31260
+      "98": line.T1.T101
+      "101": line.T1.T101
+      "103": line.T1.32300
+      "105": line.T1.32600
+      "106": line.T1.T101 + line.T1.32300 + line.T1.32600
+      "107": line.T1.33099
+      "108": round(line.T1.23600 * param.medicalThresholdRate, 2)
+      "109": min(param.medicalThresholdMax, round(line.T1.23600 * param.medicalThresholdRate, 2))
+      "110": line.T1.33200
+      "112": line.T1.33200
+      "113": line.T1.33500
+      "115": line.T1.33800
+      "116": line.T1.34900
+      "117": line.T1.34990
+      "118": line.T1.35000
+      # Part C – Net federal tax
+      "119": line.T1.40400
+      "121": line.T1.40400
+      "122": line.T1.35000
+      "123": line.T1.40425
+      "125": line.T1.35000 + line.T1.40425
+      "126": line.T1.42900
+      "128": line.T1.42900
+      "130": line.T1.42900
+      "132": line.T1.42900
+      "134": line.T1.40600
+      "139": line.T1.40600
+      "142": line.T1.42000
+      # Step 6 – Refund or balance owing
+      "143": line.T1.42000
+      "147": line.T1.42800
+      "148": line.T1.43500
+      "149": line.T1.43500
+      "150": line.T1.43700
+      "152": line.T1.44800
+      "153": line.T1.45000
+      "166": line.T1.48200
+      "167": line.T1.43500 - line.T1.48200
+      "48400": line.T1.48400
+      "48500": line.T1.48500
+    tables:
+      # Part A – Federal tax on taxable income
+      - brackets: taxBrackets
+        amount: line.T1.26000
+        parts:
+          - { columns: "71", amount: "70", over: "72", times: "74", tax: "76" }
+
+  ON428:
+    title: Form ON428, Ontario Tax
+    url: https://www.canada.ca/content/dam/cra-arc/formspubs/pbg/5006-c/5006-c-25e.pdf
+    applies: 'person.province == "ON"'
+    fields:
+      "1": line.T1.26000
+      # Part B – Ontario non-refundable tax credits
+      "9": line.ON428.9
+      "10": line.ON428.10
+      "12": "if(line.HH.partner == 1, line.HH.spouseNetIncome, 0)"
+      "13": line.ON428.13
+      "16": line.ON428.16
+      "18": line.ON428.9 + line.ON428.10 + line.ON428.13 + line.ON428.16
+      "19": line.T1.30800
+      "21": line.T1.31200
+      "24": line.ON428.24
+      "25": line.ON428.9 + line.ON428.10 + line.ON428.13 + line.ON428.16 + line.ON428.24
+      "26": line.ON428.9 + line.ON428.10 + line.ON428.13 + line.ON428.16 + line.ON428.24
+      "28": line.ON428.9 + line.ON428.10 + line.ON428.13 + line.ON428.16 + line.ON428.24
+      "31": line.ON428.9 + line.ON428.10 + line.ON428.13 + line.ON428.16 + line.ON428.24
+      "34": line.ON428.34
+      "35": line.ON428.9 + line.ON428.10 + line.ON428.13 + line.ON428.16 + line.ON428.24 + line.ON428.34
+      "36": line.ON428.36
+      "37": line.T1.23600
+      "39": round(line.T1.23600 * param.medicalThresholdRate, 2)
+      "40": min(param.onMedicalThresholdMax, round(line.T1.23600 * param.medicalThresholdRate, 2))
+      "41": line.ON428.41
+      "43": line.ON428.41
+      "44": line.ON428.44
+      "46": line.ON428.46
+      "47": round(line.S9.13 * param.onDonationLowRate, 2)
+      "48": round(line.S9.14 * param.onDonationHighRate, 2)
+      "49": line.ON428.49
+      "50": line.ON428.50
+      # Part C – Ontario tax
+      "51": line.ON428.8
+      "52": line.ON428.50
+      "53": line.ON428.53
+      "55": line.ON428.53
+      "56": line.ON428.53
+      "57": line.ON428.57
+      "58": max(0, line.ON428.53 - line.ON428.57)
+      "61": line.ON428.53
+      "62": line.ON428.53
+      "63": line.ON428.53
+      "65": line.ON428.53
+      "66": round(max(0, line.ON428.53 - param.onSurtaxThreshold1) * param.onSurtaxRate1, 2)
+      "67": round(max(0, line.ON428.53 - param.onSurtaxThreshold2) * param.onSurtaxRate2, 2)
+      "68": line.ON428.68
+      "69": line.ON428.53 + line.ON428.68
+      "70": line.ON428.57
+      "71": line.ON428.73
+      "73": line.ON428.73
+      # The Ontario tax reduction: worked out only when there is tax to reduce (line 74, $294, is printed).
+      "75": line.ON428.75
+      "77": { value: "param.onTaxReductionBasic + line.ON428.75", when: "line.ON428.73 > 0" }
+      "78": { value: "2 * (param.onTaxReductionBasic + line.ON428.75)", when: "line.ON428.73 > 0" }
+      "79": { value: "line.ON428.73", when: "line.ON428.73 > 0" }
+      "80": line.ON428.80
+      "81": line.ON428.81
+      "83": line.ON428.81
+      "84": line.ON428.81
+      "85": line.ON428.85
+      "86": line.ON428.86
+      "88": line.ON428.86
+      "89": line.ON428.89
+      "90": line.ON428.90
+    tables:
+      # Part A – Ontario tax on taxable income
+      - brackets: onTaxBrackets
+        amount: line.T1.26000
+        parts:
+          - { columns: "3", amount: "2", over: "4", times: "6", tax: "8" }
+
+  BC428:
+    title: Form BC428, British Columbia Tax
+    url: https://www.canada.ca/content/dam/cra-arc/formspubs/pbg/5010-c/5010-c-25e.pdf
+    applies: 'person.province == "BC"'
+    fields:
+      "1": line.T1.26000
+      # Part B – British Columbia non-refundable tax credits
+      "16": line.BC428.16
+      "17": line.BC428.17
+      "19": "if(line.HH.partner == 1, line.HH.spouseNetIncome, 0)"
+      "20": line.BC428.20
+      "23": line.BC428.23
+      "25": line.BC428.16 + line.BC428.17 + line.BC428.20 + line.BC428.23
+      "26": line.BC428.16 + line.BC428.17 + line.BC428.20 + line.BC428.23
+      "27": line.T1.30800
+      "29": line.T1.31200
+      "33": line.BC428.33
+      "35": line.BC428.16 + line.BC428.17 + line.BC428.20 + line.BC428.23 + line.BC428.33
+      "37": line.BC428.16 + line.BC428.17 + line.BC428.20 + line.BC428.23 + line.BC428.33
+      "40": line.BC428.16 + line.BC428.17 + line.BC428.20 + line.BC428.23 + line.BC428.33
+      "44": line.BC428.44
+      "45": line.BC428.16 + line.BC428.17 + line.BC428.20 + line.BC428.23 + line.BC428.33 + line.BC428.44
+      "46": line.T1.33099
+      "47": line.T1.23600
+      "49": round(line.T1.23600 * param.medicalThresholdRate, 2)
+      "50": min(param.bcMedicalThresholdMax, round(line.T1.23600 * param.medicalThresholdRate, 2))
+      "51": line.BC428.51
+      "53": line.BC428.51
+      "54": line.BC428.54
+      "56": line.BC428.56
+      "57": line.BC428.57
+      "58": line.BC428.56 + line.BC428.57
+      "60": line.BC428.60
+      # Part C – British Columbia tax
+      "61": line.BC428.8
+      "63": line.BC428.8
+      "64": line.BC428.60
+      "65": line.BC428.65
+      "67": line.BC428.60 + line.BC428.65
+      "68": line.BC428.68
+      "70": line.BC428.68
+      "72": line.BC428.68
+      # The British Columbia tax reduction: worked out only below the income where it ends.
+      "73": { value: "param.bcTaxReductionBasic", when: "line.T1.23600 < param.bcTaxReductionLimit" }
+      "74": { value: "line.T1.23600", when: "line.T1.23600 < param.bcTaxReductionLimit" }
+      "76": { value: "max(0, line.T1.23600 - param.bcTaxReductionBase)", when: "line.T1.23600 < param.bcTaxReductionLimit" }
+      "78": { value: "round(max(0, line.T1.23600 - param.bcTaxReductionBase) * param.bcTaxReductionRate, 2)", when: "line.T1.23600 < param.bcTaxReductionLimit" }
+      "79": line.BC428.79
+      "80": line.BC428.91
+      "82": line.BC428.91
+      "85": line.BC428.91
+      "89": line.BC428.91
+      "91": line.BC428.91
+    tables:
+      # Part A – British Columbia tax on taxable income, in two printed tables
+      - brackets: bcTaxBrackets
+        amount: line.T1.26000
+        parts:
+          - { columns: "3", amount: "2", over: "4", times: "6", tax: "8" }
+          - { columns: "10", amount: "9", over: "11", times: "13", tax: "15" }
+
+  AB428:
+    title: Form AB428, Alberta Tax
+    url: https://www.canada.ca/content/dam/cra-arc/formspubs/pbg/5009-c/5009-c-25e.pdf
+    applies: 'person.province == "AB"'
+    fields:
+      "1": line.T1.26000
+      # Part B – Alberta non-refundable tax credits
+      "16": line.AB428.16
+      "17": line.AB428.17
+      "19": "if(line.HH.partner == 1, line.HH.spouseNetIncome, 0)"
+      "20": line.AB428.20
+      "23": line.AB428.23
+      "25": line.AB428.16 + line.AB428.17 + line.AB428.20 + line.AB428.23
+      "26": line.AB428.16 + line.AB428.17 + line.AB428.20 + line.AB428.23
+      "27": line.T1.30800
+      "29": line.T1.31200
+      "32": line.AB428.32
+      "33": line.AB428.16 + line.AB428.17 + line.AB428.20 + line.AB428.23 + line.AB428.32
+      "36": line.AB428.16 + line.AB428.17 + line.AB428.20 + line.AB428.23 + line.AB428.32
+      "39": line.AB428.16 + line.AB428.17 + line.AB428.20 + line.AB428.23 + line.AB428.32
+      "42": line.AB428.42
+      "43": line.AB428.16 + line.AB428.17 + line.AB428.20 + line.AB428.23 + line.AB428.32 + line.AB428.42
+      "44": line.T1.33099
+      "45": line.T1.23600
+      "47": round(line.T1.23600 * param.medicalThresholdRate, 2)
+      "48": min(param.abMedicalThresholdMax, round(line.T1.23600 * param.medicalThresholdRate, 2))
+      "49": line.AB428.49
+      "51": line.AB428.49
+      "52": line.AB428.52
+      "54": line.AB428.54
+      "55": round(line.S9.13 * param.abDonationLowRate, 2)
+      "56": round(line.S9.14 * param.abDonationHighRate, 2)
+      "57": line.AB428.57
+      "58": line.AB428.58
+      # Part C – Alberta tax
+      "59": line.AB428.8
+      "61": line.AB428.8
+      "62": line.AB428.58
+      "63": line.AB428.63
+      "65": line.AB428.58 + line.AB428.63
+      "66": line.AB428.66
+      "68": line.AB428.66
+      "70": line.AB428.66
+      "73": line.AB428.66
+      "74": line.AB428.74
+      "75": line.AB428.75
+    tables:
+      # Part A – Alberta tax on taxable income, in two printed tables
+      - brackets: abTaxBrackets
+        amount: line.T1.26000
+        parts:
+          - { columns: "3", amount: "2", over: "4", times: "6", tax: "8" }
+          - { columns: "10", amount: "9", over: "11", times: "13", tax: "15" }

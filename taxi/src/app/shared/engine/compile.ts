@@ -7,7 +7,8 @@ import { HINT_KINDS, MODULES, loadRuleSet, type CompiledRules } from "./rules.ts
 // Compiles a year's rule files into the JSON the app imports. A year is a folder of YAML files: `year.yaml` names the
 // country, the year, the filing unit and the year it extends; the other files hold entries (params, lines, questions,
 // slips, result) in any split. A year that extends another lists only what changed: an entry replaces the one with
-// the same id, and `null` removes it. `hints` are checks on a return (hints.yaml). The compiler checks everything the engine relies on, so a broken rule file
+// the same id, and `null` removes it. `hints` are checks on a return (hints.yaml). `forms` are the CRA forms a return is
+// printed on, row by row (forms.yaml), placed by `formLayout` (form-layout.yaml, measured from the CRA's PDFs). The compiler checks everything the engine relies on, so a broken rule file
 // fails the build instead of a return.
 //
 // This module reads parsed YAML, not files: scripts/compile-rules.ts does the reading, and the tests call it directly.
@@ -25,7 +26,7 @@ export interface SourceYear {
 }
 
 const MANIFEST = "year.yaml";
-const SECTIONS = ["params", "lines", "questions", "slips", "hints"] as const;
+const SECTIONS = ["params", "lines", "questions", "slips", "hints", "forms", "formLayout"] as const;
 type Section = (typeof SECTIONS)[number];
 
 const sourceNumber = z.union([z.number(), z.string()]);
@@ -67,6 +68,30 @@ const sourceHint = z.strictObject({
   effectLabel: z.string().min(1).optional(),
 });
 
+const sourceForm = z.strictObject({
+  title: z.string().min(1),
+  url: z.url(),
+  applies: z.string().min(1),
+  /** Row (or line code) → the amount, or the amount and when to write it. */
+  fields: z.record(z.string(), z.union([z.string().min(1), z.strictObject({ value: z.string().min(1), when: z.string().min(1).optional() })])),
+  tables: z
+    .array(
+      z.strictObject({
+        brackets: z.string().min(1),
+        amount: z.string().min(1),
+        parts: z.array(z.strictObject({ columns: z.string(), amount: z.string(), over: z.string(), times: z.string(), tax: z.string() })).min(1),
+      }),
+    )
+    .optional(),
+});
+const sourceLayout = z.strictObject({
+  sha256: z.string().regex(/^[0-9a-f]{64}$/),
+  pages: z.number().int().min(1),
+  rows: z.record(z.string(), z.tuple([z.number().int().min(1), z.number(), z.number()])),
+  columns: z.record(z.string(), z.array(z.number())).optional(),
+  printed: z.array(z.string()).optional(),
+});
+
 const manifestSchema = z.strictObject({
   country: z.string().regex(/^[a-z]{2}$/),
   year: z.number().int(),
@@ -82,12 +107,14 @@ const entriesSchema = z.strictObject({
   questions: z.record(z.string(), sourceQuestion.nullable()).optional(),
   slips: z.record(z.string(), sourceSlip.nullable()).optional(),
   hints: z.record(z.string(), sourceHint.nullable()).optional(),
+  forms: z.record(z.string(), sourceForm.nullable()).optional(),
+  formLayout: z.record(z.string(), sourceLayout.nullable()).optional(),
 });
 
 /** Compiles a chain of years, oldest first; the last is the year compiled. `hash` makes the version from the content. */
 export function compileRules(chain: SourceYear[], hash: (text: string) => string): CompiledRules {
   if (chain.length === 0) throw new Error("No rule folder to compile");
-  const merged: Record<Section, Record<string, unknown>> = { params: {}, lines: {}, questions: {}, slips: {}, hints: {} };
+  const merged: Record<Section, Record<string, unknown>> = { params: {}, lines: {}, questions: {}, slips: {}, hints: {}, forms: {}, formLayout: {} };
   const origin = new Map<string, string>();
   let manifest: z.infer<typeof manifestSchema> | undefined;
   let result: string[] | undefined;
@@ -163,12 +190,50 @@ export function compileRules(chain: SourceYear[], hash: (text: string) => string
       printedYears: slip.printedYears ?? [0],
     })),
     hints: merged.hints as CompiledRules["hints"],
+    forms: mapValues(merged.forms as Record<string, z.infer<typeof sourceForm>>, (form, id) =>
+      placeForm(form, (merged.formLayout as Record<string, z.infer<typeof sourceLayout>>)[id], (message) => {
+        throw new RuleError({ file: where(`forms.${id}`), entry: `forms.${id}` }, message);
+      }),
+    ),
     ...(outcome === undefined ? {} : { outcome }),
   };
   const compiled: CompiledRules = { ...content, version: hash(JSON.stringify(content)) };
   // Loading runs every check the engine relies on: formulas parse, names exist, types agree, no cycles.
   loadRuleSet(compiled, where);
   return compiled;
+}
+
+/** A form's rows placed where form-layout.yaml measured them. */
+function placeForm(form: z.infer<typeof sourceForm>, layout: z.infer<typeof sourceLayout> | undefined, fail: (message: string) => never): CompiledRules["forms"][string] {
+  if (!layout) fail("form-layout.yaml has no layout for this form: run npm run form-layout on its PDF");
+  const row = (key: string) => layout!.rows[key] ?? fail(`The form has no row ${key} (form-layout.yaml)`);
+  return {
+    title: form.title,
+    url: form.url,
+    sha256: layout!.sha256,
+    pages: layout!.pages,
+    applies: form.applies,
+    fields: Object.entries(form.fields).map(([key, field]) => {
+      if (layout!.printed?.includes(key)) fail(`Row ${key} already has an amount printed on the form`);
+      const [page, x, y] = row(key);
+      const { value, when } = typeof field === "string" ? { value: field, when: undefined } : field;
+      return { key, page, x, y, value, ...(when === undefined ? {} : { when }) };
+    }),
+    tables: (form.tables ?? []).map((table) => ({
+      brackets: table.brackets,
+      amount: table.amount,
+      parts: table.parts.map((part) => {
+        const [page, , amountY] = row(part.amount);
+        const ys = [part.over, part.times, part.tax].map((key) => {
+          const [onPage, , y] = row(key);
+          if (onPage !== page) fail(`The rows of a table part are on one page: ${key} isn't`);
+          return y;
+        });
+        const columns = layout!.columns?.[part.columns] ?? fail(`Row ${part.columns} has no preprinted columns (form-layout.yaml)`);
+        return { page, columns, amount: amountY, over: ys[0]!, times: ys[1]!, tax: ys[2]!, rows: [part.amount, part.over, part.times, part.tax] as [string, string, string, string] };
+      }),
+    })),
+  };
 }
 
 function parse<T>(schema: z.ZodType<T>, file: SourceFile): T {

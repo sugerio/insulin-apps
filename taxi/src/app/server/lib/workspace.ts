@@ -1,4 +1,4 @@
-import { STEPS, isIssueOf, type AdultYear, type Issue, type Person, type ReturnProgress, type Slip, type StepStatuses } from "#shared";
+import { STEPS, isIssueOf, printBlockers, type AdultYear, type Issue, type Person, type ReturnProgress, type Slip, type StepStatuses } from "#shared";
 import { Evaluation, type EngineInput, type EvaluationResult } from "../../shared/engine/evaluate.ts";
 import type { Module } from "../../shared/engine/rules.ts";
 import { rulesFor } from "../../shared/rules/index.ts";
@@ -119,7 +119,7 @@ export function evaluateYear(facts: YearFacts, workspace: Workspace): { input: E
  * this return and read into slips, or a slip of this adult was read from a file (slips can also be typed in step 6).
  * Income, deductions and credits: each yes/no question of the module is answered, or answered by a slip found, no slip
  * said to exist is missing, and every amount the result reads is entered. Confirm: the adult has slips and all are
- * confirmed. Finish comes with the filled-in forms.
+ * confirmed. Finish: the return is finished, so its CRA forms can be printed (shared/print.ts).
  */
 export function stepStatuses(facts: YearFacts, issues: Issue[], workspace: Workspace): ReturnProgress[] {
   const rules = rulesFor(facts.year);
@@ -128,7 +128,8 @@ export function stepStatuses(facts: YearFacts, issues: Issue[], workspace: Works
   return facts.adults.map(({ personId }) => {
     const slips = workspace.slips.filter((slip) => slip.personId === personId);
     const answers = workspace.answers[personId] ?? {};
-    const reached = evaluation?.result.people.find((person) => person.personId === personId)?.questions;
+    const result = evaluation?.result.people.find((person) => person.personId === personId);
+    const reached = result?.questions;
     const answered = (module: Module) =>
       questions
         .filter((question) => question.module === module)
@@ -150,7 +151,7 @@ export function stepStatuses(facts: YearFacts, issues: Issue[], workspace: Works
       deductions: state(answered("deductions")),
       credits: state(answered("credits")),
       confirm: state(slips.length > 0 && slips.every((slip) => slip.status === "confirmed")),
-      finish: "todo",
+      finish: state(result !== undefined && printBlockers(result, workspace.slips).length === 0),
     };
     return { personId, steps: Object.fromEntries(STEPS.map((step) => [step, status[step]])) as StepStatuses };
   });

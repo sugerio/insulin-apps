@@ -10,6 +10,7 @@ export const API_ERROR_CODES = [
   "conflict", // 409, a stale revision or a rule about the household
   "payload_too_large", // 413
   "internal", // 500
+  "unavailable", // 503, an outside service (canada.ca) didn't answer as expected
 ] as const;
 export const apiErrorCodeSchema = z.enum(API_ERROR_CODES);
 export type ApiErrorCode = z.infer<typeof apiErrorCodeSchema>;
@@ -22,6 +23,7 @@ export const API_ERROR_STATUS = {
   conflict: 409,
   payload_too_large: 413,
   internal: 500,
+  unavailable: 503,
 } as const satisfies Record<ApiErrorCode, number>;
 
 export const apiErrorBodySchema = z.object({

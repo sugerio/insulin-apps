@@ -8,7 +8,7 @@ It is an Insulin app: you start from it in the Insulin console, change it with t
 and publish it. It brings its own database.
 
 **Status: early.** It is being built in parts. Today a year can be prepared from start to finish: the household,
-uploaded slips read by AI (or typed in), income, deductions, credits and the results. The filled-in CRA forms come later.
+uploaded slips read by AI (or typed in), income, deductions, credits, the results, and the filled-in CRA forms.
 
 ## What it does today
 
@@ -39,12 +39,17 @@ uploaded slips read by AI (or typed in), income, deductions, credits and the res
   opening into its boxes to change; amounts; what the app doesn't handle yet, such as self-employment or working from
   home, named, never ignored), what can be added, and what the slips already claim. Then Confirm (each slip entered box
   by box, then confirmed, or moved to the other return) and Finish (the refund or balance owing, the key lines with why,
-  what to check before filing, and hints).
+  what to check before filing, hints, and the forms).
 - **Hints.** Finish checks each return, like a tax program's "check and optimize": claiming both spouses' donations on
   one return, the family's medical expenses on the lower income, transferring tuition to a spouse, deducting RRSP
   contributions later, RRSP contributions over the limit, and interest without a T5. A saving is worked out on both
   returns with and without the change, never guessed (`rules/ca/2025/hints.yaml`); applying it saves answers, and it can
   be undone.
+- **The CRA's forms.** A finished return (every slip confirmed, every line worked out) downloads as one PDF: the CRA's
+  own T1 and provincial form (ON428, BC428 or AB428) with the amounts written in, then a worksheet with the slips, the
+  answers, the applied hints and how each line was worked out. The CRA's print PDFs come from canada.ca on first use
+  and are kept in the database; they are never in the repository. Where each amount goes is measured from the PDFs by
+  `npm run form-layout` (`rules/ca/2025/form-layout.yaml`); what goes there is in `rules/ca/2025/forms.yaml`.
 - **Roles.** Owners, admins and editors prepare returns; viewers see everything and change nothing. Custom roles pick
   from two permissions: Prepare returns and View returns.
 - **Built-in Docs.** **Docs**, in everyone's navigation, explains the app and covers Canadian tax basics in plain words,

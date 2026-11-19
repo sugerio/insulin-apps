@@ -5,7 +5,7 @@ import { rulesFor } from "../src/app/shared/rules/index.ts";
 
 // npm run sample-slips -- [--out <dir>] [--self <name>] [--spouse <name>]
 //
-// Writes sample 2025 slips as PDFs, for trying the app and for testing AI reading: a T4 for each adult, a T5 for the
+// Writes sample 2025 slips as PDFs, for trying the app and for testing AI reading: a T4 for each adult, two T5s (two banks) for the
 // person preparing, a T2202 for the spouse, and receipts and notices: a donation receipt, a dental receipt for the
 // spouse, an RRSP receipt for early 2026, and each adult's 2024 notice of assessment. Every page says it is a synthetic sample. The repository keeps no
 // binary files, so the PDFs are made here and never committed; the default folder is ignored by git and by the app
@@ -77,6 +77,15 @@ const samples: Sample[] = [
     issuer: { name: "Lakeview Credit Union", lines: ["8 Lakeshore Boulevard", "Toronto ON  M5E 1A1"] },
     recipient: { name: self, lines: home },
     boxes: { 13: "1250.00", 24: "2000.00", 25: "2760.00", 26: "414.55" },
+  },
+  {
+    // A second bank: interest from each institution comes on its own T5, and they add up.
+    file: `T5-${slug(self)}-Northwind-Bank.pdf`,
+    type: "T5",
+    title: "Statement of Investment Income",
+    issuer: { name: "Northwind Bank", lines: ["250 Bay Street", "Toronto ON  M5J 2S1"] },
+    recipient: { name: self, lines: home },
+    boxes: { 13: "380.00" },
   },
   {
     file: `T2202-${slug(spouse)}-Lakeview-University.pdf`,

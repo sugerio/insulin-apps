@@ -122,6 +122,46 @@ export interface Hint {
   effectLabel?: string;
 }
 
+/** An amount on a CRA form: where it goes (page, the x of the line between dollars and cents, the baseline) and what. */
+export interface FormField {
+  /** The form's row number, or the line code of a box without one (form-layout.yaml). */
+  key: string;
+  page: number;
+  x: number;
+  y: number;
+  formula: Formula;
+  text: string;
+  /** Written only when this is yes. */
+  when?: { formula: Formula; text: string };
+}
+
+/**
+ * A bracket table printed on a form (one column per bracket, in one or more parts): the column of the bracket the amount
+ * falls in gets the amount, the amount over the bracket's floor, that times the rate, and that plus the printed base.
+ */
+export interface FormTable {
+  brackets: string;
+  amount: Formula;
+  amountText: string;
+  /** Each printed table: its page, each column's cents line, and its rows' baselines, with the rows' numbers. */
+  parts: { page: number; columns: number[]; amount: number; over: number; times: number; tax: number; rows: [string, string, string, string] }[];
+}
+
+/** A CRA print form the app fills in (forms.yaml), measured in form-layout.yaml. */
+export interface FormSpec {
+  id: string;
+  title: string;
+  /** Where the CRA publishes it, and the SHA-256 of the file the layout was measured on. */
+  url: string;
+  sha256: string;
+  pages: number;
+  /** Which returns get it. */
+  applies: Formula;
+  appliesText: string;
+  fields: FormField[];
+  tables: FormTable[];
+}
+
 /** What to call a document of this type on screen: a slip by its type (T4), a receipt or notice by its title. */
 export function documentName(slipType: SlipType | undefined, id: string): string {
   return slipType?.receipt ? slipType.title : id;
@@ -143,6 +183,8 @@ export interface RuleSet {
   /** Per slip type, the boxes some formula reads, and the informational ones. Any other box is shown as not handled. */
   usedBoxes: Map<string, Set<string>>;
   hints: Map<string, Hint>;
+  /** The CRA forms a return is printed on, in order. */
+  forms: Map<string, FormSpec>;
   /** The line a hint's what-if compares, added up over the household: the refund less the balance owing. */
   outcome?: string;
 }
@@ -189,6 +231,36 @@ export const compiledRulesSchema = z.strictObject({
     }),
   ),
   outcome: z.string().optional(),
+  forms: z.record(
+    z.string(),
+    z.strictObject({
+      title: z.string(),
+      url: z.url(),
+      sha256: z.string().regex(/^[0-9a-f]{64}$/),
+      pages: z.number().int().min(1),
+      applies: z.string(),
+      fields: z.array(
+        z.strictObject({ key: z.string(), page: z.number().int().min(1), x: z.number(), y: z.number(), value: z.string(), when: z.string().optional() }),
+      ),
+      tables: z.array(
+        z.strictObject({
+          brackets: z.string(),
+          amount: z.string(),
+          parts: z.array(
+            z.strictObject({
+              page: z.number().int().min(1),
+              columns: z.array(z.number()).min(1),
+              amount: z.number(),
+              over: z.number(),
+              times: z.number(),
+              tax: z.number(),
+              rows: z.tuple([z.string(), z.string(), z.string(), z.string()]),
+            }),
+          ),
+        }),
+      ),
+    }),
+  ),
   slips: z.record(
     z.string(),
     z.strictObject({
@@ -293,6 +365,31 @@ export function loadRuleSet(json: unknown, where: (entry: string) => string = ()
     slips,
     usedBoxes,
     hints,
+    forms: new Map(
+      Object.entries(compiled.forms).map(([id, form]) => {
+        const entry = `forms.${id}`;
+        const spec: FormSpec = {
+          id,
+          title: form.title,
+          url: form.url,
+          sha256: form.sha256,
+          pages: form.pages,
+          applies: parse(entry, form.applies),
+          appliesText: form.applies,
+          fields: form.fields.map((field) => ({
+            key: field.key,
+            page: field.page,
+            x: field.x,
+            y: field.y,
+            formula: parse(`${entry}.fields.${field.key}`, field.value),
+            text: field.value,
+            ...(field.when === undefined ? {} : { when: { formula: parse(`${entry}.fields.${field.key}`, field.when), text: field.when } }),
+          })),
+          tables: form.tables.map((table) => ({ brackets: table.brackets, amount: parse(entry, table.amount), amountText: table.amount, parts: table.parts })),
+        };
+        return [id, spec];
+      }),
+    ),
     ...(compiled.outcome === undefined ? {} : { outcome: compiled.outcome }),
   };
   checkRuleSet(ruleSet, fail);
@@ -410,6 +507,28 @@ function checkRuleSet(ruleSet: RuleSet, fail: (entry: string, message: string, c
       fail(entry, "An info hint with a change names its effect (effectLabel), and only then");
     }
     if (hint.change.length > 0 && ruleSet.outcome === undefined) fail(entry, "A hint with a change needs the year's outcome line (outcome in year.yaml)");
+  }
+
+  // A form's formulas: which returns get it (yes/no), each amount a number, and its condition yes/no. A bracket table
+  // names a bracket param with printed bases, and its parts have a column for each bracket.
+  for (const form of ruleSet.forms.values()) {
+    const entry = `forms.${form.id}`;
+    const at = (where: string) => (message: string, column?: number) => fail(where, message, column);
+    if (formulaType(ruleSet, form.applies, at(entry), new Set()) !== "boolean") fail(entry, "applies must be a yes/no value");
+    for (const field of form.fields) {
+      const where = `${entry}.fields.${field.key}`;
+      if (field.page > form.pages) fail(where, `The form has ${form.pages} pages`);
+      if (formulaType(ruleSet, field.formula, at(where), new Set()) !== "number") fail(where, "An amount on a form must be a number");
+      if (field.when && formulaType(ruleSet, field.when.formula, at(where), new Set()) !== "boolean") fail(where, "when must be a yes/no value");
+    }
+    for (const table of form.tables) {
+      const param = ruleSet.params.get(table.brackets);
+      if (!param || !Array.isArray(param.value)) return fail(entry, `No bracket table param ${table.brackets}`);
+      if (param.value.some((row) => row.base === undefined)) fail(entry, `${table.brackets} needs the base of each bracket, as printed on the form`);
+      const columns = table.parts.reduce((sum, part) => sum + part.columns.length, 0);
+      if (columns !== param.value.length) fail(entry, `The table has ${columns} columns; ${table.brackets} has ${param.value.length} brackets`);
+      if (formulaType(ruleSet, table.amount, at(entry), new Set()) !== "number") fail(entry, "A table's amount must be a number");
+    }
   }
 
   // Depth-first search for a cycle; the message lists it.

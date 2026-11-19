@@ -5,5 +5,6 @@ export * from "./errors.ts";
 export * from "./estimate.ts";
 export * from "./hints.ts";
 export * from "./household.ts";
+export * from "./print.ts";
 export * from "./returns.ts";
 export * from "./routes.ts";

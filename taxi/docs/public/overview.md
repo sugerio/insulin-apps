@@ -28,12 +28,16 @@ Each return has seven steps:
 6. **Confirm.** Every number AI read, to check against the papers.
 7. **Finish.** The refund or balance owing, what to check before filing, and hints: ways to pay less, such as claiming
    both spouses' donations on one return, each with what it saves. Apply one to change your answers; you can undo it.
+   When the return is finished, download its forms: the CRA's T1 and provincial form with your amounts filled in, and
+   a worksheet that shows how each amount was worked out.
 
 In Income, Deductions and Credits, add what you have; what you don't add counts as none. Something the app doesn't
 handle yet, such as self-employment or working from home, can be added too: the return then says it isn't included.
 
 > [!NOTE]
-> Taxi is being built in parts. The filled-in CRA forms to download come in a later version.
+> The forms are filled in from Step 2 on. Fill in Step 1 of the T1 (your name, address, social insurance number and
+> the other identification) by hand, then sign and mail it, or copy the amounts into NETFILE-certified software.
+> Schedules, such as Schedule 9 for donations, aren't filled in: the worksheet shows their lines to copy.
 
 ## Who it is for
 

@@ -35,6 +35,7 @@ The base URL is `https://taxi.insulinapps.com`, and every endpoint is under `/ap
 | `POST /api/years/{year}/documents/{id}/read` | Prepare returns | Read a file again that couldn't be read (`failed` or `not_available`), from its stored bytes. Answers like an upload. |
 | `DELETE /api/years/{year}/documents/{id}` | Prepare returns | Delete a file and every slip read from it, in whichever return it is. Body: `{"revision": …}`, the revision you read; a stale one is refused with 409. |
 | `GET /api/years/{year}/documents/{id}/file` | View returns | The stored file, as uploaded. |
+| `GET /api/years/{year}/returns/{personId}/forms` | View returns | A finished return as a PDF to save: the CRA's T1 and provincial form with the amounts filled in, then a worksheet. Refused with 409 while anything is left before filing (the message says what), and with 503 when canada.ca doesn't answer or its form changed. |
 | `PUT /api/years/{year}/answers` | Prepare returns | Save an adult's answers: `{"revision", "personId", "answers": {"rrspDeduction": "5000", "hasRentalIncome": false}}`. `null` clears an answer. |
 | `GET /api/years/{year}/slips` | View returns | Every slip of the year's adults, with its boxes and whether it is confirmed. |
 | `POST /api/years/{year}/slips` | Prepare returns | Add a slip: `{"revision", "personId", "type": "T4", "issuer", "boxes": {"14": "60000.00"}}`. It starts unconfirmed. |
@@ -107,4 +108,5 @@ and `false` on the other. These answers are ordinary answers: the estimate expla
 
 Every error is JSON: `{"error": {"code", "message", "issues"?}}`. The codes are `validation_failed` (400, with each
 field's issue), `unauthenticated` (401), `forbidden` (403), `not_found` (404, also for another organization's records),
-`conflict` (409), `payload_too_large` (413) and `internal` (500).
+`conflict` (409), `payload_too_large` (413), `internal` (500) and `unavailable` (503, when canada.ca doesn't answer
+or a CRA form changed).

@@ -1638,6 +1638,1673 @@
       "when": "sum(T5.box13) == 0"
     }
   },
+  "forms": {
+    "T1": {
+      "title": "T1 Income Tax and Benefit Return",
+      "url": "https://www.canada.ca/content/dam/cra-arc/formspubs/pbg/5006-r/5006-r-25e.pdf",
+      "sha256": "2d8c3d8e2e4c3ef0e962936134186306fb758cec3a971448f1c10dfbe406cff8",
+      "pages": 8,
+      "applies": "true",
+      "fields": [
+        {
+          "key": "1",
+          "page": 3,
+          "x": 552,
+          "y": 668.3,
+          "value": "line.T1.10100"
+        },
+        {
+          "key": "9",
+          "page": 3,
+          "x": 552,
+          "y": 455.3,
+          "value": "line.T1.12000"
+        },
+        {
+          "key": "10",
+          "page": 3,
+          "x": 552,
+          "y": 428.3,
+          "value": "line.T1.12100"
+        },
+        {
+          "key": "14",
+          "page": 3,
+          "x": 552,
+          "y": 374.3,
+          "value": "line.T1.12700"
+        },
+        {
+          "key": "19",
+          "page": 3,
+          "x": 552,
+          "y": 293.8,
+          "value": "line.T1.13000"
+        },
+        {
+          "key": "21",
+          "page": 3,
+          "x": 552,
+          "y": 266.8,
+          "value": "line.T1.15000"
+        },
+        {
+          "key": "28",
+          "page": 3,
+          "x": 552,
+          "y": 158.8,
+          "value": "line.T1.15000"
+        },
+        {
+          "key": "33",
+          "page": 3,
+          "x": 552,
+          "y": 91.3,
+          "value": "line.T1.15000"
+        },
+        {
+          "key": "34",
+          "page": 4,
+          "x": 552,
+          "y": 731.3,
+          "value": "line.T1.15000"
+        },
+        {
+          "key": "35",
+          "page": 4,
+          "x": 444,
+          "y": 680.3,
+          "value": "line.T1.20700"
+        },
+        {
+          "key": "36",
+          "page": 4,
+          "x": 444,
+          "y": 666.8,
+          "value": "line.T1.20800"
+        },
+        {
+          "key": "37",
+          "page": 4,
+          "x": 444,
+          "y": 653.3,
+          "value": "line.T1.20805"
+        },
+        {
+          "key": "39",
+          "page": 4,
+          "x": 444,
+          "y": 600.8,
+          "value": "line.T1.21200"
+        },
+        {
+          "key": "48",
+          "page": 4,
+          "x": 444,
+          "y": 406.3,
+          "value": "line.T1.22215"
+        },
+        {
+          "key": "53",
+          "page": 4,
+          "x": 552,
+          "y": 338.8,
+          "value": "line.T1.23300"
+        },
+        {
+          "key": "54",
+          "page": 4,
+          "x": 552,
+          "y": 325.3,
+          "value": "line.T1.23400"
+        },
+        {
+          "key": "56",
+          "page": 4,
+          "x": 552,
+          "y": 184.3,
+          "value": "line.T1.23600"
+        },
+        {
+          "key": "57",
+          "page": 5,
+          "x": 552,
+          "y": 731.3,
+          "value": "line.T1.23600"
+        },
+        {
+          "key": "69",
+          "page": 5,
+          "x": 552,
+          "y": 532.8,
+          "value": "line.T1.26000"
+        },
+        {
+          "key": "77",
+          "page": 5,
+          "x": 552,
+          "y": 225.3,
+          "value": "line.T1.30000"
+        },
+        {
+          "key": "78",
+          "page": 5,
+          "x": 552,
+          "y": 211.8,
+          "value": "line.T1.30100"
+        },
+        {
+          "key": "79",
+          "page": 5,
+          "x": 552,
+          "y": 198.3,
+          "value": "line.T1.30300"
+        },
+        {
+          "key": "80",
+          "page": 5,
+          "x": 552,
+          "y": 184.8,
+          "value": "line.T1.30400"
+        },
+        {
+          "key": "84",
+          "page": 5,
+          "x": 552,
+          "y": 106.8,
+          "value": "line.T1.30000 + line.T1.30100 + line.T1.30300 + line.T1.30400"
+        },
+        {
+          "key": "85",
+          "page": 6,
+          "x": 552,
+          "y": 734.3,
+          "value": "line.T1.30000 + line.T1.30100 + line.T1.30300 + line.T1.30400"
+        },
+        {
+          "key": "86",
+          "page": 6,
+          "x": 444,
+          "y": 708.8,
+          "value": "line.T1.30800"
+        },
+        {
+          "key": "88",
+          "page": 6,
+          "x": 444,
+          "y": 669.8,
+          "value": "line.T1.31200"
+        },
+        {
+          "key": "92",
+          "page": 6,
+          "x": 444,
+          "y": 603.8,
+          "value": "line.T1.31260"
+        },
+        {
+          "key": "96",
+          "page": 6,
+          "x": 552,
+          "y": 549.5,
+          "value": "line.T1.30800 + line.T1.31200 + line.T1.31260"
+        },
+        {
+          "key": "98",
+          "page": 6,
+          "x": 552,
+          "y": 522.5,
+          "value": "line.T1.T101"
+        },
+        {
+          "key": "101",
+          "page": 6,
+          "x": 552,
+          "y": 470,
+          "value": "line.T1.T101"
+        },
+        {
+          "key": "103",
+          "page": 6,
+          "x": 552,
+          "y": 443,
+          "value": "line.T1.32300"
+        },
+        {
+          "key": "105",
+          "page": 6,
+          "x": 552,
+          "y": 416,
+          "value": "line.T1.32600"
+        },
+        {
+          "key": "106",
+          "page": 6,
+          "x": 552,
+          "y": 402.5,
+          "value": "line.T1.T101 + line.T1.32300 + line.T1.32600"
+        },
+        {
+          "key": "107",
+          "page": 6,
+          "x": 444,
+          "y": 377,
+          "value": "line.T1.33099"
+        },
+        {
+          "key": "108",
+          "page": 6,
+          "x": 336,
+          "y": 363.5,
+          "value": "round(line.T1.23600 * param.medicalThresholdRate, 2)"
+        },
+        {
+          "key": "109",
+          "page": 6,
+          "x": 444,
+          "y": 350,
+          "value": "min(param.medicalThresholdMax, round(line.T1.23600 * param.medicalThresholdRate, 2))"
+        },
+        {
+          "key": "110",
+          "page": 6,
+          "x": 444,
+          "y": 336.5,
+          "value": "line.T1.33200"
+        },
+        {
+          "key": "112",
+          "page": 6,
+          "x": 552,
+          "y": 297.5,
+          "value": "line.T1.33200"
+        },
+        {
+          "key": "113",
+          "page": 6,
+          "x": 552,
+          "y": 284,
+          "value": "line.T1.33500"
+        },
+        {
+          "key": "115",
+          "page": 6,
+          "x": 552,
+          "y": 257,
+          "value": "line.T1.33800"
+        },
+        {
+          "key": "116",
+          "page": 6,
+          "x": 552,
+          "y": 243.5,
+          "value": "line.T1.34900"
+        },
+        {
+          "key": "117",
+          "page": 6,
+          "x": 552,
+          "y": 230,
+          "value": "line.T1.34990"
+        },
+        {
+          "key": "118",
+          "page": 6,
+          "x": 552,
+          "y": 216.5,
+          "value": "line.T1.35000"
+        },
+        {
+          "key": "119",
+          "page": 7,
+          "x": 552,
+          "y": 733.3,
+          "value": "line.T1.40400"
+        },
+        {
+          "key": "121",
+          "page": 7,
+          "x": 552,
+          "y": 707.3,
+          "value": "line.T1.40400"
+        },
+        {
+          "key": "122",
+          "page": 7,
+          "x": 444,
+          "y": 692.8,
+          "value": "line.T1.35000"
+        },
+        {
+          "key": "123",
+          "page": 7,
+          "x": 444,
+          "y": 679.3,
+          "value": "line.T1.40425"
+        },
+        {
+          "key": "125",
+          "page": 7,
+          "x": 552,
+          "y": 653.3,
+          "value": "line.T1.35000 + line.T1.40425"
+        },
+        {
+          "key": "126",
+          "page": 7,
+          "x": 552,
+          "y": 639.8,
+          "value": "line.T1.42900"
+        },
+        {
+          "key": "128",
+          "page": 7,
+          "x": 552,
+          "y": 612.8,
+          "value": "line.T1.42900"
+        },
+        {
+          "key": "130",
+          "page": 7,
+          "x": 552,
+          "y": 585.8,
+          "value": "line.T1.42900"
+        },
+        {
+          "key": "132",
+          "page": 7,
+          "x": 552,
+          "y": 558.8,
+          "value": "line.T1.42900"
+        },
+        {
+          "key": "134",
+          "page": 7,
+          "x": 552,
+          "y": 531.8,
+          "value": "line.T1.40600"
+        },
+        {
+          "key": "139",
+          "page": 7,
+          "x": 552,
+          "y": 416.3,
+          "value": "line.T1.40600"
+        },
+        {
+          "key": "142",
+          "page": 7,
+          "x": 552,
+          "y": 375.8,
+          "value": "line.T1.42000"
+        },
+        {
+          "key": "143",
+          "page": 7,
+          "x": 552,
+          "y": 332.3,
+          "value": "line.T1.42000"
+        },
+        {
+          "key": "147",
+          "page": 7,
+          "x": 552,
+          "y": 242.3,
+          "value": "line.T1.42800"
+        },
+        {
+          "key": "148",
+          "page": 7,
+          "x": 552,
+          "y": 228.8,
+          "value": "line.T1.43500"
+        },
+        {
+          "key": "149",
+          "page": 8,
+          "x": 552,
+          "y": 731.3,
+          "value": "line.T1.43500"
+        },
+        {
+          "key": "150",
+          "page": 8,
+          "x": 444,
+          "y": 717.8,
+          "value": "line.T1.43700"
+        },
+        {
+          "key": "152",
+          "page": 8,
+          "x": 444,
+          "y": 690.8,
+          "value": "line.T1.44800"
+        },
+        {
+          "key": "153",
+          "page": 8,
+          "x": 444,
+          "y": 677.3,
+          "value": "line.T1.45000"
+        },
+        {
+          "key": "166",
+          "page": 8,
+          "x": 552,
+          "y": 477.8,
+          "value": "line.T1.48200"
+        },
+        {
+          "key": "167",
+          "page": 8,
+          "x": 552,
+          "y": 438.8,
+          "value": "line.T1.43500 - line.T1.48200"
+        },
+        {
+          "key": "12010",
+          "page": 3,
+          "x": 444.1,
+          "y": 441.8,
+          "value": "line.T1.12010"
+        },
+        {
+          "key": "48400",
+          "page": 8,
+          "x": 222.1,
+          "y": 410.3,
+          "value": "line.T1.48400"
+        },
+        {
+          "key": "48500",
+          "page": 8,
+          "x": 531.1,
+          "y": 410.3,
+          "value": "line.T1.48500"
+        }
+      ],
+      "tables": [
+        {
+          "brackets": "taxBrackets",
+          "amount": "line.T1.26000",
+          "parts": [
+            {
+              "page": 5,
+              "columns": [
+                204.3,
+                291.3,
+                378.3,
+                465.3,
+                552.3
+              ],
+              "amount": 412.8,
+              "over": 385.8,
+              "times": 358.8,
+              "tax": 319.8,
+              "rows": [
+                "70",
+                "72",
+                "74",
+                "76"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "ON428": {
+      "title": "Form ON428, Ontario Tax",
+      "url": "https://www.canada.ca/content/dam/cra-arc/formspubs/pbg/5006-c/5006-c-25e.pdf",
+      "sha256": "be18f03acf24b2b7857a45e2faf4b1630c5b3450b502d3cef516ee0b40bf73ba",
+      "pages": 4,
+      "applies": "person.province == \"ON\"",
+      "fields": [
+        {
+          "key": "1",
+          "page": 1,
+          "x": 552,
+          "y": 662.3,
+          "value": "line.T1.26000"
+        },
+        {
+          "key": "9",
+          "page": 1,
+          "x": 552,
+          "y": 422.3,
+          "value": "line.ON428.9"
+        },
+        {
+          "key": "10",
+          "page": 1,
+          "x": 552,
+          "y": 407.3,
+          "value": "line.ON428.10"
+        },
+        {
+          "key": "12",
+          "page": 1,
+          "x": 444,
+          "y": 353.3,
+          "value": "if(line.HH.partner == 1, line.HH.spouseNetIncome, 0)"
+        },
+        {
+          "key": "13",
+          "page": 1,
+          "x": 552,
+          "y": 338.3,
+          "value": "line.ON428.13"
+        },
+        {
+          "key": "16",
+          "page": 1,
+          "x": 552,
+          "y": 281.3,
+          "value": "line.ON428.16"
+        },
+        {
+          "key": "18",
+          "page": 1,
+          "x": 552,
+          "y": 251.3,
+          "value": "line.ON428.9 + line.ON428.10 + line.ON428.13 + line.ON428.16"
+        },
+        {
+          "key": "19",
+          "page": 1,
+          "x": 444,
+          "y": 224.3,
+          "value": "line.T1.30800"
+        },
+        {
+          "key": "21",
+          "page": 1,
+          "x": 444,
+          "y": 182.3,
+          "value": "line.T1.31200"
+        },
+        {
+          "key": "24",
+          "page": 1,
+          "x": 552,
+          "y": 137.3,
+          "value": "line.ON428.24"
+        },
+        {
+          "key": "25",
+          "page": 1,
+          "x": 552,
+          "y": 122.3,
+          "value": "line.ON428.9 + line.ON428.10 + line.ON428.13 + line.ON428.16 + line.ON428.24"
+        },
+        {
+          "key": "26",
+          "page": 2,
+          "x": 552,
+          "y": 731.3,
+          "value": "line.ON428.9 + line.ON428.10 + line.ON428.13 + line.ON428.16 + line.ON428.24"
+        },
+        {
+          "key": "28",
+          "page": 2,
+          "x": 552,
+          "y": 701.3,
+          "value": "line.ON428.9 + line.ON428.10 + line.ON428.13 + line.ON428.16 + line.ON428.24"
+        },
+        {
+          "key": "31",
+          "page": 2,
+          "x": 552,
+          "y": 644.3,
+          "value": "line.ON428.9 + line.ON428.10 + line.ON428.13 + line.ON428.16 + line.ON428.24"
+        },
+        {
+          "key": "34",
+          "page": 2,
+          "x": 552,
+          "y": 599.3,
+          "value": "line.ON428.34"
+        },
+        {
+          "key": "35",
+          "page": 2,
+          "x": 552,
+          "y": 584.3,
+          "value": "line.ON428.9 + line.ON428.10 + line.ON428.13 + line.ON428.16 + line.ON428.24 + line.ON428.34"
+        },
+        {
+          "key": "36",
+          "page": 2,
+          "x": 444,
+          "y": 545.3,
+          "value": "line.ON428.36"
+        },
+        {
+          "key": "37",
+          "page": 2,
+          "x": 336,
+          "y": 530.3,
+          "value": "line.T1.23600"
+        },
+        {
+          "key": "39",
+          "page": 2,
+          "x": 336,
+          "y": 500.3,
+          "value": "round(line.T1.23600 * param.medicalThresholdRate, 2)"
+        },
+        {
+          "key": "40",
+          "page": 2,
+          "x": 444,
+          "y": 485.3,
+          "value": "min(param.onMedicalThresholdMax, round(line.T1.23600 * param.medicalThresholdRate, 2))"
+        },
+        {
+          "key": "41",
+          "page": 2,
+          "x": 444,
+          "y": 470.3,
+          "value": "line.ON428.41"
+        },
+        {
+          "key": "43",
+          "page": 2,
+          "x": 552,
+          "y": 428.3,
+          "value": "line.ON428.41"
+        },
+        {
+          "key": "44",
+          "page": 2,
+          "x": 552,
+          "y": 413.3,
+          "value": "line.ON428.44"
+        },
+        {
+          "key": "46",
+          "page": 2,
+          "x": 552,
+          "y": 383.3,
+          "value": "line.ON428.46"
+        },
+        {
+          "key": "47",
+          "page": 2,
+          "x": 444,
+          "y": 344.3,
+          "value": "round(line.S9.13 * param.onDonationLowRate, 2)"
+        },
+        {
+          "key": "48",
+          "page": 2,
+          "x": 444,
+          "y": 317.3,
+          "value": "round(line.S9.14 * param.onDonationHighRate, 2)"
+        },
+        {
+          "key": "49",
+          "page": 2,
+          "x": 552,
+          "y": 302.3,
+          "value": "line.ON428.49"
+        },
+        {
+          "key": "50",
+          "page": 2,
+          "x": 552,
+          "y": 275.3,
+          "value": "line.ON428.50"
+        },
+        {
+          "key": "51",
+          "page": 2,
+          "x": 552,
+          "y": 230.3,
+          "value": "line.ON428.8"
+        },
+        {
+          "key": "52",
+          "page": 2,
+          "x": 552,
+          "y": 215.3,
+          "value": "line.ON428.50"
+        },
+        {
+          "key": "53",
+          "page": 2,
+          "x": 552,
+          "y": 200.3,
+          "value": "line.ON428.53"
+        },
+        {
+          "key": "55",
+          "page": 2,
+          "x": 552,
+          "y": 170.3,
+          "value": "line.ON428.53"
+        },
+        {
+          "key": "56",
+          "page": 2,
+          "x": 444,
+          "y": 143.3,
+          "value": "line.ON428.53"
+        },
+        {
+          "key": "57",
+          "page": 2,
+          "x": 444,
+          "y": 128.3,
+          "value": "line.ON428.57"
+        },
+        {
+          "key": "58",
+          "page": 2,
+          "x": 444,
+          "y": 113.3,
+          "value": "max(0, line.ON428.53 - line.ON428.57)"
+        },
+        {
+          "key": "61",
+          "page": 2,
+          "x": 552,
+          "y": 56.3,
+          "value": "line.ON428.53"
+        },
+        {
+          "key": "62",
+          "page": 3,
+          "x": 552,
+          "y": 731.3,
+          "value": "line.ON428.53"
+        },
+        {
+          "key": "63",
+          "page": 3,
+          "x": 444,
+          "y": 704.3,
+          "value": "line.ON428.53"
+        },
+        {
+          "key": "65",
+          "page": 3,
+          "x": 444,
+          "y": 674.3,
+          "value": "line.ON428.53"
+        },
+        {
+          "key": "66",
+          "page": 3,
+          "x": 444,
+          "y": 626.3,
+          "value": "round(max(0, line.ON428.53 - param.onSurtaxThreshold1) * param.onSurtaxRate1, 2)"
+        },
+        {
+          "key": "67",
+          "page": 3,
+          "x": 444,
+          "y": 611.3,
+          "value": "round(max(0, line.ON428.53 - param.onSurtaxThreshold2) * param.onSurtaxRate2, 2)"
+        },
+        {
+          "key": "68",
+          "page": 3,
+          "x": 552,
+          "y": 596.3,
+          "value": "line.ON428.68"
+        },
+        {
+          "key": "69",
+          "page": 3,
+          "x": 552,
+          "y": 581.3,
+          "value": "line.ON428.53 + line.ON428.68"
+        },
+        {
+          "key": "70",
+          "page": 3,
+          "x": 552,
+          "y": 566.1,
+          "value": "line.ON428.57"
+        },
+        {
+          "key": "71",
+          "page": 3,
+          "x": 552,
+          "y": 551.3,
+          "value": "line.ON428.73"
+        },
+        {
+          "key": "73",
+          "page": 3,
+          "x": 552,
+          "y": 497.3,
+          "value": "line.ON428.73"
+        },
+        {
+          "key": "75",
+          "page": 3,
+          "x": 444,
+          "y": 233.3,
+          "value": "line.ON428.75"
+        },
+        {
+          "key": "77",
+          "page": 3,
+          "x": 444,
+          "y": 191.3,
+          "value": "param.onTaxReductionBasic + line.ON428.75",
+          "when": "line.ON428.73 > 0"
+        },
+        {
+          "key": "78",
+          "page": 3,
+          "x": 444,
+          "y": 170.3,
+          "value": "2 * (param.onTaxReductionBasic + line.ON428.75)",
+          "when": "line.ON428.73 > 0"
+        },
+        {
+          "key": "79",
+          "page": 3,
+          "x": 444,
+          "y": 155.3,
+          "value": "line.ON428.73",
+          "when": "line.ON428.73 > 0"
+        },
+        {
+          "key": "80",
+          "page": 3,
+          "x": 552,
+          "y": 140.3,
+          "value": "line.ON428.80"
+        },
+        {
+          "key": "81",
+          "page": 3,
+          "x": 552,
+          "y": 125.3,
+          "value": "line.ON428.81"
+        },
+        {
+          "key": "83",
+          "page": 3,
+          "x": 552,
+          "y": 95.3,
+          "value": "line.ON428.81"
+        },
+        {
+          "key": "84",
+          "page": 4,
+          "x": 552,
+          "y": 731.3,
+          "value": "line.ON428.81"
+        },
+        {
+          "key": "85",
+          "page": 4,
+          "x": 552,
+          "y": 716.3,
+          "value": "line.ON428.85"
+        },
+        {
+          "key": "86",
+          "page": 4,
+          "x": 552,
+          "y": 701.3,
+          "value": "line.ON428.86"
+        },
+        {
+          "key": "88",
+          "page": 4,
+          "x": 552,
+          "y": 647.3,
+          "value": "line.ON428.86"
+        },
+        {
+          "key": "89",
+          "page": 4,
+          "x": 552,
+          "y": 632.3,
+          "value": "line.ON428.89"
+        },
+        {
+          "key": "90",
+          "page": 4,
+          "x": 552,
+          "y": 605.3,
+          "value": "line.ON428.90"
+        }
+      ],
+      "tables": [
+        {
+          "brackets": "onTaxBrackets",
+          "amount": "line.T1.26000",
+          "parts": [
+            {
+              "page": 1,
+              "columns": [
+                204,
+                291,
+                378,
+                465,
+                552
+              ],
+              "amount": 587.3,
+              "over": 557.3,
+              "times": 527.3,
+              "tax": 485.3,
+              "rows": [
+                "2",
+                "4",
+                "6",
+                "8"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "BC428": {
+      "title": "Form BC428, British Columbia Tax",
+      "url": "https://www.canada.ca/content/dam/cra-arc/formspubs/pbg/5010-c/5010-c-25e.pdf",
+      "sha256": "e3963988d00351c1dca35003a1e4a6f52156d60cdfec855460f781ae5639ae6a",
+      "pages": 3,
+      "applies": "person.province == \"BC\"",
+      "fields": [
+        {
+          "key": "1",
+          "page": 1,
+          "x": 552,
+          "y": 659.3,
+          "value": "line.T1.26000"
+        },
+        {
+          "key": "16",
+          "page": 1,
+          "x": 552,
+          "y": 248.3,
+          "value": "line.BC428.16"
+        },
+        {
+          "key": "17",
+          "page": 1,
+          "x": 552,
+          "y": 233.3,
+          "value": "line.BC428.17"
+        },
+        {
+          "key": "19",
+          "page": 1,
+          "x": 444,
+          "y": 179.3,
+          "value": "if(line.HH.partner == 1, line.HH.spouseNetIncome, 0)"
+        },
+        {
+          "key": "20",
+          "page": 1,
+          "x": 552,
+          "y": 164.3,
+          "value": "line.BC428.20"
+        },
+        {
+          "key": "23",
+          "page": 1,
+          "x": 552,
+          "y": 107.3,
+          "value": "line.BC428.23"
+        },
+        {
+          "key": "25",
+          "page": 1,
+          "x": 552,
+          "y": 77.3,
+          "value": "line.BC428.16 + line.BC428.17 + line.BC428.20 + line.BC428.23"
+        },
+        {
+          "key": "26",
+          "page": 2,
+          "x": 552,
+          "y": 731.3,
+          "value": "line.BC428.16 + line.BC428.17 + line.BC428.20 + line.BC428.23"
+        },
+        {
+          "key": "27",
+          "page": 2,
+          "x": 444,
+          "y": 704.3,
+          "value": "line.T1.30800"
+        },
+        {
+          "key": "29",
+          "page": 2,
+          "x": 444,
+          "y": 662.3,
+          "value": "line.T1.31200"
+        },
+        {
+          "key": "33",
+          "page": 2,
+          "x": 552,
+          "y": 602.3,
+          "value": "line.BC428.33"
+        },
+        {
+          "key": "35",
+          "page": 2,
+          "x": 552,
+          "y": 572.3,
+          "value": "line.BC428.16 + line.BC428.17 + line.BC428.20 + line.BC428.23 + line.BC428.33"
+        },
+        {
+          "key": "37",
+          "page": 2,
+          "x": 552,
+          "y": 542.3,
+          "value": "line.BC428.16 + line.BC428.17 + line.BC428.20 + line.BC428.23 + line.BC428.33"
+        },
+        {
+          "key": "40",
+          "page": 2,
+          "x": 552,
+          "y": 485.3,
+          "value": "line.BC428.16 + line.BC428.17 + line.BC428.20 + line.BC428.23 + line.BC428.33"
+        },
+        {
+          "key": "44",
+          "page": 2,
+          "x": 552,
+          "y": 425.3,
+          "value": "line.BC428.44"
+        },
+        {
+          "key": "45",
+          "page": 2,
+          "x": 552,
+          "y": 410.3,
+          "value": "line.BC428.16 + line.BC428.17 + line.BC428.20 + line.BC428.23 + line.BC428.33 + line.BC428.44"
+        },
+        {
+          "key": "46",
+          "page": 2,
+          "x": 444,
+          "y": 383.3,
+          "value": "line.T1.33099"
+        },
+        {
+          "key": "47",
+          "page": 2,
+          "x": 336,
+          "y": 368.3,
+          "value": "line.T1.23600"
+        },
+        {
+          "key": "49",
+          "page": 2,
+          "x": 336,
+          "y": 338.3,
+          "value": "round(line.T1.23600 * param.medicalThresholdRate, 2)"
+        },
+        {
+          "key": "50",
+          "page": 2,
+          "x": 444,
+          "y": 323.3,
+          "value": "min(param.bcMedicalThresholdMax, round(line.T1.23600 * param.medicalThresholdRate, 2))"
+        },
+        {
+          "key": "51",
+          "page": 2,
+          "x": 444,
+          "y": 308.3,
+          "value": "line.BC428.51"
+        },
+        {
+          "key": "53",
+          "page": 2,
+          "x": 552,
+          "y": 266.3,
+          "value": "line.BC428.51"
+        },
+        {
+          "key": "54",
+          "page": 2,
+          "x": 552,
+          "y": 251.3,
+          "value": "line.BC428.54"
+        },
+        {
+          "key": "56",
+          "page": 2,
+          "x": 552,
+          "y": 221.3,
+          "value": "line.BC428.56"
+        },
+        {
+          "key": "57",
+          "page": 2,
+          "x": 552,
+          "y": 206.3,
+          "value": "line.BC428.57"
+        },
+        {
+          "key": "58",
+          "page": 2,
+          "x": 552,
+          "y": 191.3,
+          "value": "line.BC428.56 + line.BC428.57"
+        },
+        {
+          "key": "60",
+          "page": 2,
+          "x": 552,
+          "y": 137.3,
+          "value": "line.BC428.60"
+        },
+        {
+          "key": "61",
+          "page": 3,
+          "x": 552,
+          "y": 731.3,
+          "value": "line.BC428.8"
+        },
+        {
+          "key": "63",
+          "page": 3,
+          "x": 552,
+          "y": 701.3,
+          "value": "line.BC428.8"
+        },
+        {
+          "key": "64",
+          "page": 3,
+          "x": 444,
+          "y": 686.3,
+          "value": "line.BC428.60"
+        },
+        {
+          "key": "65",
+          "page": 3,
+          "x": 444,
+          "y": 671.3,
+          "value": "line.BC428.65"
+        },
+        {
+          "key": "67",
+          "page": 3,
+          "x": 552,
+          "y": 617.3,
+          "value": "line.BC428.60 + line.BC428.65"
+        },
+        {
+          "key": "68",
+          "page": 3,
+          "x": 552,
+          "y": 602.3,
+          "value": "line.BC428.68"
+        },
+        {
+          "key": "70",
+          "page": 3,
+          "x": 552,
+          "y": 560.3,
+          "value": "line.BC428.68"
+        },
+        {
+          "key": "72",
+          "page": 3,
+          "x": 552,
+          "y": 530.3,
+          "value": "line.BC428.68"
+        },
+        {
+          "key": "73",
+          "page": 3,
+          "x": 444,
+          "y": 458.3,
+          "value": "param.bcTaxReductionBasic",
+          "when": "line.T1.23600 < param.bcTaxReductionLimit"
+        },
+        {
+          "key": "74",
+          "page": 3,
+          "x": 336,
+          "y": 431.3,
+          "value": "line.T1.23600",
+          "when": "line.T1.23600 < param.bcTaxReductionLimit"
+        },
+        {
+          "key": "76",
+          "page": 3,
+          "x": 336,
+          "y": 401.3,
+          "value": "max(0, line.T1.23600 - param.bcTaxReductionBase)",
+          "when": "line.T1.23600 < param.bcTaxReductionLimit"
+        },
+        {
+          "key": "78",
+          "page": 3,
+          "x": 444,
+          "y": 371.3,
+          "value": "round(max(0, line.T1.23600 - param.bcTaxReductionBase) * param.bcTaxReductionRate, 2)",
+          "when": "line.T1.23600 < param.bcTaxReductionLimit"
+        },
+        {
+          "key": "79",
+          "page": 3,
+          "x": 552,
+          "y": 344.3,
+          "value": "line.BC428.79"
+        },
+        {
+          "key": "80",
+          "page": 3,
+          "x": 552,
+          "y": 329.3,
+          "value": "line.BC428.91"
+        },
+        {
+          "key": "82",
+          "page": 3,
+          "x": 552,
+          "y": 299.3,
+          "value": "line.BC428.91"
+        },
+        {
+          "key": "85",
+          "page": 3,
+          "x": 552,
+          "y": 254.3,
+          "value": "line.BC428.91"
+        },
+        {
+          "key": "89",
+          "page": 3,
+          "x": 552,
+          "y": 134.3,
+          "value": "line.BC428.91"
+        },
+        {
+          "key": "91",
+          "page": 3,
+          "x": 552,
+          "y": 92.3,
+          "value": "line.BC428.91"
+        }
+      ],
+      "tables": [
+        {
+          "brackets": "bcTaxBrackets",
+          "amount": "line.T1.26000",
+          "parts": [
+            {
+              "page": 1,
+              "columns": [
+                264,
+                360,
+                456,
+                552
+              ],
+              "amount": 590.3,
+              "over": 560.3,
+              "times": 530.3,
+              "tax": 488.3,
+              "rows": [
+                "2",
+                "4",
+                "6",
+                "8"
+              ]
+            },
+            {
+              "page": 1,
+              "columns": [
+                360,
+                456,
+                552
+              ],
+              "amount": 416.3,
+              "over": 386.3,
+              "times": 356.3,
+              "tax": 314.3,
+              "rows": [
+                "9",
+                "11",
+                "13",
+                "15"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "AB428": {
+      "title": "Form AB428, Alberta Tax",
+      "url": "https://www.canada.ca/content/dam/cra-arc/formspubs/pbg/5009-c/5009-c-25e.pdf",
+      "sha256": "5ff6ff15df5eabaf41130e50a63cf501daa8e79d89e04d6caea5350c7a918f4b",
+      "pages": 3,
+      "applies": "person.province == \"AB\"",
+      "fields": [
+        {
+          "key": "1",
+          "page": 1,
+          "x": 552,
+          "y": 659.3,
+          "value": "line.T1.26000"
+        },
+        {
+          "key": "16",
+          "page": 1,
+          "x": 552,
+          "y": 242.3,
+          "value": "line.AB428.16"
+        },
+        {
+          "key": "17",
+          "page": 1,
+          "x": 552,
+          "y": 227.3,
+          "value": "line.AB428.17"
+        },
+        {
+          "key": "19",
+          "page": 1,
+          "x": 444,
+          "y": 173.3,
+          "value": "if(line.HH.partner == 1, line.HH.spouseNetIncome, 0)"
+        },
+        {
+          "key": "20",
+          "page": 1,
+          "x": 552,
+          "y": 158.3,
+          "value": "line.AB428.20"
+        },
+        {
+          "key": "23",
+          "page": 1,
+          "x": 552,
+          "y": 101.3,
+          "value": "line.AB428.23"
+        },
+        {
+          "key": "25",
+          "page": 1,
+          "x": 552,
+          "y": 71.3,
+          "value": "line.AB428.16 + line.AB428.17 + line.AB428.20 + line.AB428.23"
+        },
+        {
+          "key": "26",
+          "page": 2,
+          "x": 552,
+          "y": 728.3,
+          "value": "line.AB428.16 + line.AB428.17 + line.AB428.20 + line.AB428.23"
+        },
+        {
+          "key": "27",
+          "page": 2,
+          "x": 444,
+          "y": 698.3,
+          "value": "line.T1.30800"
+        },
+        {
+          "key": "29",
+          "page": 2,
+          "x": 444,
+          "y": 656.3,
+          "value": "line.T1.31200"
+        },
+        {
+          "key": "32",
+          "page": 2,
+          "x": 552,
+          "y": 611.3,
+          "value": "line.AB428.32"
+        },
+        {
+          "key": "33",
+          "page": 2,
+          "x": 552,
+          "y": 596.3,
+          "value": "line.AB428.16 + line.AB428.17 + line.AB428.20 + line.AB428.23 + line.AB428.32"
+        },
+        {
+          "key": "36",
+          "page": 2,
+          "x": 552,
+          "y": 551.3,
+          "value": "line.AB428.16 + line.AB428.17 + line.AB428.20 + line.AB428.23 + line.AB428.32"
+        },
+        {
+          "key": "39",
+          "page": 2,
+          "x": 552,
+          "y": 494.3,
+          "value": "line.AB428.16 + line.AB428.17 + line.AB428.20 + line.AB428.23 + line.AB428.32"
+        },
+        {
+          "key": "42",
+          "page": 2,
+          "x": 552,
+          "y": 449.3,
+          "value": "line.AB428.42"
+        },
+        {
+          "key": "43",
+          "page": 2,
+          "x": 552,
+          "y": 434.3,
+          "value": "line.AB428.16 + line.AB428.17 + line.AB428.20 + line.AB428.23 + line.AB428.32 + line.AB428.42"
+        },
+        {
+          "key": "44",
+          "page": 2,
+          "x": 444,
+          "y": 407.3,
+          "value": "line.T1.33099"
+        },
+        {
+          "key": "45",
+          "page": 2,
+          "x": 336,
+          "y": 392.3,
+          "value": "line.T1.23600"
+        },
+        {
+          "key": "47",
+          "page": 2,
+          "x": 336,
+          "y": 362.3,
+          "value": "round(line.T1.23600 * param.medicalThresholdRate, 2)"
+        },
+        {
+          "key": "48",
+          "page": 2,
+          "x": 444,
+          "y": 347.3,
+          "value": "min(param.abMedicalThresholdMax, round(line.T1.23600 * param.medicalThresholdRate, 2))"
+        },
+        {
+          "key": "49",
+          "page": 2,
+          "x": 444,
+          "y": 332.3,
+          "value": "line.AB428.49"
+        },
+        {
+          "key": "51",
+          "page": 2,
+          "x": 552,
+          "y": 290.3,
+          "value": "line.AB428.49"
+        },
+        {
+          "key": "52",
+          "page": 2,
+          "x": 552,
+          "y": 275.3,
+          "value": "line.AB428.52"
+        },
+        {
+          "key": "54",
+          "page": 2,
+          "x": 552,
+          "y": 245.3,
+          "value": "line.AB428.54"
+        },
+        {
+          "key": "55",
+          "page": 2,
+          "x": 444,
+          "y": 206.3,
+          "value": "round(line.S9.13 * param.abDonationLowRate, 2)"
+        },
+        {
+          "key": "56",
+          "page": 2,
+          "x": 444,
+          "y": 179.3,
+          "value": "round(line.S9.14 * param.abDonationHighRate, 2)"
+        },
+        {
+          "key": "57",
+          "page": 2,
+          "x": 552,
+          "y": 164.3,
+          "value": "line.AB428.57"
+        },
+        {
+          "key": "58",
+          "page": 2,
+          "x": 552,
+          "y": 137.3,
+          "value": "line.AB428.58"
+        },
+        {
+          "key": "59",
+          "page": 3,
+          "x": 552,
+          "y": 728.3,
+          "value": "line.AB428.8"
+        },
+        {
+          "key": "61",
+          "page": 3,
+          "x": 552,
+          "y": 698.3,
+          "value": "line.AB428.8"
+        },
+        {
+          "key": "62",
+          "page": 3,
+          "x": 444,
+          "y": 683.3,
+          "value": "line.AB428.58"
+        },
+        {
+          "key": "63",
+          "page": 3,
+          "x": 444,
+          "y": 668.3,
+          "value": "line.AB428.63"
+        },
+        {
+          "key": "65",
+          "page": 3,
+          "x": 552,
+          "y": 614.3,
+          "value": "line.AB428.58 + line.AB428.63"
+        },
+        {
+          "key": "66",
+          "page": 3,
+          "x": 552,
+          "y": 599.3,
+          "value": "line.AB428.66"
+        },
+        {
+          "key": "68",
+          "page": 3,
+          "x": 552,
+          "y": 557.3,
+          "value": "line.AB428.66"
+        },
+        {
+          "key": "70",
+          "page": 3,
+          "x": 552,
+          "y": 527.3,
+          "value": "line.AB428.66"
+        },
+        {
+          "key": "73",
+          "page": 3,
+          "x": 552,
+          "y": 482.3,
+          "value": "line.AB428.66"
+        },
+        {
+          "key": "74",
+          "page": 3,
+          "x": 552,
+          "y": 467.3,
+          "value": "line.AB428.74"
+        },
+        {
+          "key": "75",
+          "page": 3,
+          "x": 552,
+          "y": 440.3,
+          "value": "line.AB428.75"
+        }
+      ],
+      "tables": [
+        {
+          "brackets": "abTaxBrackets",
+          "amount": "line.T1.26000",
+          "parts": [
+            {
+              "page": 1,
+              "columns": [
+                360,
+                456,
+                552
+              ],
+              "amount": 587.3,
+              "over": 557.3,
+              "times": 527.3,
+              "tax": 485.3,
+              "rows": [
+                "2",
+                "4",
+                "6",
+                "8"
+              ]
+            },
+            {
+              "page": 1,
+              "columns": [
+                360,
+                456,
+                552
+              ],
+              "amount": 410.3,
+              "over": 380.3,
+              "times": 350.3,
+              "tax": 308.3,
+              "rows": [
+                "9",
+                "11",
+                "13",
+                "15"
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  },
   "outcome": "RESULT.net",
-  "version": "51cc8229cc310fd6"
+  "version": "36898c5c18506c1d"
 }

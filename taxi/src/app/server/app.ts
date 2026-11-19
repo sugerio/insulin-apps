@@ -5,6 +5,7 @@ import { platformReader } from "./lib/ai.ts";
 import * as documents from "./lib/documents.ts";
 import { getEstimate } from "./lib/estimate.ts";
 import * as hints from "./lib/hints.ts";
+import { craForms, printReturn, type FormSource } from "./lib/forms.ts";
 import * as household from "./lib/household.ts";
 import * as returns from "./lib/returns.ts";
 import { ApiError, forbidden, logError, notFound, parseOr400, readJson } from "./lib/http.ts";
@@ -26,6 +27,8 @@ export interface AppOptions {
   reader?: (orgId: string) => SlipReader;
   /** The same-origin check on writes; off only in the dev server, where the console preview's origin differs. */
   enforceSameOrigin?: boolean;
+  /** Where the CRA's print forms come from; tests pass blank stand-in pages. */
+  forms?: FormSource;
 }
 
 /** What a route's handler gets: the caller, its parsed params and body, the database and the time. */
@@ -117,6 +120,22 @@ export function createApp(options: AppOptions = {}) {
       headers: {
         "Content-Type": file.contentType,
         "Content-Disposition": `inline; filename*=UTF-8''${encodeURIComponent(file.name)}`,
+        "Cache-Control": "private, no-store",
+        "X-Content-Type-Options": "nosniff",
+      },
+    });
+  });
+  // A return printed on the CRA's forms, with its worksheet, as a PDF to save: not JSON, so outside the route table.
+  app.get("/api/years/:year/returns/:personId/forms", async (c) => {
+    const caller = c.get("caller");
+    if (!caller.permissions.has("taxi.view")) throw forbidden();
+    const year = Number(c.req.param("year"));
+    if (!(SUPPORTED_YEARS as readonly number[]).includes(year)) throw notFound();
+    const pdf = await printReturn(c.env.DB, caller.orgId, year, c.req.param("personId"), options.forms ?? craForms, now());
+    return new Response(pdf.bytes, {
+      headers: {
+        "Content-Type": "application/pdf",
+        "Content-Disposition": `attachment; filename*=UTF-8''${encodeURIComponent(pdf.name)}`,
         "Cache-Control": "private, no-store",
         "X-Content-Type-Options": "nosniff",
       },

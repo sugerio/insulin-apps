@@ -237,6 +237,23 @@ export const documentChunks = sqliteTable(
   (table) => [primaryKey({ columns: [table.documentId, table.chunkIndex] })],
 );
 
+/**
+ * A CRA print form (rules/<country>/<year>/forms.yaml), downloaded from canada.ca the first time an organization prints
+ * a return, so it is fetched once. Its bytes are the CRA's, kept only if they match the SHA-256 the layout was measured
+ * on. Never committed to the repository.
+ */
+export const formFiles = sqliteTable(
+  "form_files",
+  {
+    orgId: text("org_id").notNull(),
+    url: text("url").notNull(),
+    sha256: text("sha256").notNull(),
+    bytes: blob("bytes").notNull(),
+    fetchedAt: integer("fetched_at").notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.orgId, table.url] })],
+);
+
 export const HINT_DECISIONS = ["accepted", "dismissed"] as const;
 
 /**

@@ -8,8 +8,11 @@ export const revisionSchema = z.number().int().min(1);
 
 /** An amount as printed on a slip: dollars and cents, no sign or separators. */
 export const slipAmountSchema = z.string().regex(/^\d{1,9}(\.\d{1,2})?$/, "Enter an amount like 1234.56");
-/** A slip's boxes: box number as printed (such as `14` or `16A`) → amount. */
-export const slipBoxesSchema = z.record(z.string().regex(/^\d{1,3}[A-Z]?$/, "A box number such as 14 or 16A"), slipAmountSchema);
+/**
+ * A slip's boxes: box as printed (such as `14` or `16A`, or a Quebec RL slip's letter `A` or `A1`) → amount. The point or
+ * dash of an RL sub-box is an underscore (box B.A is `B_A`), as a formula names it (slips.yaml).
+ */
+export const slipBoxesSchema = z.record(z.string().regex(/^[0-9A-Z]{1,3}(_[0-9A-Z]{1,3})?$/, "A box such as 14, 16A, A or B_A"), slipAmountSchema);
 
 export const SLIP_STATUSES = ["unconfirmed", "confirmed"] as const;
 

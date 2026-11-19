@@ -79,7 +79,18 @@
         "fertilityExpenses": "0",
         "childFitnessFees": "0",
         "childArtsFees": "0",
-        "departureProperty": false
+        "departureProperty": false,
+        "qcLivedAlone": false,
+        "qcHomeOwner": false,
+        "qcHomeOwners": "1",
+        "qcGroupDrugPlan": false,
+        "qcDrugMonthsJanJun": "6",
+        "qcDrugMonthsJulDec": "6",
+        "qcChildCareReceipts": "0",
+        "hasHomeSupport": false,
+        "qcChildTransfer": "0",
+        "qcChildTuitionTransfer": "0",
+        "qcInstalmentsPaid": "0"
       }
     },
     "slips": [

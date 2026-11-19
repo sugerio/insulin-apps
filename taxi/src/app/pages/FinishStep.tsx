@@ -42,6 +42,10 @@ function Results({ estimate, slips }: { estimate: Estimate; slips: SlipList }) {
   const line = (id: string) => person.lines.find((each) => each.id === id);
   const refund = line("T1.48400");
   const owing = line("T1.48500");
+  // A resident of Quebec files two returns: the result has the Quebec refund and balance (TP-1 lines 478 and 479) too.
+  const quebecRefund = line("TP1.478");
+  const quebecOwing = line("TP1.479");
+  const results = new Set(["T1.48400", "T1.48500", "TP1.478", "TP1.479"]);
   /** The step that asks a question: its module's, Personal info for facts about the person. */
   const stepOfQuestion = (id: string): Step => {
     const module = rules.questions.get(id)?.module;
@@ -57,10 +61,17 @@ function Results({ estimate, slips }: { estimate: Estimate; slips: SlipList }) {
   return (
     <Card>
       <CardContent className="flex flex-col gap-5">
-        <Headline refund={refund?.value ?? null} owing={owing?.value ?? null} />
+        {quebecRefund && quebecOwing ? (
+          <div className="grid gap-2 sm:grid-cols-2">
+            <Headline title="Federal" refund={refund?.value ?? null} owing={owing?.value ?? null} />
+            <Headline title="Quebec" refund={quebecRefund.value} owing={quebecOwing.value} />
+          </div>
+        ) : (
+          <Headline refund={refund?.value ?? null} owing={owing?.value ?? null} />
+        )}
         <ul className="flex flex-col" aria-label="Key lines">
           {person.lines
-            .filter((each) => each.id !== "T1.48400" && each.id !== "T1.48500")
+            .filter((each) => !results.has(each.id))
             .map((each) => (
               <ResultLine key={each.id} line={each} explain={() => evaluation.explain(person.personId, `line.${each.id}`)} rules={rules} />
             ))}
@@ -88,14 +99,20 @@ function Results({ estimate, slips }: { estimate: Estimate; slips: SlipList }) {
   );
 }
 
-function Headline({ refund, owing }: { refund: string | null; owing: string | null }) {
+/** A return's refund or balance owing; `title` names the return when there are two (federal and Quebec). */
+function Headline({ title, refund, owing }: { title?: string; refund: string | null; owing: string | null }) {
   if (refund === null || owing === null) {
-    return <p className="text-sm text-muted-foreground">The refund or balance owing can't be worked out yet: see below.</p>;
+    return (
+      <p className="text-sm text-muted-foreground">
+        {title ? `The ${title} refund or balance owing` : "The refund or balance owing"} can't be worked out yet: see below.
+      </p>
+    );
   }
   const isRefund = !Number(owing);
+  const label = isRefund ? "Refund" : "Balance owing";
   return (
     <div className="rounded-lg bg-muted/50 px-4 py-3">
-      <p className="text-sm text-muted-foreground">{isRefund ? "Refund" : "Balance owing"}</p>
+      <p className="text-sm text-muted-foreground">{title ? `${title} ${label.toLowerCase()}` : label}</p>
       <p className="text-2xl font-semibold tabular-nums">{formatMoney(isRefund ? refund : owing)}</p>
     </div>
   );

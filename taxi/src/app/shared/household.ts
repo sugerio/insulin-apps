@@ -51,8 +51,8 @@ export const PROVINCE_NAMES: Record<Province, string> = {
   SK: "Saskatchewan",
   YT: "Yukon",
 };
-/** The provinces whose tax this app works out. Quebec, with its own return, comes later. */
-export const SUPPORTED_PROVINCES: readonly Province[] = ["ON", "BC", "AB", "MB", "SK", "NB", "NL", "NS", "PE", "YT", "NT", "NU"];
+/** The provinces whose tax this app works out: all of them. A Quebec resident also files Revenu Québec's TP-1. */
+export const SUPPORTED_PROVINCES: readonly Province[] = ["ON", "BC", "AB", "MB", "SK", "NB", "NL", "NS", "PE", "YT", "NT", "NU", "QC"];
 
 export const idSchema = z.uuid();
 const isoDateSchema = z.iso.date();

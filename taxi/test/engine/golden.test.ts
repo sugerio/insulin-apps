@@ -19,6 +19,8 @@ interface Golden {
 /** Lines no golden household makes non-zero, and why that is fine. Every other line must be non-zero in at least one. */
 const ALWAYS_ZERO: Record<string, string> = {
   "SCOPE.departure": "property deemed sold on leaving Canada is not handled: the line is zero or says so",
+  "QC.scope": "the Quebec return's cases this app doesn't handle: the line is zero or says so",
+  "QCD.check": "Schedule D answers that don't fit together: the line is zero or says so",
 };
 
 for (const folder of readdirSync(ROOT)) {

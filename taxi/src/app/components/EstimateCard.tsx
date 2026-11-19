@@ -53,12 +53,23 @@ export function EstimateSummary() {
 /** The refund or balance owing, and whether an answer assumed for now went into it. */
 function headline(estimate: Estimate, personId: string): { text: string; estimate: boolean } | null {
   const lines = estimate.result.people.find((person) => person.personId === personId)?.lines ?? [];
-  const refund = lines.find((line) => line.id === "T1.48400");
-  const owing = lines.find((line) => line.id === "T1.48500");
-  if (!refund || !owing || refund.value === null || owing.value === null) return null;
-  const owes = Number(owing.value) > 0;
-  const line = owes ? owing : refund;
-  return { text: `${owes ? "Balance owing" : "Refund"} ${formatMoney(line.value!)}`, estimate: line.status === "estimate" };
+  const one = (refundId: string, owingId: string) => {
+    const refund = lines.find((line) => line.id === refundId);
+    const owing = lines.find((line) => line.id === owingId);
+    if (!refund || !owing || refund.value === null || owing.value === null) return null;
+    const owes = Number(owing.value) > 0;
+    const line = owes ? owing : refund;
+    return { owes, value: line.value!, estimate: line.status === "estimate" };
+  };
+  const federal = one("T1.48400", "T1.48500");
+  if (!federal) return null;
+  // A resident of Quebec also files the TP-1, whose refund or balance is shown after the federal one.
+  const hasQuebec = lines.some((line) => line.id === "TP1.478");
+  const quebec = hasQuebec ? one("TP1.478", "TP1.479") : null;
+  if (hasQuebec && !quebec) return null;
+  const text = (each: { owes: boolean; value: string }, name: string) => `${name}${each.owes ? "balance owing" : "refund"} ${formatMoney(each.value)}`;
+  if (!quebec) return { text: text(federal, "").replace(/^./, (first) => first.toUpperCase()), estimate: federal.estimate };
+  return { text: `${text(federal, "Federal ")} · ${text(quebec, "Quebec ")}`, estimate: federal.estimate || quebec.estimate };
 }
 
 function EstimateBody({ estimate }: { estimate: Estimate }) {

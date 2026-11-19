@@ -645,8 +645,12 @@ lines:
     source: "Form T1032, line 22: the amount your spouse or partner splits with you"
   T1.11900:
     label: Employment insurance and other benefits
-    formula: "sum(T4E.box14)"
-    source: "Box 14 of the T4E slip"
+    formula: 'sum(T4E.box14) + if(person.province == "QC", sum(RL6.boxA), 0)'
+    source: "Box 14 of the T4E slip, and for a resident of Quebec the parental insurance benefits on the RL-6 (5005-R line 11905)"
+  T1.11905:
+    label: Provincial parental insurance plan (PPIP) benefits included on line 11900
+    formula: 'if(person.province == "QC", sum(RL6.boxA), 0)'
+    source: "5005-R line 11905: box A of the RL-6. EI maternity and parental benefits aren't shown apart on the T4E the app reads"
   T1.12000:
     label: Taxable amount of dividends (eligible and other than eligible)
     formula: "sum(T5.box11) + sum(T5.box25) + sum(T3.box32) + sum(T3.box50)"
@@ -2054,7 +2058,8 @@ lines:
   # The household's outcome, which hints compare with and without their change.
   RESULT.net:
     label: Refund, less balance owing
-    formula: "line.T1.48400 - line.T1.48500"
+    formula: 'line.T1.48400 - line.T1.48500 + if(person.province == "QC", line.TP1.478 - line.TP1.479, 0)'
+    source: "The federal refund or balance, and for a Quebec resident the Quebec one (TP-1 lines 478 and 479)"
 
   # Starting amounts worked out from receipts and last year's notice of assessment, for the person to check: not lines
   # of the return. The RRSP deduction is the contributions (with unused ones from earlier years) up to the limit.

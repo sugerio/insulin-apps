@@ -42,6 +42,18 @@ describe("reading a slip with Claude", () => {
     expect(content[0]!.source!.media_type).toBe("application/pdf");
   });
 
+  it("keys a Quebec RL slip's boxes as the rules name them", async () => {
+    // Box B.A of an RL-1 is B_A in slips.yaml, so a formula can name it; a box read as printed lands there.
+    const boxes = [
+      { box: "A", amount: "62000.00" },
+      { box: "B.A", amount: "3744.00" },
+      { box: "201", amount: "500.00" },
+    ];
+    const { client } = stubbed(answer({ taxYear: 2025, slips: [{ type: "RL1", person: "Alex Martin", issuer: "Maple Corp", boxes, unsure: ["B.A"] }] }));
+    const outcome = await claudeReader(client).read(file, context);
+    expect(outcome).toMatchObject({ kind: "read", slips: [{ type: "RL1", boxes: { A: "62000.00", B_A: "3744.00", 201: "500.00" }, unsure: ["B_A"] }] });
+  });
+
   it("says why when the model declines or answers in another shape", async () => {
     expect(await claudeReader(stubbed({ stop_reason: "refusal", content: [] }).client).read(file, context)).toEqual({ kind: "failed", message: "This file couldn't be read." });
     expect(await claudeReader(stubbed(answer({ nope: true })).client).read(file, context)).toEqual({ kind: "failed", message: "Reading this file went wrong. Try again." });
@@ -54,5 +66,7 @@ describe("reading a slip with Claude", () => {
     expect(prompt).toContain("- T2202, T2202 Tuition and Enrolment Certificate");
     expect(prompt).toContain("16A (Employee's second CPP contributions)");
     expect(prompt).toContain("Never return a social insurance number.");
+    expect(prompt).toContain("- RL1, RL-1 slip, Employment and Other Income (Revenu Québec)");
+    expect(prompt).toContain("B_A (QPP contribution (box B.A))");
   });
 });

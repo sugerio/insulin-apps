@@ -13,12 +13,13 @@ export interface LeftItem {
 }
 
 /**
- * Whether a return asks a question. A kind of income shown by a slip, and a yes/no question with a note, are always
- * asked. Any other question is asked only when the return reads it (`reached`): tuition to transfer needs a T2202 and
- * a spouse, and a province's own credits are read only by its own form. One answered already stays on the screen.
+ * Whether a return asks a question. A yes/no question with a note is always asked. Any other question is asked only when
+ * the return reads it (`reached`): tuition to transfer needs a T2202 and a spouse, a province's own credits are read
+ * only by its own form, and a kind of income shown by a slip is asked when the return reads that slip (every return
+ * reads the T4; only a Quebec return reads the RL-1). One answered already stays on the screen.
  */
 export function isAsked(question: Question, reached: readonly string[] | ReadonlySet<string>, answered: boolean): boolean {
-  if (question.slip !== undefined || question.note !== undefined || answered) return true;
+  if (question.note !== undefined || answered) return true;
   return reached instanceof Set ? reached.has(question.id) : (reached as readonly string[]).includes(question.id);
 }
 

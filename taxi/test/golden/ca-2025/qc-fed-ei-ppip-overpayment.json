@@ -76,7 +76,18 @@
         "fertilityExpenses": "0",
         "childFitnessFees": "0",
         "childArtsFees": "0",
-        "departureProperty": false
+        "departureProperty": false,
+        "qcLivedAlone": false,
+        "qcHomeOwner": false,
+        "qcHomeOwners": "1",
+        "qcGroupDrugPlan": false,
+        "qcDrugMonthsJanJun": "6",
+        "qcDrugMonthsJulDec": "6",
+        "qcChildCareReceipts": "0",
+        "hasHomeSupport": false,
+        "qcChildTransfer": "0",
+        "qcChildTuitionTransfer": "0",
+        "qcInstalmentsPaid": "0"
       }
     },
     "slips": [
@@ -191,7 +202,10 @@
       "T1.48400": "3046.42",
       "T1.48500": "0",
       "S11.11": "130257.52",
-      "S11.13": "107651.53"
+      "S11.13": "107651.53",
+      "QCC.claims": "1",
+      "QCU.40": "3500",
+      "TP1.350": "18571"
     }
   }
 }

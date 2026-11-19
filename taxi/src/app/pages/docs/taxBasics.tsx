@@ -92,7 +92,9 @@ export const taxBasics: DocTopic = {
       body: (
         <p>
           Your provincial tax is the tax of the province you lived in on December 31, even if you lived somewhere else for part of the year. Quebec
-          residents also file a separate Quebec return.
+          residents also file a separate Quebec return (TP-1) with Revenu Québec, from the RL slips their employers and payers send with the
+          T-slips. The app works it out with the federal return; Revenu Québec works out the solidarity tax credit (Schedule D) and can work
+          out the senior assistance credit itself.
         </p>
       ),
     },

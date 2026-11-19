@@ -216,6 +216,24 @@ describe("the 2025 rules", () => {
     // And outside Quebec, a T4 with QPP contributions.
     expect(alone([t4({ 14: "60000", 17: "3616" })]).line("p1", "T1.30800").status).toBe("missing");
 
+    // A Quebec resident's T4 without the RL-1 its employer issues with it: the federal return is worked out (Quebec has
+    // no Form 428), and the Quebec return (TP-1) says what it needs instead of leaving the employment income out.
+    const withoutRl1 = alone([t4({ 14: "60000", 22: "9000" })], "QC");
+    expect(withoutRl1.line("p1", "T1.42800").value?.toString()).toBe("0");
+    expect(withoutRl1.line("p1", "T1.42000").status).toBe("estimate");
+    expect(withoutRl1.line("p1", "TP1.199")).toEqual({ value: null, status: "missing" });
+    expect(withoutRl1.line("p1", "TP1.478").status).toBe("missing");
+    const needsRl1 = expect.stringMatching(/issues an RL-1 with each T4: upload it/);
+    expect(withoutRl1.result().people[0]!.unhandled).toContainEqual(needsRl1);
+    expect(withoutRl1.explain("p1", "line.QC.scope").notes).toEqual([needsRl1]);
+    // A return outside Quebec never reads the TP-1: its Quebec lines are 0, and it asks for no RL slip.
+    const ontario = alone([t4({ 14: "60000", 22: "9000" })]);
+    expect(ontario.linesOf("p1").filter((id) => id.startsWith("TP1.") || id.startsWith("QC"))).toEqual([]);
+    expect(ontario.result().people[0]!.lines.map((line) => line.id)).not.toContain("TP1.478");
+    expect(ontario.result().people[0]!.questions).toContain("hasEmploymentIncome");
+    expect(ontario.result().people[0]!.questions).not.toContain("hasRl1");
+    expect(withoutRl1.result().people[0]!.questions).toEqual(expect.arrayContaining(["hasEmploymentIncome", "hasRl1", "hasRl31", "qcGroupDrugPlan"]));
+
     // Box 26 on one slip and not the other: Schedule 8 takes box 14 for the blank one, which a sum of slips can't do.
     const oneBlank = alone([t4({ 14: "60000", 16: "3361.75", 26: "60000" }), t4({ 14: "30000", 16: "1576.75" }, "s2")]);
     expect(oneBlank.line("p1", "T1.44800").status).toBe("missing");

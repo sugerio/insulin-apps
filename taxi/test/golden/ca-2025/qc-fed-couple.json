@@ -89,7 +89,18 @@
         "fertilityExpenses": "0",
         "childFitnessFees": "0",
         "childArtsFees": "0",
-        "departureProperty": false
+        "departureProperty": false,
+        "qcLivedAlone": false,
+        "qcHomeOwner": false,
+        "qcHomeOwners": "1",
+        "qcGroupDrugPlan": false,
+        "qcDrugMonthsJanJun": "6",
+        "qcDrugMonthsJulDec": "6",
+        "qcChildCareReceipts": "0",
+        "hasHomeSupport": false,
+        "qcChildTransfer": "0",
+        "qcChildTuitionTransfer": "0",
+        "qcInstalmentsPaid": "0"
       },
       "p2": {
         "hasSelfEmployment": true,
@@ -155,7 +166,18 @@
         "fertilityExpenses": "0",
         "childFitnessFees": "0",
         "childArtsFees": "0",
-        "departureProperty": false
+        "departureProperty": false,
+        "qcLivedAlone": false,
+        "qcHomeOwner": false,
+        "qcHomeOwners": "1",
+        "qcGroupDrugPlan": false,
+        "qcDrugMonthsJanJun": "6",
+        "qcDrugMonthsJulDec": "6",
+        "qcChildCareReceipts": "0",
+        "hasHomeSupport": false,
+        "qcChildTransfer": "0",
+        "qcChildTuitionTransfer": "0",
+        "qcInstalmentsPaid": "0"
       }
     },
     "slips": [
@@ -281,7 +303,12 @@
       "S2.7": "10487.96",
       "S2.11": "18340.96",
       "S11.11": "29735",
-      "S11.13": "4521.76"
+      "S11.13": "4521.76",
+      "QCC.50": "12275",
+      "QCC.claims": "1",
+      "QCU.40": "3500",
+      "QC.couple": "1",
+      "TP1.350": "18571"
     },
     "p2": {
       "HH.partner": "1",
@@ -369,7 +396,40 @@
       "S2.7": "29735",
       "S2.11": "19572.2",
       "S2.12": "10162.8",
-      "S11.11": "10487.96"
+      "S11.11": "10487.96",
+      "QC.claimsMedical": "1",
+      "QCF.68": "208.04",
+      "QCP.64": "6000",
+      "QCP.72": "2400",
+      "QCP.76": "600",
+      "QCR.12": "6000",
+      "QCR.20": "98000",
+      "QCR.24": "52.68",
+      "QCR.26": "23.04",
+      "QCU.33": "6000",
+      "QCU.40": "3500",
+      "QCU.43": "2500",
+      "QCU.48": "320",
+      "QCU.71": "160",
+      "QCU.94": "320",
+      "QCU.95": "160",
+      "QCU.98": "320",
+      "QCU.99": "320",
+      "QCU.101": "135",
+      "QCU.103": "50",
+      "QCU.111": "2500",
+      "QCU.124": "185",
+      "QC.couple": "1",
+      "QC.work": "6000",
+      "TP1.164": "6000",
+      "TP1.201": "360",
+      "TP1.248": "208.04",
+      "TP1.254": "568.04",
+      "TP1.350": "18571",
+      "TP1.377": "18571",
+      "TP1.377_1": "2599.94",
+      "TP1.439": "52.68",
+      "TP1.445": "320"
     }
   }
 }

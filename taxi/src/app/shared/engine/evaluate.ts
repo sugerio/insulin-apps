@@ -78,7 +78,11 @@ export interface PersonResult {
   estimates: { question: string; ask: string; assumed: string | boolean }[];
   /** What the person entered that the rules don't use: a slip box, or an answer to a question the year doesn't ask. */
   unhandled: string[];
-  /** Every question a result line reads for this person, answered or not, in the order the rules reach them. */
+  /**
+   * Every question a result line reads for this person, answered or not, in the order the rules reach them; then each
+   * question about a kind of slip (`slip`) whose boxes a result line reads, so a Quebec return asks for RL slips and
+   * another return doesn't.
+   */
   questions: string[];
 }
 export interface EvaluationResult {
@@ -234,7 +238,13 @@ export class Evaluation {
         for (const key of reached) {
           if (key.startsWith(`${person.id}:`)) for (const note of this.node(key).notes ?? []) if (!unhandled.includes(note)) unhandled.push(note);
         }
-        return { personId: person.id, lines, missing, estimates, unhandled, questions: asked };
+        const slipsRead = new Set(
+          [...reached].filter((key) => key.startsWith(`${person.id}:`)).map((key) => key.slice(person.id.length + 1).split(".")[0]!),
+        );
+        const slipQuestions = [...this.rules.questions.values()]
+          .filter((question) => question.slip !== undefined && slipsRead.has(question.slip) && !asked.includes(question.id))
+          .map((question) => question.id);
+        return { personId: person.id, lines, missing, estimates, unhandled, questions: [...asked, ...slipQuestions] };
       }),
     };
   }

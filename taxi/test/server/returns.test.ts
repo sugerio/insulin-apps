@@ -199,6 +199,36 @@ describe("the steps", () => {
     expect(current.returns[0]!.steps.income).toBe("done");
   });
 
+  it("ask a Quebec resident for the RL slip that comes with each T-slip, and no one else", async () => {
+    const alex = await addPerson("Alex Martin", "self", "1985-04-02");
+    await json<TaxYear>(server.call("POST", "/api/years", { body: { year: 2025, people: [alex.id] } }), 201);
+    let current = await json<TaxYear>(
+      server.call("PUT", "/api/years/2025/household", {
+        body: { revision: 1, maritalStatus: "single", adults: [{ personId: alex.id, province: "QC", residentAllYear: true }] },
+      }),
+    );
+    const income = noneOf("income", ["hasEmploymentIncome", "hasRl1"]);
+    current = await json<TaxYear>(server.call("PUT", "/api/years/2025/answers", { body: { revision: current.revision, personId: alex.id, answers: income } }));
+    const addSlip = (type: string, boxes: Record<string, string>) =>
+      json<TaxYear>(server.call("POST", "/api/years/2025/slips", { body: { revision: current.revision, personId: alex.id, type, issuer: "Maple Corp", boxes } }), 201);
+    current = await addSlip("T4", { 14: "60000.00", 22: "9000" });
+    // The T4 answers the employment question; the Quebec return still asks for the RL-1 the employer issues with it.
+    expect(current.returns[0]!.steps.income).toBe("todo");
+    current = await addSlip("RL1", { A: "60000.00", B_A: "3616.00", E: "8000.00" });
+    expect(current.returns[0]!.steps.income).toBe("done");
+    const quebec = (await estimate()).result.people[0]!;
+    expect(quebec.questions).toEqual(expect.arrayContaining(["hasRl1", "qcGroupDrugPlan"]));
+
+    // In Ontario, no Quebec question is asked.
+    current = await json<TaxYear>(
+      server.call("PUT", "/api/years/2025/household", {
+        body: { revision: current.revision, maritalStatus: "single", adults: [{ personId: alex.id, province: "ON", residentAllYear: true }] },
+      }),
+    );
+    const ontario = (await estimate()).result.people[0]!;
+    expect(ontario.questions.filter((id) => id.startsWith("qc") || id.startsWith("hasRl"))).toEqual([]);
+  });
+
   it("are each adult's own: one return's slips and facts don't hold up the other's", async () => {
     const { alex, sam } = await year(true);
     let current = await json<TaxYear>(server.call("GET", "/api/years/2025"));

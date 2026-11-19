@@ -210,14 +210,14 @@ describe("the year's facts", () => {
     expect(year.returns[0]!.steps.household).toBe("todo");
   });
 
-  it("name what the app can't prepare without blocking the step", async () => {
+  it("prepare a Quebec resident's returns like any other province's", async () => {
     const alex = await addPerson("Alex Martin", "self");
     await startYear([alex]);
     const saved = await json<TaxYear>(
       server.call("PUT", "/api/years/2025/household", { body: facts(1, "single", [{ personId: alex.id, province: "QC", residentAllYear: true }]) }),
     );
-    // Moving to or from Canada during the year is handled: only the province is named.
-    expect(saved.issues.map((issue) => [issue.code, issue.kind])).toEqual([["unsupported_province", "unsupported"]]);
+    // Every province is handled, Quebec with its own return (TP-1): no issue names it.
+    expect(saved.issues).toEqual([]);
     expect(saved.returns[0]!.steps.household).toBe("done");
   });
 

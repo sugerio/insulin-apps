@@ -11,9 +11,15 @@
     "T1.43500",
     "T1.43700",
     "T1.48400",
-    "T1.48500"
+    "T1.48500",
+    "TP1.478",
+    "TP1.479"
   ],
-  "resultWhen": {},
+  "resultWhen": {
+    "T1.42800": "person.province != \"QC\"",
+    "TP1.478": "person.province == \"QC\"",
+    "TP1.479": "person.province == \"QC\""
+  },
   "params": {
     "abTaxBrackets": {
       "label": "Alberta tax brackets",
@@ -3195,6 +3201,585 @@
       "value": "0.05",
       "source": "PE428 line 85: 5%"
     },
+    "qcAgeIncomeThreshold": {
+      "label": "Family income above which the Schedule B amounts go down",
+      "value": "42090",
+      "source": "Schedule B, line 16: $42,090"
+    },
+    "qcLivingAloneAmount": {
+      "label": "Amount for a person living alone",
+      "value": "2128",
+      "source": "Schedule B, line 20: $2,128"
+    },
+    "qcAgeAmount": {
+      "label": "Age amount, for each spouse born before 1961",
+      "value": "3906",
+      "source": "Schedule B, lines 22 and 23: $3,906"
+    },
+    "qcRetirementFactor": {
+      "label": "Retirement income multiplier",
+      "value": "1.25",
+      "source": "Schedule B, work chart, line 9: line 8 × 1.25"
+    },
+    "qcRetirementMax": {
+      "label": "Most amount for retirement income",
+      "value": "3470",
+      "source": "Schedule B, work chart, line 9: maximum $3,470"
+    },
+    "qcAgeReductionRate": {
+      "label": "Reduction rate of the Schedule B amounts",
+      "value": "0.1875",
+      "source": "Schedule B, line 31: line 18 × 18.75%"
+    },
+    "qcMedicalThresholdRate": {
+      "label": "Share of family income medical expenses must exceed",
+      "value": "0.03",
+      "source": "Schedule B, line 39: family income × 3%"
+    },
+    "qcMedicalRefundRate": {
+      "label": "Refundable medical credit rate",
+      "value": "0.25",
+      "source": "Schedule B, line 44: line 43 × 25%"
+    },
+    "qcMedicalRefundMax": {
+      "label": "Most refundable medical credit",
+      "value": "1466",
+      "source": "Schedule B, line 44: maximum $1,466"
+    },
+    "qcMedicalRefundThreshold": {
+      "label": "Family income above which the refundable medical credit goes down",
+      "value": "28335",
+      "source": "Schedule B, line 46: $28,335"
+    },
+    "qcMedicalRefundReductionRate": {
+      "label": "Refundable medical credit reduction rate",
+      "value": "0.05",
+      "source": "Schedule B, line 48: line 47 × 5%"
+    },
+    "qcMedicalRefundMinWork": {
+      "label": "Work income needed for the refundable medical credit",
+      "value": "3750",
+      "source": "Schedule B, Part D: work income of $3,750 or more"
+    },
+    "qcChildCareUnder7": {
+      "label": "Childcare expense limit for a child born after 2018",
+      "value": "12275",
+      "source": "Schedule C, line 45: × $12,275"
+    },
+    "qcChildCare7to16": {
+      "label": "Childcare expense limit for a child born after 2008",
+      "value": "6180",
+      "source": "Schedule C, line 47: × $6,180"
+    },
+    "qcChildCareRates": {
+      "label": "Childcare credit rate by family income",
+      "value": [
+        {
+          "upTo": "24795",
+          "rate": "0.78"
+        },
+        {
+          "upTo": "43725",
+          "rate": "0.75"
+        },
+        {
+          "upTo": "45340",
+          "rate": "0.74"
+        },
+        {
+          "upTo": "46970",
+          "rate": "0.73"
+        },
+        {
+          "upTo": "48570",
+          "rate": "0.72"
+        },
+        {
+          "upTo": "50195",
+          "rate": "0.71"
+        },
+        {
+          "upTo": "119835",
+          "rate": "0.7"
+        },
+        {
+          "upTo": null,
+          "rate": "0.67"
+        }
+      ],
+      "source": "Schedule C, table of tax credit rates: 78% up to $24,795, then 75%, 74%, 73%, 72%, 71%, 70% up to $119,835, and 67%"
+    },
+    "hsfThreshold": {
+      "label": "Health services fund, income with no contribution",
+      "value": "18130",
+      "source": "Schedule F, lines 70 and 77: $18,130 or less"
+    },
+    "hsfSecondThreshold": {
+      "label": "Health services fund, top of the first column",
+      "value": "63060",
+      "source": "Schedule F, line 77: $63,060"
+    },
+    "hsfRate": {
+      "label": "Health services fund contribution rate",
+      "value": "0.01",
+      "source": "Schedule F, line 80: 1%"
+    },
+    "hsfFirstMax": {
+      "label": "Health services fund, most in the first column",
+      "value": "150",
+      "source": "Schedule F, line 82: maximum $150 (and $150 on line 81 of the second column)"
+    },
+    "hsfMax": {
+      "label": "Health services fund, most",
+      "value": "1000",
+      "source": "Schedule F, line 82: maximum $1,000"
+    },
+    "homeSupportRate": {
+      "label": "Home-support credit rate",
+      "value": "0.39",
+      "source": "Schedule J, line 88: line 87 × 39%"
+    },
+    "homeSupportRentShare": {
+      "label": "Share of the monthly rent that counts",
+      "value": "0.05",
+      "source": "Schedule J, line 31: line 30 × 5%"
+    },
+    "homeSupportRentMin": {
+      "label": "Lowest monthly rent counted",
+      "value": "600",
+      "source": "Schedule J, line 30: minimum $600"
+    },
+    "homeSupportRentMax": {
+      "label": "Highest monthly rent counted",
+      "value": "1200",
+      "source": "Schedule J, line 30: maximum $1,200"
+    },
+    "homeSupportMaxSingle": {
+      "label": "Most expenses for a single non-dependent senior",
+      "value": "19500",
+      "source": "Guide, line 458, annual limit on eligible expenses: $19,500"
+    },
+    "homeSupportMaxCouple": {
+      "label": "Most expenses for a couple of non-dependent seniors",
+      "value": "39000",
+      "source": "Guide, line 458, annual limit on eligible expenses: $39,000"
+    },
+    "homeSupportThreshold": {
+      "label": "Family income above which the home-support credit goes down",
+      "value": "71010",
+      "source": "Work Chart 458, lines 11 and 13: $71,010"
+    },
+    "homeSupportSecondThreshold": {
+      "label": "Family income above which the home-support credit goes down faster",
+      "value": "115035",
+      "source": "Work Chart 458, lines 10 and 14: $115,035"
+    },
+    "homeSupportReductionRate": {
+      "label": "Home-support credit reduction rate",
+      "value": "0.03",
+      "source": "Work Chart 458, line 12: 3%"
+    },
+    "homeSupportSecondReductionRate": {
+      "label": "Home-support credit reduction rate above the second threshold",
+      "value": "0.07",
+      "source": "Work Chart 458, line 15: 7%"
+    },
+    "seniorCreditAge": {
+      "label": "Age for the home-support and senior assistance credits",
+      "value": "70",
+      "source": "Guide, lines 458 and 463: 70 or older on December 31, 2025"
+    },
+    "drugIncomeSingle": {
+      "label": "Drug insurance income deduction without a spouse",
+      "value": "19890",
+      "source": "Schedule K, line 41 and situation 32: $19,890"
+    },
+    "drugIncomeCouple": {
+      "label": "Drug insurance income deduction with a spouse",
+      "value": "32240",
+      "source": "Schedule K, line 41 and situation 34: $32,240"
+    },
+    "drugChildCouple": {
+      "label": "Drug insurance deduction for one dependent child, with a spouse",
+      "value": "4220",
+      "source": "Schedule K, line 42: $4,220"
+    },
+    "drugChildrenCouple": {
+      "label": "Drug insurance deduction for more than one dependent child, with a spouse",
+      "value": "8120",
+      "source": "Schedule K, line 42: $8,120"
+    },
+    "drugChildSingle": {
+      "label": "Drug insurance deduction for one dependent child, without a spouse",
+      "value": "12350",
+      "source": "Schedule K, line 44: $12,350"
+    },
+    "drugChildrenSingle": {
+      "label": "Drug insurance deduction for more than one dependent child, without a spouse",
+      "value": "16570",
+      "source": "Schedule K, line 44: $16,570"
+    },
+    "drugTableBreak": {
+      "label": "Income where the drug premium rate changes",
+      "value": "5000",
+      "source": "Schedule K, Part C, line 78: $5,000"
+    },
+    "drugTableTop": {
+      "label": "Income above which the drug premium is the most",
+      "value": "14669",
+      "source": "Schedule K, Part C: more than $14,669, enter $766"
+    },
+    "drugPremiumMax": {
+      "label": "Most drug insurance premium for a year",
+      "value": "766",
+      "source": "Schedule K, Part C, line 83: maximum $766"
+    },
+    "drugRateSingleLow": {
+      "label": "Drug premium rate without a spouse, column A",
+      "value": "0.0784",
+      "source": "Schedule K, line 80: 7.84%"
+    },
+    "drugRateSingleHigh": {
+      "label": "Drug premium rate without a spouse, column B",
+      "value": "0.1176",
+      "source": "Schedule K, line 80: 11.76%"
+    },
+    "drugBaseSingle": {
+      "label": "Drug premium without a spouse at $5,000",
+      "value": "392",
+      "source": "Schedule K, line 82: $392"
+    },
+    "drugRateCoupleLow": {
+      "label": "Drug premium rate with a spouse, column A",
+      "value": "0.0393",
+      "source": "Schedule K, line 80: 3.93%"
+    },
+    "drugRateCoupleHigh": {
+      "label": "Drug premium rate with a spouse, column B",
+      "value": "0.0589",
+      "source": "Schedule K, line 80: 5.89%"
+    },
+    "drugBaseCouple": {
+      "label": "Drug premium with a spouse at $5,000",
+      "value": "196.5",
+      "source": "Schedule K, line 82: $196.50"
+    },
+    "drugMax2025": {
+      "label": "Most drug insurance premium for 2025",
+      "value": "755",
+      "source": "Schedule K, line 87: $755"
+    },
+    "drugMonthlyFirstHalf": {
+      "label": "Drug premium for each month from January to June",
+      "value": "62",
+      "source": "Schedule K, line 88: × $62.00"
+    },
+    "drugMonthlySecondHalf": {
+      "label": "Drug premium for each month from July to December",
+      "value": "63.83",
+      "source": "Schedule K, line 88: × $63.83"
+    },
+    "workPremiumCapCouple": {
+      "label": "Work premium, most work income counted for a couple",
+      "value": "19534",
+      "source": "Schedule P, Part E, section 1, line 66: $19,534"
+    },
+    "workPremiumCapSingle": {
+      "label": "Work premium, most work income counted without a spouse",
+      "value": "12620",
+      "source": "Schedule P, Part E, section 2, line 66: $12,620"
+    },
+    "workPremiumExclusionCouple": {
+      "label": "Work premium, work income left out for a couple",
+      "value": "3600",
+      "source": "Schedule P, Part E, section 1, line 70: $3,600"
+    },
+    "workPremiumExclusionSingle": {
+      "label": "Work premium, work income left out without a spouse",
+      "value": "2400",
+      "source": "Schedule P, Part E, section 2, line 70: $2,400"
+    },
+    "workPremiumRateChildCouple": {
+      "label": "Work premium rate, couple with a designated child",
+      "value": "0.25",
+      "source": "Schedule P, Part E, section 1, line 74: 25%"
+    },
+    "workPremiumRateChildSingle": {
+      "label": "Work premium rate, single parent",
+      "value": "0.3",
+      "source": "Schedule P, Part E, section 2, line 74: 30%"
+    },
+    "workPremiumRate": {
+      "label": "Work premium rate without a designated child",
+      "value": "0.116",
+      "source": "Schedule P, Part E, line 74: 11.6%"
+    },
+    "workPremiumReductionRate": {
+      "label": "Work premium reduction rate",
+      "value": "0.1",
+      "source": "Schedule P, Part E, line 83: line 82 × 10%"
+    },
+    "workPremiumMaxFamilyCouple": {
+      "label": "Family income from which a couple gets no work premium",
+      "value": "59369",
+      "source": "Guide, line 456, maximum family income: $59,369 for a couple with one or more children"
+    },
+    "childActivitiesRate": {
+      "label": "Children's activities credit rate",
+      "value": "0.2",
+      "source": "Guide, line 462, point 25, work chart line 4: line 3 × 20%"
+    },
+    "childActivitiesMaxFees": {
+      "label": "Most fees counted for each child",
+      "value": "500",
+      "source": "Guide, line 462, point 25, work chart line 1: maximum $500"
+    },
+    "childActivitiesMaxIncome": {
+      "label": "Most family income for the children's activities credit",
+      "value": "168470",
+      "source": "Guide, line 462, point 25: family income of $168,470 or less"
+    },
+    "seniorAssistanceMax": {
+      "label": "Senior assistance credit for each eligible person 70 or older",
+      "value": "2000",
+      "source": "Guide, line 463: maximum $2,000 ($4,000 when both spouses were 70 or over)"
+    },
+    "seniorAssistanceRate": {
+      "label": "Senior assistance credit reduction rate",
+      "value": "0.054",
+      "source": "Guide, line 463: 5.40% of family income over the threshold"
+    },
+    "seniorAssistanceThresholdCouple": {
+      "label": "Family income above which the senior assistance credit goes down, with a spouse",
+      "value": "45270",
+      "source": "Guide, line 463: $45,270 if you had a spouse on December 31"
+    },
+    "seniorAssistanceThresholdSingle": {
+      "label": "Family income above which the senior assistance credit goes down, without a spouse",
+      "value": "27835",
+      "source": "Guide, line 463: $27,835 if you did not have a spouse on December 31"
+    },
+    "qcTaxBrackets": {
+      "label": "Quebec tax brackets",
+      "value": [
+        {
+          "upTo": "53255",
+          "rate": "0.14",
+          "base": "0"
+        },
+        {
+          "upTo": "106495",
+          "rate": "0.19",
+          "base": "7455.7"
+        },
+        {
+          "upTo": "129590",
+          "rate": "0.24",
+          "base": "17571.3"
+        },
+        {
+          "upTo": null,
+          "rate": "0.2575",
+          "base": "23114.1"
+        }
+      ],
+      "source": "Work Chart 401 (TP-1.D.GR-V): 14% to $53,255, 19% to $106,495, 24% to $129,590, 25.75% above, bases as printed"
+    },
+    "qcBasicPersonalAmount": {
+      "label": "Quebec basic personal amount",
+      "value": "18571",
+      "source": "TP-1 line 350: $18,571 (it already allows for QPP, QPIP, EI and health fund contributions)"
+    },
+    "qcCreditRate": {
+      "label": "Quebec rate of the non-refundable credits of line 377",
+      "value": "0.14",
+      "source": "TP-1 line 377.1: line 377 × 14%"
+    },
+    "qcSecondCreditRate": {
+      "label": "Quebec rate of the medical expense and student loan credits",
+      "value": "0.2",
+      "source": "TP-1 line 389: line 388 × 20%"
+    },
+    "qcImpairmentAmount": {
+      "label": "Amount for a severe and prolonged impairment",
+      "value": "4123",
+      "source": "TP-1 line 376 and guide, line 376: $4,123 if you were 18 or older"
+    },
+    "qcDuesRate": {
+      "label": "Credit rate on union and professional dues",
+      "value": "0.1",
+      "source": "TP-1 line 397: line 397.1 × 10%"
+    },
+    "qcWorkerDeductionRate": {
+      "label": "Deduction for workers, rate",
+      "value": "0.06",
+      "source": "Work Chart 201, line 9: 6% of line 8"
+    },
+    "qcWorkerDeductionMax": {
+      "label": "Deduction for workers, most",
+      "value": "1420",
+      "source": "Work Chart 201, line 9, and guide, line 201: maximum $1,420"
+    },
+    "qcDonationLowLimit": {
+      "label": "Donations at the low Quebec rate",
+      "value": "200",
+      "source": "Work Chart 395, lines 2 and 6: the first $200"
+    },
+    "qcDonationLowRate": {
+      "label": "Quebec donation credit rate on the first $200",
+      "value": "0.2",
+      "source": "Work Chart 395, line 7: 20%"
+    },
+    "qcDonationTopThreshold": {
+      "label": "Taxable income above which donations get the top Quebec rate",
+      "value": "129590",
+      "source": "Work Chart 395, line 4: line 299 minus $129,590"
+    },
+    "qcDonationTopRate": {
+      "label": "Quebec donation credit rate in the top bracket",
+      "value": "0.2575",
+      "source": "Work Chart 395, line 9: 25.75%"
+    },
+    "qcDonationHighRate": {
+      "label": "Quebec donation credit rate above $200",
+      "value": "0.24",
+      "source": "Work Chart 395, line 11: 24%"
+    },
+    "qcPoliticalMax": {
+      "label": "Quebec political contributions counted, most",
+      "value": "200",
+      "source": "Work Chart 414, line 1: maximum $200"
+    },
+    "qcPoliticalFirst": {
+      "label": "Quebec political contributions at the higher rate",
+      "value": "50",
+      "source": "Work Chart 414, line 2: line 1 or $50, whichever is less"
+    },
+    "qcPoliticalFirstRate": {
+      "label": "Quebec political contribution credit rate on the first $50",
+      "value": "0.85",
+      "source": "Work Chart 414, line 10: 85%"
+    },
+    "qcPoliticalRate": {
+      "label": "Quebec political contribution credit rate above $50",
+      "value": "0.75",
+      "source": "Work Chart 414, line 11: 75%"
+    },
+    "qcTuitionRate": {
+      "label": "Quebec tuition credit rate for 2014 and later fees",
+      "value": "0.08",
+      "source": "Schedule T, line 45: line 44.1 × 8%"
+    },
+    "qcTuitionMinimum": {
+      "label": "Tuition fees for 2025 must exceed",
+      "value": "100",
+      "source": "Schedule T, line 40.6: tuition or examination fees paid for 2025 (if they exceed $100)"
+    },
+    "qcCapitalGainsInclusionRate": {
+      "label": "Quebec capital gains inclusion rate",
+      "value": "0.5",
+      "source": "Schedule G, line 108, and guide, line 139: 50%"
+    },
+    "qcRefundMinimum": {
+      "label": "Smallest refund paid or balance to pay",
+      "value": "2",
+      "source": "Guide, lines 474 and 475: a refund of less than $2 isn't paid, and a balance of less than $2 needn't be paid"
+    },
+    "qppEmployeeRate": {
+      "label": "QPP base and first additional contribution rate, employee",
+      "value": "0.064",
+      "source": "Schedule U, lines 17.2, 38 and 71: 6.4%"
+    },
+    "qppSelfEmployedRate": {
+      "label": "QPP base and first additional contribution rate, self-employed",
+      "value": "0.128",
+      "source": "Schedule U, line 48: 12.8%"
+    },
+    "qppSecondRate": {
+      "label": "QPP second additional contribution rate, employee",
+      "value": "0.04",
+      "source": "Schedule U, lines 21, 95.8 and 122: 4%"
+    },
+    "qppSecondSelfEmployedRate": {
+      "label": "QPP second additional contribution rate, self-employed",
+      "value": "0.08",
+      "source": "Schedule U, line 93: 8%"
+    },
+    "qppFirstRate": {
+      "label": "QPP first additional contribution rate, employee",
+      "value": "0.01",
+      "source": "Schedule U, lines 15 and 112: 1%"
+    },
+    "qppExemption": {
+      "label": "QPP basic exemption",
+      "value": "3500",
+      "source": "Schedule U, instructions for Part B (personal QPP exemption for 12 months), and TP-1015.G-V: $3,500"
+    },
+    "qppMaxPensionable": {
+      "label": "QPP maximum pensionable earnings",
+      "value": "71300",
+      "source": "Schedule U, line 12 (maximum $71,300), lines 14.1 and 44"
+    },
+    "qppAdditionalMaxPensionable": {
+      "label": "QPP additional maximum pensionable earnings",
+      "value": "81200",
+      "source": "Schedule U, lines 18.8 and 53, and TP-1015.G-V: $81,200"
+    },
+    "qppMaxEmployee": {
+      "label": "Most QPP base and first additional contributions, employee",
+      "value": "4339.2",
+      "source": "Schedule U, line 10 (maximum $4,339.20) and line 71"
+    },
+    "qppMaxEmployeeTotal": {
+      "label": "Most QPP contributions of an employee, lines 98 and 98.2",
+      "value": "4735.2",
+      "source": "Guide, line 452: lines 98 and 98.2 total more than $4,735.20"
+    },
+    "qppFirstShare": {
+      "label": "First additional share of the employee QPP contribution",
+      "value": "0.15625",
+      "source": "Schedule U, lines 11, 103 and 105: × 0.156250"
+    },
+    "qppHalfBaseShare": {
+      "label": "Deductible share of the self-employed QPP base contribution",
+      "value": "0.421875",
+      "source": "Schedule U, line 101: × 0.421875"
+    },
+    "qpipEmployeeRate": {
+      "label": "QPIP premium rate, employee",
+      "value": "0.00494",
+      "source": "Schedule R, line 37: 0.494%"
+    },
+    "qpipSelfEmployedRate": {
+      "label": "QPIP premium rate, self-employed",
+      "value": "0.00878",
+      "source": "Schedule R, line 24: 0.878%"
+    },
+    "qpipMaxInsurable": {
+      "label": "QPIP maximum insurable earnings",
+      "value": "98000",
+      "source": "Schedule R, lines 13 and 33: $98,000"
+    },
+    "qpipMaxEmployee": {
+      "label": "Most QPIP premium of an employee",
+      "value": "484.12",
+      "source": "Guide, line 97: more than $484.12 is an overpayment (line 457)"
+    },
+    "qpipMaxSelfEmployed": {
+      "label": "Most QPIP premium on self-employment",
+      "value": "860.44",
+      "source": "Schedule R, line 24: maximum $860.44"
+    },
+    "qpipMinimum": {
+      "label": "Earnings under which no QPIP premium is payable",
+      "value": "2000",
+      "source": "Schedule R, first paragraph, and guide, line 457: less than $2,000"
+    },
+    "qpipDeductionRate": {
+      "label": "Deductible share of the QPIP premium on self-employment",
+      "value": "0.43736",
+      "source": "Schedule R, line 26: line 24 × 43.736%"
+    },
     "skTaxBrackets": {
       "label": "Saskatchewan tax brackets",
       "value": [
@@ -4119,8 +4704,13 @@
     },
     "T1.11900": {
       "label": "Employment insurance and other benefits",
-      "formula": "sum(T4E.box14)",
-      "source": "Box 14 of the T4E slip"
+      "formula": "sum(T4E.box14) + if(person.province == \"QC\", sum(RL6.boxA), 0)",
+      "source": "Box 14 of the T4E slip, and for a resident of Quebec the parental insurance benefits on the RL-6 (5005-R line 11905)"
+    },
+    "T1.11905": {
+      "label": "Provincial parental insurance plan (PPIP) benefits included on line 11900",
+      "formula": "if(person.province == \"QC\", sum(RL6.boxA), 0)",
+      "source": "5005-R line 11905: box A of the RL-6. EI maternity and parental benefits aren't shown apart on the T4E the app reads"
     },
     "T1.12000": {
       "label": "Taxable amount of dividends (eligible and other than eligible)",
@@ -5525,7 +6115,8 @@
     },
     "RESULT.net": {
       "label": "Refund, less balance owing",
-      "formula": "line.T1.48400 - line.T1.48500"
+      "formula": "line.T1.48400 - line.T1.48500 + if(person.province == \"QC\", line.TP1.478 - line.TP1.479, 0)",
+      "source": "The federal refund or balance, and for a Quebec resident the Quebec one (TP-1 lines 478 and 479)"
     },
     "SUGGEST.rrspDeduction": {
       "label": "RRSP contributions you can deduct for 2025",
@@ -7917,6 +8508,915 @@
       "label": "Prince Edward Island amounts transferred from your spouse",
       "formula": "max(0, line.PES2.5 - line.PES2.11)"
     },
+    "QCB.18": {
+      "label": "Family income over the threshold",
+      "formula": "max(0, line.QC.family - param.qcAgeIncomeThreshold)",
+      "source": "Schedule B, lines 14 to 18"
+    },
+    "QCB.20": {
+      "label": "Amount for a person living alone",
+      "formula": "if(line.HH.partner == 0, if(answer.qcLivedAlone, param.qcLivingAloneAmount, 0), 0)",
+      "source": "Schedule B, line 20: living all year in a dwelling alone, or only with people under 18 or student children"
+    },
+    "QCB.22": {
+      "label": "Age amount",
+      "formula": "if(person.age >= 65, param.qcAgeAmount, 0)",
+      "source": "Schedule B, line 22: born before January 1, 1961"
+    },
+    "QCB.23": {
+      "label": "Age amount of your spouse",
+      "formula": "if(line.HH.partner == 1 and household.partnerInYear, if(spouse.person.age >= 65, param.qcAgeAmount, 0), 0)",
+      "source": "Schedule B, line 23: your spouse born before January 1, 1961"
+    },
+    "QCB.27": {
+      "label": "Amount for retirement income",
+      "formula": "min(param.qcRetirementMax, round(max(0, line.TP1.122 + line.TP1.123 - line.TP1.245) * param.qcRetirementFactor, 2))",
+      "source": "Schedule B, work chart, lines 1 to 9: lines 122 and 123 less line 245, × 1.25, maximum $3,470"
+    },
+    "QCB.28": {
+      "label": "Amount for your spouse's retirement income",
+      "formula": "if(line.QC.couple == 1, spouse.line.QCB.27, 0)",
+      "source": "Schedule B, line 28: the work chart for your spouse"
+    },
+    "QCB.30": {
+      "label": "Schedule B amounts",
+      "formula": "line.QCB.20 + line.QCB.22 + line.QCB.23 + line.QCB.27 + line.QCB.28",
+      "source": "Schedule B, line 30: lines 20 through 28 (line 21 isn't handled)"
+    },
+    "QCB.31": {
+      "label": "Reduction based on family income",
+      "formula": "round(line.QCB.18 * param.qcAgeReductionRate, 2)",
+      "source": "Schedule B, line 31: line 18 × 18.75%"
+    },
+    "QCB.32": {
+      "label": "Amount to which you or your spouse is entitled",
+      "formula": "max(0, line.QCB.30 - line.QCB.31)",
+      "source": "Schedule B, line 32"
+    },
+    "QC.ownMedical": {
+      "label": "Medical expenses on this return's receipts and Quebec slips",
+      "formula": "line.OWN.medical + sum(RL1.boxJ) + sum(RL1.box235) + sum(RL2.box235)",
+      "source": "Guide, line 381: receipts, and the private health plan premiums of box J and box 235 of the RL-1 and box 235 of the RL-2"
+    },
+    "QC.claimsMedical": {
+      "label": "This return claims the couple's medical expenses (1 for yes)",
+      "formula": "if(line.QC.couple == 1, if(line.QC.work > spouse.line.QC.work or (line.QC.work == spouse.line.QC.work and person.role == \"self\"), 1, 0), 1)",
+      "source": "Guide, line 381: either spouse may claim the couple's expenses, less 3% of family income either way; the one with the higher work income can also get the refundable credit"
+    },
+    "QCB.36": {
+      "label": "Medical expenses",
+      "formula": "if(line.QC.couple == 1, if(line.QC.claimsMedical == 1, line.QC.ownMedical + spouse.line.QC.ownMedical, 0), line.QC.ownMedical)",
+      "source": "Schedule B, line 36"
+    },
+    "QCB.39": {
+      "label": "3% of family income",
+      "formula": "round(line.QC.family * param.qcMedicalThresholdRate, 2)",
+      "source": "Schedule B, lines 37 to 39"
+    },
+    "QCB.44": {
+      "label": "Refundable medical credit before reduction",
+      "formula": "min(param.qcMedicalRefundMax, round((line.TP1.381 + line.T1.21500) * param.qcMedicalRefundRate, 2))",
+      "source": "Schedule B, lines 41 to 44: line 40 and the disability supports deduction (as on federal line 21500), × 25%, maximum $1,466"
+    },
+    "QCB.48": {
+      "label": "Reduction of the refundable medical credit",
+      "formula": "round(max(0, line.QC.family - param.qcMedicalRefundThreshold) * param.qcMedicalRefundReductionRate, 2)",
+      "source": "Schedule B, lines 45 to 48: 5% of family income over $28,335"
+    },
+    "QCB.50": {
+      "label": "Refundable tax credit for medical expenses",
+      "formula": "if(person.residentAllYear and person.age >= 18 and line.QC.work >= param.qcMedicalRefundMinWork, max(0, line.QCB.44 - line.QCB.48), 0)",
+      "source": "Schedule B, Part D, line 50: resident all year, 18 or older, with work income of $3,750 or more"
+    },
+    "QCC.own": {
+      "label": "Childcare expenses this return paid",
+      "formula": "if(household.childrenUnder17 > 0, max(0, sum(RL24.boxE) + answer.qcChildCareReceipts - sum(RL1.box201) - sum(RL5.boxJ)), 0)",
+      "source": "Schedule C, lines 26.1 to 41: box E of the RL-24 slips and the receipts without one, less the allowance in box 201 of the RL-1 or box J of the RL-5"
+    },
+    "QCC.41": {
+      "label": "Childcare expenses qualifying for the tax credit",
+      "formula": "line.QCC.own + if(line.QC.couple == 1, spouse.line.QCC.own, 0)",
+      "source": "Schedule C, line 41: the couple's expenses"
+    },
+    "QCC.50": {
+      "label": "Childcare expense limit",
+      "formula": "param.qcChildCareUnder7 * household.childrenUnder7 + param.qcChildCare7to16 * (household.childrenUnder17 - household.childrenUnder7)",
+      "source": "Schedule C, lines 44 to 50: $12,275 for each child born after 2018 and $6,180 for each child born after 2008 (the $16,800 limit for a child with an impairment isn't handled)"
+    },
+    "QCC.85": {
+      "label": "Childcare expenses counted",
+      "formula": "min(line.QCC.41, line.QCC.50)",
+      "source": "Schedule C, line 85: line 41 or line 50, whichever is less"
+    },
+    "QCC.92": {
+      "label": "Childcare credit rate",
+      "formula": "step(param.qcChildCareRates, line.QC.family)",
+      "source": "Schedule C, line 92: the rate for the family income"
+    },
+    "QCC.94": {
+      "label": "Couple's tax credit for childcare expenses",
+      "formula": "round(line.QCC.85 * line.QCC.92, 2)",
+      "source": "Schedule C, line 94: line 85 × line 92"
+    },
+    "QCC.claims": {
+      "label": "This return claims the couple's childcare credit (1 for yes)",
+      "formula": "if(line.QC.couple == 1, if(line.QCC.own > spouse.line.QCC.own or (line.QCC.own == spouse.line.QCC.own and person.role == \"self\"), 1, 0), 1)"
+    },
+    "QCD.12": {
+      "label": "Lived alone in a dwelling throughout 2025 (1 for yes)",
+      "formula": "if(line.HH.partner == 0 and answer.qcLivedAlone, 1, 0)",
+      "source": "Schedule D, line 12"
+    },
+    "QCD.33": {
+      "label": "Tenants who signed the lease (RL-31 box B)",
+      "formula": "sum(RL31.boxB)",
+      "source": "Schedule D, line 33: box B of the RL-31 slip issued in your name"
+    },
+    "QCD.36": {
+      "label": "Owners living in your dwelling",
+      "formula": "if(answer.qcHomeOwner, answer.qcHomeOwners, 0)",
+      "source": "Schedule D, line 36"
+    },
+    "QCD.check": {
+      "label": "Schedule D answers that don't fit together",
+      "formula": "if(count(RL31.boxB) > 0 and answer.qcHomeOwner, unsupported(\"Schedule D takes a tenant's RL-31 or an owner's roll number, not both: remove the RL-31 or say you didn't own your home\"), if(answer.qcHomeOwner and answer.qcHomeOwners < 1, unsupported(\"Enter how many owners live in the home you own (Schedule D, line 36)\"), 0))",
+      "source": "Schedule D, Part A: lines 32 and 33 for a tenant, lines 35 and 36 for an owner"
+    },
+    "QCF.18": {
+      "label": "Total income other than employment income",
+      "formula": "max(0, line.TP1.199 - line.TP1.101)",
+      "source": "Schedule F, lines 10 to 18"
+    },
+    "QCF.34": {
+      "label": "Income not subject to the contribution",
+      "formula": "line.TP1.114 + max(0, line.TP1.128 - line.TP1.166 - line.TP1.167) + line.TP1.142 + line.TP1.147",
+      "source": "Schedule F, lines 20 to 34: the OAS pension, the dividend gross-up, taxable support and social assistance"
+    },
+    "QCF.36": {
+      "label": "Income",
+      "formula": "max(0, line.QCF.18 - line.QCF.34)",
+      "source": "Schedule F, line 36"
+    },
+    "QCF.68": {
+      "label": "Deductions",
+      "formula": "line.QCR.26 + line.QCU.101 + line.QCU.103 + if(line.QCU.33 > 0, min(line.QCU.94 - line.QCU.48, line.QCU.99), 0) + line.TP1.245 + line.TP1.225 + line.TP1.231",
+      "source": "Schedule F, lines 41 to 68: Schedule R line 26, Schedule U lines 101, 103 and 115, and lines 245, 225 and 231"
+    },
+    "QCF.70": {
+      "label": "Income subject to the contribution",
+      "formula": "max(0, line.QCF.36 - line.QCF.68)",
+      "source": "Schedule F, line 70"
+    },
+    "QCJ.34": {
+      "label": "Home-support services included in your rent",
+      "formula": "if(person.age >= param.seniorCreditAge, if(answer.hasHomeSupport, if(answer.homeSupportRent > 0, round(clamp(answer.homeSupportRent, param.homeSupportRentMin, param.homeSupportRentMax) * param.homeSupportRentShare, 2) * answer.homeSupportRentMonths, 0), 0), 0)",
+      "source": "Schedule J, Part A, section 2, lines 30 to 34: 5% of the monthly rent (at least $600, at most $1,200) times the months"
+    },
+    "QCJ.74": {
+      "label": "Home-support services you paid",
+      "formula": "if(person.age >= param.seniorCreditAge, if(answer.hasHomeSupport, answer.homeSupportServices, 0), 0)",
+      "source": "Schedule J, Part B, lines 50 to 74"
+    },
+    "QCJ.75": {
+      "label": "Cost of home-support services",
+      "formula": "min(if(line.QC.couple == 1, if(spouse.person.age >= param.seniorCreditAge, param.homeSupportMaxCouple, param.homeSupportMaxSingle), param.homeSupportMaxSingle), line.QCJ.34 + line.QCJ.74)",
+      "source": "Schedule J, line 75, and guide, line 458: at most $19,500, or $39,000 for a couple of seniors"
+    },
+    "QCJ.88": {
+      "label": "Home-support credit before reduction",
+      "formula": "round(line.QCJ.75 * param.homeSupportRate, 2)",
+      "source": "Schedule J, line 88: line 87 × 39%"
+    },
+    "QCJ.89": {
+      "label": "Reduction based on family income",
+      "formula": "round(max(0, min(line.QC.family, param.homeSupportSecondThreshold) - param.homeSupportThreshold) * param.homeSupportReductionRate, 2) + round(max(0, line.QC.family - param.homeSupportSecondThreshold) * param.homeSupportSecondReductionRate, 2)",
+      "source": "Work Chart 458, lines 10 to 16: 3% of family income from $71,010 to $115,035, and 7% above"
+    },
+    "QCJ.90": {
+      "label": "Tax credit for home-support services for seniors",
+      "formula": "if(line.QC.couple == 1 and person.age >= param.seniorCreditAge and answer.hasHomeSupport and spouse.person.age >= param.seniorCreditAge and spouse.answer.hasHomeSupport, unsupported(\"Only one spouse claims the home-support credit for the couple: enter the services on one return\"), max(0, line.QCJ.88 - line.QCJ.89))",
+      "source": "Schedule J, line 90"
+    },
+    "QCK.40": {
+      "label": "Family income for the drug premium",
+      "formula": "line.QC.family",
+      "source": "Schedule K, line 40"
+    },
+    "QCK.46": {
+      "label": "Income not subject to the premium",
+      "formula": "if(line.HH.partner == 1, param.drugIncomeCouple + if(household.childrenUnder18 >= 2, param.drugChildrenCouple, if(household.childrenUnder18 == 1, param.drugChildCouple, 0)), param.drugIncomeSingle + if(household.childrenUnder18 >= 2, param.drugChildrenSingle, if(household.childrenUnder18 == 1, param.drugChildSingle, 0)))",
+      "source": "Schedule K, lines 41 to 46 (a dependent child: under 18 at the end of the year)"
+    },
+    "QCK.48": {
+      "label": "Income used to calculate the premium",
+      "formula": "max(0, line.QCK.40 - line.QCK.46)",
+      "source": "Schedule K, line 48"
+    },
+    "QCK.84": {
+      "label": "Premium for a full year",
+      "formula": "if(line.QCK.48 > param.drugTableTop, param.drugPremiumMax, if(line.HH.partner == 1, if(line.QCK.48 <= param.drugTableBreak, round(line.QCK.48 * param.drugRateCoupleLow, 2), min(param.drugPremiumMax, param.drugBaseCouple + round((line.QCK.48 - param.drugTableBreak) * param.drugRateCoupleHigh, 2))), if(line.QCK.48 <= param.drugTableBreak, round(line.QCK.48 * param.drugRateSingleLow, 2), min(param.drugPremiumMax, param.drugBaseSingle + round((line.QCK.48 - param.drugTableBreak) * param.drugRateSingleHigh, 2)))))",
+      "source": "Schedule K, Part C, lines 77 to 84"
+    },
+    "QCK.60": {
+      "label": "Months from January to June covered by a group plan",
+      "formula": "if(answer.qcGroupDrugPlan, answer.qcDrugMonthsJanJun, 0)",
+      "source": "Schedule K, box 60"
+    },
+    "QCK.61": {
+      "label": "Months from July to December covered by a group plan",
+      "formula": "if(answer.qcGroupDrugPlan, answer.qcDrugMonthsJulDec, 0)",
+      "source": "Schedule K, box 61"
+    },
+    "QCK.62": {
+      "label": "Months with no premium to pay",
+      "formula": "if(line.QCK.60 > 6 or line.QCK.61 > 6, unsupported(\"Each half of the year has 6 months: check the months your group drug plan covered you\"), line.QCK.60 + line.QCK.61)",
+      "source": "Schedule K, box 62: boxes 60 and 61"
+    },
+    "QCK.86": {
+      "label": "Premium for the months without a group plan",
+      "formula": "line.QCK.84 - round(line.QCK.84 * line.QCK.62 / 12, 2)",
+      "source": "Schedule K, lines 85 and 86"
+    },
+    "QCK.89": {
+      "label": "Most premium for those months",
+      "formula": "param.drugMax2025 - round(param.drugMonthlyFirstHalf * line.QCK.60, 2) - round(param.drugMonthlySecondHalf * line.QCK.61, 2)",
+      "source": "Schedule K, lines 87 to 89: $755 less $62.00 a month from January to June and $63.83 a month from July to December"
+    },
+    "QCK.90": {
+      "label": "Drug insurance premium",
+      "formula": "max(0, min(line.QCK.86, line.QCK.89))",
+      "source": "Schedule K, line 90: line 86 or line 89, whichever is less"
+    },
+    "QCP.49": {
+      "label": "Your spouse's work income",
+      "formula": "if(line.HH.partner == 1, if(household.partnerInYear, if(spouse.person.province == \"QC\", spouse.line.QC.work, spouse.line.CWB.working), if(line.QC.family < param.workPremiumMaxFamilyCouple, unsupported(\"The work premium for a couple needs your spouse's work income: prepare their return here too\"), 0)), 0)",
+      "source": "Schedule P, line 49; a couple whose family income is over the most can't get the premium, so the spouse's income isn't needed"
+    },
+    "QCP.64": {
+      "label": "Work income",
+      "formula": "line.QC.work + line.QCP.49",
+      "source": "Schedule P, line 64: lines 29 and 49"
+    },
+    "QCP.72": {
+      "label": "Work income counted",
+      "formula": "max(0, min(line.QCP.64, if(line.HH.partner == 1, param.workPremiumCapCouple, param.workPremiumCapSingle)) - if(line.HH.partner == 1, param.workPremiumExclusionCouple, param.workPremiumExclusionSingle))",
+      "source": "Schedule P, Part E, lines 66 to 72"
+    },
+    "QCP.76": {
+      "label": "Work premium before reduction",
+      "formula": "round(line.QCP.72 * if(household.childrenUnder18 > 0, if(line.HH.partner == 1, param.workPremiumRateChildCouple, param.workPremiumRateChildSingle), param.workPremiumRate), 2)",
+      "source": "Schedule P, lines 74 and 76: 25% (couple) or 30% (single parent) with a designated dependent child (a child under 18 who lived with you), else 11.6%"
+    },
+    "QCP.83": {
+      "label": "Reduction based on family income",
+      "formula": "round(max(0, line.QC.family - if(line.HH.partner == 1, param.workPremiumCapCouple, param.workPremiumCapSingle)) * param.workPremiumReductionRate, 2)",
+      "source": "Schedule P, lines 78 to 83"
+    },
+    "QCP.84": {
+      "label": "Work premium",
+      "formula": "max(0, line.QCP.76 - line.QCP.83)",
+      "source": "Schedule P, line 84"
+    },
+    "QCP.90": {
+      "label": "Tax credits respecting the work premium",
+      "formula": "if(line.QC.couple == 1, if(line.QC.work > spouse.line.QC.work or (line.QC.work == spouse.line.QC.work and person.role == \"self\"), line.QCP.84, 0), line.QCP.84)",
+      "source": "Schedule P, lines 85 to 90: a couple's premium, claimed by the spouse with the higher work income (line 86 is the other's line 89)"
+    },
+    "QCQ.20": {
+      "label": "Eligible retirement income",
+      "formula": "line.TP1.122",
+      "source": "Schedule Q, lines 10 to 20: line 122 (no amount transferred to a plan or deducted)"
+    },
+    "QCQ.58": {
+      "label": "Quebec income tax withholding transferred to your spouse",
+      "formula": "if(line.TP1.245 > 0, round(sum(RL2.boxJ) * line.TP1.245 / line.QCQ.20, 2), 0)",
+      "source": "Schedule Q, lines 50 to 58: the tax withheld on the RL-2 (box J) × line 22 ÷ line 20"
+    },
+    "QCR.12": {
+      "label": "Net business income for QPIP",
+      "formula": "max(0, line.SE.net)",
+      "source": "Schedule R, lines 10 to 12"
+    },
+    "QCR.14": {
+      "label": "Employment income subject to QPIP",
+      "formula": "if(count(RL1.boxI) == 0, sum(RL1.boxA), if(count(RL1.boxI) >= count(RL1.boxA), sum(RL1.boxI), unsupported(\"Some of your RL-1 slips show box I and some don't. Enter box I on each slip: the amount from box A when box I is blank\")))",
+      "source": "Schedule R, line 14: box I of the RL-1 slips (box A if blank)"
+    },
+    "QCR.20": {
+      "label": "Insurable earnings left",
+      "formula": "max(0, param.qpipMaxInsurable - line.QCR.14)",
+      "source": "Schedule R, lines 13 to 20"
+    },
+    "QCR.24": {
+      "label": "QPIP premium on self-employment",
+      "formula": "if(line.QCR.12 + line.QCR.14 < param.qpipMinimum, 0, min(param.qpipMaxSelfEmployed, round(min(line.QCR.12, line.QCR.20) * param.qpipSelfEmployedRate, 2)))",
+      "source": "Schedule R, lines 22 and 24: 0.878%, maximum $860.44; none when business and employment income are less than $2,000"
+    },
+    "QCR.26": {
+      "label": "Deduction for the QPIP premium",
+      "formula": "round(line.QCR.24 * param.qpipDeductionRate, 2)",
+      "source": "Schedule R, line 26: line 24 × 43.736%"
+    },
+    "QCT.41": {
+      "label": "Tuition fees for 2025",
+      "formula": "if(sum(RL8.boxB) > param.qcTuitionMinimum, max(0, sum(RL8.boxB) - line.T1.45350), 0)",
+      "source": "Schedule T, lines 40.6 to 41: box B of the RL-8 slips, if more than $100, less the Canada training credit (federal line 45350)"
+    },
+    "QCT.44_1": {
+      "label": "Tuition fees for the 8% credit",
+      "formula": "line.QCT.41 + answer.unusedProvincialTuition",
+      "source": "Schedule T, lines 43 to 44.1: with the unused fees of earlier years"
+    },
+    "QCT.45": {
+      "label": "Tax credit for tuition or examination fees available",
+      "formula": "round(line.QCT.44_1 * param.qcTuitionRate, 2)",
+      "source": "Schedule T, line 45: line 44.1 × 8%"
+    },
+    "QCU.11": {
+      "label": "First additional part of the QPP contribution",
+      "formula": "round(min(line.TP1.98, param.qppMaxEmployee) * param.qppFirstShare, 2)",
+      "source": "Schedule U, lines 10 and 11: line 98 (maximum $4,339.20) × 0.156250"
+    },
+    "QCU.14_4": {
+      "label": "Pensionable salary over the exemption",
+      "formula": "min(max(0, min(line.TP1.98_1, param.qppMaxPensionable) - param.qppExemption), param.qppMaxPensionable - param.qppExemption)",
+      "source": "Schedule U, lines 12 to 14.4"
+    },
+    "QCU.16": {
+      "label": "Deduction for first additional contributions",
+      "formula": "min(line.QCU.11, round(line.QCU.14_4 * param.qppFirstRate, 2))",
+      "source": "Schedule U, lines 15 and 16"
+    },
+    "QCU.17_5": {
+      "label": "QPP contributions over those required, and the additional contribution",
+      "formula": "max(0, line.TP1.98 - round(line.QCU.14_4 * param.qppEmployeeRate, 2)) + line.TP1.98_2",
+      "source": "Schedule U, lines 17 to 17.5"
+    },
+    "QCU.21": {
+      "label": "Second additional contributions required",
+      "formula": "round(min(max(0, line.TP1.98_1 - param.qppMaxPensionable), param.qppAdditionalMaxPensionable - param.qppMaxPensionable) * param.qppSecondRate, 2)",
+      "source": "Schedule U, lines 18.5 to 21: 4% of pensionable salary between $71,300 and $81,200"
+    },
+    "QCU.23": {
+      "label": "Deduction for QPP contributions on employment income",
+      "formula": "min(line.QCU.17_5, line.QCU.21) + line.QCU.16",
+      "source": "Schedule U, lines 22 to 23"
+    },
+    "QCU.33": {
+      "label": "Net business income for QPP",
+      "formula": "if(person.age >= 18 and person.age <= 72, max(0, line.SE.net), 0)",
+      "source": "Schedule U, lines 30 to 33: line 27 of Schedule L, 0 if negative. QPP is paid from 18 until the year you turn 73 (Schedule U, instructions)"
+    },
+    "QCU.40": {
+      "label": "Earnings your employee contributions cover, with the exemption",
+      "formula": "round((line.TP1.98 + line.TP1.98_2) / param.qppEmployeeRate, 2) + param.qppExemption",
+      "source": "Schedule U, lines 34 to 40: lines 98 and 98.2 ÷ 6.4%, plus $3,500"
+    },
+    "QCU.43": {
+      "label": "Self-employment earnings subject to contributions",
+      "formula": "max(0, line.QCU.33 - max(0, line.QCU.40 - line.TP1.98_1))",
+      "source": "Schedule U, lines 41 to 43"
+    },
+    "QCU.48": {
+      "label": "QPP base and first additional contribution on self-employment",
+      "formula": "round(min(line.QCU.43, max(0, param.qppMaxPensionable - line.QCU.40)) * param.qppSelfEmployedRate, 2)",
+      "source": "Schedule U, lines 44 to 48: 12.8%, up to the maximum pensionable earnings the employee contributions leave"
+    },
+    "QCU.71": {
+      "label": "Base and first additional contributions required on all earnings",
+      "formula": "min(param.qppMaxEmployee, round(max(0, min(param.qppMaxPensionable, line.QCU.33 + line.TP1.98_1) - param.qppExemption) * param.qppEmployeeRate, 2))",
+      "source": "Schedule U, lines 67 to 71"
+    },
+    "QCU.94": {
+      "label": "QPP contribution on self-employment, before the limit",
+      "formula": "line.QCU.48 + round(min(max(0, line.QCU.33 + min(line.TP1.98_1, line.QCU.40) - param.qppMaxPensionable), param.qppAdditionalMaxPensionable - param.qppMaxPensionable, line.QCU.33) * param.qppSecondSelfEmployedRate, 2)",
+      "source": "Schedule U, lines 75 to 94: line 48 plus 8% of the self-employment earnings between $71,300 and $81,200 (line 92)"
+    },
+    "QCU.95": {
+      "label": "Contributions required on all earnings, employee share",
+      "formula": "line.QCU.71 + round(max(0, min(param.qppAdditionalMaxPensionable, line.TP1.98_1 + line.QCU.33) - param.qppMaxPensionable) * param.qppSecondRate, 2)",
+      "source": "Schedule U, lines 95.1 to 95"
+    },
+    "QCU.98": {
+      "label": "Limit on the self-employment contribution",
+      "formula": "2 * max(0, line.QCU.95 - line.TP1.98 - line.TP1.98_2)",
+      "source": "Schedule U, lines 96 to 98"
+    },
+    "QCU.99": {
+      "label": "QPP contribution on income from self-employment",
+      "formula": "if(line.QCU.33 > 0 and line.TP1.98 > line.QCU.71, unsupported(\"QPP contributions deducted by employers over the maximum, with self-employment income (Schedule U, lines 72 to 74), aren't handled by this app yet\"), min(line.QCU.94, line.QCU.98))",
+      "source": "Schedule U, line 99: line 94 or line 98, whichever is less"
+    },
+    "QCU.101": {
+      "label": "Deduction for half the base contribution on self-employment",
+      "formula": "round(line.QCU.48 * param.qppHalfBaseShare, 2)",
+      "source": "Schedule U, lines 100 and 101: line 48 × 0.421875"
+    },
+    "QCU.103": {
+      "label": "Deduction for the first additional contribution on self-employment",
+      "formula": "round(line.QCU.48 * param.qppFirstShare, 2)",
+      "source": "Schedule U, lines 102 and 103: line 48 × 0.156250"
+    },
+    "QCU.111": {
+      "label": "All pensionable earnings over the exemption",
+      "formula": "min(param.qppMaxPensionable - param.qppExemption, max(0, line.QCU.33 + line.TP1.98_1 - param.qppExemption))",
+      "source": "Schedule U, lines 106 to 111"
+    },
+    "QCU.124": {
+      "label": "QPP deduction",
+      "formula": "line.QCU.101 + line.QCU.103 + min(round(line.TP1.98 * param.qppFirstShare, 2), round(line.QCU.111 * param.qppFirstRate, 2)) + min(line.QCU.94 - line.QCU.48, line.QCU.99) + min(max(0, line.TP1.98 - round(line.QCU.111 * param.qppEmployeeRate, 2)) + line.TP1.98_2, round(min(max(0, line.TP1.98_1 + line.QCU.33 - param.qppMaxPensionable), param.qppAdditionalMaxPensionable - param.qppMaxPensionable) * param.qppSecondRate, 2))",
+      "source": "Schedule U, lines 100 to 124: lines 114 (101, 103 and 113), 115 and 123"
+    },
+    "QC.childActivities": {
+      "label": "Tax credit for children's activities",
+      "formula": "if(household.childrenUnder17 - household.childrenUnder6 > 0 and line.QC.family <= param.childActivitiesMaxIncome, round(min(answer.childActivityFees, param.childActivitiesMaxFees * (household.childrenUnder17 - household.childrenUnder6)) * param.childActivitiesRate, 2), 0)",
+      "source": "Guide, line 462, point 25: 20% of fees up to $500 for each child born from 2009 to 2019, with family income of $168,470 or less (the extra for a child with an impairment isn't handled)"
+    },
+    "QC.seniorAssistance": {
+      "label": "Senior assistance tax credit",
+      "formula": "if(line.QC.couple == 1 and person.role == \"spouse\", 0, max(0, param.seniorAssistanceMax * (if(person.age >= param.seniorCreditAge, 1, 0) + if(line.QC.couple == 1, if(spouse.person.age >= param.seniorCreditAge, 1, 0), 0)) - if(person.age >= param.seniorCreditAge or (line.QC.couple == 1 and spouse.person.age >= param.seniorCreditAge), round(max(0, line.QC.family - if(line.HH.partner == 1, param.seniorAssistanceThresholdCouple, param.seniorAssistanceThresholdSingle)) * param.seniorAssistanceRate, 2), 0)))",
+      "source": "Guide, line 463: $2,000 for each eligible person 70 or older, less 5.40% of family income over $45,270 (with a spouse) or $27,835. A couple's credit is claimed on the return of the person preparing"
+    },
+    "QC.couple": {
+      "label": "Both spouses file a Quebec return prepared here (1 for yes)",
+      "formula": "if(line.HH.partner == 1 and household.partnerInYear, if(spouse.person.province == \"QC\", 1, 0), 0)"
+    },
+    "QC.spouseNet": {
+      "label": "Your spouse's net income, for the Quebec family income",
+      "formula": "if(line.HH.partner == 1, if(household.partnerInYear, if(spouse.person.province == \"QC\", spouse.line.TP1.275, spouse.line.T1.23600), answer.spouseNetIncome), 0)",
+      "source": "TP-1 line 51: your spouse's net income (line 275 of their TP-1); for a spouse who doesn't file one, their federal net income"
+    },
+    "QC.family": {
+      "label": "Family income",
+      "formula": "line.TP1.275 + line.QC.spouseNet",
+      "source": "Schedules B, C, J, K and P, Part A or C: line 275 of your return plus line 275 of your spouse's return"
+    },
+    "QC.work": {
+      "label": "Work income",
+      "formula": "max(0, line.TP1.101 - sum(RL1.box211)) + max(0, line.SE.net)",
+      "source": "Work Chart 201, lines 1 to 8, and Schedule P, line 29: line 101 less box 211 of the RL-1, plus net business income (no losses)"
+    },
+    "QC.scope": {
+      "label": "Quebec return cases this app doesn't handle",
+      "formula": "if(not person.residentAllYear, unsupported(\"A Quebec return for a year you moved to or from Canada isn't handled by this app yet\"), if(count(T4.box14) > count(RL1.boxA), unsupported(\"A Quebec resident's employer in Quebec issues an RL-1 with each T4: upload it. Employment outside Quebec (a T4 without an RL-1, Schedule R Part B) isn't handled by this app yet\"), if(answer.hasRentalIncome, unsupported(\"Rental income on the Quebec return (form TP-128-V) isn't handled by this app yet\"), if(answer.hasForeignIncome, unsupported(\"Foreign income on the Quebec return (the foreign tax credit, Schedule E) isn't handled by this app yet\"), if(sum(T4AOAS.box21) > 0, unsupported(\"Net federal supplements on the Quebec return (lines 148 and 295) aren't handled by this app yet\"), if(answer.hasMovingExpenses, unsupported(\"Moving expenses on the Quebec return (form TP-348-V) aren't handled by this app yet\"), 0))))))"
+    },
+    "TP1.97": {
+      "label": "QPIP premium",
+      "formula": "sum(RL1.boxH)",
+      "source": "TP-1 line 97: box H of your RL-1 slips"
+    },
+    "TP1.98": {
+      "label": "QPP contribution",
+      "formula": "sum(RL1.boxB_A)",
+      "source": "TP-1 line 98: box B.A of your RL-1 slips"
+    },
+    "TP1.98_1": {
+      "label": "Pensionable salary or wages (QPP)",
+      "formula": "sum(RL1.boxG)",
+      "source": "TP-1 line 98.1: box G of your RL-1 slips"
+    },
+    "TP1.98_2": {
+      "label": "Additional contribution to the QPP",
+      "formula": "sum(RL1.boxB_B)",
+      "source": "TP-1 line 98.2: box B.B of your RL-1 slips"
+    },
+    "TP1.101": {
+      "label": "Employment income",
+      "formula": "sum(RL1.boxA)",
+      "source": "TP-1 line 101: box A of your RL-1 slips"
+    },
+    "TP1.110": {
+      "label": "Parental insurance benefits",
+      "formula": "sum(RL6.boxA)",
+      "source": "TP-1 line 110: box A of the RL-6 slip"
+    },
+    "TP1.111": {
+      "label": "Employment Insurance benefits",
+      "formula": "line.T1.11900",
+      "source": "TP-1 line 111: the T4E slip (box 14)"
+    },
+    "TP1.114": {
+      "label": "Old Age Security pension",
+      "formula": "line.T1.11300",
+      "source": "TP-1 line 114: the T4A(OAS) slip (box 18)"
+    },
+    "TP1.119": {
+      "label": "QPP or CPP benefits",
+      "formula": "if(count(RL2.boxC_QPP) > 0, sum(RL2.boxC_QPP), sum(T4AP.box20))",
+      "source": "TP-1 line 119: box C of the RL-2 slip for QPP benefits; a CPP pension (Service Canada issues no RL-2) from box 20 of the T4A(P)"
+    },
+    "TP1.122": {
+      "label": "Payments from a pension plan, an RRSP or a RRIF, or annuities",
+      "formula": "sum(RL2.boxA) + sum(RL2.boxB)",
+      "source": "TP-1 line 122: boxes A and B of the RL-2 slip"
+    },
+    "TP1.123": {
+      "label": "Retirement income transferred by your spouse",
+      "formula": "if(line.QC.couple == 1, spouse.line.TP1.245, 0)",
+      "source": "TP-1 line 123 and Schedule Q, line 22: the amount your spouse transfers to you"
+    },
+    "TP1.166": {
+      "label": "Actual amount of eligible dividends",
+      "formula": "sum(RL3.boxA1) + sum(RL16.boxC1)",
+      "source": "TP-1 line 166: box A1 of the RL-3 slip and box C1 of the RL-16 slip"
+    },
+    "TP1.167": {
+      "label": "Actual amount of ordinary dividends",
+      "formula": "sum(RL3.boxA2) + sum(RL16.boxC2)",
+      "source": "TP-1 line 167: box A2 of the RL-3 slip and box C2 of the RL-16 slip"
+    },
+    "TP1.128": {
+      "label": "Taxable amount of dividends",
+      "formula": "sum(RL3.boxB) + sum(RL16.boxI)",
+      "source": "TP-1 line 128: box B of the RL-3 slip and box I of the RL-16 slip"
+    },
+    "TP1.130": {
+      "label": "Interest and other investment income",
+      "formula": "sum(RL3.boxD) + sum(RL3.boxE) + sum(RL3.boxF) + sum(RL16.boxE) + sum(RL16.boxF) + sum(RL16.boxG)",
+      "source": "TP-1 line 130: boxes D, E and F of the RL-3 slip; boxes E, F and G of the RL-16 slip"
+    },
+    "QCG.gains": {
+      "label": "Capital gains or losses",
+      "formula": "line.S3.13200 + line.S3.13800 + line.S3.15800 + sum(RL3.boxI) + sum(RL16.boxA)",
+      "source": "Schedule G: shares and fund units sold (as on federal Schedule 3, line 13200), real estate and personal-use property (lines 13800 and 15800), capital gains dividends (RL-3 box I) and trust capital gains (RL-16 box A)"
+    },
+    "TP1.139": {
+      "label": "Taxable capital gains",
+      "formula": "max(0, round(line.QCG.gains * param.qcCapitalGainsInclusionRate, 2))",
+      "source": "TP-1 line 139: Schedule G, line 108, at 50%. A net capital loss isn't entered here; it carries forward"
+    },
+    "TP1.142": {
+      "label": "Support payments received (taxable amount)",
+      "formula": "line.T1.12800",
+      "source": "Work Chart 142: support received less the non-taxable child support, as on the federal return"
+    },
+    "TP1.147": {
+      "label": "Social assistance payments",
+      "formula": "sum(RL5.boxA) + sum(RL5.boxB)",
+      "source": "TP-1 line 147: boxes A and B of the RL-5 slip"
+    },
+    "TP1.154": {
+      "label": "Other income",
+      "formula": "sum(RL2.boxC)",
+      "source": "TP-1 line 154 and the RL-2 slip, box C: payments from a pension plan, an RRSP, a DPSP or an annuity other than QPP benefits"
+    },
+    "TP1.164": {
+      "label": "Net business income",
+      "formula": "line.SE.net",
+      "source": "Schedule L, lines 22 to 27 and 34: the net income of your business, as on the federal return"
+    },
+    "TP1.199": {
+      "label": "Total income",
+      "formula": "line.TP1.101 + line.TP1.110 + line.TP1.111 + line.TP1.114 + line.TP1.119 + line.TP1.122 + line.TP1.123 + line.TP1.128 + line.TP1.130 + line.TP1.139 + line.TP1.142 + line.TP1.147 + line.TP1.154 + line.TP1.164 + line.QC.scope",
+      "source": "TP-1 line 199: lines 101 and 105 through 164"
+    },
+    "TP1.201": {
+      "label": "Deduction for workers",
+      "formula": "min(param.qcWorkerDeductionMax, round(line.QC.work * param.qcWorkerDeductionRate, 2))",
+      "source": "Work Chart 201: 6% of eligible work income, maximum $1,420"
+    },
+    "TP1.205": {
+      "label": "Registered pension plan (RPP) deduction",
+      "formula": "min(sum(RL1.boxD), line.T1.20700)",
+      "source": "TP-1 line 205: box D of the RL-1 slip; guide, line 205: not more than the federal deduction (line 20700)"
+    },
+    "TP1.207": {
+      "label": "Employment expenses and deductions",
+      "formula": "line.T1.22900",
+      "source": "TP-1 line 207 (code 07, form TP-59-V): the work-from-home expenses, as on federal line 22900"
+    },
+    "TP1.214": {
+      "label": "RRSP or PRPP/VRSP deduction",
+      "formula": "line.T1.20800",
+      "source": "Guide, line 214: the amount deducted on federal line 20800"
+    },
+    "TP1.215": {
+      "label": "FHSA deduction",
+      "formula": "line.T1.20805",
+      "source": "Guide, line 215: the amount deducted on federal line 20805"
+    },
+    "TP1.225": {
+      "label": "Support payments made (deductible amount)",
+      "formula": "line.T1.22000",
+      "source": "Work Chart 225: support paid less the non-deductible child support, as on the federal return"
+    },
+    "TP1.231": {
+      "label": "Carrying charges and interest expenses",
+      "formula": "line.T1.22100",
+      "source": "TP-1 line 231: the same carrying charges as on federal line 22100"
+    },
+    "TP1.245": {
+      "label": "Deduction for retirement income transferred to your spouse",
+      "formula": "if(line.QC.couple == 1 and person.age >= 65, min(line.T1.21000, round(line.QCQ.20 * 50%, 2)), 0)",
+      "source": "Schedule Q, line 22: up to 50% of line 20, for a person born before 1961. The app transfers what the federal T1032 splits (line 21000)"
+    },
+    "TP1.248": {
+      "label": "Deduction for QPP and CPP contributions and QPIP premiums",
+      "formula": "if((line.TP1.98 > 0 and (person.age <= 18 or person.age >= 73)) or (line.QCU.33 > 0 and person.age == 18), unsupported(\"QPP in the year you turned 18 is prorated by month, and none is due before 18 or from the year you turn 73 (Schedule U): this app doesn't handle QPP contributions at those ages yet\"), if(line.QCU.33 > 0, line.QCU.124, line.QCU.23) + line.QCR.26)",
+      "source": "TP-1 line 248: Schedule U, Part B line 23 (employees) or Part C line 124 (self-employed), plus Schedule R line 26"
+    },
+    "TP1.254": {
+      "label": "Total deductions",
+      "formula": "line.TP1.201 + line.TP1.205 + line.TP1.207 + line.TP1.214 + line.TP1.215 + line.TP1.225 + line.TP1.231 + line.TP1.245 + line.TP1.248",
+      "source": "TP-1 line 254: lines 201 through 207, 214 through 231 and 234 through 252"
+    },
+    "TP1.256": {
+      "label": "Net income before adjustment",
+      "formula": "line.TP1.199 - line.TP1.254",
+      "source": "TP-1 line 256: line 199 minus line 254"
+    },
+    "TP1.275": {
+      "label": "Net income",
+      "formula": "max(0, line.TP1.256)",
+      "source": "TP-1 line 275: lines 256 and 260 (Schedule N isn't handled); 0 if negative"
+    },
+    "TP1.279": {
+      "label": "Net income and adjustments",
+      "formula": "line.TP1.275",
+      "source": "TP-1 line 279: lines 275 through 278 (276 and 278 aren't handled)"
+    },
+    "TP1.289": {
+      "label": "Non-capital losses from other years",
+      "formula": "line.T1.25200",
+      "source": "TP-1 line 289: the non-capital losses carried forward, as entered for the federal return"
+    },
+    "TP1.290": {
+      "label": "Net capital losses from other years",
+      "formula": "min(answer.netCapitalLosses, line.TP1.139)",
+      "source": "TP-1 line 290: up to the taxable capital gains of the year"
+    },
+    "TP1.298": {
+      "label": "Total deductions from net income",
+      "formula": "line.TP1.289 + line.TP1.290",
+      "source": "TP-1 line 298: lines 287 through 297"
+    },
+    "TP1.299": {
+      "label": "Taxable income",
+      "formula": "max(0, line.TP1.279 - line.TP1.298)",
+      "source": "TP-1 line 299: line 279 minus line 298; 0 if negative"
+    },
+    "TP1.350": {
+      "label": "Basic personal amount",
+      "formula": "param.qcBasicPersonalAmount"
+    },
+    "TP1.361": {
+      "label": "Age amount, amount for a person living alone and amount for retirement income",
+      "formula": "if(line.QC.couple == 1 and person.role == \"spouse\", 0, line.QCB.32)",
+      "source": "Schedule B, lines 32 to 34: the couple's amount, claimed here on the return of the person preparing (line 33 takes off what the spouse claims). Credits one spouse can't use go to the other on line 431"
+    },
+    "TP1.367": {
+      "label": "Amount transferred by a child 18 or over enrolled in post-secondary studies",
+      "formula": "answer.qcChildTransfer",
+      "source": "Schedule A, Part B, line 29: the amounts on line 28, from lines 20.1 and 20.2 of the child's Schedule S"
+    },
+    "TP1.376": {
+      "label": "Amount for a severe and prolonged impairment",
+      "formula": "if(answer.hasDisability and person.age >= 18, param.qcImpairmentAmount, 0)",
+      "source": "TP-1 line 376: $4,123 at 18 or older (the same certificate as the federal disability amount)"
+    },
+    "TP1.377": {
+      "label": "Total of the basic and other amounts",
+      "formula": "line.TP1.350 + line.TP1.361 + line.TP1.367 + line.TP1.376",
+      "source": "TP-1 line 377: lines 359 through 376 (no adjustment on line 358)"
+    },
+    "TP1.377_1": {
+      "label": "Credits for the basic and other amounts",
+      "formula": "round(line.TP1.377 * param.qcCreditRate, 2)",
+      "source": "TP-1 line 377.1: line 377 × 14%"
+    },
+    "TP1.381": {
+      "label": "Medical expenses",
+      "formula": "max(0, line.QCB.36 - line.QCB.39)",
+      "source": "Schedule B, Part C, line 40: medical expenses less 3% of family income"
+    },
+    "TP1.385": {
+      "label": "Interest paid on a student loan",
+      "formula": "answer.studentLoanInterest",
+      "source": "Schedule M, line 52: interest paid in 2025 (the same amount as on federal line 31900)"
+    },
+    "TP1.388": {
+      "label": "Medical expenses and student loan interest",
+      "formula": "line.TP1.381 + line.TP1.385",
+      "source": "TP-1 line 388: lines 378 through 385"
+    },
+    "TP1.389": {
+      "label": "Credits for medical expenses and student loan interest",
+      "formula": "round(line.TP1.388 * param.qcSecondCreditRate, 2)",
+      "source": "TP-1 line 389: line 388 × 20%"
+    },
+    "QC.ownDonations": {
+      "label": "Donations on this return's receipts and Quebec slips",
+      "formula": "answer.donations + sum(DONATION.box1) + sum(RL1.boxN) + sum(RL2.box210) + sum(RL8.boxC)",
+      "source": "Official receipts (uploaded, or entered), box N of the RL-1, box 210 of the RL-2 and box C of the RL-8"
+    },
+    "TP1.393": {
+      "label": "Donations and gifts",
+      "formula": "if(household.partnerInYear and spouse.answer.claimSpouseDonations and line.HH.partner == 1, 0, line.QC.ownDonations) + if(household.partnerInYear and answer.claimSpouseDonations and line.HH.partner == 1, spouse.line.QC.ownDonations, 0)",
+      "source": "Work Chart 395, line 1: monetary donations made in 2025. Whoever claims both spouses' donations on the federal return claims them here too"
+    },
+    "TP1.395": {
+      "label": "Tax credits for donations and gifts",
+      "formula": "round(min(line.TP1.393, param.qcDonationLowLimit) * param.qcDonationLowRate, 2) + round(min(max(0, line.TP1.393 - param.qcDonationLowLimit), max(0, line.TP1.299 - param.qcDonationTopThreshold)) * param.qcDonationTopRate, 2) + round(max(0, max(0, line.TP1.393 - param.qcDonationLowLimit) - max(0, line.TP1.299 - param.qcDonationTopThreshold)) * param.qcDonationHighRate, 2)",
+      "source": "Work Chart 395, lines 2 to 12: 20% of the first $200; 25.75% of the rest up to taxable income over $129,590; 24% of what remains"
+    },
+    "TP1.397_1": {
+      "label": "Union, professional or other dues",
+      "formula": "sum(RL1.boxF)",
+      "source": "TP-1 line 397.1: box F of the RL-1 slip"
+    },
+    "TP1.397": {
+      "label": "Tax credit for union, professional or other dues",
+      "formula": "round(line.TP1.397_1 * param.qcDuesRate, 2)",
+      "source": "TP-1 line 397: line 397.1 × 10%"
+    },
+    "TP1.398": {
+      "label": "Tax credit for tuition or examination fees",
+      "formula": "min(line.QCT.45, max(0, line.TP1.401 - line.TP1.377_1 - line.TP1.389 - line.TP1.395 - line.TP1.397))",
+      "source": "Schedule T, line 46: the credit, claimed up to the tax the other credits leave (the rest is carried forward, line 48)"
+    },
+    "TP1.398_1": {
+      "label": "Tax credit for tuition or examination fees transferred by a child",
+      "formula": "answer.qcChildTuitionTransfer",
+      "source": "Schedule A, Part D, line 70: line 68 of the child's Schedule T"
+    },
+    "TP1.399": {
+      "label": "Non-refundable tax credits",
+      "formula": "line.TP1.377_1 + line.TP1.389 + line.TP1.395 + line.TP1.397 + line.TP1.398 + line.TP1.398_1",
+      "source": "TP-1 line 399: lines 377.1, 389 through 392, 395 through 397, 398 and 398.1"
+    },
+    "TP1.401": {
+      "label": "Income tax on taxable income",
+      "formula": "round(bracket(param.qcTaxBrackets, line.TP1.299), 2)",
+      "source": "Work Chart 401"
+    },
+    "TP1.406": {
+      "label": "Non-refundable tax credits",
+      "formula": "line.TP1.399"
+    },
+    "TP1.413": {
+      "label": "Tax after non-refundable credits",
+      "formula": "line.TP1.401 - line.TP1.406",
+      "source": "TP-1 line 413: line 401 minus line 406 (negative when the credits are more than the tax)"
+    },
+    "TP1.414": {
+      "label": "Tax credit for contributions to authorized Quebec political parties",
+      "formula": "round(min(answer.provincialPoliticalContributions, param.qcPoliticalFirst) * param.qcPoliticalFirstRate, 2) + round(max(0, min(answer.provincialPoliticalContributions, param.qcPoliticalMax) - param.qcPoliticalFirst) * param.qcPoliticalRate, 2)",
+      "source": "Work Chart 414: 85% of the first $50 and 75% of the rest, of up to $200 of contributions (the credit is then at most $155)"
+    },
+    "TP1.415": {
+      "label": "Dividend tax credit",
+      "formula": "sum(RL3.boxC) + sum(RL16.boxJ)",
+      "source": "TP-1 line 415: box C of the RL-3 slip and box J of the RL-16 slip"
+    },
+    "TP1.425": {
+      "label": "Political contribution and dividend credits",
+      "formula": "line.TP1.414 + line.TP1.415",
+      "source": "TP-1 line 425: lines 414 through 424"
+    },
+    "TP1.430": {
+      "label": "Tax after credits",
+      "formula": "line.TP1.413 - line.TP1.425",
+      "source": "TP-1 line 430: line 413 minus line 425; a negative amount can go to your spouse (line 431)"
+    },
+    "TP1.431": {
+      "label": "Credits transferred from one spouse to the other",
+      "formula": "if(line.QC.couple == 1, if(line.TP1.430 < 0, line.TP1.430, if(spouse.line.TP1.430 < 0, min(line.TP1.430, -spouse.line.TP1.430), 0)), 0)",
+      "source": "Guide, line 431: a spouse with a negative line 430 carries it to line 431 (432 is then 0); the other spouse takes it off their tax, here as a positive amount, up to their line 430"
+    },
+    "TP1.432": {
+      "label": "Income tax",
+      "formula": "max(0, line.TP1.430 - line.TP1.431)",
+      "source": "TP-1 line 432: line 430 minus line 431; 0 if negative"
+    },
+    "TP1.439": {
+      "label": "QPIP premium on income from self-employment",
+      "formula": "line.QCR.24",
+      "source": "Schedule R, line 24"
+    },
+    "TP1.441": {
+      "label": "Advance payments of tax credits",
+      "formula": "sum(RL19.boxA) + sum(RL19.boxB) + sum(RL19.boxC) + sum(RL19.boxD) + sum(RL19.boxG) + sum(RL19.boxH)",
+      "source": "TP-1 line 441: boxes A, B, C, D, G and H of the RL-19 slip"
+    },
+    "TP1.445": {
+      "label": "QPP contribution on income from self-employment",
+      "formula": "if(line.QCU.33 > 0, line.QCU.99, 0)",
+      "source": "Schedule U, line 99"
+    },
+    "TP1.446": {
+      "label": "Contribution to the health services fund",
+      "formula": "if(line.QCF.70 <= param.hsfThreshold, 0, if(line.QCF.70 <= param.hsfSecondThreshold, min(param.hsfFirstMax, round((line.QCF.70 - param.hsfThreshold) * param.hsfRate, 2)), min(param.hsfMax, param.hsfFirstMax + round((line.QCF.70 - param.hsfSecondThreshold) * param.hsfRate, 2))))",
+      "source": "Schedule F, Part B: 1% of income over $18,130 (at most $150), or $150 plus 1% over $63,060 (at most $1,000)"
+    },
+    "TP1.449": {
+      "label": "Prescription drug insurance exemption code (box 449)",
+      "formula": "if(line.QCK.62 >= 12, 14, if(line.HH.partner == 0 and line.TP1.275 <= param.drugIncomeSingle, 32, if(line.HH.partner == 1 and line.QC.family <= param.drugIncomeCouple, 34, 0)))",
+      "source": "Schedule K, situations 14 (a group plan all year), 32 (no spouse and line 275 of $19,890 or less) and 34 (family income of $32,240 or less); 0 when the premium is payable"
+    },
+    "TP1.447": {
+      "label": "Premium payable under the Quebec prescription drug insurance plan",
+      "formula": "if(line.TP1.449 > 0, 0, line.QCK.90)",
+      "source": "Schedule K, line 98 (lines 91 to 97, paying your spouse's premium, aren't used: each spouse pays their own)"
+    },
+    "TP1.450": {
+      "label": "Income tax and contributions",
+      "formula": "line.TP1.432 + line.TP1.439 + line.TP1.441 + line.TP1.445 + line.TP1.446 + line.TP1.447",
+      "source": "TP-1 line 450: lines 432 through 447"
+    },
+    "TP1.451": {
+      "label": "Quebec income tax withheld at source",
+      "formula": "sum(RL1.boxE) + sum(RL2.boxJ) + sum(RL6.boxG)",
+      "source": "Guide, line 451: box E of the RL-1, box J of the RL-2 and box G of the RL-6"
+    },
+    "TP1.451_1": {
+      "label": "Withholding transferred to your spouse with retirement income",
+      "formula": "line.QCQ.58",
+      "source": "Schedule Q, line 58"
+    },
+    "TP1.451_2": {
+      "label": "Quebec income tax withheld, less the part transferred",
+      "formula": "line.TP1.451 - line.TP1.451_1",
+      "source": "TP-1 line 451.2: line 451 minus line 451.1"
+    },
+    "TP1.451_3": {
+      "label": "Quebec income tax withholding transferred by your spouse",
+      "formula": "if(line.QC.couple == 1, spouse.line.TP1.451_1, 0)",
+      "source": "TP-1 line 451.3: line 58 of your spouse's Schedule Q"
+    },
+    "TP1.452": {
+      "label": "QPP overpayment",
+      "formula": "if(line.QCU.33 > 0, max(0, line.TP1.98 + line.TP1.98_2 - param.qppMaxEmployeeTotal), max(0, line.TP1.98 - round(line.QCU.14_4 * param.qppEmployeeRate, 2)) + max(0, line.TP1.98_2 - line.QCU.21))",
+      "source": "Guide, line 452: the contributions deducted (lines 98 and 98.2) less those required on the pensionable salary (Schedule U lines 17.2 and 21); with self-employment, the part over $4,735.20"
+    },
+    "TP1.453": {
+      "label": "Income tax paid in instalments",
+      "formula": "answer.qcInstalmentsPaid"
+    },
+    "TP1.455": {
+      "label": "Tax credit for childcare expenses",
+      "formula": "if(line.QCC.claims == 1, line.QCC.94, 0)",
+      "source": "Schedule C, line 98: the couple's credit, claimed here on the return of the spouse who paid more of the expenses (line 96 is then the other's 0)"
+    },
+    "TP1.456": {
+      "label": "Tax credits respecting the work premium",
+      "formula": "line.QCP.90",
+      "source": "Schedule P, line 90"
+    },
+    "TP1.457": {
+      "label": "QPIP overpayment",
+      "formula": "if(line.QCR.14 + line.QCR.12 < param.qpipMinimum, line.TP1.97, max(0, line.TP1.97 - min(param.qpipMaxEmployee, round(min(line.QCR.14, param.qpipMaxInsurable) * param.qpipEmployeeRate, 2))))",
+      "source": "Guide, line 457: the premiums deducted (line 97) less 0.494% of the insurable salary up to $98,000; all of line 97 when employment and business income are less than $2,000"
+    },
+    "TP1.458": {
+      "label": "Tax credit for home-support services for seniors",
+      "formula": "line.QCJ.90",
+      "source": "Schedule J, line 90"
+    },
+    "TP1.462": {
+      "label": "Other credits",
+      "formula": "line.QCB.50 + line.QC.childActivities",
+      "source": "TP-1 line 462: point 1, the refundable tax credit for medical expenses (Schedule B, Part D), and point 25, the tax credit for children's activities"
+    },
+    "TP1.463": {
+      "label": "Senior assistance tax credit",
+      "formula": "line.QC.seniorAssistance",
+      "source": "Guide, line 463"
+    },
+    "TP1.465": {
+      "label": "Income tax paid and other credits",
+      "formula": "line.TP1.451_2 + line.TP1.451_3 + line.TP1.452 + line.TP1.453 + line.TP1.455 + line.TP1.456 + line.TP1.457 + line.TP1.458 + line.TP1.462 + line.TP1.463",
+      "source": "TP-1 line 465: lines 451.2 through 463"
+    },
+    "TP1.468": {
+      "label": "Total payments and credits",
+      "formula": "line.TP1.465",
+      "source": "TP-1 line 468: lines 465 and 466 (line 466 isn't handled)"
+    },
+    "TP1.470": {
+      "label": "Income tax and contributions less payments and credits",
+      "formula": "line.TP1.450 - line.TP1.468 + line.QCD.check",
+      "source": "TP-1 line 470: line 450 minus line 468"
+    },
+    "TP1.474": {
+      "label": "Refund",
+      "formula": "max(0, -line.TP1.470)",
+      "source": "TP-1 line 474: line 470 if negative"
+    },
+    "TP1.475": {
+      "label": "Balance due",
+      "formula": "max(0, line.TP1.470)",
+      "source": "TP-1 line 475: line 470 if positive"
+    },
+    "TP1.478": {
+      "label": "Quebec refund",
+      "formula": "if(person.province == \"QC\", if(line.TP1.474 < param.qcRefundMinimum, 0, line.TP1.474), 0)",
+      "source": "TP-1 line 478: line 474 (no refund is transferred to your spouse here, line 476). Only a Quebec resident files a TP-1"
+    },
+    "TP1.479": {
+      "label": "Quebec balance due",
+      "formula": "if(person.province == \"QC\", if(line.TP1.475 < param.qcRefundMinimum, 0, line.TP1.475), 0)",
+      "source": "TP-1 line 479: line 475 (no amount is transferred by your spouse here, line 477). Only a Quebec resident files a TP-1"
+    },
     "SK428.8": {
       "label": "Saskatchewan tax on taxable income",
       "formula": "round(bracket(param.skTaxBrackets, line.T1.26000), 2)"
@@ -8405,6 +9905,13 @@
       "help": "A T4 from each employer you worked for in 2025.",
       "slip": "T4"
     },
+    "hasRl1": {
+      "type": "boolean",
+      "ask": "Employment income in Quebec (RL-1)",
+      "module": "income",
+      "help": "An RL-1 from each employer in Quebec, which also gives you a T4. The Quebec return reads the RL-1.",
+      "slip": "RL1"
+    },
     "hasInvestmentIncome": {
       "type": "boolean",
       "ask": "Interest or dividends",
@@ -8412,12 +9919,26 @@
       "help": "A T5 from each bank, credit union or broker that paid you $50 or more.",
       "slip": "T5"
     },
+    "hasRl3": {
+      "type": "boolean",
+      "ask": "Interest or dividends, Quebec slip (RL-3)",
+      "module": "income",
+      "help": "An RL-3 from each bank, credit union or broker, which also gives you a T5.",
+      "slip": "RL3"
+    },
     "hasTrustIncome": {
       "type": "boolean",
       "ask": "Mutual fund or trust income",
       "module": "income",
       "help": "A T3 from each mutual fund or trust held outside an RRSP or TFSA.",
       "slip": "T3"
+    },
+    "hasRl16": {
+      "type": "boolean",
+      "ask": "Mutual fund or trust income, Quebec slip (RL-16)",
+      "module": "income",
+      "help": "An RL-16 from each mutual fund or trust, which also gives you a T3.",
+      "slip": "RL16"
     },
     "hasSoldInvestments": {
       "type": "boolean",
@@ -8447,6 +9968,13 @@
       "help": "A T4A from each pension plan, school or other payer.",
       "slip": "T4A"
     },
+    "hasRl2": {
+      "type": "boolean",
+      "ask": "Pension, RRSP, RRIF or QPP payments, Quebec slip (RL-2)",
+      "module": "income",
+      "help": "An RL-2 from each pension plan, RRSP or RRIF issuer, and from Retraite Québec for QPP benefits. They also give you a T4A, T4RSP, T4RIF or T4A(P).",
+      "slip": "RL2"
+    },
     "hasRrifIncome": {
       "type": "boolean",
       "ask": "RRIF payments",
@@ -8460,6 +9988,13 @@
       "module": "income",
       "help": "A T4E from Service Canada, for EI regular, sickness, maternity or parental benefits.",
       "slip": "T4E"
+    },
+    "hasRl6": {
+      "type": "boolean",
+      "ask": "Québec parental insurance plan benefits (RL-6)",
+      "module": "income",
+      "help": "An RL-6 from the Québec parental insurance plan, for maternity, paternity, parental or adoption benefits.",
+      "slip": "RL6"
     },
     "hasSelfEmployment": {
       "type": "boolean",
@@ -8841,6 +10376,13 @@
       "module": "income",
       "help": "A T5007 from the board or the government that paid you.",
       "slip": "T5007"
+    },
+    "hasRl5": {
+      "type": "boolean",
+      "ask": "Social assistance, Quebec slip (RL-5)",
+      "module": "income",
+      "help": "An RL-5 from the Quebec government for social assistance or similar financial assistance, which also gives you a T5007.",
+      "slip": "RL5"
     },
     "hasFhsaWithdrawals": {
       "type": "boolean",
@@ -9273,7 +10815,7 @@
       "type": "money",
       "ask": "Provincial or territorial political contributions",
       "module": "credits",
-      "help": "To a registered party, association or candidate of your province or territory, on official receipts.",
+      "help": "To a registered party, association or candidate of your province or territory, on official receipts. In Quebec, to an authorized Quebec political party.",
       "default": "0"
     },
     "hasRentedHome": {
@@ -9360,6 +10902,13 @@
       "help": "An RC210 from the CRA.",
       "slip": "RC210"
     },
+    "hasRl19": {
+      "type": "boolean",
+      "ask": "Quebec tax credits paid in advance (RL-19)",
+      "module": "credits",
+      "help": "An RL-19 from Revenu Québec, for the work premium, childcare or home-support credits paid to you during 2025.",
+      "slip": "RL19"
+    },
     "trainingCreditLimit": {
       "type": "money",
       "ask": "Canada training credit limit from your 2024 notice of assessment",
@@ -9383,6 +10932,13 @@
       "help": "A T2202 from each school, for 2025.",
       "slip": "T2202"
     },
+    "hasRl8": {
+      "type": "boolean",
+      "ask": "Tuition at a college or university in Quebec (RL-8)",
+      "module": "credits",
+      "help": "An RL-8 from each school in Quebec, which also gives you a T2202.",
+      "slip": "RL8"
+    },
     "unusedTuition": {
       "type": "money",
       "ask": "Unused federal tuition from your 2024 notice of assessment",
@@ -9395,7 +10951,7 @@
       "type": "money",
       "ask": "Unused provincial or territorial tuition from your 2024 notice of assessment",
       "module": "credits",
-      "help": "The unused tuition and education amounts your notice shows for your province or territory, apart from the federal amount. If you lived in another one at the end of 2024, enter your unused federal amount.",
+      "help": "The unused tuition and education amounts your notice shows for your province or territory, apart from the federal amount. If you lived in another one at the end of 2024, enter your unused federal amount. In Quebec, the unused tuition or examination fees on your 2024 notice of assessment from Revenu Québec (line 48 of Schedule T).",
       "receipts": "NOA",
       "default": "0"
     },
@@ -9433,7 +10989,7 @@
       "type": "money",
       "ask": "Children's sports, arts and activity fees",
       "module": "credits",
-      "help": "Registration or membership fees paid in 2025 for your children's sports, arts, cultural or recreational programs, less any reimbursement. For each child, count at most your province's limit ($300 in Saskatchewan, or $400 for a child with the disability tax credit; $500 in Nova Scotia; $1,000 in Prince Edward Island). A couple can split them; enter only what you claim on this return.",
+      "help": "Registration or membership fees paid in 2025 for your children's sports, arts, cultural or recreational programs, less any reimbursement. For each child, count at most your province's limit ($300 in Saskatchewan, or $400 for a child with the disability tax credit; $500 in Nova Scotia and in Quebec, for a child born from 2009 to 2019; $1,000 in Prince Edward Island). A couple can split them; enter only what you claim on this return.",
       "default": "0"
     },
     "homeRenovationExpenses": {
@@ -9462,6 +11018,120 @@
       "ask": "Children's arts and learning program fees",
       "module": "credits",
       "help": "Fees paid in 2025 for your children's arts, cultural, nature, learning or developmental programs, such as music or dance lessons, that aren't sports or physical activity, less any reimbursement. Count at most $500 for each child under 16. A couple can split them; enter only what you claim on this return.",
+      "default": "0"
+    },
+    "qcLivedAlone": {
+      "type": "boolean",
+      "ask": "Lived alone all year (Quebec)",
+      "module": "credits",
+      "help": "All of 2025 in a home you kept, alone or only with people under 18 or your children who were full-time students. It gives the amount for a person living alone (Schedule B) and counts for the solidarity tax credit (Schedule D).",
+      "default": false
+    },
+    "hasRl31": {
+      "type": "boolean",
+      "ask": "Rented your home on December 31 (RL-31)",
+      "module": "credits",
+      "help": "An RL-31 from your landlord, for the solidarity tax credit (Schedule D). Copy its dwelling number (box A) onto Schedule D yourself; this app doesn't keep it.",
+      "slip": "RL31"
+    },
+    "qcHomeOwner": {
+      "type": "boolean",
+      "ask": "Owned the home you lived in on December 31 (Quebec)",
+      "module": "credits",
+      "help": "For the solidarity tax credit (Schedule D). Copy the roll number from your municipal tax bill onto Schedule D yourself; this app doesn't keep it.",
+      "default": false
+    },
+    "qcHomeOwners": {
+      "type": "count",
+      "ask": "Owners living in the home",
+      "module": "credits",
+      "help": "You included (Schedule D, line 36).",
+      "parent": "qcHomeOwner",
+      "default": "1"
+    },
+    "qcGroupDrugPlan": {
+      "type": "boolean",
+      "ask": "Covered by a group drug insurance plan (Quebec)",
+      "module": "credits",
+      "help": "Basic prescription drug insurance through a group plan at work, or through your spouse's or a parent's plan. Without one, you pay the premium of the public plan (Schedule K).",
+      "default": false
+    },
+    "qcDrugMonthsJanJun": {
+      "type": "count",
+      "ask": "Months from January to June it covered you",
+      "module": "credits",
+      "help": "Count a month if the plan covered you for at least one day of it. 6 for all of them.",
+      "parent": "qcGroupDrugPlan",
+      "default": "6"
+    },
+    "qcDrugMonthsJulDec": {
+      "type": "count",
+      "ask": "Months from July to December it covered you",
+      "module": "credits",
+      "help": "6 for all of them.",
+      "parent": "qcGroupDrugPlan",
+      "default": "6"
+    },
+    "hasRl24": {
+      "type": "boolean",
+      "ask": "Childcare in Quebec (RL-24)",
+      "module": "credits",
+      "help": "An RL-24 from each daycare or childcare provider, for the tax credit for childcare expenses (Schedule C).",
+      "slip": "RL24"
+    },
+    "qcChildCareReceipts": {
+      "type": "money",
+      "ask": "Childcare paid without an RL-24 (Quebec)",
+      "module": "credits",
+      "help": "Childcare that qualifies for the Quebec credit, paid to a person who gave you a receipt instead of an RL-24. Not the reduced contribution of a subsidized daycare.",
+      "default": "0"
+    },
+    "hasHomeSupport": {
+      "type": "boolean",
+      "ask": "Home-support services for seniors (Quebec)",
+      "module": "credits",
+      "help": "Rent in an apartment building, or housekeeping, personal care, meal or nursing services you paid for, at 70 or older (Schedule J). A couple enters them on one return.",
+      "default": false
+    },
+    "homeSupportRent": {
+      "type": "money",
+      "ask": "Monthly rent of your apartment",
+      "module": "credits",
+      "help": "0 if you lived in your own house or in a private seniors' residence. A seniors' residence (form TP-1029.61.MD-V) isn't handled.",
+      "parent": "hasHomeSupport"
+    },
+    "homeSupportRentMonths": {
+      "type": "count",
+      "ask": "Months you paid this rent in 2025",
+      "module": "credits",
+      "parent": "hasHomeSupport"
+    },
+    "homeSupportServices": {
+      "type": "money",
+      "ask": "Home-support services you paid, not in your rent",
+      "module": "credits",
+      "help": "Housekeeping, grounds maintenance and snow removal, personal care, meal preparation and delivery, nursing.",
+      "parent": "hasHomeSupport"
+    },
+    "qcChildTransfer": {
+      "type": "money",
+      "ask": "Amount transferred to you by a child who is a student (Quebec)",
+      "module": "credits",
+      "help": "What your child, 18 or older and a full-time student with an RL-8, transfers to you on their Schedule S (lines 20.1 and 20.2).",
+      "default": "0"
+    },
+    "qcChildTuitionTransfer": {
+      "type": "money",
+      "ask": "Tuition credit transferred to you by a child (Quebec)",
+      "module": "credits",
+      "help": "The amount on line 68 of your child's Schedule T.",
+      "default": "0"
+    },
+    "qcInstalmentsPaid": {
+      "type": "money",
+      "ask": "Tax paid by instalments to Revenu Québec",
+      "module": "credits",
+      "help": "Instalments you paid to Revenu Québec for 2025. Instalments paid to the CRA are a separate question.",
       "default": "0"
     },
     "spouseNetIncome": {
@@ -9800,6 +11470,205 @@
       "counts": [
         "7"
       ],
+      "informational": [],
+      "receipt": false,
+      "printedYears": [
+        0
+      ]
+    },
+    "RL1": {
+      "title": "RL-1 slip, Employment and Other Income (Revenu Québec)",
+      "about": "Employment income an employer in Quebec paid, with the Quebec tax, QPP contributions, QPIP premium and dues it withheld. Issued with the employer's T4; boxes are letters (A, B.A, B.B, C …) and some numbers (201, 211, 235)",
+      "boxes": {
+        "201": "Allowance for childcare expenses",
+        "211": "Benefit related to previous employment",
+        "235": "Premium paid to a private health services plan",
+        "A": "Employment income before source deductions",
+        "B_A": "QPP contribution (box B.A)",
+        "B_B": "Additional QPP contribution (box B.B)",
+        "C": "Employment Insurance premium",
+        "D": "Registered pension plan (RPP) contribution",
+        "E": "Québec income tax withheld at source",
+        "F": "Union dues",
+        "G": "Pensionable salary or wages under the QPP",
+        "H": "QPIP premium",
+        "I": "Eligible salary or wages under the QPIP",
+        "J": "Amount paid by the employer to a private health services plan",
+        "L": "Other benefits",
+        "M": "Commissions included in box A or box R",
+        "N": "Charitable donations and gifts"
+      },
+      "informational": [
+        "C",
+        "L",
+        "M"
+      ],
+      "name": "RL-1",
+      "counts": [],
+      "receipt": false,
+      "printedYears": [
+        0
+      ]
+    },
+    "RL2": {
+      "title": "RL-2 slip, Retirement and Annuity Income (Revenu Québec)",
+      "about": "Pension, RRSP, RRIF and annuity payments, and QPP benefits from Retraite Québec, with the Quebec tax withheld. Box C holds other payments: when the source of income printed on the slip (\"Provenance des revenus\") is RRQ, they are QPP benefits, reported as C_QPP; any other source, as C",
+      "boxes": {
+        "210": "Charitable donations",
+        "235": "Premium paid to a private health services plan",
+        "A": "Payments from a registered pension plan (RPP)",
+        "B": "Payments from an RRSP, a RRIF, a DPSP, a PRPP or a VRSP, or annuities",
+        "C": "Other payments (box C, a source other than RRQ)",
+        "C_QPP": "QPP benefits (box C, source RRQ)",
+        "J": "Québec income tax withheld at source"
+      },
+      "name": "RL-2",
+      "informational": [],
+      "counts": [],
+      "receipt": false,
+      "printedYears": [
+        0
+      ]
+    },
+    "RL3": {
+      "title": "RL-3 slip, Investment Income (Revenu Québec)",
+      "about": "Interest, dividends and capital gains dividends from a bank, broker or corporation, issued with the T5",
+      "boxes": {
+        "A1": "Actual amount of eligible dividends",
+        "A2": "Actual amount of ordinary dividends",
+        "B": "Taxable amount of eligible and ordinary dividends",
+        "C": "Dividend tax credit",
+        "D": "Interest from Canadian sources",
+        "E": "Other income from Canadian sources",
+        "F": "Gross foreign investment income",
+        "I": "Capital gains dividends"
+      },
+      "name": "RL-3",
+      "informational": [],
+      "counts": [],
+      "receipt": false,
+      "printedYears": [
+        0
+      ]
+    },
+    "RL5": {
+      "title": "RL-5 slip, Benefits and Indemnities (Revenu Québec)",
+      "about": "Social assistance and similar financial assistance paid by the Quebec government, issued with the T5007",
+      "boxes": {
+        "A": "Social assistance payments",
+        "B": "Other government financial assistance similar to social assistance",
+        "J": "Allowance for childcare expenses"
+      },
+      "name": "RL-5",
+      "informational": [],
+      "counts": [],
+      "receipt": false,
+      "printedYears": [
+        0
+      ]
+    },
+    "RL6": {
+      "title": "RL-6 slip, Québec Parental Insurance Plan Benefits (Revenu Québec)",
+      "about": "Maternity, paternity, parental and adoption benefits paid under the Québec parental insurance plan (QPIP)",
+      "boxes": {
+        "A": "Maternity, paternity, parental and adoption benefits",
+        "G": "Québec income tax withheld at source"
+      },
+      "name": "RL-6",
+      "informational": [],
+      "counts": [],
+      "receipt": false,
+      "printedYears": [
+        0
+      ]
+    },
+    "RL8": {
+      "title": "RL-8 slip, Amount for Post-Secondary Studies (Revenu Québec)",
+      "about": "Tuition or examination fees a college or university in Quebec received, issued with the T2202",
+      "boxes": {
+        "A": "Amount for post-secondary studies",
+        "B": "Tuition or examination fees",
+        "C": "Charitable donations"
+      },
+      "informational": [
+        "A"
+      ],
+      "name": "RL-8",
+      "counts": [],
+      "receipt": false,
+      "printedYears": [
+        0
+      ]
+    },
+    "RL16": {
+      "title": "RL-16 slip, Trust Income (Revenu Québec)",
+      "about": "Income a trust or mutual fund allocated to you, such as capital gains, dividends and other income, issued with the T3",
+      "boxes": {
+        "A": "Capital gains",
+        "C1": "Actual amount of eligible dividends",
+        "C2": "Actual amount of ordinary dividends",
+        "E": "Foreign business income",
+        "F": "Foreign investment income",
+        "G": "Other income",
+        "I": "Taxable amount of eligible and ordinary dividends",
+        "J": "Dividend tax credit"
+      },
+      "name": "RL-16",
+      "informational": [],
+      "counts": [],
+      "receipt": false,
+      "printedYears": [
+        0
+      ]
+    },
+    "RL19": {
+      "title": "RL-19 slip, Advance Payments of Tax Credits (Revenu Québec)",
+      "about": "Quebec tax credits paid in advance during the year, such as the work premium, childcare or home-support credits",
+      "boxes": {
+        "A": "Advance payments of the work premium or adapted work premium",
+        "B": "Advance payments of the supplement to the work premium",
+        "C": "Advance payments of the tax credit for childcare expenses",
+        "D": "Advance payments of the tax credit for home-support services for seniors",
+        "G": "Advance payments of the tax credit for the treatment of infertility",
+        "H": "Advance payments of the tax credit for caregivers"
+      },
+      "name": "RL-19",
+      "informational": [],
+      "counts": [],
+      "receipt": false,
+      "printedYears": [
+        0
+      ]
+    },
+    "RL24": {
+      "title": "RL-24 slip, Childcare Expenses (Revenu Québec)",
+      "about": "Childcare expenses paid to a daycare or childcare provider in Quebec, one slip for each child",
+      "boxes": {
+        "C": "Total childcare expenses paid",
+        "D": "Childcare expenses that do not qualify for the tax credit",
+        "E": "Childcare expenses that qualify for the tax credit"
+      },
+      "informational": [
+        "C",
+        "D"
+      ],
+      "name": "RL-24",
+      "counts": [],
+      "receipt": false,
+      "printedYears": [
+        0
+      ]
+    },
+    "RL31": {
+      "title": "RL-31 slip, Information About a Leased Dwelling (Revenu Québec)",
+      "about": "From the landlord of the home you rented on December 31, for the solidarity tax credit (Schedule D). Only box B, a number of people, is read; the dwelling number (box A) and the address are copied onto Schedule D by hand",
+      "boxes": {
+        "B": "Total number of tenants and subtenants who signed the lease"
+      },
+      "counts": [
+        "B"
+      ],
+      "name": "RL-31",
       "informational": [],
       "receipt": false,
       "printedYears": [
@@ -12415,6 +14284,14 @@
           "x": 444,
           "y": 573.8,
           "value": "line.T1.11410"
+        },
+        {
+          "key": "11905",
+          "kind": "amount",
+          "page": 3,
+          "x": 444,
+          "y": 480.8,
+          "value": "line.T1.11905"
         },
         {
           "key": "12010",
@@ -26915,5 +28792,5 @@
     }
   },
   "outcome": "RESULT.net",
-  "version": "07d68cabb21cccfc"
+  "version": "a10d3ba95c82695e"
 }

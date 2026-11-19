@@ -106,6 +106,7 @@ export function promptFor(context: ReadContext): string {
     "- issuer: who issued the slip (the employer, payer, trust, broker or institution).",
     "- boxes: each box from that type's list that shows an amount, with the amount exactly as printed but without $ signs, spaces or thousands separators (for example 60000.00). Leave out empty boxes and boxes not in the list. Copy amounts; never add them up.",
     "- unsure: the numbers of any boxes you could not read clearly.",
+    "Quebec RL slips (RL-1, RL-2 …) print boxes as letters: report each under its key in the list, a point or dash as an underscore (box B.A of an RL-1 is B_A). On an RL-2, box C goes under C_QPP when its source of income is RRQ, and under C otherwise.",
     "Receipts and notices (RRSP, DONATION, MEDICAL, NOA) have no box numbers printed: the numbers in their list are this app's. Put each amount under the number of the matching description. For a medical receipt, person is the patient; for a notice of assessment, the taxpayer, and issuer is Canada Revenue Agency.",
     `An RRSP receipt shows contributions for one period: report those from March 4 to December 31, ${context.year} as box 1, and those from January 1 to March 2, ${context.year + 1} as box 2. Contributions from January 1 to March 3, ${context.year} belong to the year before: leave them out.`,
     `taxYear: the tax year printed on the document (for a notice of assessment, the year it assesses, such as ${context.year - 1}; for an RRSP receipt, the year of the contributions), or null if none is printed.`,
@@ -166,10 +167,12 @@ export function claudeReader(client: Anthropic): SlipReader {
   };
 }
 
-/** A box number as the slip type prints it: "16" read from a T4A is box "016". */
+/** A box as the slip type keys it: "16" read from a T4A is box "016", "B.A" read from an RL-1 is box "B_A". */
 function printedBox(rules: RuleSet, type: string, box: string): string {
   const boxes = rules.slips.get(type)?.boxes ?? {};
   if (box in boxes) return box;
+  const joined = box.toUpperCase().replace(/[.\-\s]/g, "_");
+  if (joined in boxes) return joined;
   const padded = box.padStart(3, "0");
   return padded in boxes ? padded : box;
 }

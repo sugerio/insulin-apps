@@ -1,8 +1,9 @@
 # Questions a formula reads as answer.<id>. A question with a default gives an estimate until it is answered. `module`
 # is the part of the return that asks it (about the person, income, deductions, credits); the screens build their forms
-# from these entries, in this order. In a module:
+# from these entries, in this order. A question is asked only when the return reads it. In a module:
 # - a yes/no question with a `slip` is a kind of income or expense shown by that slip: finding the slip adds it to the
-#   return, and a yes without the slip is missing;
+#   return, and a yes without the slip is missing. It is asked when the return reads that slip's boxes: every return
+#   reads the federal slips, and only a Quebec return reads the RL slips;
 # - a yes/no question without one is a group: its parts (questions with `parent`) are asked in its card once it applies,
 #   or, with a `note`, something to know (a form to file separately);
 # - a money question is an amount to enter. Its `receipts` are shown with it; a line that adds them makes the amount
@@ -18,18 +19,36 @@ questions:
     slip: T4
     ask: Employment income
     help: A T4 from each employer you worked for in 2025.
+  hasRl1:
+    type: boolean
+    module: income
+    slip: RL1
+    ask: Employment income in Quebec (RL-1)
+    help: An RL-1 from each employer in Quebec, which also gives you a T4. The Quebec return reads the RL-1.
   hasInvestmentIncome:
     type: boolean
     module: income
     slip: T5
     ask: Interest or dividends
     help: A T5 from each bank, credit union or broker that paid you $50 or more.
+  hasRl3:
+    type: boolean
+    module: income
+    slip: RL3
+    ask: Interest or dividends, Quebec slip (RL-3)
+    help: An RL-3 from each bank, credit union or broker, which also gives you a T5.
   hasTrustIncome:
     type: boolean
     module: income
     slip: T3
     ask: Mutual fund or trust income
     help: A T3 from each mutual fund or trust held outside an RRSP or TFSA.
+  hasRl16:
+    type: boolean
+    module: income
+    slip: RL16
+    ask: Mutual fund or trust income, Quebec slip (RL-16)
+    help: An RL-16 from each mutual fund or trust, which also gives you a T3.
   hasSoldInvestments:
     type: boolean
     module: income
@@ -54,6 +73,12 @@ questions:
     slip: T4A
     ask: A pension, annuity, scholarship or other T4A income
     help: A T4A from each pension plan, school or other payer.
+  hasRl2:
+    type: boolean
+    module: income
+    slip: RL2
+    ask: Pension, RRSP, RRIF or QPP payments, Quebec slip (RL-2)
+    help: An RL-2 from each pension plan, RRSP or RRIF issuer, and from Retraite Québec for QPP benefits. They also give you a T4A, T4RSP, T4RIF or T4A(P).
   hasRrifIncome:
     type: boolean
     module: income
@@ -66,6 +91,12 @@ questions:
     slip: T4E
     ask: Employment insurance benefits
     help: A T4E from Service Canada, for EI regular, sickness, maternity or parental benefits.
+  hasRl6:
+    type: boolean
+    module: income
+    slip: RL6
+    ask: Québec parental insurance plan benefits (RL-6)
+    help: An RL-6 from the Québec parental insurance plan, for maternity, paternity, parental or adoption benefits.
   hasSelfEmployment:
     type: boolean
     module: income
@@ -306,6 +337,12 @@ questions:
     slip: T5007
     ask: Workers' compensation or social assistance
     help: A T5007 from the board or the government that paid you.
+  hasRl5:
+    type: boolean
+    module: income
+    slip: RL5
+    ask: Social assistance, Quebec slip (RL-5)
+    help: An RL-5 from the Quebec government for social assistance or similar financial assistance, which also gives you a T5007.
   hasFhsaWithdrawals:
     type: boolean
     module: income
@@ -674,7 +711,7 @@ questions:
     type: money
     module: credits
     ask: Provincial or territorial political contributions
-    help: To a registered party, association or candidate of your province or territory, on official receipts.
+    help: To a registered party, association or candidate of your province or territory, on official receipts. In Quebec, to an authorized Quebec political party.
     default: 0
   hasRentedHome:
     type: boolean
@@ -748,6 +785,12 @@ questions:
     slip: RC210
     ask: Canada workers benefit paid in advance
     help: An RC210 from the CRA.
+  hasRl19:
+    type: boolean
+    module: credits
+    slip: RL19
+    ask: Quebec tax credits paid in advance (RL-19)
+    help: An RL-19 from Revenu Québec, for the work premium, childcare or home-support credits paid to you during 2025.
   trainingCreditLimit:
     type: money
     module: credits
@@ -768,6 +811,12 @@ questions:
     slip: T2202
     ask: Tuition at a college or university
     help: A T2202 from each school, for 2025.
+  hasRl8:
+    type: boolean
+    module: credits
+    slip: RL8
+    ask: Tuition at a college or university in Quebec (RL-8)
+    help: An RL-8 from each school in Quebec, which also gives you a T2202.
   unusedTuition:
     type: money
     module: credits
@@ -780,7 +829,7 @@ questions:
     module: credits
     receipts: NOA
     ask: Unused provincial or territorial tuition from your 2024 notice of assessment
-    help: The unused tuition and education amounts your notice shows for your province or territory, apart from the federal amount. If you lived in another one at the end of 2024, enter your unused federal amount.
+    help: The unused tuition and education amounts your notice shows for your province or territory, apart from the federal amount. If you lived in another one at the end of 2024, enter your unused federal amount. In Quebec, the unused tuition or examination fees on your 2024 notice of assessment from Revenu Québec (line 48 of Schedule T).
     default: 0
   tuitionTransfer:
     type: money
@@ -812,7 +861,7 @@ questions:
     type: money
     module: credits
     ask: Children's sports, arts and activity fees
-    help: Registration or membership fees paid in 2025 for your children's sports, arts, cultural or recreational programs, less any reimbursement. For each child, count at most your province's limit ($300 in Saskatchewan, or $400 for a child with the disability tax credit; $500 in Nova Scotia; $1,000 in Prince Edward Island). A couple can split them; enter only what you claim on this return.
+    help: Registration or membership fees paid in 2025 for your children's sports, arts, cultural or recreational programs, less any reimbursement. For each child, count at most your province's limit ($300 in Saskatchewan, or $400 for a child with the disability tax credit; $500 in Nova Scotia and in Quebec, for a child born from 2009 to 2019; $1,000 in Prince Edward Island). A couple can split them; enter only what you claim on this return.
     default: 0
   homeRenovationExpenses:
     type: money
@@ -837,6 +886,106 @@ questions:
     module: credits
     ask: Children's arts and learning program fees
     help: Fees paid in 2025 for your children's arts, cultural, nature, learning or developmental programs, such as music or dance lessons, that aren't sports or physical activity, less any reimbursement. Count at most $500 for each child under 16. A couple can split them; enter only what you claim on this return.
+    default: 0
+
+  # Quebec: what the Quebec return (TP-1) needs besides the federal answers. Only a Quebec return reads them.
+  qcLivedAlone:
+    type: boolean
+    module: credits
+    ask: Lived alone all year (Quebec)
+    help: All of 2025 in a home you kept, alone or only with people under 18 or your children who were full-time students. It gives the amount for a person living alone (Schedule B) and counts for the solidarity tax credit (Schedule D).
+    default: false
+  hasRl31:
+    type: boolean
+    module: credits
+    slip: RL31
+    ask: Rented your home on December 31 (RL-31)
+    help: An RL-31 from your landlord, for the solidarity tax credit (Schedule D). Copy its dwelling number (box A) onto Schedule D yourself; this app doesn't keep it.
+  qcHomeOwner:
+    type: boolean
+    module: credits
+    ask: Owned the home you lived in on December 31 (Quebec)
+    help: For the solidarity tax credit (Schedule D). Copy the roll number from your municipal tax bill onto Schedule D yourself; this app doesn't keep it.
+    default: false
+  qcHomeOwners:
+    type: count
+    module: credits
+    parent: qcHomeOwner
+    ask: Owners living in the home
+    help: You included (Schedule D, line 36).
+    default: "1"
+  qcGroupDrugPlan:
+    type: boolean
+    module: credits
+    ask: Covered by a group drug insurance plan (Quebec)
+    help: Basic prescription drug insurance through a group plan at work, or through your spouse's or a parent's plan. Without one, you pay the premium of the public plan (Schedule K).
+    default: false
+  qcDrugMonthsJanJun:
+    type: count
+    module: credits
+    parent: qcGroupDrugPlan
+    ask: Months from January to June it covered you
+    help: Count a month if the plan covered you for at least one day of it. 6 for all of them.
+    default: "6"
+  qcDrugMonthsJulDec:
+    type: count
+    module: credits
+    parent: qcGroupDrugPlan
+    ask: Months from July to December it covered you
+    help: 6 for all of them.
+    default: "6"
+  hasRl24:
+    type: boolean
+    module: credits
+    slip: RL24
+    ask: Childcare in Quebec (RL-24)
+    help: An RL-24 from each daycare or childcare provider, for the tax credit for childcare expenses (Schedule C).
+  qcChildCareReceipts:
+    type: money
+    module: credits
+    ask: Childcare paid without an RL-24 (Quebec)
+    help: Childcare that qualifies for the Quebec credit, paid to a person who gave you a receipt instead of an RL-24. Not the reduced contribution of a subsidized daycare.
+    default: 0
+  hasHomeSupport:
+    type: boolean
+    module: credits
+    ask: Home-support services for seniors (Quebec)
+    help: Rent in an apartment building, or housekeeping, personal care, meal or nursing services you paid for, at 70 or older (Schedule J). A couple enters them on one return.
+    default: false
+  homeSupportRent:
+    type: money
+    module: credits
+    parent: hasHomeSupport
+    ask: Monthly rent of your apartment
+    help: 0 if you lived in your own house or in a private seniors' residence. A seniors' residence (form TP-1029.61.MD-V) isn't handled.
+  homeSupportRentMonths:
+    type: count
+    module: credits
+    parent: hasHomeSupport
+    ask: Months you paid this rent in 2025
+  homeSupportServices:
+    type: money
+    module: credits
+    parent: hasHomeSupport
+    ask: Home-support services you paid, not in your rent
+    help: Housekeeping, grounds maintenance and snow removal, personal care, meal preparation and delivery, nursing.
+  qcChildTransfer:
+    type: money
+    module: credits
+    ask: Amount transferred to you by a child who is a student (Quebec)
+    help: What your child, 18 or older and a full-time student with an RL-8, transfers to you on their Schedule S (lines 20.1 and 20.2).
+    default: 0
+  qcChildTuitionTransfer:
+    type: money
+    module: credits
+    ask: Tuition credit transferred to you by a child (Quebec)
+    help: The amount on line 68 of your child's Schedule T.
+    default: 0
+  qcInstalmentsPaid:
+    type: money
+    module: credits
+    ask: Tax paid by instalments to Revenu Québec
+    help: Instalments you paid to Revenu Québec for 2025. Instalments paid to the CRA are a separate question.
     default: 0
 
   # About the person (Personal info)

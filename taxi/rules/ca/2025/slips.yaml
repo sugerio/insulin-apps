@@ -169,6 +169,130 @@ slips:
       30: Total repayment
     counts: [7]                  # a rate, not dollars
 
+  # Quebec RL slips (Revenu Québec relevés), which a payer in Quebec issues besides the federal T-slip. The TP-1 reads
+  # them; the federal return reads the T-slips. A box is keyed by its letter as printed, with an underscore for the
+  # point or dash of a sub-box (box B.A is B_A, box D-1 would be D_1), since a formula names a box as RL1.boxB_A. Box C
+  # of the RL-2 is split by the source of income printed beside it: C_QPP for QPP benefits (source RRQ), C for the rest.
+  RL1:
+    name: RL-1
+    title: RL-1 slip, Employment and Other Income (Revenu Québec)
+    about: >-
+      Employment income an employer in Quebec paid, with the Quebec tax, QPP contributions, QPIP premium and dues it
+      withheld. Issued with the employer's T4; boxes are letters (A, B.A, B.B, C …) and some numbers (201, 211, 235)
+    boxes:
+      A: Employment income before source deductions
+      B_A: QPP contribution (box B.A)
+      B_B: Additional QPP contribution (box B.B)
+      C: Employment Insurance premium
+      D: Registered pension plan (RPP) contribution
+      E: Québec income tax withheld at source
+      F: Union dues
+      G: Pensionable salary or wages under the QPP
+      H: QPIP premium
+      I: Eligible salary or wages under the QPIP
+      J: Amount paid by the employer to a private health services plan
+      L: Other benefits
+      M: Commissions included in box A or box R
+      N: Charitable donations and gifts
+      "201": Allowance for childcare expenses
+      "211": Benefit related to previous employment
+      "235": Premium paid to a private health services plan
+    informational: [C, L, M]   # C is on the federal return (T4 box 18); L and M are already in box A
+  RL2:
+    name: RL-2
+    title: RL-2 slip, Retirement and Annuity Income (Revenu Québec)
+    about: >-
+      Pension, RRSP, RRIF and annuity payments, and QPP benefits from Retraite Québec, with the Quebec tax withheld.
+      Box C holds other payments: when the source of income printed on the slip ("Provenance des revenus") is RRQ, they
+      are QPP benefits, reported as C_QPP; any other source, as C
+    boxes:
+      A: Payments from a registered pension plan (RPP)
+      B: Payments from an RRSP, a RRIF, a DPSP, a PRPP or a VRSP, or annuities
+      C: Other payments (box C, a source other than RRQ)
+      C_QPP: QPP benefits (box C, source RRQ)
+      J: Québec income tax withheld at source
+      "210": Charitable donations
+      "235": Premium paid to a private health services plan
+  RL3:
+    name: RL-3
+    title: RL-3 slip, Investment Income (Revenu Québec)
+    about: Interest, dividends and capital gains dividends from a bank, broker or corporation, issued with the T5
+    boxes:
+      A1: Actual amount of eligible dividends
+      A2: Actual amount of ordinary dividends
+      B: Taxable amount of eligible and ordinary dividends
+      C: Dividend tax credit
+      D: Interest from Canadian sources
+      E: Other income from Canadian sources
+      F: Gross foreign investment income
+      I: Capital gains dividends
+  RL5:
+    name: RL-5
+    title: RL-5 slip, Benefits and Indemnities (Revenu Québec)
+    about: Social assistance and similar financial assistance paid by the Quebec government, issued with the T5007
+    boxes:
+      A: Social assistance payments
+      B: Other government financial assistance similar to social assistance
+      J: Allowance for childcare expenses
+  RL6:
+    name: RL-6
+    title: RL-6 slip, Québec Parental Insurance Plan Benefits (Revenu Québec)
+    about: Maternity, paternity, parental and adoption benefits paid under the Québec parental insurance plan (QPIP)
+    boxes:
+      A: Maternity, paternity, parental and adoption benefits
+      G: Québec income tax withheld at source
+  RL8:
+    name: RL-8
+    title: RL-8 slip, Amount for Post-Secondary Studies (Revenu Québec)
+    about: Tuition or examination fees a college or university in Quebec received, issued with the T2202
+    boxes:
+      A: Amount for post-secondary studies
+      B: Tuition or examination fees
+      C: Charitable donations
+    informational: [A]   # a student transfers it to a parent on Schedule S, which the parent's return enters
+  RL16:
+    name: RL-16
+    title: RL-16 slip, Trust Income (Revenu Québec)
+    about: Income a trust or mutual fund allocated to you, such as capital gains, dividends and other income, issued with the T3
+    boxes:
+      A: Capital gains
+      C1: Actual amount of eligible dividends
+      C2: Actual amount of ordinary dividends
+      E: Foreign business income
+      F: Foreign investment income
+      G: Other income
+      I: Taxable amount of eligible and ordinary dividends
+      J: Dividend tax credit
+  RL19:
+    name: RL-19
+    title: RL-19 slip, Advance Payments of Tax Credits (Revenu Québec)
+    about: Quebec tax credits paid in advance during the year, such as the work premium, childcare or home-support credits
+    boxes:
+      A: Advance payments of the work premium or adapted work premium
+      B: Advance payments of the supplement to the work premium
+      C: Advance payments of the tax credit for childcare expenses
+      D: Advance payments of the tax credit for home-support services for seniors
+      G: Advance payments of the tax credit for the treatment of infertility
+      H: Advance payments of the tax credit for caregivers
+  RL24:
+    name: RL-24
+    title: RL-24 slip, Childcare Expenses (Revenu Québec)
+    about: Childcare expenses paid to a daycare or childcare provider in Quebec, one slip for each child
+    boxes:
+      C: Total childcare expenses paid
+      D: Childcare expenses that do not qualify for the tax credit
+      E: Childcare expenses that qualify for the tax credit
+    informational: [C, D]   # E is the part that counts
+  RL31:
+    name: RL-31
+    title: RL-31 slip, Information About a Leased Dwelling (Revenu Québec)
+    about: >-
+      From the landlord of the home you rented on December 31, for the solidarity tax credit (Schedule D). Only box B,
+      a number of people, is read; the dwelling number (box A) and the address are copied onto Schedule D by hand
+    boxes:
+      B: Total number of tenants and subtenants who signed the lease
+    counts: [B]
+
   # Receipts and notices: amounts with no box number printed beside them. The numbers below are this app's, so the
   # amounts can be read and stored like a slip's boxes.
   RRSP:

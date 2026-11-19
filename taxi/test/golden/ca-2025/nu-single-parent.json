@@ -86,7 +86,18 @@
         "childCareInfirmOlder": "0",
         "childCareSpouseUnable": false,
         "childCareSpouseWeeks": "0",
-        "childCareSpouseMonths": "0"
+        "childCareSpouseMonths": "0",
+        "qcLivedAlone": false,
+        "qcHomeOwner": false,
+        "qcHomeOwners": "1",
+        "qcGroupDrugPlan": false,
+        "qcDrugMonthsJanJun": "6",
+        "qcDrugMonthsJulDec": "6",
+        "qcChildCareReceipts": "0",
+        "hasHomeSupport": false,
+        "qcChildTransfer": "0",
+        "qcChildTuitionTransfer": "0",
+        "qcInstalmentsPaid": "0"
       }
     },
     "slips": [

@@ -1,0 +1,629 @@
+# Quebec: the Revenu Québec income tax return TP-1 (TP-1.D-V, 2025-12), which a Quebec resident files besides the
+# federal T1. Line ids are the TP-1's own line numbers, a decimal line written with an underscore (line 377.1 is
+# TP1.377_1); the schedules' lines are in qc-credits.yaml (QCA … QCU). Every number was checked against the 2025
+# documents: the TP-1, its guide (TP-1.G-V), the schedules and work charts (TP-1.D.<X>-V, TP-1.D.GR-V), Revenu Québec's
+# guide for employers (TP-1015.G-V) and the RL slips' courtesy translations.
+#
+# Only a Quebec return reads these lines: the result lines TP1.478 and TP1.479 are 0 for anyone else, and read nothing.
+# The TP-1 reads the RL slips (slips.yaml), never the matching T-slips: a payer in Quebec issues both, and their
+# amounts can differ. It reads the federal return only where the guide says the two are equal (RRSP, FHSA, RPP limit,
+# support, carrying charges, the T1032 split, self-employment) and for the federal slips that have no RL slip (T4E,
+# T4A(OAS), T4A(P)).
+#
+# Left out (said not handled, or not entered): a year you moved to or from Canada; employment outside Quebec (a T4
+# without an RL-1, Schedule R Part B, line 454); CPP contributions on an RL-1 (lines 96 to 96.2, form LE-35-V); QPP in
+# the year you turned 18 or 73, an election to stop paying QPP (Schedule U Part A); rental and foreign income (TP-128-V,
+# Schedule E); net federal supplements (lines 148 and 295); moving expenses (line 228); lines 105, 107, 136, 153, 169,
+# 236, 241, 246, 250, 252, 260, 276, 278, 287, 291 to 297, 358, 378, 390 to 392, 396, 422, 424, 438, 443, 454, 459, 460,
+# 466; the refund transferred between spouses (lines 476 and 477); Schedule A Parts A and C, Schedule B line 21,
+# Schedule H, the adapted work premium (Schedule P column 2) and the supplement to the work premium (Part D).
+
+params:
+  qcTaxBrackets:
+    label: Quebec tax brackets
+    source: "Work Chart 401 (TP-1.D.GR-V): 14% to $53,255, 19% to $106,495, 24% to $129,590, 25.75% above, bases as printed"
+    value:
+      - { upTo: 53255, rate: 14%, base: 0 }
+      - { upTo: 106495, rate: 19%, base: 7455.70 }
+      - { upTo: 129590, rate: 24%, base: 17571.30 }
+      - { rate: 25.75%, base: 23114.10 }
+  qcBasicPersonalAmount:
+    label: Quebec basic personal amount
+    source: "TP-1 line 350: $18,571 (it already allows for QPP, QPIP, EI and health fund contributions)"
+    value: 18571
+  qcCreditRate:
+    label: Quebec rate of the non-refundable credits of line 377
+    source: "TP-1 line 377.1: line 377 × 14%"
+    value: 14%
+  qcSecondCreditRate:
+    label: Quebec rate of the medical expense and student loan credits
+    source: "TP-1 line 389: line 388 × 20%"
+    value: 20%
+  qcImpairmentAmount:
+    label: Amount for a severe and prolonged impairment
+    source: "TP-1 line 376 and guide, line 376: $4,123 if you were 18 or older"
+    value: 4123
+  qcDuesRate:
+    label: Credit rate on union and professional dues
+    source: "TP-1 line 397: line 397.1 × 10%"
+    value: 10%
+  qcWorkerDeductionRate:
+    label: Deduction for workers, rate
+    source: "Work Chart 201, line 9: 6% of line 8"
+    value: 6%
+  qcWorkerDeductionMax:
+    label: Deduction for workers, most
+    source: "Work Chart 201, line 9, and guide, line 201: maximum $1,420"
+    value: 1420
+  qcDonationLowLimit:
+    label: Donations at the low Quebec rate
+    source: "Work Chart 395, lines 2 and 6: the first $200"
+    value: 200
+  qcDonationLowRate:
+    label: Quebec donation credit rate on the first $200
+    source: "Work Chart 395, line 7: 20%"
+    value: 20%
+  qcDonationTopThreshold:
+    label: Taxable income above which donations get the top Quebec rate
+    source: "Work Chart 395, line 4: line 299 minus $129,590"
+    value: 129590
+  qcDonationTopRate:
+    label: Quebec donation credit rate in the top bracket
+    source: "Work Chart 395, line 9: 25.75%"
+    value: 25.75%
+  qcDonationHighRate:
+    label: Quebec donation credit rate above $200
+    source: "Work Chart 395, line 11: 24%"
+    value: 24%
+  qcPoliticalMax:
+    label: Quebec political contributions counted, most
+    source: "Work Chart 414, line 1: maximum $200"
+    value: 200
+  qcPoliticalFirst:
+    label: Quebec political contributions at the higher rate
+    source: "Work Chart 414, line 2: line 1 or $50, whichever is less"
+    value: 50
+  qcPoliticalFirstRate:
+    label: Quebec political contribution credit rate on the first $50
+    source: "Work Chart 414, line 10: 85%"
+    value: 85%
+  qcPoliticalRate:
+    label: Quebec political contribution credit rate above $50
+    source: "Work Chart 414, line 11: 75%"
+    value: 75%
+  qcTuitionRate:
+    label: Quebec tuition credit rate for 2014 and later fees
+    source: "Schedule T, line 45: line 44.1 × 8%"
+    value: 8%
+  qcTuitionMinimum:
+    label: Tuition fees for 2025 must exceed
+    source: "Schedule T, line 40.6: tuition or examination fees paid for 2025 (if they exceed $100)"
+    value: 100
+  qcCapitalGainsInclusionRate:
+    label: Quebec capital gains inclusion rate
+    source: "Schedule G, line 108, and guide, line 139: 50%"
+    value: 50%
+  qcRefundMinimum:
+    label: Smallest refund paid or balance to pay
+    source: "Guide, lines 474 and 475: a refund of less than $2 isn't paid, and a balance of less than $2 needn't be paid"
+    value: 2
+
+  # QPP and QPIP (Schedules U and R; Revenu Québec's guide for employers, TP-1015.G-V)
+  qppEmployeeRate:
+    label: QPP base and first additional contribution rate, employee
+    source: "Schedule U, lines 17.2, 38 and 71: 6.4%"
+    value: 6.4%
+  qppSelfEmployedRate:
+    label: QPP base and first additional contribution rate, self-employed
+    source: "Schedule U, line 48: 12.8%"
+    value: 12.8%
+  qppSecondRate:
+    label: QPP second additional contribution rate, employee
+    source: "Schedule U, lines 21, 95.8 and 122: 4%"
+    value: 4%
+  qppSecondSelfEmployedRate:
+    label: QPP second additional contribution rate, self-employed
+    source: "Schedule U, line 93: 8%"
+    value: 8%
+  qppFirstRate:
+    label: QPP first additional contribution rate, employee
+    source: "Schedule U, lines 15 and 112: 1%"
+    value: 1%
+  qppExemption:
+    label: QPP basic exemption
+    source: "Schedule U, instructions for Part B (personal QPP exemption for 12 months), and TP-1015.G-V: $3,500"
+    value: 3500
+  qppMaxPensionable:
+    label: QPP maximum pensionable earnings
+    source: "Schedule U, line 12 (maximum $71,300), lines 14.1 and 44"
+    value: 71300
+  qppAdditionalMaxPensionable:
+    label: QPP additional maximum pensionable earnings
+    source: "Schedule U, lines 18.8 and 53, and TP-1015.G-V: $81,200"
+    value: 81200
+  qppMaxEmployee:
+    label: Most QPP base and first additional contributions, employee
+    source: "Schedule U, line 10 (maximum $4,339.20) and line 71"
+    value: 4339.20
+  qppMaxEmployeeTotal:
+    label: Most QPP contributions of an employee, lines 98 and 98.2
+    source: "Guide, line 452: lines 98 and 98.2 total more than $4,735.20"
+    value: 4735.20
+  qppFirstShare:
+    label: First additional share of the employee QPP contribution
+    source: "Schedule U, lines 11, 103 and 105: × 0.156250"
+    value: 0.15625
+  qppHalfBaseShare:
+    label: Deductible share of the self-employed QPP base contribution
+    source: "Schedule U, line 101: × 0.421875"
+    value: 0.421875
+  qpipEmployeeRate:
+    label: QPIP premium rate, employee
+    source: "Schedule R, line 37: 0.494%"
+    value: 0.494%
+  qpipSelfEmployedRate:
+    label: QPIP premium rate, self-employed
+    source: "Schedule R, line 24: 0.878%"
+    value: 0.878%
+  qpipMaxInsurable:
+    label: QPIP maximum insurable earnings
+    source: "Schedule R, lines 13 and 33: $98,000"
+    value: 98000
+  qpipMaxEmployee:
+    label: Most QPIP premium of an employee
+    source: "Guide, line 97: more than $484.12 is an overpayment (line 457)"
+    value: 484.12
+  qpipMaxSelfEmployed:
+    label: Most QPIP premium on self-employment
+    source: "Schedule R, line 24: maximum $860.44"
+    value: 860.44
+  qpipMinimum:
+    label: Earnings under which no QPIP premium is payable
+    source: "Schedule R, first paragraph, and guide, line 457: less than $2,000"
+    value: 2000
+  qpipDeductionRate:
+    label: Deductible share of the QPIP premium on self-employment
+    source: "Schedule R, line 26: line 24 × 43.736%"
+    value: 43.736%
+
+lines:
+  # Who the TP-1 is for, and the couple. A spouse's return is read only when both returns are prepared here and the
+  # spouse is a Quebec resident too; otherwise their net income is the federal one, or the answer about them.
+  QC.couple:
+    label: Both spouses file a Quebec return prepared here (1 for yes)
+    formula: 'if(line.HH.partner == 1 and household.partnerInYear, if(spouse.person.province == "QC", 1, 0), 0)'
+  QC.spouseNet:
+    label: Your spouse's net income, for the Quebec family income
+    formula: >-
+      if(line.HH.partner == 1, if(household.partnerInYear, if(spouse.person.province == "QC", spouse.line.TP1.275,
+      spouse.line.T1.23600), answer.spouseNetIncome), 0)
+    source: "TP-1 line 51: your spouse's net income (line 275 of their TP-1); for a spouse who doesn't file one, their federal net income"
+  QC.family:
+    label: Family income
+    formula: "line.TP1.275 + line.QC.spouseNet"
+    source: "Schedules B, C, J, K and P, Part A or C: line 275 of your return plus line 275 of your spouse's return"
+  QC.work:
+    label: Work income
+    formula: "max(0, line.TP1.101 - sum(RL1.box211)) + max(0, line.SE.net)"
+    source: "Work Chart 201, lines 1 to 8, and Schedule P, line 29: line 101 less box 211 of the RL-1, plus net business income (no losses)"
+  # Cases the TP-1 here doesn't handle: the return waits instead of guessing.
+  QC.scope:
+    label: Quebec return cases this app doesn't handle
+    formula: >-
+      if(not person.residentAllYear,
+      unsupported("A Quebec return for a year you moved to or from Canada isn't handled by this app yet"),
+      if(count(T4.box14) > count(RL1.boxA),
+      unsupported("A Quebec resident's employer in Quebec issues an RL-1 with each T4: upload it. Employment outside Quebec (a T4 without an RL-1, Schedule R Part B) isn't handled by this app yet"),
+      if(answer.hasRentalIncome, unsupported("Rental income on the Quebec return (form TP-128-V) isn't handled by this app yet"),
+      if(answer.hasForeignIncome, unsupported("Foreign income on the Quebec return (the foreign tax credit, Schedule E) isn't handled by this app yet"),
+      if(sum(T4AOAS.box21) > 0, unsupported("Net federal supplements on the Quebec return (lines 148 and 295) aren't handled by this app yet"),
+      if(answer.hasMovingExpenses, unsupported("Moving expenses on the Quebec return (form TP-348-V) aren't handled by this app yet"), 0))))))
+
+  # Page 2 – contributions (not added into income)
+  TP1.97:
+    label: QPIP premium
+    formula: "sum(RL1.boxH)"
+    source: "TP-1 line 97: box H of your RL-1 slips"
+  TP1.98:
+    label: QPP contribution
+    formula: "sum(RL1.boxB_A)"
+    source: "TP-1 line 98: box B.A of your RL-1 slips"
+  TP1.98_1:
+    label: Pensionable salary or wages (QPP)
+    formula: "sum(RL1.boxG)"
+    source: "TP-1 line 98.1: box G of your RL-1 slips"
+  TP1.98_2:
+    label: Additional contribution to the QPP
+    formula: "sum(RL1.boxB_B)"
+    source: "TP-1 line 98.2: box B.B of your RL-1 slips"
+
+  # Total income
+  TP1.101:
+    label: Employment income
+    formula: "sum(RL1.boxA)"
+    source: "TP-1 line 101: box A of your RL-1 slips"
+  TP1.110:
+    label: Parental insurance benefits
+    formula: "sum(RL6.boxA)"
+    source: "TP-1 line 110: box A of the RL-6 slip"
+  TP1.111:
+    label: Employment Insurance benefits
+    formula: "line.T1.11900"
+    source: "TP-1 line 111: the T4E slip (box 14)"
+  TP1.114:
+    label: Old Age Security pension
+    formula: "line.T1.11300"
+    source: "TP-1 line 114: the T4A(OAS) slip (box 18)"
+  TP1.119:
+    label: QPP or CPP benefits
+    formula: "if(count(RL2.boxC_QPP) > 0, sum(RL2.boxC_QPP), sum(T4AP.box20))"
+    source: "TP-1 line 119: box C of the RL-2 slip for QPP benefits; a CPP pension (Service Canada issues no RL-2) from box 20 of the T4A(P)"
+  TP1.122:
+    label: Payments from a pension plan, an RRSP or a RRIF, or annuities
+    formula: "sum(RL2.boxA) + sum(RL2.boxB)"
+    source: "TP-1 line 122: boxes A and B of the RL-2 slip"
+  TP1.123:
+    label: Retirement income transferred by your spouse
+    formula: "if(line.QC.couple == 1, spouse.line.TP1.245, 0)"
+    source: "TP-1 line 123 and Schedule Q, line 22: the amount your spouse transfers to you"
+  TP1.166:
+    label: Actual amount of eligible dividends
+    formula: "sum(RL3.boxA1) + sum(RL16.boxC1)"
+    source: "TP-1 line 166: box A1 of the RL-3 slip and box C1 of the RL-16 slip"
+  TP1.167:
+    label: Actual amount of ordinary dividends
+    formula: "sum(RL3.boxA2) + sum(RL16.boxC2)"
+    source: "TP-1 line 167: box A2 of the RL-3 slip and box C2 of the RL-16 slip"
+  TP1.128:
+    label: Taxable amount of dividends
+    formula: "sum(RL3.boxB) + sum(RL16.boxI)"
+    source: "TP-1 line 128: box B of the RL-3 slip and box I of the RL-16 slip"
+  TP1.130:
+    label: Interest and other investment income
+    formula: "sum(RL3.boxD) + sum(RL3.boxE) + sum(RL3.boxF) + sum(RL16.boxE) + sum(RL16.boxF) + sum(RL16.boxG)"
+    source: "TP-1 line 130: boxes D, E and F of the RL-3 slip; boxes E, F and G of the RL-16 slip"
+  QCG.gains:
+    label: Capital gains or losses
+    formula: "line.S3.13200 + line.S3.13800 + line.S3.15800 + sum(RL3.boxI) + sum(RL16.boxA)"
+    source: "Schedule G: shares and fund units sold (as on federal Schedule 3, line 13200), real estate and personal-use property (lines 13800 and 15800), capital gains dividends (RL-3 box I) and trust capital gains (RL-16 box A)"
+  TP1.139:
+    label: Taxable capital gains
+    formula: "max(0, round(line.QCG.gains * param.qcCapitalGainsInclusionRate, 2))"
+    source: "TP-1 line 139: Schedule G, line 108, at 50%. A net capital loss isn't entered here; it carries forward"
+  TP1.142:
+    label: Support payments received (taxable amount)
+    formula: "line.T1.12800"
+    source: "Work Chart 142: support received less the non-taxable child support, as on the federal return"
+  TP1.147:
+    label: Social assistance payments
+    formula: "sum(RL5.boxA) + sum(RL5.boxB)"
+    source: "TP-1 line 147: boxes A and B of the RL-5 slip"
+  TP1.154:
+    label: Other income
+    formula: "sum(RL2.boxC)"
+    source: "TP-1 line 154 and the RL-2 slip, box C: payments from a pension plan, an RRSP, a DPSP or an annuity other than QPP benefits"
+  TP1.164:
+    label: Net business income
+    formula: "line.SE.net"
+    source: "Schedule L, lines 22 to 27 and 34: the net income of your business, as on the federal return"
+  TP1.199:
+    label: Total income
+    formula: >-
+      line.TP1.101 + line.TP1.110 + line.TP1.111 + line.TP1.114 + line.TP1.119 + line.TP1.122 + line.TP1.123 + line.TP1.128
+      + line.TP1.130 + line.TP1.139 + line.TP1.142 + line.TP1.147 + line.TP1.154 + line.TP1.164 + line.QC.scope
+    source: "TP-1 line 199: lines 101 and 105 through 164"
+
+  # Net income
+  TP1.201:
+    label: Deduction for workers
+    formula: "min(param.qcWorkerDeductionMax, round(line.QC.work * param.qcWorkerDeductionRate, 2))"
+    source: "Work Chart 201: 6% of eligible work income, maximum $1,420"
+  TP1.205:
+    label: Registered pension plan (RPP) deduction
+    formula: "min(sum(RL1.boxD), line.T1.20700)"
+    source: "TP-1 line 205: box D of the RL-1 slip; guide, line 205: not more than the federal deduction (line 20700)"
+  TP1.207:
+    label: Employment expenses and deductions
+    formula: "line.T1.22900"
+    source: "TP-1 line 207 (code 07, form TP-59-V): the work-from-home expenses, as on federal line 22900"
+  TP1.214:
+    label: RRSP or PRPP/VRSP deduction
+    formula: "line.T1.20800"
+    source: "Guide, line 214: the amount deducted on federal line 20800"
+  TP1.215:
+    label: FHSA deduction
+    formula: "line.T1.20805"
+    source: "Guide, line 215: the amount deducted on federal line 20805"
+  TP1.225:
+    label: Support payments made (deductible amount)
+    formula: "line.T1.22000"
+    source: "Work Chart 225: support paid less the non-deductible child support, as on the federal return"
+  TP1.231:
+    label: Carrying charges and interest expenses
+    formula: "line.T1.22100"
+    source: "TP-1 line 231: the same carrying charges as on federal line 22100"
+  TP1.245:
+    label: Deduction for retirement income transferred to your spouse
+    formula: >-
+      if(line.QC.couple == 1 and person.age >= 65, min(line.T1.21000, round(line.QCQ.20 * 50%, 2)), 0)
+    source: "Schedule Q, line 22: up to 50% of line 20, for a person born before 1961. The app transfers what the federal T1032 splits (line 21000)"
+  TP1.248:
+    label: Deduction for QPP and CPP contributions and QPIP premiums
+    formula: >-
+      if((line.TP1.98 > 0 and (person.age <= 18 or person.age >= 73)) or (line.QCU.33 > 0 and person.age == 18),
+      unsupported("QPP in the year you turned 18 is prorated by month, and none is due before 18 or from the year you turn 73 (Schedule U): this app doesn't handle QPP contributions at those ages yet"),
+      if(line.QCU.33 > 0, line.QCU.124, line.QCU.23) + line.QCR.26)
+    source: "TP-1 line 248: Schedule U, Part B line 23 (employees) or Part C line 124 (self-employed), plus Schedule R line 26"
+  TP1.254:
+    label: Total deductions
+    formula: >-
+      line.TP1.201 + line.TP1.205 + line.TP1.207 + line.TP1.214 + line.TP1.215 + line.TP1.225 + line.TP1.231 + line.TP1.245
+      + line.TP1.248
+    source: "TP-1 line 254: lines 201 through 207, 214 through 231 and 234 through 252"
+  TP1.256:
+    label: Net income before adjustment
+    formula: "line.TP1.199 - line.TP1.254"
+    source: "TP-1 line 256: line 199 minus line 254"
+  TP1.275:
+    label: Net income
+    formula: "max(0, line.TP1.256)"
+    source: "TP-1 line 275: lines 256 and 260 (Schedule N isn't handled); 0 if negative"
+
+  # Taxable income
+  TP1.279:
+    label: Net income and adjustments
+    formula: "line.TP1.275"
+    source: "TP-1 line 279: lines 275 through 278 (276 and 278 aren't handled)"
+  TP1.289:
+    label: Non-capital losses from other years
+    formula: "line.T1.25200"
+    source: "TP-1 line 289: the non-capital losses carried forward, as entered for the federal return"
+  TP1.290:
+    label: Net capital losses from other years
+    formula: "min(answer.netCapitalLosses, line.TP1.139)"
+    source: "TP-1 line 290: up to the taxable capital gains of the year"
+  TP1.298:
+    label: Total deductions from net income
+    formula: "line.TP1.289 + line.TP1.290"
+    source: "TP-1 line 298: lines 287 through 297"
+  TP1.299:
+    label: Taxable income
+    formula: "max(0, line.TP1.279 - line.TP1.298)"
+    source: "TP-1 line 299: line 279 minus line 298; 0 if negative"
+
+  # Non-refundable tax credits
+  TP1.350:
+    label: Basic personal amount
+    formula: "param.qcBasicPersonalAmount"
+  TP1.361:
+    label: Age amount, amount for a person living alone and amount for retirement income
+    formula: 'if(line.QC.couple == 1 and person.role == "spouse", 0, line.QCB.32)'
+    source: "Schedule B, lines 32 to 34: the couple's amount, claimed here on the return of the person preparing (line 33 takes off what the spouse claims). Credits one spouse can't use go to the other on line 431"
+  TP1.367:
+    label: Amount transferred by a child 18 or over enrolled in post-secondary studies
+    formula: "answer.qcChildTransfer"
+    source: "Schedule A, Part B, line 29: the amounts on line 28, from lines 20.1 and 20.2 of the child's Schedule S"
+  TP1.376:
+    label: Amount for a severe and prolonged impairment
+    formula: "if(answer.hasDisability and person.age >= 18, param.qcImpairmentAmount, 0)"
+    source: "TP-1 line 376: $4,123 at 18 or older (the same certificate as the federal disability amount)"
+  TP1.377:
+    label: Total of the basic and other amounts
+    formula: "line.TP1.350 + line.TP1.361 + line.TP1.367 + line.TP1.376"
+    source: "TP-1 line 377: lines 359 through 376 (no adjustment on line 358)"
+  TP1.377_1:
+    label: Credits for the basic and other amounts
+    formula: "round(line.TP1.377 * param.qcCreditRate, 2)"
+    source: "TP-1 line 377.1: line 377 × 14%"
+  TP1.381:
+    label: Medical expenses
+    formula: "max(0, line.QCB.36 - line.QCB.39)"
+    source: "Schedule B, Part C, line 40: medical expenses less 3% of family income"
+  TP1.385:
+    label: Interest paid on a student loan
+    formula: "answer.studentLoanInterest"
+    source: "Schedule M, line 52: interest paid in 2025 (the same amount as on federal line 31900)"
+  TP1.388:
+    label: Medical expenses and student loan interest
+    formula: "line.TP1.381 + line.TP1.385"
+    source: "TP-1 line 388: lines 378 through 385"
+  TP1.389:
+    label: Credits for medical expenses and student loan interest
+    formula: "round(line.TP1.388 * param.qcSecondCreditRate, 2)"
+    source: "TP-1 line 389: line 388 × 20%"
+  QC.ownDonations:
+    label: Donations on this return's receipts and Quebec slips
+    formula: "answer.donations + sum(DONATION.box1) + sum(RL1.boxN) + sum(RL2.box210) + sum(RL8.boxC)"
+    source: "Official receipts (uploaded, or entered), box N of the RL-1, box 210 of the RL-2 and box C of the RL-8"
+  TP1.393:
+    label: Donations and gifts
+    formula: >-
+      if(household.partnerInYear and spouse.answer.claimSpouseDonations and line.HH.partner == 1, 0, line.QC.ownDonations)
+      + if(household.partnerInYear and answer.claimSpouseDonations and line.HH.partner == 1, spouse.line.QC.ownDonations, 0)
+    source: "Work Chart 395, line 1: monetary donations made in 2025. Whoever claims both spouses' donations on the federal return claims them here too"
+  TP1.395:
+    label: Tax credits for donations and gifts
+    formula: >-
+      round(min(line.TP1.393, param.qcDonationLowLimit) * param.qcDonationLowRate, 2)
+      + round(min(max(0, line.TP1.393 - param.qcDonationLowLimit), max(0, line.TP1.299 - param.qcDonationTopThreshold)) * param.qcDonationTopRate, 2)
+      + round(max(0, max(0, line.TP1.393 - param.qcDonationLowLimit) - max(0, line.TP1.299 - param.qcDonationTopThreshold)) * param.qcDonationHighRate, 2)
+    source: "Work Chart 395, lines 2 to 12: 20% of the first $200; 25.75% of the rest up to taxable income over $129,590; 24% of what remains"
+  TP1.397_1:
+    label: Union, professional or other dues
+    formula: "sum(RL1.boxF)"
+    source: "TP-1 line 397.1: box F of the RL-1 slip"
+  TP1.397:
+    label: Tax credit for union, professional or other dues
+    formula: "round(line.TP1.397_1 * param.qcDuesRate, 2)"
+    source: "TP-1 line 397: line 397.1 × 10%"
+  TP1.398:
+    label: Tax credit for tuition or examination fees
+    formula: "min(line.QCT.45, max(0, line.TP1.401 - line.TP1.377_1 - line.TP1.389 - line.TP1.395 - line.TP1.397))"
+    source: "Schedule T, line 46: the credit, claimed up to the tax the other credits leave (the rest is carried forward, line 48)"
+  TP1.398_1:
+    label: Tax credit for tuition or examination fees transferred by a child
+    formula: "answer.qcChildTuitionTransfer"
+    source: "Schedule A, Part D, line 70: line 68 of the child's Schedule T"
+  TP1.399:
+    label: Non-refundable tax credits
+    formula: "line.TP1.377_1 + line.TP1.389 + line.TP1.395 + line.TP1.397 + line.TP1.398 + line.TP1.398_1"
+    source: "TP-1 line 399: lines 377.1, 389 through 392, 395 through 397, 398 and 398.1"
+
+  # Income tax
+  TP1.401:
+    label: Income tax on taxable income
+    formula: "round(bracket(param.qcTaxBrackets, line.TP1.299), 2)"
+    source: "Work Chart 401"
+  TP1.406:
+    label: Non-refundable tax credits
+    formula: "line.TP1.399"
+  TP1.413:
+    label: Tax after non-refundable credits
+    formula: "line.TP1.401 - line.TP1.406"
+    source: "TP-1 line 413: line 401 minus line 406 (negative when the credits are more than the tax)"
+  TP1.414:
+    label: Tax credit for contributions to authorized Quebec political parties
+    formula: >-
+      round(min(answer.provincialPoliticalContributions, param.qcPoliticalFirst) * param.qcPoliticalFirstRate, 2)
+      + round(max(0, min(answer.provincialPoliticalContributions, param.qcPoliticalMax) - param.qcPoliticalFirst) * param.qcPoliticalRate, 2)
+    source: "Work Chart 414: 85% of the first $50 and 75% of the rest, of up to $200 of contributions (the credit is then at most $155)"
+  TP1.415:
+    label: Dividend tax credit
+    formula: "sum(RL3.boxC) + sum(RL16.boxJ)"
+    source: "TP-1 line 415: box C of the RL-3 slip and box J of the RL-16 slip"
+  TP1.425:
+    label: Political contribution and dividend credits
+    formula: "line.TP1.414 + line.TP1.415"
+    source: "TP-1 line 425: lines 414 through 424"
+  TP1.430:
+    label: Tax after credits
+    formula: "line.TP1.413 - line.TP1.425"
+    source: "TP-1 line 430: line 413 minus line 425; a negative amount can go to your spouse (line 431)"
+  TP1.431:
+    label: Credits transferred from one spouse to the other
+    formula: >-
+      if(line.QC.couple == 1, if(line.TP1.430 < 0, line.TP1.430,
+      if(spouse.line.TP1.430 < 0, min(line.TP1.430, -spouse.line.TP1.430), 0)), 0)
+    source: "Guide, line 431: a spouse with a negative line 430 carries it to line 431 (432 is then 0); the other spouse takes it off their tax, here as a positive amount, up to their line 430"
+  TP1.432:
+    label: Income tax
+    formula: "max(0, line.TP1.430 - line.TP1.431)"
+    source: "TP-1 line 432: line 430 minus line 431; 0 if negative"
+
+  # Income tax and contributions
+  TP1.439:
+    label: QPIP premium on income from self-employment
+    formula: "line.QCR.24"
+    source: "Schedule R, line 24"
+  TP1.441:
+    label: Advance payments of tax credits
+    formula: "sum(RL19.boxA) + sum(RL19.boxB) + sum(RL19.boxC) + sum(RL19.boxD) + sum(RL19.boxG) + sum(RL19.boxH)"
+    source: "TP-1 line 441: boxes A, B, C, D, G and H of the RL-19 slip"
+  TP1.445:
+    label: QPP contribution on income from self-employment
+    formula: "if(line.QCU.33 > 0, line.QCU.99, 0)"
+    source: "Schedule U, line 99"
+  TP1.446:
+    label: Contribution to the health services fund
+    formula: >-
+      if(line.QCF.70 <= param.hsfThreshold, 0, if(line.QCF.70 <= param.hsfSecondThreshold,
+      min(param.hsfFirstMax, round((line.QCF.70 - param.hsfThreshold) * param.hsfRate, 2)),
+      min(param.hsfMax, param.hsfFirstMax + round((line.QCF.70 - param.hsfSecondThreshold) * param.hsfRate, 2))))
+    source: "Schedule F, Part B: 1% of income over $18,130 (at most $150), or $150 plus 1% over $63,060 (at most $1,000)"
+  TP1.449:
+    label: Prescription drug insurance exemption code (box 449)
+    formula: >-
+      if(line.QCK.62 >= 12, 14, if(line.HH.partner == 0 and line.TP1.275 <= param.drugIncomeSingle, 32,
+      if(line.HH.partner == 1 and line.QC.family <= param.drugIncomeCouple, 34, 0)))
+    source: "Schedule K, situations 14 (a group plan all year), 32 (no spouse and line 275 of $19,890 or less) and 34 (family income of $32,240 or less); 0 when the premium is payable"
+  TP1.447:
+    label: Premium payable under the Quebec prescription drug insurance plan
+    formula: "if(line.TP1.449 > 0, 0, line.QCK.90)"
+    source: "Schedule K, line 98 (lines 91 to 97, paying your spouse's premium, aren't used: each spouse pays their own)"
+  TP1.450:
+    label: Income tax and contributions
+    formula: "line.TP1.432 + line.TP1.439 + line.TP1.441 + line.TP1.445 + line.TP1.446 + line.TP1.447"
+    source: "TP-1 line 450: lines 432 through 447"
+
+  # Refund or balance due
+  TP1.451:
+    label: Quebec income tax withheld at source
+    formula: "sum(RL1.boxE) + sum(RL2.boxJ) + sum(RL6.boxG)"
+    source: "Guide, line 451: box E of the RL-1, box J of the RL-2 and box G of the RL-6"
+  TP1.451_1:
+    label: Withholding transferred to your spouse with retirement income
+    formula: "line.QCQ.58"
+    source: "Schedule Q, line 58"
+  TP1.451_2:
+    label: Quebec income tax withheld, less the part transferred
+    formula: "line.TP1.451 - line.TP1.451_1"
+    source: "TP-1 line 451.2: line 451 minus line 451.1"
+  TP1.451_3:
+    label: Quebec income tax withholding transferred by your spouse
+    formula: "if(line.QC.couple == 1, spouse.line.TP1.451_1, 0)"
+    source: "TP-1 line 451.3: line 58 of your spouse's Schedule Q"
+  TP1.452:
+    label: QPP overpayment
+    formula: >-
+      if(line.QCU.33 > 0, max(0, line.TP1.98 + line.TP1.98_2 - param.qppMaxEmployeeTotal),
+      max(0, line.TP1.98 - round(line.QCU.14_4 * param.qppEmployeeRate, 2)) + max(0, line.TP1.98_2 - line.QCU.21))
+    source: "Guide, line 452: the contributions deducted (lines 98 and 98.2) less those required on the pensionable salary (Schedule U lines 17.2 and 21); with self-employment, the part over $4,735.20"
+  TP1.453:
+    label: Income tax paid in instalments
+    formula: "answer.qcInstalmentsPaid"
+  TP1.455:
+    label: Tax credit for childcare expenses
+    formula: "if(line.QCC.claims == 1, line.QCC.94, 0)"
+    source: "Schedule C, line 98: the couple's credit, claimed here on the return of the spouse who paid more of the expenses (line 96 is then the other's 0)"
+  TP1.456:
+    label: Tax credits respecting the work premium
+    formula: "line.QCP.90"
+    source: "Schedule P, line 90"
+  TP1.457:
+    label: QPIP overpayment
+    formula: >-
+      if(line.QCR.14 + line.QCR.12 < param.qpipMinimum, line.TP1.97,
+      max(0, line.TP1.97 - min(param.qpipMaxEmployee, round(min(line.QCR.14, param.qpipMaxInsurable) * param.qpipEmployeeRate, 2))))
+    source: "Guide, line 457: the premiums deducted (line 97) less 0.494% of the insurable salary up to $98,000; all of line 97 when employment and business income are less than $2,000"
+  TP1.458:
+    label: Tax credit for home-support services for seniors
+    formula: "line.QCJ.90"
+    source: "Schedule J, line 90"
+  TP1.462:
+    label: Other credits
+    formula: "line.QCB.50 + line.QC.childActivities"
+    source: "TP-1 line 462: point 1, the refundable tax credit for medical expenses (Schedule B, Part D), and point 25, the tax credit for children's activities"
+  TP1.463:
+    label: Senior assistance tax credit
+    formula: "line.QC.seniorAssistance"
+    source: "Guide, line 463"
+  TP1.465:
+    label: Income tax paid and other credits
+    formula: >-
+      line.TP1.451_2 + line.TP1.451_3 + line.TP1.452 + line.TP1.453 + line.TP1.455 + line.TP1.456 + line.TP1.457 + line.TP1.458
+      + line.TP1.462 + line.TP1.463
+    source: "TP-1 line 465: lines 451.2 through 463"
+  TP1.468:
+    label: Total payments and credits
+    formula: "line.TP1.465"
+    source: "TP-1 line 468: lines 465 and 466 (line 466 isn't handled)"
+  TP1.470:
+    label: Income tax and contributions less payments and credits
+    formula: "line.TP1.450 - line.TP1.468 + line.QCD.check"
+    source: "TP-1 line 470: line 450 minus line 468"
+  TP1.474:
+    label: Refund
+    formula: "max(0, -line.TP1.470)"
+    source: "TP-1 line 474: line 470 if negative"
+  TP1.475:
+    label: Balance due
+    formula: "max(0, line.TP1.470)"
+    source: "TP-1 line 475: line 470 if positive"
+  TP1.478:
+    label: Quebec refund
+    formula: 'if(person.province == "QC", if(line.TP1.474 < param.qcRefundMinimum, 0, line.TP1.474), 0)'
+    source: "TP-1 line 478: line 474 (no refund is transferred to your spouse here, line 476). Only a Quebec resident files a TP-1"
+  TP1.479:
+    label: Quebec balance due
+    formula: 'if(person.province == "QC", if(line.TP1.475 < param.qcRefundMinimum, 0, line.TP1.475), 0)'
+    source: "TP-1 line 479: line 475 (no amount is transferred by your spouse here, line 477). Only a Quebec resident files a TP-1"

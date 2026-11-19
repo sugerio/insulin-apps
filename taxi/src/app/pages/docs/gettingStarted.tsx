@@ -23,8 +23,8 @@ export const gettingStarted: DocTopic = {
           </p>
           <p>
             <b>Who it is for:</b> residents of Ontario, British Columbia and Alberta who lived in Canada all year, with income from work,
-            pensions, EI, investments, self-employment (a business, a profession, farming or fishing), rent or abroad. It doesn't handle
-            Quebec returns or pension income splitting yet.
+            pensions, EI, investments, self-employment (a business, a profession, farming or fishing), rent or abroad. For a Quebec resident it
+            also works out the Quebec return (TP-1) from the RL slips; printing it on Revenu Québec's forms comes later.
           </p>
         </>
       ),

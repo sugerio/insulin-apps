@@ -244,6 +244,47 @@ test('the page talks to its own origin only, and tells the exchange how it is fr
  } finally {globalThis.fetch=oldFetch;(globalThis as any).window=oldWindow;delete (globalThis as any).IS_REACT_ACT_ENVIRONMENT;}
 });
 
+test('the address keeps the link\'s host and drops the code, so a reload in the host\'s frame is still framed there and says it has no code',async()=>{
+ const {default:Renderer,act}=await import('react-test-renderer');
+ const {pageHeaders}=await import('../src/app/server/page-policy.ts');
+ (globalThis as any).IS_REACT_ACT_ENVIRONMENT=true;
+ const oldFetch=globalThis.fetch,oldWindow=(globalThis as any).window;
+ const origin='https://esign.example.test',host='https://host.example.test',kept=`/sign?host=${encodeURIComponent(host)}`;
+ /** Opens the page at an address; answers the addresses it replaced its own with, the requests it made and its text. */
+ const open=async(search:string,hash:string)=>{
+  const replaced:string[]=[],urls:string[]=[];
+  (globalThis as any).window={location:{origin,pathname:'/sign',search,hash,ancestorOrigins:[host]},history:{replaceState(_data:unknown,_unused:string,url:string){replaced.push(url);}},document:{referrer:''},parent:{}};
+  globalThis.fetch=async(input:any)=>{urls.push(String(input));return Response.json({error:'invalid_code'},{status:401});};
+  let renderer:any;await act(async()=>{renderer=Renderer.create(React.createElement(page.RecipientPage));});await settle(act);
+  const text=visibleText(renderer.toJSON());await act(async()=>renderer.unmount());
+  return {replaced,urls,text};
+ };
+ try {
+  // The host's link (recipient-view's url): the code is taken, the host kept, nothing else.
+  for(const [search,hash,address] of [
+   [`?host=${encodeURIComponent(host)}`,'#code=test-code',kept],
+   [`?host=${host}`,'#code=test-code',kept],
+   [`?host=${encodeURIComponent(host)}&other=1`,'#code=test-code&other=2',kept],
+   // A link that names no host (an emailed invitation, or a page opened on its own) keeps its bare path, as before.
+   ['','#code=test-code','/sign'],
+   ['','#invite=test-invite','/sign'],
+  ] as const){
+   const opened=await open(search,hash);
+   assert.deepEqual(opened.replaced,[address],`${search}${hash}`);
+   assert.ok(!opened.replaced[0]!.includes('#')&&!opened.replaced[0]!.includes('test-code')&&!opened.replaced[0]!.includes('test-invite'),'no code in the address');
+  }
+  // Reloaded, the page is asked for at that address: its frame-ancestors names the host again (page-headers.ts reads
+  // ?host= from the request), and with no fragment the page says it has no code and asks for nothing.
+  const reload=new URL(kept,origin);
+  const headers=(await pageHeaders(reload.pathname,'text/html; charset=utf-8',{signingHost:reload.searchParams.get('host'),viaGateway:true,editorParent:async()=>null}))!;
+  assert.ok(headers['Content-Security-Policy']!.split('; ').includes(`frame-ancestors 'self' ${host}`),headers['Content-Security-Policy']);
+  const reloaded=await open(reload.search,'');
+  assert.match(reloaded.text,/No recipient code provided\./);
+  assert.deepEqual(reloaded.urls,[]);
+  assert.deepEqual(reloaded.replaced,[kept],'a reload keeps the host too');
+ } finally {globalThis.fetch=oldFetch;(globalThis as any).window=oldWindow;delete (globalThis as any).IS_REACT_ACT_ENVIRONMENT;}
+});
+
 test('after signing, the page says the signature is recorded: the app processes it itself',async()=>{
  const {default:Renderer,act}=await import('react-test-renderer');
  (globalThis as any).IS_REACT_ACT_ENVIRONMENT=true;

@@ -502,8 +502,9 @@ reads from `nitro.config.ts` (`src/app/server/page-headers.ts`, policy in `page-
 each page its Content-Security-Policy: scripts, styles, workers and requests only from this origin,
 no `eval`, `object-src 'none'`, `base-uri 'none'`. Behind insulinapps.com's gateway (the request
 has `x-suger-access-via`) it adds who may frame the page: the signing page this origin and the one
-its link names in `?host=` (at most one, an origin only), the editor this origin and its session's
-parent, the signed-copy page and
+its link names in `?host=` (at most one, an origin only; the page keeps `?host=` in its address when
+it takes the code out, so reloaded in the host's frame it is framed as before and says it has no code),
+the editor this origin and its session's parent, the signed-copy page and
 the members' pages nobody, so another page can't frame them and trick a signed-in member into
 sending or voiding. The Insulin console frames its own preview, so there it leaves framing to the
 console. The signing, editor and copy pages also get `Cache-Control: no-store` and

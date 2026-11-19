@@ -21,6 +21,16 @@ export function embedding(win: { parent: unknown; location: { ancestorOrigins?: 
   if (ancestors?.length) { const embedders = Array.from({ length: Math.min(ancestors.length, 11) }, (_, i) => ancestors[i] ?? ''); return { embedded, embedder: embedders[0] ?? '', embedders }; }
   try { return { embedded, embedder: referrer ? new URL(referrer).origin : '' }; } catch { return { embedded, embedder: '' }; }
 }
+/**
+ * The signing page's address once it has read its link: the path and the link's `host`, without the fragment (the code
+ * or invitation, kept out of the address, the history and a reload). The page's frame-ancestors comes from that `host`
+ * (page-policy.ts), so a reload in the host's frame is still allowed there and says itself that it has no code. Nothing
+ * else in the query is kept.
+ */
+export function addressWithoutCode(location: { pathname: string; search?: string }): string {
+  const host = new URLSearchParams(location.search ?? '').get('host');
+  return host === null ? location.pathname : `${location.pathname}?host=${encodeURIComponent(host)}`;
+}
 class RequestFailed extends Error {readonly status:number;readonly code:string;readonly detail:Record<string,unknown>;constructor(status:number,code='',detail:Record<string,unknown>={}){super('Request failed');this.status=status;this.code=code;this.detail=detail;}}
 
 type SignatureField = {id:string;type:'Signature'|'Title'|'Date signed';page:number;required:boolean;rect:{x:number;y:number;width:number;height:number}};
@@ -103,6 +113,11 @@ export function codeProblem(status:number,code:string,detail:Record<string,unkno
   if(code==='invalid_session'||(status===401&&when==='send'))return {text:'This signing session has ended. Close and open the signing page again.',clear:false,retryAfterMs:0};
   return when==='send'?{text:'Could not send a code. Wait a minute, then ask for a new code.',clear:false,retryAfterMs:0}:{text:'Code verification unavailable. Retry the same code.',clear:false,retryAfterMs:0};
 }
+/**
+ * A code box: 44 by 48 px where there is room, narrower on a phone as its row shrinks with the card (esign-theme.css).
+ * Set here, since the Input's own utilities (h-9, w-full, px-3, text-base) win over the theme's layer.
+ */
+const CODE_BOX='h-12 w-11 px-0 text-center text-xl md:text-xl font-semibold tabular-nums';
 /** Six boxes, one digit each; typing moves on, Backspace moves back, a paste fills them all. */
 function CodeBoxes({value,onChange,disabled,onEnter,focusSignal}:{value:string;onChange:(code:string)=>void;disabled:boolean;onEnter:()=>void;focusSignal:number}){
   const boxes=useRef<(HTMLInputElement|null)[]>([]);
@@ -111,7 +126,7 @@ function CodeBoxes({value,onChange,disabled,onEnter,focusSignal}:{value:string;o
   // biome-ignore lint/correctness/useExhaustiveDependencies: focuses on the signal only
   useEffect(()=>{if(focusSignal&&!disabled)focus(value.length);},[focusSignal,disabled]);
   return h('div',{className:'esign-code-boxes',role:'group','aria-label':'Verification code'},...Array.from({length:CODE_LENGTH},(_,i)=>h(Input,{
-    key:i,ref:(el:HTMLInputElement|null)=>{boxes.current[i]=el;},'aria-label':`Digit ${i+1} of ${CODE_LENGTH}`,value:value[i]??'',disabled,
+    key:i,ref:(el:HTMLInputElement|null)=>{boxes.current[i]=el;},className:CODE_BOX,'aria-label':`Digit ${i+1} of ${CODE_LENGTH}`,value:value[i]??'',disabled,
     inputMode:'numeric',autoComplete:i===0?'one-time-code':'off',
     onFocus:(e:React.FocusEvent<HTMLInputElement>)=>{if(i>value.length){focus(value.length);return;}e.target.select();},
     onChange:(e:React.ChangeEvent<HTMLInputElement>)=>{const next=nextCode(value,i,e.target.value);onChange(next);if(next.length>value.length)focus(next.length);},
@@ -183,7 +198,7 @@ export function RecipientPage({renderDocument=defaultRender}:{renderDocument?:Re
     // A host's link carries a one-time code (#code=); an invitation Esign emailed carries the
     // invitation's token (#invite=), which this page exchanges for such a code first.
     const params=new URLSearchParams(window.location.hash.slice(1));const given=params.get('code'),invite=params.get('invite');
-    window.history.replaceState(null,'',window.location.pathname);
+    window.history.replaceState(null,'',addressWithoutCode(window.location));
     // The API is this page's own origin (the app). The host told when the signer closes, signs or
     // declines is the origin the code was issued for, which the exchange returns when it frames this page.
     api.current=window.location.origin;

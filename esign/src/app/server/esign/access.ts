@@ -33,34 +33,19 @@ export function validAccessOrigin(origin: string): boolean {
 }
 
 /**
- * An origin the deployment may list for the editor (the app's own and ESIGN_FRAME_ANCESTORS, kept
- * in `app_settings.editor_origins`): a valid access origin spelled only with lowercase host
- * characters, digits, dots, hyphens, an optional bracketed IPv6 literal and an optional port. It
- * therefore holds no quote, backslash, semicolon or space and is safe in SQL and in JSON. Checked
- * wherever the list is written and on every origin an editing session is started for.
+ * An origin a host may name as the page that frames the editor or the signing page: a valid access origin spelled
+ * only with lowercase host characters, digits, dots, hyphens, an optional bracketed IPv6 literal and an optional
+ * port. It therefore holds no quote, backslash, semicolon or space and is safe in SQL, in JSON and in a
+ * Content-Security-Policy. The host names it each time it starts an editing session or asks for a signing code,
+ * and the code is bound to it: there is no list of allowed origins.
  */
 export function validEditorOrigin(origin: string): boolean {
   return /^https?:\/\/(?:[a-z0-9.-]+|\[[0-9a-f:.]+\])(?::[0-9]{1,5})?$/.test(origin) && validAccessOrigin(origin);
 }
 
-/**
- * SQL: `origin` is one of the editor origins the deployment allows, both SQL expressions of the
- * caller's statement (`tenant` is the session's organization; every organization gets the same
- * list). The list is the JSON array `app_settings.editor_origins`; only its string elements are
- * compared, by exact equality. It is read inside the caller's statement, so an origin dropped from
- * ESIGN_FRAME_ANCESTORS stops working at the next editor request, once `syncEditorOrigins` ran.
- */
-export const editorOriginAllowed = (tenant: string, origin: string): string =>
-  `(${tenant} IS NOT NULL AND EXISTS (SELECT 1 FROM app_settings eos, json_each(eos.value) eoo WHERE eos.name='editor_origins' AND eoo.type='text' AND eoo.value=${origin}))`;
-
-/**
- * Records the editor origins the deployment allows (`origins`: the app's own and ESIGN_FRAME_ANCESTORS) where
- * the editor's SQL reads them. Writes only when the list changed. Invalid origins are dropped.
- */
-export async function syncEditorOrigins(db: D1Database, origins: readonly string[]): Promise<void> {
-  const value = JSON.stringify(origins.filter(validEditorOrigin));
-  await db.prepare(`INSERT INTO app_settings (name, value) VALUES ('editor_origins', ?)
-    ON CONFLICT (name) DO UPDATE SET value = excluded.value WHERE app_settings.value IS NOT excluded.value`).bind(value).run();
+/** An origin a host may name to frame a page here: `validEditorOrigin`, and https only in prod. */
+export function validParentOrigin(origin: string, prod: boolean): boolean {
+  return validEditorOrigin(origin) && (!prod || origin.startsWith('https://'));
 }
 
 function assertScope(scope: AccessScope): void {
@@ -70,13 +55,13 @@ function assertScope(scope: AccessScope): void {
 /**
  * SQL: the subject of access row `a` still exists and may be accessed, per scope. A recipient's
  * task is ACTIVE in an IN_PROGRESS envelope of the row's tenant. An editor session belongs to the
- * row's tenant and its parent origin, the row's origin, is still an editor origin the deployment allows.
+ * row's tenant and its parent origin is the row's origin.
  */
 function subjectOpen(scope: AccessScope, a: string): string {
   if (scope === 'recipient') return `EXISTS (SELECT 1 FROM tasks at JOIN envelopes ae ON ae.id=at.envelope_id
     WHERE at.id=${a}.subject_id AND ae.tenant_id=${a}.tenant_id AND ae.status='IN_PROGRESS' AND at.status='ACTIVE')`;
   return `EXISTS (SELECT 1 FROM editor_sessions ax
-    WHERE ax.id=${a}.subject_id AND ax.tenant_id=${a}.tenant_id AND ax.parent_origin=${a}.origin AND ${editorOriginAllowed('ax.tenant_id', 'ax.parent_origin')})`;
+    WHERE ax.id=${a}.subject_id AND ax.tenant_id=${a}.tenant_id AND ax.parent_origin=${a}.origin)`;
 }
 
 /**

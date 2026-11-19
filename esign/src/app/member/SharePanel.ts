@@ -19,23 +19,31 @@ const ACCESS: Record<'' | 'viewer' | 'editor', string> = { '': 'Only the people 
 
 /**
  * An email field that suggests the organization's people who can use Esign (server directory.ts), by name or email:
- * arrow keys move through them, Enter or a click chooses one, Escape or leaving the field closes them (as ContactField).
+ * arrow keys move through them, Enter or a click chooses one, Escape or leaving the field closes them and drops an answer
+ * still on its way, so they open only while the field has the focus (as ContactField).
  */
 export function MemberEmailField({ id, label, value, onChange }: { id: string; label: string; value: string; onChange: (value: string) => void }) {
   const [found, setFound] = useState<Member[]>([])
   const [active, setActive] = useState(-1)
   const latest = useRef(0)
+  const input = useRef<HTMLInputElement | null>(null)
   const listId = `${id}-suggestions`
+  /** Whether the field still has the focus (where the page has a document to ask). */
+  const focused = () => { const el = input.current; return !el?.ownerDocument || el.ownerDocument.activeElement === el }
+  /** Closes the suggestions and drops an answer still on its way. */
+  function close() { latest.current++; setFound([]); setActive(-1) }
   function typed(text: string) {
     onChange(text)
     const ask = ++latest.current
     if (text.trim().length < 2) { setFound([]); return }
     apiJson<{ members: Member[] }>(`/api/members?limit=6&q=${encodeURIComponent(text.trim())}`)
-      .then((data) => { if (ask === latest.current) { setFound(data.members.filter((m) => m.email.toLowerCase() !== text.trim().toLowerCase())); setActive(-1) } })
+      .then((data) => { if (ask === latest.current && focused()) { setFound(data.members.filter((m) => m.email.toLowerCase() !== text.trim().toLowerCase())); setActive(-1) } })
       .catch(() => { if (ask === latest.current) setFound([]) })
   }
   function choose(member: Member) { latest.current++; setFound([]); setActive(-1); onChange(member.email) }
   function keyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    // Escape with nothing shown yet only drops the answer on its way, and is left to the page.
+    if (e.key === 'Escape' && !found.length) { latest.current++; return }
     if (!found.length) return
     if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
       e.preventDefault()
@@ -45,16 +53,16 @@ export function MemberEmailField({ id, label, value, onChange }: { id: string; l
       choose(found[active]!)
     } else if (e.key === 'Escape') {
       e.preventDefault()
-      setFound([]); setActive(-1)
+      close()
     }
   }
   return h(Field, { label, htmlFor: id },
     h('div', { className: 'relative' },
       h(Input, {
-        id, type: 'email', value, autoComplete: 'off',
+        id, ref: input, type: 'email', value, autoComplete: 'off',
         role: 'combobox', 'aria-autocomplete': 'list', 'aria-expanded': found.length > 0, 'aria-controls': listId,
         ...(found.length && active >= 0 ? { 'aria-activedescendant': `${listId}-${active}` } : {}),
-        onChange: (e: React.ChangeEvent<HTMLInputElement>) => typed(e.target.value), onKeyDown: keyDown, onBlur: () => setFound([]),
+        onChange: (e: React.ChangeEvent<HTMLInputElement>) => typed(e.target.value), onKeyDown: keyDown, onBlur: close,
       }),
       found.length ? h('ul', { id: listId, role: 'listbox', 'aria-label': 'Members', className: 'absolute z-20 mt-1 w-full rounded-md border bg-popover p-1 text-popover-foreground shadow-md' },
         ...found.map((member, i) => h('li', {

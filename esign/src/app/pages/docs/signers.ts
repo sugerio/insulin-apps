@@ -54,7 +54,7 @@ export const signers: DocTopic = {
       id: 'in-a-host-product',
       title: 'In a host product',
       body: [
-        p('When the signing page is shown inside a host product, it tells the host when the signer has signed, declined or cancelled, so the host can move on. It works only inside the origins the deployment allows, and for the origin its link was made for.'),
+        p('When the signing page is shown inside a host product, it tells the host when the signer has signed, declined or cancelled, so the host can move on. It works only inside the page its link was made for.'),
       ],
     },
   ],

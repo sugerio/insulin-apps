@@ -2,7 +2,7 @@
 // this middleware (registered in nitro.config.ts) gives each page the headers its audience needs. The policy itself is
 // in page-policy.ts, which the tests import directly.
 import { onResponse } from 'nitro/h3'
-import { openAppD1, readAppEnv } from '#platform'
+import { openAppD1 } from '#platform'
 import { pageHeaders } from './page-policy.ts'
 
 export default onResponse(async (response, event) => {
@@ -12,7 +12,7 @@ export default onResponse(async (response, event) => {
     return new Response('Not found', { status: 404, headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' } })
   }
   const headers = await pageHeaders(event.url.pathname, response.headers.get('content-type'), {
-    frameAncestors: readAppEnv('ESIGN_FRAME_ANCESTORS') ?? '',
+    signingHost: event.url.searchParams.get('host'),
     viaGateway: event.req.headers.get('x-suger-access-via') !== null,
     editorParent: async (pageId) => {
       try {

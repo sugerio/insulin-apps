@@ -177,6 +177,30 @@ test('Who sees it: a document an API client owns shows the people its settings n
   } finally { await app.unmount(); }
 });
 
+test('the members suggested for an email open only while the field has the focus: an answer after the focus moved on, or after Escape, leaves them closed', async () => {
+  // The members answer when the test says, as a slow network would.
+  const waiting: ((response: Response) => void)[] = [];
+  const app = await renderMember('/client-settings/sa-1', (c) => {
+    if (c.path === '/api/me') return json(me('ADMIN', ['esign.manage', 'esign.view'], { orgRole: 'ADMIN' }));
+    if (c.path === '/api/client-settings/sa-1') return json({ id: 'sa-1', name: 'Host product', people: [] });
+    if (c.path.startsWith('/api/members?')) return new Promise<Response>((resolve) => waiting.push(resolve)) as unknown as Response;
+  });
+  const answer = async () => { for (const resolve of waiting.splice(0)) resolve(json({ members: [{ id: 'u2', email: 'bo@example.com', name: 'Bo Example' }] })); await app.settle(); };
+  const field = () => app.byId('client-person-email');
+  try {
+    await app.type(field(), 'bo'); await answer();
+    assert.equal(field().props['aria-expanded'], true, 'open while typing');
+    await app.type(field(), 'bo@');
+    await app.act(async () => { field().props.onBlur(); });
+    await answer();
+    assert.equal(field().props['aria-expanded'], false, 'an answer after the focus moved on leaves it closed');
+    await app.type(field(), 'bo@e');
+    await app.keyDown(field(), 'Escape');
+    await answer();
+    assert.equal(field().props['aria-expanded'], false, 'an answer after Escape leaves it closed');
+  } finally { await app.unmount(); }
+});
+
 test("an API client's page, reached from API access: owners and admins choose who sees what it creates, and save", async () => {
   let people: { email: string; name?: string }[] = [{ email: 'sam@example.com', name: 'Sam Example' }];
   const app = await renderMember('/client-settings/sa-1?name=Host%20product', (c) => {

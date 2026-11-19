@@ -32,7 +32,7 @@ export function SaveAsTemplateDialog({ open, envelopeId, documentName, signers, 
   function save() {
     const names = roles.map((r) => r.trim())
     if (!name.trim()) { setMessage({ text: 'Name the template.', error: true }); return }
-    if (names.some((r) => !ROLE.test(r))) { setMessage({ text: 'Use letters, digits, - and _ in role names (no spaces).', error: true }); return }
+    if (names.some((r) => !ROLE.test(r))) { setMessage({ text: 'Use English letters, digits, hyphens (-) and underscores (_) in role names, with no spaces.', error: true }); return }
     if (new Set(names.map((r) => r.toLowerCase())).size !== names.length) { setMessage({ text: 'Give each role a different name.', error: true }); return }
     setBusy(true); setMessage({ text: '', error: false })
     saveAsTemplate(envelopeId, { name: name.trim(), roles: names, defaultSigners: keepSigners })

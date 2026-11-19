@@ -34,7 +34,6 @@ async function bindings(request: Request): Promise<Bindings> {
     APP_ORIGIN: new URL(request.url).origin,
     OTP_KEY: secret('ESIGN_OTP_KEY') ?? (dev ? PREVIEW_OTP_KEY : undefined),
     TEST_SEAL_KEY: dev ? PREVIEW_SEAL_KEY : undefined,
-    SIGNING_PAGE_FRAME_ANCESTORS: secret('ESIGN_FRAME_ANCESTORS'),
     // The managed seal: the Worker's seal key binding, never in the local preview, and the keys
     // this code trusts (seal/keys.ts), never the deployment's configuration.
     SEAL_KEY: dev ? undefined : sealKeyOf(request),

@@ -165,7 +165,7 @@ test('templates: the roles and default signers are checked before the editor ope
   await app.type(app.byId('template-name'),'Mutual NDA');
   await app.type(app.byLabel('Role 1'),'partner seller');
   await app.click(app.button('Upload and place fields'),'Place fields');
-  assert.match(app.text(),/Use letters, digits, - and _ in role names/);
+  assert.match(app.text(),/Use English letters, digits, hyphens \(-\) and underscores \(_\) in role names/);
   await app.type(app.byLabel('Role 1'),'partner');
   await app.click(app.button('Add a role'),'Add a role');
   await app.type(app.byLabel('Role 2'),'seller');

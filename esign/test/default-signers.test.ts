@@ -7,7 +7,6 @@ import { readFile, readdir } from 'node:fs/promises';
 import { Miniflare } from 'miniflare';
 import { PDFDocument } from 'pdf-lib';
 import { blobStore, MIGRATIONS_DIR, splitSql } from './helpers/platform.ts';
-import { setEditorOrigins } from './helpers/editor-origins.ts';
 import app from './helpers/gateway.ts';
 import { parseDefaultSigners, storedDefaultSigners } from '../src/app/server/esign/default-signers.ts';
 
@@ -23,7 +22,6 @@ async function setup() {
   await db.prepare("INSERT INTO tenants(id) VALUES ('tenant'),('other')").run();
   const hash = async (key: string) => Buffer.from(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(key))).toString('hex');
   await db.prepare("INSERT INTO api_keys(key_hash,tenant_id) VALUES (?,'tenant'),(?,'other')").bind(await hash(KEY), await hash(OTHER)).run();
-  await setEditorOrigins(db, 'tenant', [HOST]);
   const env = { DB: db, ARTIFACTS: await blobStore(mf, 'artifacts'), ASSETS: { fetch: async () => new Response('<html>editor</html>', { headers: { 'content-type': 'text/html' } }) } };
   const as = (key: string) => ({ authorization: `Bearer ${key}` });
   const req = (path: string, init: RequestInit = {}) => app.fetch(new Request(ORIGIN + path, init), env);

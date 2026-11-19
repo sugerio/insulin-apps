@@ -319,7 +319,6 @@ async function main() {
       esign: {
         ESIGN_OTP_KEY,
         ESIGN_SEAL_KEY,
-        ESIGN_FRAME_ANCESTORS: host('esign'),
       },
     },
   })

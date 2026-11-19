@@ -24,7 +24,7 @@ INSERT INTO envelopes (id,tenant_id,template_id,status,created_at,request_sha256
 INSERT INTO tasks (id,envelope_id,role,recipient_name,recipient_email,routing_order,status) VALUES ('ana','env','ana','Ana','ana@example.com',1,'ACTIVE');
 INSERT INTO tasks (id,envelope_id,role,recipient_name,recipient_email,routing_order,status) VALUES ('marcus','env','marcus','Marcus','marcus@example.com',2,'PENDING');
 `);
-    await db.prepare("INSERT INTO artifacts VALUES ('d0','env','d0.pdf',?)").bind(h0).run();await bucket.put('d0.pdf',d0);
+    await db.prepare("INSERT INTO artifacts (id, envelope_id, object_key, sha256) VALUES ('d0','env','d0.pdf',?)").bind(h0).run();await bucket.put('d0.pdf',d0);
     const origin='https://host.example.com', pepper=new TextEncoder().encode('local-test-pepper-at-least-32-bytes');
     async function signer(taskId:string, inputId:string, inputHash:string, now:number) {
       const code=await issueRecipientCode(db,{tenantId:'a',envelopeId:'env',taskId,origin,now});

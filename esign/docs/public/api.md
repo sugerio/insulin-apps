@@ -58,14 +58,14 @@ that are shared with them (see [Owners, sharing and tags](#owners-sharing-and-ta
 | --- | --- | --- |
 | `GET /api/templates` | View | The templates you own or that are shared with you, newest first: `{templates: [{id, name?, metadata, defaultSigners, roles, fields, createdAt, owner, myRole, tags}], next?}`. Filters: `q` (the name contains it, or it is the template's id), `since` (uploaded at or after, epoch ms), `status` (`active`, the default: ready to use; `draft`; or `all`), `scope` and `tag`; `next` is the `cursor` of the following page. Each has its `status`. |
 | `POST /api/templates` (JSON) | Manage | Save as template: `{fromEnvelope, name?, roles?, defaultSigners?, tags?, share?}` makes a template of an envelope you see that was sent with a document uploaded with it (not a draft, no template): its PDF and fields, `roles` renaming its roles in their order (its own by default), its document name unless `name`, and with `defaultSigners: true` its signers as default signers. You own it; it is ready. Answers `201 {id, name?, roles, defaultSigners, tags}`; an envelope of another kind answers `409 not_an_uploaded_envelope`. |
-| `POST /api/templates` | Manage | Upload a PDF (at most 5 MiB and 100 pages) as multipart form fields `file` and `roles` (a JSON array of 1 to 20 distinct role names, in signing order), and optionally `name`, `metadata` (a JSON object; see [Names and metadata](#names-and-metadata)), `defaultSigners` (a JSON object; see [Default signers](#default-signers)), `tags` and `share` (JSON arrays; see [Owners, sharing and tags](#owners-sharing-and-tags)). You own it. Answers `201 {id, name?, metadata, roles, defaultSigners, tags}`. Signed on an added signature page. |
+| `POST /api/templates` | Manage | Upload a PDF (at most 5 MiB and 100 pages; prepared for signing as [Uploaded PDFs](#uploaded-pdfs) says) as multipart form fields `file` and `roles` (a JSON array of 1 to 20 distinct role names, in signing order), and optionally `name`, `metadata` (a JSON object; see [Names and metadata](#names-and-metadata)), `defaultSigners` (a JSON object; see [Default signers](#default-signers)), `tags` and `share` (JSON arrays; see [Owners, sharing and tags](#owners-sharing-and-tags)). You own it. Answers `201 {id, name?, metadata, roles, defaultSigners, tags, changes}`. Signed on an added signature page. A PDF Esign can't prepare for placed fields is kept as uploaded (`changes` null), as it is signed on that page; one it can't read is `422 invalid_pdf` with its `reason`. |
 | `GET /api/templates/{id}` | Viewer | A template's name, metadata and default signers, its roles and placed fields (type, role, page, box, `required`; a pre-filled field's type is `Prefill`, its role empty, with its `name` and `label`), its pre-filled fields once per name (`prefill: [{name, label, required, default?}]`), whether they can be signed, `createdAt`, `status` (`active`, or `draft`: saved from the field editor before it is ready, and not usable to send), its owner, your role and your tags, and `archivedAt` when it was deleted or replaced by a new version. Lists show the templates that aren't archived only. |
-| `GET /api/templates/{id}/pdf` | Viewer | Its PDF as uploaded (`application/pdf`), to show it. |
+| `GET /api/templates/{id}/pdf` | Viewer | Its PDF as stored, prepared for signing when it was uploaded (`application/pdf`), to show it. |
 | `POST /api/templates/{id}` | Editor | Rename it: `{name}` (`null` clears it). Answers `{id, name?}`. Envelopes already sent keep their document name. |
 | `POST /api/templates/{id}/delete` | Admin | Delete it: it is archived, which takes it off every list, Esign's pages included. Everything by its id works as before (`GET` says `archivedAt`), so a host that keeps the id is unaffected, and envelopes sent from it are signed as before. Answers `{id, deleted: true}`. |
 | `POST /api/templates/{id}/default-signers` | Editor | Replace the template's default signers: `{defaultSigners}` (`{}` clears them). Answers `{id, defaultSigners}`. Envelopes already sent keep their signers. |
 | `POST /api/template-editing-sessions` | Manage | Open the field editor for a host page to embed: `{allowedParentOrigin, roles?, sourceTemplateId?, replace?, name?, metadata?, tags?, share?, prefill?}`. `prefill`, `[{name, label}]` (1 to 30): the pre-filled fields you fill in when you send; the editor offers those to place, and its author can't add their own. A source template must be one you see (Viewer). With `replace: true` (Editor of the source), the saved template is the source's new version: it keeps the source's owner, name, default signers, shares and everyone's tags, and takes its place in lists; the source is archived, as if deleted: off the lists, while everything by its id works as before; `tags` and `share` are then ignored. The template it saves is yours, gets that name and metadata, or the source template's, your tags (with yours on the source) and the shares asked for. Answers `{sessionId, url}`. With `{allowedParentOrigin, envelopeId}` instead, it places the fields of a draft whose document was uploaded with it: the roles are its signers', the PDF its own, and saving writes the draft's fields (`draft=true` as it is; without it, every role needs a required Signature). |
-| `POST /api/template-editing-sessions/{id}/source` | Manage | Stage the PDF the session starts from (body: the PDF, `application/pdf`), once, before the editor is opened. Whoever opened the session only. |
+| `POST /api/template-editing-sessions/{id}/source` | Manage | Stage the PDF the session starts from (body: the PDF, `application/pdf`), once, before the editor is opened. Whoever opened the session only. Answers `201 {ok, changes}`; a PDF Esign can't prepare is `422 invalid_file` with its `reason` (see [Uploaded PDFs](#uploaded-pdfs)). |
 | `GET /api/template-editing-sessions/{id}` | View | `{templateId}` once the editor has saved, else `{templateId: null}`. Whoever opened the session only. |
 
 ### Envelopes
@@ -75,14 +75,14 @@ that are shared with them (see [Owners, sharing and tags](#owners-sharing-and-ta
 | `GET /api/envelopes` | View | The envelopes you own or that are shared with you, newest first: `{envelopes: [{id, templateId, status, createdAt, documentName?, metadata, signers: [{role, name, email, status}], progress: {signed, total}, current?: {taskId, name, email, delivery}, lastChangeAt, owner, myRole, tags}], next?}`. `current` is whose turn it is, while it is out for signature; `lastChangeAt` its latest event; `next` the `cursor` of the following page. Drafts are listed only when `status` asks for `DRAFT`; their `signers` are those the draft names so far, and a scheduled one has `sendAt` (when Esign sends it) or `sendError` (why it couldn't, then), and `sendWaiting` while it waits past its time (see `POST /api/envelopes`). Filters: `status` (one or more, comma-separated or repeated), `q` (the document name or a signer's name or email contains it, or the envelope's id), `since` (created at or after, epoch ms), `view` (`waiting`: yours, out for signature; `expiring`: out for signature, the active signer's deadline within 7 days), `scope` and `tag`. |
 | `POST /api/envelopes` | Manage | Send a template you see (Viewer) for signature, one recipient per role. Needs an `Idempotency-Key` header. You own the envelope; it isn't shared with the template's people. Answers `201 {id, status: "IN_PROGRESS"}`; the first signer's turn starts at once. A draft template answers `409 template_draft`. `prefill` gives the template's pre-filled fields' values by name (`{"partner.legalName": "Kestrel Systems Ltd"}`): each is drawn on the document before anyone signs, in every box placed for its name; one not given takes its default, or stays empty. Refused: `422 unknown_prefill` (a name the template hasn't), `422 invalid_prefill` (a value that isn't printable ASCII, trimmed, at most 128 characters), `422 prefill_missing` (a required one without a value), `422 prefill_too_long` (a value too wide for its box at the smallest size); each with `fields`, the names. `GET /api/envelopes/{id}` shows the values drawn as `prefill: [{name, label, value}]`. With `draft: true`, saves a draft instead: the request as it is (only its fields' names, its template, `tags` and `share` are checked), with no tasks, invitations or contacts; answers `201 {id, status: "DRAFT"}`. With `sendAt` (ISO 8601, 1 minute to 400 days ahead; not with `draft`), sends it later: checked now as a send (refused as one would be, and `422 deadline_before_send_at` for a signer's deadline at or before it; `422 invalid_send_at` for the time), saved as a draft with nothing sent; answers `201 {id, status: "DRAFT", sendAt}`. Esign sends it then, as you, within a few minutes: only while the platform still says you may send in Esign (a person with Manage and an active account; an API client that isn't revoked, with Manage), and not while your organization is suspended. A due draft the platform can't vouch for yet keeps its `sendAt` and shows `sendWaiting: "organization_unconfirmed"`: Insulin Apps hasn't recorded that your organization uses Esign, which any request to Esign there does (this one included), and it is tried again every ten minutes. |
 | `POST /api/envelopes/{id}` | Editor | A draft, changed (the same body as `POST /api/envelopes`, with `draft: true`, which also cancels a scheduled send; answers `{id, status: "DRAFT"}`), scheduled or rescheduled (with `sendAt`, as above; answers `{id, status: "DRAFT", sendAt}`) or sent (without it: checked and sent as a new envelope, once; answers `{id, status: "IN_PROGRESS"}`). No `Idempotency-Key`. An envelope that isn't a draft answers `409 not_draft`. |
-| `POST /api/envelopes/{id}/document` | Editor | The PDF of a draft created without `templateId` (its document is uploaded with it), as the body (`application/pdf`, at most 5 MiB and 100 pages, no form fields or annotations, pages not rotated); again to replace it, which clears the fields placed on it. Answers `201 {id, pages, sha256}`. Its fields are placed with an editing session's `envelopeId`; sending it (`POST /api/envelopes/{id}` without `templateId`) answers `409 document_required` or `fields_required` until they are there, and `422 fields_not_ready` until every role has a required Signature field. The envelope's `templateId` is then null. |
-| `GET /api/envelopes/{id}` | Viewer | The status, `documentName`, `metadata` and `message`, the pre-filled fields' values drawn on the document (`prefill: [{name, label, value}]`), a draft's request as saved (`draft`), for a draft with an uploaded document `upload: {document, roles, fields}`, and each signer's task, in order: `id`, `role`, `recipientName`, `recipientEmail`, `routingOrder`, `status`, `delivery`, `message`, `expiresAt`, `openedAt`, `invitedAt`; its owner, your role and your tags. |
+| `POST /api/envelopes/{id}/document` | Editor | The PDF of a draft created without `templateId` (its document is uploaded with it), as the body (`application/pdf`, at most 5 MiB and 100 pages, prepared for signing as [Uploaded PDFs](#uploaded-pdfs) says); again to replace it, which clears the fields placed on it. Answers `201 {id, pages, sha256, uploadedSha256, changes}`; a PDF Esign can't prepare is `422 unsupported_pdf` with its `reason`. Its fields are placed with an editing session's `envelopeId`, on the document it opened on: once that is replaced, the session's save answers `409 source_changed`; sending it (`POST /api/envelopes/{id}` without `templateId`) answers `409 document_required` or `fields_required` until they are there, and `422 fields_not_ready` until every role has a required Signature field. The envelope's `templateId` is then null. |
+| `GET /api/envelopes/{id}` | Viewer | The status, `documentName`, `metadata` and `message`, the pre-filled fields' values drawn on the document (`prefill: [{name, label, value}]`), a draft's request as saved (`draft`), for a draft with an uploaded document `upload: {document, changes, roles, fields}` (`changes`: what Esign changed in it, see [Uploaded PDFs](#uploaded-pdfs)), and each signer's task, in order: `id`, `role`, `recipientName`, `recipientEmail`, `routingOrder`, `status`, `delivery`, `message`, `expiresAt`, `openedAt`, `invitedAt`; its owner, your role and your tags. |
 | `GET /api/envelopes/{id}/audit` | Viewer | The audit trail, in order: `{events: [{type, at, recipient?, ip?, userAgent?, detail?}]}`. Never codes or message ids. |
 | `POST /api/envelopes/{id}/void` | Editor | Withdraw an envelope that is out for signature, with an optional `{reason}` (up to 500 characters). Repeating it is harmless; any other status answers `409 envelope_not_voidable`. A draft is discarded: deleted, with its shares and tags (`{id, status: "DISCARDED"}`). |
-| `POST /api/envelopes/{id}/tasks/{taskId}/recipient-view` † | Editor | A one-time code for the active signer's signing page: `{code}`. Body: `{signedInEmail, origin?, hostAuthentication?}`; see [Embed the signing page](#embed-the-signing-page). |
+| `POST /api/envelopes/{id}/tasks/{taskId}/recipient-view` † | Editor | A one-time code for the active signer's signing page and the page to frame: `{code, url}`. Body: `{signedInEmail, allowedParentOrigin?, origin?, hostAuthentication?}`; see [Embed the signing page](#embed-the-signing-page). |
 | `POST /api/envelopes/{id}/tasks/{taskId}/invitation` | Editor | Email the active signer's invitation again, with a new link; the earlier link stops working. Answers `204`; `409 not_invited` for a signer Esign doesn't invite. |
 | `GET /api/envelopes/{id}/delivery-pdf` | Viewer | A completed envelope's signed PDF followed by its certificate of completion. `Content-Disposition` names it by its document and the day it was completed (UTC), such as `Reseller Agreement - Signed 2026-11-13.pdf`; each signer's copy has the same name. |
-| `GET /api/envelopes/{id}/certificate` | Viewer | A completed envelope's certificate as JSON: the seal, checked against the stored files on every read. |
+| `GET /api/envelopes/{id}/certificate` | Viewer | A completed envelope's certificate as JSON: the seal, checked against the stored files on every read. `upload` is `{uploadedSha256, changes, fromTemplate}` when Esign changed the PDF on upload (a database record, not sealed), else null. |
 | `POST /api/process-due` † | Manage | Due work for the caller's organization, at once: answers `{expired, completed, waiting, failed, scheduledSent, scheduledFailed}` (the last two: drafts sent later whose time had come). The platform runs it for every organization every five minutes anyway. |
 
 `POST /api/envelopes/{id}/prepare` still exists for older callers and does nothing; don't use it.
@@ -164,6 +164,43 @@ of plain text, up to 10,000 characters, line breaks kept. The envelope's `messag
 `message` replaces it for them. The body is shown on the signing page, next to the document, and in an invitation;
 the subject is the invitation's (without one, "Please sign:" and the document's name). It is part of the request, like
 `metadata`, and not part of the signed evidence.
+
+## Uploaded PDFs
+
+Placed fields are drawn into the page content, where the page shows them. So every PDF uploaded (`POST /api/templates`,
+`POST /api/envelopes/{id}/document` and a field editor's PDF) is prepared for signing first, keeping how it looks:
+
+- form fields, comments, highlights, stamps and other annotations with an appearance are flattened into the page, and the
+  form is removed: values stay as shown and can no longer be edited;
+- links (and comments' pop-ups) are removed: their text stays, it no longer opens anything;
+- rotated, cropped or offset pages are redrawn upright, at the size they are shown, with the page's origin at zero;
+- pages that share one content list each get their own, so a signature drawn on one never shows on another.
+
+A PDF that needs none of this is stored exactly as uploaded. When something changed, the answer's `changes` counts it,
+`{formFields, annotations, links, pages}` (else `changes` is null), `sha256` is the stored PDF's and `uploadedSha256` the
+file's as uploaded. Signers see and sign the stored PDF; the certificate of completion also shows the uploaded file's
+SHA-256 and what changed, as a database record that isn't bound by the seal.
+
+A PDF that can't be prepared is refused with `422`, the route's own `error`, a `reason` and, when one page is the reason,
+its `page`: `{"error": "unsupported_pdf", "reason": "pdf_annotation_without_appearance", "page": 2}`.
+
+| `reason` | Why |
+|---|---|
+| `pdf_encrypted` | Password-protected or encrypted |
+| `pdf_unreadable` | Damaged, or not a PDF |
+| `pdf_page_count` | No pages, or more than 100 |
+| `pdf_dynamic_form` | A dynamic (XFA) form |
+| `pdf_form_without_appearance` | A form field holding a value but with no appearance of its own, or a form with values that asks the viewer to draw them (`NeedAppearances`); an empty field with no appearance is just removed, and a blank form's own appearances are kept |
+| `pdf_annotation_without_appearance` | A visible comment or mark with no appearance of its own |
+| `pdf_page_units` | A page in other units than points (`UserUnit`) |
+| `pdf_page_size` | A page with no area, or larger than 14,400 points (200 inches) on a side |
+| `pdf_page_rotation` | A page turned at an angle that isn't a multiple of 90 degrees |
+| `pdf_too_large` | Over 5 MiB once rewritten (its compressed object streams written out in full) |
+| `pdf_unsupported` | Anything else that keeps it from being signed with placed fields, such as more than 10,000 annotations |
+
+Printing such a PDF to PDF (Save as PDF) usually makes one Esign can use. `POST /api/templates` refuses only a PDF it can't read (`pdf_encrypted`, `pdf_unreadable`, `pdf_page_count`): another it can't prepare is kept as uploaded, since that template is signed on an added page, and placing fields on it later is refused.
+
+An annotation in optional content (a layer) keeps its condition: it is drawn as that layer's marked content, shown where the layer is.
 
 ## Names and metadata
 
@@ -345,10 +382,11 @@ clients uploaded.
 A host product shows the signing page inside its own pages:
 
 1. When it is a signer's turn (their task is `ACTIVE`), the host's backend calls
-   `POST /api/envelopes/{id}/tasks/{taskId}/recipient-view` with `{"signedInEmail": "…"}`, the email of the account
-   signed in to the host, and gets `{code}`.
-2. The host frames `https://esign.insulinapps.com/sign#code=CODE&host=HOST_ORIGIN`, where `HOST_ORIGIN` is the host
-   page's origin (for messages). Put the code in the fragment, never in a query string, and never log it.
+   `POST /api/envelopes/{id}/tasks/{taskId}/recipient-view` with
+   `{"signedInEmail": "…", "allowedParentOrigin": "https://app.example.com"}`: the email of the account signed in to the
+   host, and the origin of the host page that will frame the signing page. It gets `{code, url}`.
+2. The host frames `url`, which is `https://esign.insulinapps.com/sign?host=HOST_ORIGIN#code=CODE`. The code stays in
+   the fragment, which browsers never send; never log it.
 3. The page exchanges the code for a 15-minute session, takes the signer through review, the emailed code and signing,
    and posts `esign.signing.finished` (`signed` or `declined`) or `esign.signing.cancel` to the host.
 4. The host treats the message as a prompt and reads the envelope's status with `GET /api/envelopes/{id}`.
@@ -360,8 +398,10 @@ Rules:
   regard to case: otherwise `422 signed_in_email_required` or `403 signer_mismatch`. Esign records the account it
   checked, and the certificate shows it. This holds for every caller, a member in the browser included: Esign's own
   console opens no signer's page.
-- The host's origin must be one of the origins the deployment allows to embed Esign's pages. The page refuses to start
-  in a frame from any other origin, or in one that hides its origin.
+- The code is bound to `allowedParentOrigin` (https; anything else answers `422 invalid_parent_origin`). There is no
+  list of origins to register: only that origin may frame the page, which refuses to start in a frame from any other
+  origin, or in one that hides its origin, and posts its messages to that origin only. Without `allowedParentOrigin`
+  the page opens only on its own, never in a frame.
 - `hostAuthentication` (`{method, provider?, domain?, signedInAt?}`, `method` an upper-case word such as `SSO`) tells
   Esign how the host signed the signer in. Esign can't check it; it shows it to the signer and records it as the
   host's statement.

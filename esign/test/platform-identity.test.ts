@@ -194,4 +194,10 @@ test('the catalog lists every management route, as the routes take it', async ()
   assert.equal(draft.additionalProperties, false);
   assert.deepEqual(Object.keys(draft.properties), Object.keys(body('POST', '/api/envelopes').properties as object));
   assert.deepEqual(body('POST', '/api/envelopes/{id}/tasks/{taskId}/recipient-view').required, ['signedInEmail']);
+  // The fields recipient-view takes, the page that will frame the signing page among them, as the route reads them.
+  const view = body('POST', '/api/envelopes/{id}/tasks/{taskId}/recipient-view') as { additionalProperties: boolean; properties: Record<string, unknown> };
+  assert.equal(view.additionalProperties, false);
+  assert.deepEqual(Object.keys(view.properties).sort(), ['allowedParentOrigin', 'hostAuthentication', 'origin', 'signedInEmail']);
+  // No list of allowed origins any more: the host names the page that frames the editor, and the session is bound to it.
+  assert.doesNotMatch(JSON.stringify(body('POST', '/api/template-editing-sessions')), /deployment/);
 });

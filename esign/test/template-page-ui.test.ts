@@ -43,6 +43,9 @@ test('a template\'s page: its details, read only, and its PDF below them; its na
       assert.ok(details.includes(shown), `${shown} in: ${details}`);
     assert.match(app.text(), /Shared with you · Viewer/);
     assert.ok(app.byLabel('Document'), 'the document below the details');
+    // Esign may have prepared the PDF when it was uploaded: the card says what is shown, not "as uploaded".
+    assert.match(visibleText(app.byLabel('Document').children), /The PDF as Esign stores it, read only, with where each role signs or fills in\./);
+    assert.doesNotMatch(app.text(), /as uploaded/);
     assert.deepEqual(drawn, [PDF], 'its PDF, drawn once');
     assert.ok(app.byLabel('Roles on the document'), 'a key to the roles\' colours');
     assert.equal(app.renderer.root.findAll((n: any) => n.type === 'input' || n.type === 'textarea' || n.type === 'select').length, 0, 'nothing to change');
@@ -62,6 +65,7 @@ test('a template\'s page: View in its menu; without placed fields, a signature p
     assert.equal(app.location.pathname, `/templates/${ID}`);
     assert.match(app.text(), /A signature page added at the end/);
     assert.match(app.text(), /Each signer signs on a page added at the end/);
+    assert.doesNotMatch(app.text(), /as uploaded/);
     assert.equal(app.byLabel('Roles on the document'), undefined);
     assert.match(app.text(), /Archived Nov 5, 2026/);
     assert.equal(app.link('Use'), undefined);

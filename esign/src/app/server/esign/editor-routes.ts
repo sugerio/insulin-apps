@@ -45,12 +45,13 @@ export function mountEditorRoutes(app:Hono<Env>){
    const found=await documentRole(c.env.DB,tenant,c.get('caller'),'envelope',envelopeId);
    if(!found)return c.json({error:'not_found'},404);
    if(!atLeast(found.role,'editor'))return c.json({error:'forbidden',role:found.role},403);
-   const draft=await c.env.DB.prepare("SELECT status,template_id,draft_json,EXISTS (SELECT 1 FROM artifacts a WHERE a.envelope_id=envelopes.id) AS has_document FROM envelopes WHERE id=? AND tenant_id=?").bind(envelopeId,tenant).first<{status:string;template_id:string|null;draft_json:string|null;has_document:number}>();
+   // The document the editor opens on: its fields are saved only while it is still the draft's document.
+   const draft=await c.env.DB.prepare("SELECT status,template_id,draft_json,(SELECT a.sha256 FROM artifacts a WHERE a.id=? AND a.envelope_id=envelopes.id) AS document_sha256 FROM envelopes WHERE id=? AND tenant_id=?").bind(initialDocumentId(envelopeId),envelopeId,tenant).first<{status:string;template_id:string|null;draft_json:string|null;document_sha256:string|null}>();
    if(draft?.status!=='DRAFT'||draft.template_id!==null)return c.json({error:'not_an_upload_draft'},409);
-   if(!draft.has_document)return c.json({error:'document_required'},409);
+   if(!draft.document_sha256)return c.json({error:'document_required'},409);
    const roles=draftRoles(draft.draft_json);
    if(!roles)return c.json({error:'invalid_roles'},422);
-   let issued:{pageId:string;code:string};try{issued=await issueEditorPage(c.env.DB,tenant,input.allowedParentOrigin,Date.now(),{roles,ownerUserId:c.get('caller').userId,envelopeId});}catch{return c.json({error:'origin_not_allowed'},403);}
+   let issued:{pageId:string;code:string};try{issued=await issueEditorPage(c.env.DB,tenant,input.allowedParentOrigin,Date.now(),{roles,ownerUserId:c.get('caller').userId,envelopeId,sourceSha256:draft.document_sha256});}catch{return c.json({error:'origin_not_allowed'},403);}
    const url=new URL(`/editor/page/${issued.pageId}`,c.req.url);url.hash=issued.code;
    c.header('Cache-Control','no-store');c.header('Referrer-Policy','no-referrer');return c.json({sessionId:issued.pageId,url:url.toString()},201);
   }
@@ -145,13 +146,16 @@ export function mountEditorRoutes(app:Hono<Env>){
    if(roles.length!==session.roles.length||roles.some((r,i)=>r!==session.roles[i]))return c.json({error:'invalid_roles'},422);
    const document=await envelopeDocument(c.env.DB,c.env.ARTIFACTS,session.envelopeId);
    if(!document)return c.json({error:'source_unavailable'},409);
+   // Only on the document they were placed on: an upload meanwhile cleared the fields, for its own document, and an
+   // editor opened on the one before is told to open again, before its fields are checked against a document they
+   // weren't placed on. A session opened before it recorded its document has none.
+   const documentHash=session.sourceSha256??await sha256(document);
+   if(documentHash!==await sha256(document))return c.json({error:'source_changed'},409);
    let placed:import('./fields.ts').TemplateField[];
    try{const pdf=await PDFDocument.load(document,{throwOnInvalidObject:true});const pages=pdf.getPages();if(!pages.length||pages.length>100||pages.some(p=>((p.getRotation().angle%360)+360)%360!==0))throw new Error('Unsupported rotation');placed=validateTemplateFields(fields,roles,pages.length);assertNoOverlappingFields(placed);}catch{return c.json({error:'invalid_pdf_or_fields'},422);}
    // An uploaded document has no pre-filled fields: its sender writes on it before uploading it.
    if(placed.some(f=>f.type==='Prefill'))return c.json({error:'prefill_not_supported'},422);
    if(!draft)try{assertEditorSigningFields(placed,roles);}catch(error){return c.json({error:'invalid_signing_fields',message:error instanceof Error?error.message:'Invalid signing fields'},422);}
-   // Only on the document they were placed on: an upload meanwhile cleared the fields, for its own document.
-   const documentHash=await sha256(document);
    const saved=await c.env.DB.prepare(`UPDATE envelopes SET roles_json=?,fields_json=? WHERE id=? AND tenant_id=? AND status='DRAFT' AND template_id IS NULL
      AND (SELECT a.sha256 FROM artifacts a WHERE a.id=? AND a.envelope_id=envelopes.id)=?
      AND EXISTS (SELECT 1 FROM editor_sessions x JOIN access_sessions s ON s.subject_id=x.id AND s.tenant_id=x.tenant_id AND s.origin=x.parent_origin WHERE x.id=? AND x.tenant_id=? AND x.envelope_id=envelopes.id AND ${editorOriginAllowed('x.tenant_id','x.parent_origin')} AND s.scope='editor' AND s.token_hash=? AND s.expires_at>?)`)

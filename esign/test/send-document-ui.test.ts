@@ -78,6 +78,9 @@ test('upload and send: the document and signers, the fields in the editor, the r
     const review = visibleText(app.byLabel('Review').children);
     assert.match(review, /1\. partner — Pat Partner \(pat@partner\.example\): 2 fields/);
     assert.match(review, /2\. seller — Sam Seller \(sam@seller\.example\): 1 field/);
+    // A long name or address with no space wraps inside the review on a phone instead of widening the page.
+    assert.match(String(app.byLabel('Review').props.className), /\[&>dd\]:min-w-0/);
+    assert.match(String(app.byLabel('Review').props.className), /\[&>dd\]:wrap-anywhere/);
     await app.click(app.button('Send for signature'), 'Send');
     const sent = JSON.parse(String(posts(`/api/envelopes/${ID}`).at(-1)!.body));
     assert.equal(sent.draft, undefined);

@@ -109,7 +109,11 @@ const headerVersion = (bytes: Uint8Array) => /^%PDF-(\d\.\d)/.exec(new TextDecod
 export function logPdfUpload(source: PdfUploadSource, outcome: { refused: PdfRefusal; facts: PdfFacts } | { kept: PdfRefusal; facts: PdfFacts } | { changes: PdfUploadChanges; facts: PdfFacts }): void {
   if ('refused' in outcome) console.warn('Esign: an uploaded PDF was refused', { ...source, code: outcome.refused, ...outcome.facts });
   else if ('kept' in outcome) console.info('Esign: an uploaded PDF could not be prepared for placed fields and was kept as uploaded', { ...source, code: outcome.kept, ...outcome.facts });
-  else console.info('Esign: an uploaded PDF was flattened or reoriented before it was stored', { ...source, ...outcome.changes, ...outcome.facts });
+  else {
+    // The facts' `pages` is the file's page count; the pages redrawn upright are logged apart, not overwritten by it.
+    const { pages: pagesRedrawn, ...changed } = outcome.changes;
+    console.info('Esign: an uploaded PDF was flattened or reoriented before it was stored', { ...source, ...changed, pagesRedrawn, ...outcome.facts });
+  }
 }
 
 /**

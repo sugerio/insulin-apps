@@ -74,7 +74,8 @@ To send a PDF of your own without making a template, choose **New envelope** ›
 It is a draft from the first step on: **Save draft**, on any step, keeps it (with the fields placed so far), and it is
 listed on **Envelopes** as a draft, where **Continue** opens it again on this page. **Send later** on the review step
 schedules it, as above; saving it as a draft again (also by going back to its fields) cancels that. Choosing another PDF replaces the one
-uploaded and clears the fields placed on it. The envelope has no template: its document and fields are its own.
+uploaded and clears the fields placed on it; an editor still open on the earlier PDF, in another tab, saves nothing and says
+to open it again. The envelope has no template: its document and fields are its own.
 
 To send the same document again, make it a template. Tick **Also save as a template** on the review step (it is
 named as the document, with the same roles), or, once it is sent, choose **Save as template** on the envelope's page or

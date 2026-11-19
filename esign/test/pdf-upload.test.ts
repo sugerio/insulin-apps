@@ -150,6 +150,17 @@ test('a form is flattened: each field shows its value as before, in the page its
   assert.deepEqual(prepared.logs.map((log) => log.level), ['info']);
 });
 
+test('a rewrite is logged with the file\'s page count and, apart, how many pages were redrawn', async () => {
+  const pdf = await PDFDocument.create();
+  await markedPage(pdf);
+  (await markedPage(pdf)).setRotation(degrees(90));
+  const prepared = await prepare(await pdf.save());
+  assert.equal(prepared.changes?.pages, 1);
+  const record = prepared.logs[0]!.args[1] as Record<string, unknown>;
+  assert.equal(record.pages, 2, 'the file has two pages');
+  assert.equal(record.pagesRedrawn, 1, 'one of them was redrawn upright');
+});
+
 test('links without a look of their own are removed, the text they were on stays, and pop-ups go with them', async () => {
   const pdf = await PDFDocument.create();
   const page = await markedPage(pdf);

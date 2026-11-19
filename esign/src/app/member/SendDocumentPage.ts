@@ -255,7 +255,7 @@ export function SendDocumentPage({ me }: { me: Me }) {
   return h('div', { className: 'flex flex-col gap-6' }, header,
     h(Card, null,
       h(CardHeader, null, h(CardTitle, null, h('h2', null, 'Review')), h(CardDescription, null, 'Check what is sent. Once sent, the first signer is invited at once.')),
-      h(CardContent, null, h('dl', { 'aria-label': 'Review', className: 'grid gap-x-8 gap-y-3 text-sm sm:grid-cols-[max-content_1fr]' },
+      h(CardContent, null, h('dl', { 'aria-label': 'Review', className: 'grid gap-x-8 gap-y-3 text-sm sm:grid-cols-[max-content_1fr] [&>dd]:min-w-0 [&>dd]:wrap-anywhere' },
         h('dt', { className: 'text-muted-foreground' }, 'Document'), h('dd', null, docName.trim() || defaultDocumentName(null), changed.length ? h('span', { className: 'block text-muted-foreground' }, `Prepared for signing: ${changed.join('; ')}.`) : null),
         h('dt', { className: 'text-muted-foreground' }, 'Signers'),
         h('dd', null, h('ol', { className: 'flex flex-col gap-1' }, ...people.map((p, i) => h('li', { key: i }, `${i + 1}. ${p.role} — ${p.name} (${p.email}): ${count(p.role.trim())} ${count(p.role.trim()) === 1 ? 'field' : 'fields'}`)))),

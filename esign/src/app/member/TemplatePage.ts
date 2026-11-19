@@ -126,7 +126,7 @@ export function TemplatePage({ me, id }: { me: Me; id: string }) {
           ...metadata.map(([key, value]) => h(Detail, { key, term: key }, value))))),
     h(Card, { 'aria-label': 'Document' },
       h(CardHeader, null, h(CardTitle, null, h('h2', null, 'Document')),
-        h(CardDescription, null, template.fields.length ? 'The PDF as uploaded, read only, with where each role signs or fills in.' : draft ? 'The PDF as uploaded, read only. No fields are placed yet.' : 'The PDF as uploaded, read only. Each signer signs on a page added at the end.')),
+        h(CardDescription, null, template.fields.length ? 'The PDF as Esign stores it, read only, with where each role signs or fills in.' : draft ? 'The PDF as Esign stores it, read only. No fields are placed yet.' : 'The PDF as Esign stores it, read only. Each signer signs on a page added at the end.')),
       h(CardContent, null, h(DocumentView, { id: template.id, roles: template.roles, fields: template.fields }))))
 }
 

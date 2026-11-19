@@ -21,7 +21,7 @@ export const sending: DocTopic = {
       id: 'steps',
       title: 'Steps',
       body: ol(
-        ['On ', h(PageLink, { to: '/' }, 'Envelopes'), ', choose ', b('New envelope'), ' › ', b('From a template'), '. Or, on Templates, choose ', b('Use'), ' next to a template. To send a PDF of your own without a template, choose ', b('New envelope'), ' › ', b('Upload and send'), ' instead: the document and its signers (each with a role you name), the fields in the editor, then a review and Send. Esign prepares the PDF for signing when you upload it (see ', h(DocLink, { to: 'templates', section: 'the-pdf' }, 'What Esign does to a PDF'), ').'],
+        ['On ', h(PageLink, { to: '/' }, 'Envelopes'), ', choose ', b('New envelope'), ' › ', b('From a template'), '. Or, on Templates, choose ', b('Use'), ' next to a template. To send a PDF of your own without a template, choose ', b('New envelope'), ' › ', b('Upload and send'), ' instead: the document and its signers (each with a role you name), the fields in the editor, then a review and Send. Esign prepares the PDF for signing when you upload it (see ', h(DocLink, { to: 'templates', section: 'the-pdf' }, 'What Esign does to a PDF'), '). Choosing another PDF clears the fields placed on the one before; an editor still open on it in another tab saves nothing and says to open it again.'],
         'Choose the template.',
         ['For each role, name the signer and give their email address, or choose them from your contacts. The signers sign in this order.'],
         'Add what the signers should see about the document, and a sign-by day if there is one. Both are optional.',

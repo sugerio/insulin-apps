@@ -287,7 +287,8 @@ a visible area that is empty or over 14,400 points a side, or a rotation that is
 Every refusal is logged (`console.warn`) and every rewrite (`console.info`) with the route, tenant,
 subject, size, SHA-256, PDF version, the producing and creating software as one of a fixed list of
 names (`softwareName`; else `other`: the file's own /Producer and /Creator strings are never
-logged) and the reason's facts (page, subtype): never the content, a title or the file name.
+logged) and the reason's facts (page, subtype), or for a rewrite what changed (`formFields`, `annotations`,
+`links`, `pagesRedrawn`, beside the file's `pages`): never the content, a title or the file name.
 
 What changed is kept beside the stored PDF, never the uploaded file: `uploaded_sha256` and
 `upload_changes_json` (`{formFields, annotations, links, pages}`) on `artifacts`, `templates` and

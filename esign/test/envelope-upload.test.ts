@@ -126,6 +126,24 @@ test('only an upload draft takes a document; a new envelope needs a template; re
     assert.equal((await h.upload(id, await two.save())).status, 201);
     assert.deepEqual((await h.shown(id)).upload!.fields, []);
     assert.equal((await h.bucket.list({ prefix: `envelopes/${id}/` })).objects.length, 2, 'the one it replaced stays until the draft is sent or discarded');
+    // An editor opened on the document before it was replaced doesn't put its fields on the new one: it is told to
+    // open the editor again, and the new document keeps no fields until one opened on it saves.
+    const stale = await session.save!(['partner', 'seller'], [signature('a', 'partner', 0.1)], true);
+    assert.deepEqual([stale.status, await stale.json()], [409, { error: 'source_changed' }]);
+    assert.deepEqual((await h.shown(id)).upload!.fields, []);
+    const fresh = await h.editor(id);
+    assert.equal((await fresh.save!(['partner', 'seller'], [signature('a', 'partner', 0.1)], true)).status, 200);
+    assert.equal((await h.shown(id)).upload!.fields.length, 1);
+    // Also when the fields wouldn't fit the new document (a field on a page it no longer has), draft or ready: the
+    // editor is told to open again, not to move its fields.
+    const page2 = { ...signature('p', 'partner', 0.1), page: 2 };
+    const onTwo = await h.editor(id);
+    assert.equal((await h.upload(id)).status, 201, 'replaced by a one-page PDF');
+    for (const asDraft of [true, false]) {
+      const saved = await onTwo.save!(['partner', 'seller'], [page2, signature('b', 'seller', 0.5)], asDraft);
+      assert.deepEqual([saved.status, await saved.json()], [409, { error: 'source_changed' }], `draft: ${asDraft}`);
+    }
+    assert.deepEqual((await h.shown(id)).upload!.fields, []);
     // Discarded: the draft, its document's record and its stored file.
     assert.deepEqual(await (await h.post(`/api/envelopes/${id}/void`, {})).json(), { id, status: 'DISCARDED' });
     assert.equal((await h.db.prepare('SELECT count(*) AS n FROM artifacts WHERE envelope_id = ?').bind(id).first<{ n: number }>())!.n, 0);

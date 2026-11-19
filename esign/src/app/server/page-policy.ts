@@ -10,6 +10,7 @@
 //   signed-in member into sending or voiding (clickjacking).
 // frame-ancestors is sent only when the request came through insulinapps.com's gateway (it sets x-suger-access-via):
 // the Insulin console frames the app in its own preview, and decides that itself.
+import { validEditorOrigin } from './esign/access.ts'
 
 export type PageKind = 'signing' | 'editor' | 'copy' | 'member'
 
@@ -57,7 +58,9 @@ export async function pageHeaders(pathname: string, contentType: string | null, 
   const kind = pageKind(pathname)
   if (!kind || !/^text\/html\b/i.test(contentType ?? '')) return null
   let ancestors: string | null = null
-  if (kind === 'signing') ancestors = ["'self'", ...originsIn(context.signingHost ?? '').slice(0, 1)].join(' ')
+  // The link's `host` is anyone's to write: only an origin a code can be bound to (no wildcard, no stray characters a
+  // header can't carry) reaches frame-ancestors.
+  if (kind === 'signing') ancestors = ["'self'", ...originsIn(context.signingHost ?? '').filter(validEditorOrigin).slice(0, 1)].join(' ')
   else if (kind === 'editor') {
     const parent = await context.editorParent(EDITOR_PAGE.exec(pathname)![1]!)
     ancestors = ["'self'", ...(parent && ORIGIN.test(parent) ? [parent] : [])].join(' ')

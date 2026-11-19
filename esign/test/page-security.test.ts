@@ -41,6 +41,12 @@ test('the signing page: scripts only from this origin, framed only by this origi
   assert.equal(directive(unnamed['Content-Security-Policy']!, 'frame-ancestors'), "frame-ancestors 'self'", 'a link that names no host: only the app frames it');
   const many = (await pageHeaders('/sign', HTML, context({ signingHost: 'https://host.example.test https://second.example.test' })))!;
   assert.equal(directive(many['Content-Security-Policy']!, 'frame-ancestors'), "frame-ancestors 'self' https://host.example.test", 'one origin at most');
+  // The link's host is anyone's to write: only a concrete origin, as a host may bind a code to, ever reaches the header.
+  for (const host of ['https://*', 'https://*.example.test', 'https://host.example.test:*', 'https://ho\u0101st.example.test', 'https://HOST.example.test']) {
+    const loose = (await pageHeaders('/sign', HTML, context({ signingHost: host })))!;
+    assert.equal(directive(loose['Content-Security-Policy']!, 'frame-ancestors'), "frame-ancestors 'self'", host);
+    assert.doesNotThrow(() => new Headers(loose), host);
+  }
   assert.doesNotMatch(csp, /unsafe-eval/);
   assert.equal(headers['Cache-Control'], 'no-store');
   assert.equal(headers['Referrer-Policy'], 'no-referrer');

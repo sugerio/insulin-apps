@@ -569,7 +569,7 @@ is enabled.
 | `GET /api/envelopes/:id` | Status and tasks (role, name, email, order, status, `expiresAt`, `openedAt`) |
 | `POST /api/envelopes/:id/void` | Optional `{reason}` (at most 500 characters); a repeat is a no-op; any status other than `IN_PROGRESS` answers `409 envelope_not_voidable` |
 | `GET /api/envelopes/:id/audit` | Events with type, time, recipient, IP, user agent and an allow-listed detail; never codes or message ids |
-| `POST /api/envelopes/:id/tasks/:taskId/recipient-view` † | `{signedInEmail, origin?, hostAuthentication?}`, `signedInEmail` the account signed in to the host, which must be the signer's; returns `{code}` for the active task (`409 recipient_signs_by_email` for a signer Esign invites) |
+| `POST /api/envelopes/:id/tasks/:taskId/recipient-view` † | `{signedInEmail, origin?, allowedParentOrigin?, hostAuthentication?}`, `signedInEmail` the account signed in to the host, which must be the signer's; `allowedParentOrigin` the page that will frame the signing page, which the code is bound to (`422 invalid_parent_origin` unless https; http on a loopback host outside prod); returns `{code, url}` for the active task, `url` being `/sign?host=<allowedParentOrigin>#code=<code>` (`409 recipient_signs_by_email` for a signer Esign invites) |
 | `GET /api/envelopes/:id/delivery-pdf` | The signed PDF with its certificate, for a `COMPLETED` envelope |
 | `GET /api/envelopes/:id/certificate` | The completion certificate as JSON (shown on the envelope page), verified on every read |
 | `GET /api/contacts`, `GET /api/contacts/:id` | The address book, most recently used first (`q`, `limit`, `cursor`), and one contact with the envelopes that name them |
@@ -584,7 +584,7 @@ is enabled.
 
 **Signing page** (†, recipient session token, page origin checked)
 
-`POST /api/public/page-sessions/exchange` `{code}` → `{token}`; `GET /api/public/signing/current` (the document,
+`POST /api/public/page-sessions/exchange` `{code, embedded, embedder?, embedders?}` → `{token, host?}` (`403 embedder_not_allowed` for a page framed by any origin but the one the code is bound to; `host` that origin, when it frames the page); `GET /api/public/signing/current` (the document,
 fields, disclosure, intent, whether verified); `GET /api/public/signing/pdf`; `POST /api/public/signing/page-views`;
 `POST /api/public/signing/otp` → `202 {messageId, emailed?, testMailbox?}` (`testMailbox` only in dev, where the code is kept in the test mailbox; never the code itself); `POST /api/public/signing/otp/verify` `{otp}`;
 `POST /api/public/signing/preview`; `POST /api/public/signing/decline` `{reason}` (at most 1000 characters);
@@ -596,7 +596,7 @@ by the same live session with the same input and values, and returns the same si
 
 | Route | Auth | Purpose |
 | --- | --- | --- |
-| `POST /api/template-editing-sessions` | Management | `{allowedParentOrigin, roles?, sourceTemplateId?, envelopeId?, prefill?}` (`envelopeId`: an upload draft's own document and roles, instead of a template) (`prefill`: the host's pre-filled fields, the only ones offered); returns `{sessionId, url}`, the code in the URL fragment |
+| `POST /api/template-editing-sessions` | Management | `{allowedParentOrigin, roles?, sourceTemplateId?, envelopeId?, prefill?}` (`envelopeId`: an upload draft's own document and roles, instead of a template) (`prefill`: the host's pre-filled fields, the only ones offered); `allowedParentOrigin` the page that will frame the editor, which the session is bound to (`422 invalid_origin` unless https; http on a loopback host outside prod); returns `{sessionId, url}`, the code in the URL fragment |
 | `POST /api/template-editing-sessions/:id/source` | Management | The PDF bytes (`Content-Type: application/pdf`, at most 5 MiB and 100 pages), once, before the page is opened |
 | `GET /api/template-editing-sessions/:id` | Management | `{templateId}` once saved, else null |
 | `GET /editor/page/:id` | — | The editor page, framable only by the session's parent origin |

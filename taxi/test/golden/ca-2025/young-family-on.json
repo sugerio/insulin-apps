@@ -119,7 +119,8 @@
         "hasHomeSupport": false,
         "qcChildTransfer": "0",
         "qcChildTuitionTransfer": "0",
-        "qcInstalmentsPaid": "0"
+        "qcInstalmentsPaid": "0",
+        "qcMunicipalPoliticalContributions": "0"
       },
       "p2": {
         "rrspDeduction": "0",
@@ -199,7 +200,8 @@
         "hasHomeSupport": false,
         "qcChildTransfer": "0",
         "qcChildTuitionTransfer": "0",
-        "qcInstalmentsPaid": "0"
+        "qcInstalmentsPaid": "0",
+        "qcMunicipalPoliticalContributions": "0"
       }
     },
     "slips": [

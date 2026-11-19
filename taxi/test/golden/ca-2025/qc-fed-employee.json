@@ -1,5 +1,5 @@
 {
-  "about": "A single employee in Quebec earning more than the QPP's maximum pensionable earnings: the T4 shows QPP (box 17), second additional QPP (box 17A), EI at Quebec's 1.31% (box 18) and PPIP premiums and insurable earnings (boxes 55 and 56). The T1 for residents of Quebec (5005-R) with Schedule 8 for Quebec (Part 2a: QPP deducted exactly as required), Schedule 10 Part C, and the refundable Quebec abatement (line 44000). No provincial tax on the T1: Quebec's is on the TP-1. Synthetic data.",
+  "about": "A single employee in Quebec earning more than the QPP's maximum pensionable earnings: the T4 shows QPP (box 17), second additional QPP (box 17A), EI at Quebec's 1.31% (box 18) and PPIP premiums and insurable earnings (boxes 55 and 56). The T1 for residents of Quebec (5005-R) with Schedule 8 for Quebec (Part 2a: QPP deducted exactly as required), Schedule 10 Part C, and the refundable Quebec abatement (line 44000). No provincial tax on the T1: Quebec's is on the TP-1. Synthetic data. Each T4 comes with its RL-1.",
   "input": {
     "year": 2025,
     "people": [
@@ -87,7 +87,8 @@
         "hasHomeSupport": false,
         "qcChildTransfer": "0",
         "qcChildTuitionTransfer": "0",
-        "qcInstalmentsPaid": "0"
+        "qcInstalmentsPaid": "0",
+        "qcMunicipalPoliticalContributions": "0"
       }
     },
     "slips": [
@@ -107,6 +108,23 @@
           "55": "385.32",
           "56": "78000.00",
           "17A": "268.00"
+        }
+      },
+      {
+        "id": "s1-rl1",
+        "person": "p1",
+        "type": "RL1",
+        "issuer": "Riverside Software",
+        "boxes": {
+          "A": "78000.00",
+          "B_A": "4339.20",
+          "B_B": "268.00",
+          "C": "860.67",
+          "F": "600.00",
+          "G": "78000.00",
+          "H": "385.32",
+          "I": "78000.00",
+          "E": "11875.00"
         }
       }
     ]
@@ -195,11 +213,71 @@
       "S9.23": "58",
       "S11.11": "84348.83",
       "S11.13": "61841.64",
+      "QCB.18": "33544",
+      "QCB.31": "6289.5",
+      "QCB.39": "2269.02",
+      "QCB.48": "2364.95",
+      "QCC.92": "0.7",
       "QCC.claims": "1",
-      "QCU.40": "3500",
+      "QCJ.89": "138.72",
+      "QCK.40": "75634",
+      "QCK.46": "19890",
+      "QCK.48": "55744",
+      "QCK.84": "766",
+      "QCK.86": "766",
+      "QCK.89": "755",
+      "QCK.90": "755",
+      "QCP.64": "78000",
+      "QCP.72": "10220",
+      "QCP.76": "1185.52",
+      "QCP.83": "6301.4",
+      "QCR.14": "78000",
+      "QCR.20": "20000",
+      "QCU.11": "678",
+      "QCU.14_4": "67800",
+      "QCU.16": "678",
+      "QCU.17_5": "268",
+      "QCU.21": "268",
+      "QCU.23": "946",
+      "QCU.40": "75487.5",
+      "QC.family": "75634",
+      "QC.work": "78000",
+      "TP1.97": "385.32",
+      "TP1.98": "4339.2",
+      "TP1.98_1": "78000",
+      "TP1.98_2": "268",
+      "TP1.101": "78000",
+      "TP1.199": "78000",
+      "TP1.201": "1420",
+      "TP1.248": "946",
+      "TP1.254": "2366",
+      "TP1.256": "75634",
+      "TP1.275": "75634",
+      "TP1.279": "75634",
+      "TP1.299": "75634",
       "TP1.350": "18571",
+      "TP1.377": "18571",
+      "TP1.377_1": "2599.94",
       "QC.ownDonations": "300",
-      "TP1.393": "300"
+      "TP1.393": "300",
+      "TP1.395": "64",
+      "TP1.397_1": "600",
+      "TP1.397": "60",
+      "TP1.399": "2723.94",
+      "TP1.401": "11707.71",
+      "TP1.406": "2723.94",
+      "TP1.413": "8983.77",
+      "TP1.430": "8983.77",
+      "TP1.432": "8983.77",
+      "TP1.447": "755",
+      "TP1.450": "9738.77",
+      "TP1.451": "11875",
+      "TP1.451_2": "11875",
+      "TP1.465": "11875",
+      "TP1.468": "11875",
+      "TP1.470": "-2136.23",
+      "TP1.474": "2136.23",
+      "TP1.478": "2136.23"
     }
   }
 }

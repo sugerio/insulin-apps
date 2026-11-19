@@ -248,8 +248,8 @@ lines:
     source: "TP-1 line 110: box A of the RL-6 slip"
   TP1.111:
     label: Employment Insurance benefits
-    formula: "line.T1.11900"
-    source: "TP-1 line 111: the T4E slip (box 14)"
+    formula: "sum(T4E.box14)"
+    source: "TP-1 line 111: the T4E slip (box 14). Parental insurance benefits (RL-6) go on line 110 only"
   TP1.114:
     label: Old Age Security pension
     formula: "line.T1.11300"
@@ -482,11 +482,11 @@ lines:
     formula: "line.TP1.401 - line.TP1.406"
     source: "TP-1 line 413: line 401 minus line 406 (negative when the credits are more than the tax)"
   TP1.414:
-    label: Tax credit for contributions to authorized Quebec political parties
+    label: Tax credit for contributions to authorized Quebec municipal political parties
     formula: >-
-      round(min(answer.provincialPoliticalContributions, param.qcPoliticalFirst) * param.qcPoliticalFirstRate, 2)
-      + round(max(0, min(answer.provincialPoliticalContributions, param.qcPoliticalMax) - param.qcPoliticalFirst) * param.qcPoliticalRate, 2)
-    source: "Work Chart 414: 85% of the first $50 and 75% of the rest, of up to $200 of contributions (the credit is then at most $155)"
+      round(min(answer.qcMunicipalPoliticalContributions, param.qcPoliticalFirst) * param.qcPoliticalFirstRate, 2)
+      + round(max(0, min(answer.qcMunicipalPoliticalContributions, param.qcPoliticalMax) - param.qcPoliticalFirst) * param.qcPoliticalRate, 2)
+    source: "Work Chart 414: contributions to authorized Quebec municipal parties and candidates, 85% of the first $50 and 75% of the rest, of up to $200 (at most $155). A contribution to a provincial party gets no credit"
   TP1.415:
     label: Dividend tax credit
     formula: "sum(RL3.boxC) + sum(RL16.boxJ)"
@@ -566,8 +566,8 @@ lines:
     label: QPP overpayment
     formula: >-
       if(line.QCU.33 > 0, max(0, line.TP1.98 + line.TP1.98_2 - param.qppMaxEmployeeTotal),
-      max(0, line.TP1.98 - round(line.QCU.14_4 * param.qppEmployeeRate, 2)) + max(0, line.TP1.98_2 - line.QCU.21))
-    source: "Guide, line 452: the contributions deducted (lines 98 and 98.2) less those required on the pensionable salary (Schedule U lines 17.2 and 21); with self-employment, the part over $4,735.20"
+      max(0, line.TP1.98 + line.TP1.98_2 - round(line.QCU.14_4 * param.qppEmployeeRate, 2) - line.QCU.21))
+    source: "Guide, line 452: the contributions deducted (lines 98 and 98.2 together) less all those required on the pensionable salary (Schedule U lines 17.2 and 21), so an over-deducted base contribution pays a second additional contribution no employer deducted; with self-employment, the part over $4,735.20"
   TP1.453:
     label: Income tax paid in instalments
     formula: "answer.qcInstalmentsPaid"

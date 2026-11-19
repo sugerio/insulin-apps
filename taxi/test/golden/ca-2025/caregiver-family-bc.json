@@ -118,7 +118,8 @@
         "hasHomeSupport": false,
         "qcChildTransfer": "0",
         "qcChildTuitionTransfer": "0",
-        "qcInstalmentsPaid": "0"
+        "qcInstalmentsPaid": "0",
+        "qcMunicipalPoliticalContributions": "0"
       },
       "p2": {
         "hasDisability": true,
@@ -191,7 +192,8 @@
         "hasHomeSupport": false,
         "qcChildTransfer": "0",
         "qcChildTuitionTransfer": "0",
-        "qcInstalmentsPaid": "0"
+        "qcInstalmentsPaid": "0",
+        "qcMunicipalPoliticalContributions": "0"
       }
     },
     "slips": [

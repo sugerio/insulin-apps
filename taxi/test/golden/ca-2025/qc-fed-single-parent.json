@@ -1,5 +1,5 @@
 {
-  "about": "A low-income single parent in Quebec with a child born in 2021, child care, medical expenses and the disability tax credit: the Canada workers benefit at Quebec's rates for a person with an eligible dependant and no spouse (5005-S6: $2,400 base, 20%, up to $2,044, less 20% over $14,341.56) and its disability supplement (40% over $1,200, up to $851.31), and the refundable medical expense supplement. Synthetic data.",
+  "about": "A low-income single parent in Quebec with a child born in 2021, child care, medical expenses and the disability tax credit: the Canada workers benefit at Quebec's rates for a person with an eligible dependant and no spouse (5005-S6: $2,400 base, 20%, up to $2,044, less 20% over $14,341.56) and its disability supplement (40% over $1,200, up to $851.31), and the refundable medical expense supplement. Synthetic data. Each T4 comes with its RL-1.",
   "input": {
     "year": 2025,
     "people": [
@@ -94,7 +94,8 @@
         "hasHomeSupport": false,
         "qcChildTransfer": "0",
         "qcChildTuitionTransfer": "0",
-        "qcInstalmentsPaid": "0"
+        "qcInstalmentsPaid": "0",
+        "qcMunicipalPoliticalContributions": "0"
       }
     },
     "slips": [
@@ -112,6 +113,21 @@
           "26": "19500.00",
           "55": "96.33",
           "56": "19500.00"
+        }
+      },
+      {
+        "id": "s1-rl1",
+        "person": "p1",
+        "type": "RL1",
+        "issuer": "Épicerie du Quartier",
+        "boxes": {
+          "A": "19500.00",
+          "B_A": "1024.00",
+          "C": "255.45",
+          "G": "19500.00",
+          "H": "96.33",
+          "I": "19500.00",
+          "E": "380.00"
         }
       }
     ]
@@ -205,11 +221,67 @@
       "S11.11": "15340",
       "QC.ownMedical": "900",
       "QCB.36": "900",
+      "QCB.39": "545.1",
+      "QCB.44": "88.73",
+      "QCB.50": "88.73",
       "QCC.50": "12275",
+      "QCC.92": "0.78",
       "QCC.claims": "1",
-      "QCU.40": "3500",
+      "QCP.64": "19500",
+      "QCP.72": "10220",
+      "QCP.76": "3066",
+      "QCP.83": "555",
+      "QCP.84": "2511",
+      "QCP.adapted": "1",
+      "QCP.72_2": "16598",
+      "QCP.76_2": "4149.5",
+      "QCP.83_2": "37.2",
+      "QCP.84_2": "4112.3",
+      "QCP.87": "4112.3",
+      "QCP.90": "4112.3",
+      "QCR.14": "19500",
+      "QCR.20": "78500",
+      "QCU.11": "160",
+      "QCU.14_4": "16000",
+      "QCU.16": "160",
+      "QCU.23": "160",
+      "QCU.40": "19500",
+      "QC.family": "18170",
+      "QC.work": "19500",
+      "TP1.97": "96.33",
+      "TP1.98": "1024",
+      "TP1.98_1": "19500",
+      "TP1.101": "19500",
+      "TP1.199": "19500",
+      "TP1.201": "1170",
+      "TP1.248": "160",
+      "TP1.254": "1330",
+      "TP1.256": "18170",
+      "TP1.275": "18170",
+      "TP1.279": "18170",
+      "TP1.299": "18170",
       "TP1.350": "18571",
-      "TP1.376": "4123"
+      "TP1.376": "4123",
+      "TP1.377": "22694",
+      "TP1.377_1": "3177.16",
+      "TP1.381": "354.9",
+      "TP1.388": "354.9",
+      "TP1.389": "70.98",
+      "TP1.399": "3248.14",
+      "TP1.401": "2543.8",
+      "TP1.406": "3248.14",
+      "TP1.413": "-704.34",
+      "TP1.430": "-704.34",
+      "TP1.449": "32",
+      "TP1.451": "380",
+      "TP1.451_2": "380",
+      "TP1.456": "4112.3",
+      "TP1.462": "88.73",
+      "TP1.465": "4581.03",
+      "TP1.468": "4581.03",
+      "TP1.470": "-4581.03",
+      "TP1.474": "4581.03",
+      "TP1.478": "4581.03"
     }
   }
 }

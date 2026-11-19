@@ -101,7 +101,8 @@
         "qcChildCareReceipts": "0",
         "hasHomeSupport": false,
         "qcInstalmentsPaid": "0",
-        "departureProperty": false
+        "departureProperty": false,
+        "qcMunicipalPoliticalContributions": "0"
       },
       "p2": {
         "hasDisability": true,
@@ -175,7 +176,8 @@
         "qcChildTransfer": "0",
         "qcChildTuitionTransfer": "0",
         "qcInstalmentsPaid": "0",
-        "departureProperty": false
+        "departureProperty": false,
+        "qcMunicipalPoliticalContributions": "0"
       }
     },
     "slips": [
@@ -314,6 +316,10 @@
       "QCP.72": "15934",
       "QCP.76": "1848.34",
       "QCP.83": "4734",
+      "QCP.adapted": "1",
+      "QCP.72_2": "25746",
+      "QCP.76_2": "3501.46",
+      "QCP.83_2": "3992.8",
       "QCR.14": "72000",
       "QCR.20": "26000",
       "QCU.11": "678",

@@ -88,7 +88,8 @@
         "qcChildTransfer": "0",
         "qcChildTuitionTransfer": "0",
         "qcInstalmentsPaid": "0",
-        "departureProperty": false
+        "departureProperty": false,
+        "qcMunicipalPoliticalContributions": "0"
       }
     },
     "slips": [

@@ -1,5 +1,5 @@
 {
-  "about": "An employee in Quebec who worked for two employers in turn, each deducting QPP, EI and PPIP on its own earnings: more than required in total. Schedule 10 Part C refunds the EI over 1.31% of $65,700 (lines 45000 and 45100 on the T1 for residents of Quebec); line 31205 claims the PPIP premiums up to $484.12 and the QPP credit and deduction are the required amounts (Part 2a). The QPP and PPIP overpayments are claimed on the TP-1, not the federal return: line 44800 isn't there. Synthetic data.",
+  "about": "An employee in Quebec who worked for two employers in turn, each deducting QPP, EI and PPIP on its own earnings: more than required in total. Schedule 10 Part C refunds the EI over 1.31% of $65,700 (lines 45000 and 45100 on the T1 for residents of Quebec); line 31205 claims the PPIP premiums up to $484.12 and the QPP credit and deduction are the required amounts (Part 2a). The QPP and PPIP overpayments are claimed on the TP-1, not the federal return: line 44800 isn't there. Synthetic data. Each T4 comes with its RL-1.",
   "input": {
     "year": 2025,
     "people": [
@@ -87,7 +87,8 @@
         "hasHomeSupport": false,
         "qcChildTransfer": "0",
         "qcChildTuitionTransfer": "0",
-        "qcInstalmentsPaid": "0"
+        "qcInstalmentsPaid": "0",
+        "qcMunicipalPoliticalContributions": "0"
       }
     },
     "slips": [
@@ -121,6 +122,36 @@
           "26": "50000.00",
           "55": "247.00",
           "56": "50000.00"
+        }
+      },
+      {
+        "id": "s1-rl1",
+        "person": "p1",
+        "type": "RL1",
+        "issuer": "Construction Saint-Laurent",
+        "boxes": {
+          "A": "60000.00",
+          "B_A": "3616.00",
+          "C": "786.00",
+          "G": "60000.00",
+          "H": "296.40",
+          "I": "60000.00",
+          "E": "8075.00"
+        }
+      },
+      {
+        "id": "s2-rl1",
+        "person": "p1",
+        "type": "RL1",
+        "issuer": "Béton Mauricie",
+        "boxes": {
+          "A": "50000.00",
+          "B_A": "2976.00",
+          "C": "655.00",
+          "G": "50000.00",
+          "H": "247.00",
+          "I": "50000.00",
+          "E": "6650.00"
         }
       }
     ]
@@ -203,9 +234,66 @@
       "T1.48500": "0",
       "S11.11": "130257.52",
       "S11.13": "107651.53",
+      "QCB.18": "65416",
+      "QCB.31": "12265.5",
+      "QCB.39": "3225.18",
+      "QCB.48": "3958.55",
+      "QCC.92": "0.7",
       "QCC.claims": "1",
-      "QCU.40": "3500",
-      "TP1.350": "18571"
+      "QCJ.89": "1094.88",
+      "QCK.40": "107506",
+      "QCK.46": "19890",
+      "QCK.48": "87616",
+      "QCK.84": "766",
+      "QCK.86": "766",
+      "QCK.89": "755",
+      "QCK.90": "755",
+      "QCP.64": "110000",
+      "QCP.72": "10220",
+      "QCP.76": "1185.52",
+      "QCP.83": "9488.6",
+      "QCR.14": "110000",
+      "QCU.11": "678",
+      "QCU.14_4": "67800",
+      "QCU.16": "678",
+      "QCU.17_5": "2252.8",
+      "QCU.21": "396",
+      "QCU.23": "1074",
+      "QCU.40": "106500",
+      "QC.family": "107506",
+      "QC.work": "110000",
+      "TP1.97": "543.4",
+      "TP1.98": "6592",
+      "TP1.98_1": "110000",
+      "TP1.101": "110000",
+      "TP1.199": "110000",
+      "TP1.201": "1420",
+      "TP1.248": "1074",
+      "TP1.254": "2494",
+      "TP1.256": "107506",
+      "TP1.275": "107506",
+      "TP1.279": "107506",
+      "TP1.299": "107506",
+      "TP1.350": "18571",
+      "TP1.377": "18571",
+      "TP1.377_1": "2599.94",
+      "TP1.399": "2599.94",
+      "TP1.401": "17813.94",
+      "TP1.406": "2599.94",
+      "TP1.413": "15214",
+      "TP1.430": "15214",
+      "TP1.432": "15214",
+      "TP1.447": "755",
+      "TP1.450": "15969",
+      "TP1.451": "14725",
+      "TP1.451_2": "14725",
+      "TP1.452": "1856.8",
+      "TP1.457": "59.28",
+      "TP1.465": "16641.08",
+      "TP1.468": "16641.08",
+      "TP1.470": "-672.08",
+      "TP1.474": "672.08",
+      "TP1.478": "672.08"
     }
   }
 }

@@ -1,5 +1,5 @@
 {
-  "about": "A Quebec couple: $150,000 from two employers (QPP and QPIP over-withheld), $8,000 of donations, a $250 Quebec political contribution and support paid; a spouse at $45,000 with RL-16 trust income, shares sold (T5008), tuition (RL-8), an RRSP withdrawal, an FHSA deduction and a net capital loss carried forward; a child born 2016. Synthetic data.",
+  "about": "A Quebec couple: $150,000 from two employers (QPP and QPIP over-withheld), $8,000 of donations, a $250 Quebec municipal political contribution and support paid; a spouse at $45,000 with RL-16 trust income, shares sold (T5008), tuition (RL-8), an RRSP withdrawal, an FHSA deduction and a net capital loss carried forward; a child born 2016. Synthetic data.",
   "input": {
     "year": 2025,
     "people": [
@@ -31,7 +31,7 @@
     "answers": {
       "p1": {
         "donations": "8000",
-        "provincialPoliticalContributions": "250",
+        "provincialPoliticalContributions": "0",
         "hasSupportPaid": true,
         "supportPaid": "6000",
         "childSupportPaid": "0",
@@ -103,7 +103,8 @@
         "qcChildTransfer": "0",
         "qcChildTuitionTransfer": "0",
         "qcInstalmentsPaid": "0",
-        "departureProperty": false
+        "departureProperty": false,
+        "qcMunicipalPoliticalContributions": "250"
       },
       "p2": {
         "netCapitalLosses": "500",
@@ -177,7 +178,8 @@
         "qcChildTransfer": "0",
         "qcChildTuitionTransfer": "0",
         "qcInstalmentsPaid": "0",
-        "departureProperty": false
+        "departureProperty": false,
+        "qcMunicipalPoliticalContributions": "0"
       }
     },
     "slips": [

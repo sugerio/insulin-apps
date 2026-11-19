@@ -711,7 +711,13 @@ questions:
     type: money
     module: credits
     ask: Provincial or territorial political contributions
-    help: To a registered party, association or candidate of your province or territory, on official receipts. In Quebec, to an authorized Quebec political party.
+    help: To a registered party, association or candidate of your province or territory, on official receipts. In Quebec, a contribution to a provincial party gives no credit.
+    default: 0
+  qcMunicipalPoliticalContributions:
+    type: money
+    module: credits
+    ask: Contributions to Quebec municipal political parties or candidates
+    help: To an authorized municipal party or independent candidate in Quebec, on official receipts. Up to $200 counts.
     default: 0
   hasRentedHome:
     type: boolean

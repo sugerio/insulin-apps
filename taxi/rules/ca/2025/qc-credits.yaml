@@ -258,6 +258,30 @@ params:
     label: Work premium reduction rate
     source: "Schedule P, Part E, line 83: line 82 × 10%"
     value: 10%
+  adaptedWorkPremiumCapCouple:
+    label: Adapted work premium, most work income counted for a couple
+    source: "Schedule P, Part E, section 1, column 2, line 66: $26,946"
+    value: 26946
+  adaptedWorkPremiumCapSingle:
+    label: Adapted work premium, most work income counted without a spouse
+    source: "Schedule P, Part E, section 2, column 2, line 66: $17,798"
+    value: 17798
+  adaptedWorkPremiumExclusion:
+    label: Adapted work premium, work income left out
+    source: "Schedule P, Part E, column 2, line 70: $1,200"
+    value: 1200
+  adaptedWorkPremiumRateChildCouple:
+    label: Adapted work premium rate, couple with a designated child
+    source: "Schedule P, Part E, section 1, line 75: 20%"
+    value: 20%
+  adaptedWorkPremiumRateChildSingle:
+    label: Adapted work premium rate, single parent
+    source: "Schedule P, Part E, section 2, line 75: 25%"
+    value: 25%
+  adaptedWorkPremiumRate:
+    label: Adapted work premium rate without a designated child
+    source: "Schedule P, Part E, line 75: 13.6%"
+    value: 13.6%
   workPremiumMaxFamilyCouple:
     label: Family income from which a couple gets no work premium
     source: "Guide, line 456, maximum family income: $59,369 for a couple with one or more children"
@@ -564,11 +588,43 @@ lines:
     label: Work premium
     formula: "max(0, line.QCP.76 - line.QCP.83)"
     source: "Schedule P, line 84"
+  # Column 2, the adapted work premium: for someone (or their spouse) entitled to the amount for a severe and
+  # prolonged impairment (line 376). An allowance under the Social Solidarity or Basic Income Program isn't asked.
+  QCP.adapted:
+    label: Column 2 (adapted work premium) applies (1 for yes)
+    formula: "if(line.TP1.376 > 0 or (line.QC.couple == 1 and spouse.line.TP1.376 > 0), 1, 0)"
+    source: "Schedule P, Part E: column 2 when you or your spouse were entitled to the amount on line 376"
+  QCP.72_2:
+    label: Work income counted, adapted work premium
+    formula: >-
+      max(0, min(line.QCP.64, if(line.HH.partner == 1, param.adaptedWorkPremiumCapCouple, param.adaptedWorkPremiumCapSingle))
+      - param.adaptedWorkPremiumExclusion)
+    source: "Schedule P, Part E, column 2, lines 66 to 72"
+  QCP.76_2:
+    label: Adapted work premium before reduction
+    formula: >-
+      round(line.QCP.72_2 * if(household.childrenUnder18 > 0, if(line.HH.partner == 1, param.adaptedWorkPremiumRateChildCouple,
+      param.adaptedWorkPremiumRateChildSingle), param.adaptedWorkPremiumRate), 2)
+    source: "Schedule P, Part E, column 2, lines 75 and 76"
+  QCP.83_2:
+    label: Reduction based on family income, adapted work premium
+    formula: >-
+      round(max(0, line.QC.family - if(line.HH.partner == 1, param.adaptedWorkPremiumCapCouple, param.adaptedWorkPremiumCapSingle))
+      * param.workPremiumReductionRate, 2)
+    source: "Schedule P, Part E, column 2, lines 78 to 83"
+  QCP.84_2:
+    label: Adapted work premium
+    formula: "if(line.QCP.adapted == 1, max(0, line.QCP.76_2 - line.QCP.83_2), 0)"
+    source: "Schedule P, Part E, column 2, line 84"
+  QCP.87:
+    label: Work premium or adapted work premium, whichever is greater
+    formula: "max(line.QCP.84, line.QCP.84_2)"
+    source: "Schedule P, lines 85 and 87"
   QCP.90:
     label: Tax credits respecting the work premium
     formula: >-
       if(line.QC.couple == 1, if(line.QC.work > spouse.line.QC.work or (line.QC.work == spouse.line.QC.work and person.role == "self"),
-      line.QCP.84, 0), line.QCP.84)
+      line.QCP.87, 0), line.QCP.87)
     source: "Schedule P, lines 85 to 90: a couple's premium, claimed by the spouse with the higher work income (line 86 is the other's line 89)"
 
   # Schedule Q – retirement income transferred to your spouse

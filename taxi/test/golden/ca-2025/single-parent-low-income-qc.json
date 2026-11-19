@@ -95,7 +95,8 @@
         "qcChildTransfer": "0",
         "qcChildTuitionTransfer": "0",
         "qcInstalmentsPaid": "0",
-        "departureProperty": false
+        "departureProperty": false,
+        "qcMunicipalPoliticalContributions": "0"
       }
     },
     "slips": [
@@ -301,6 +302,7 @@
       "QCP.76": "3066",
       "QCP.83": "825",
       "QCP.84": "2241",
+      "QCP.87": "2241",
       "QCP.90": "2241",
       "QCR.14": "19500",
       "QCR.20": "78500",

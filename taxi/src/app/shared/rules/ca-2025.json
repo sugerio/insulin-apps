@@ -3519,6 +3519,36 @@
       "value": "0.1",
       "source": "Schedule P, Part E, line 83: line 82 × 10%"
     },
+    "adaptedWorkPremiumCapCouple": {
+      "label": "Adapted work premium, most work income counted for a couple",
+      "value": "26946",
+      "source": "Schedule P, Part E, section 1, column 2, line 66: $26,946"
+    },
+    "adaptedWorkPremiumCapSingle": {
+      "label": "Adapted work premium, most work income counted without a spouse",
+      "value": "17798",
+      "source": "Schedule P, Part E, section 2, column 2, line 66: $17,798"
+    },
+    "adaptedWorkPremiumExclusion": {
+      "label": "Adapted work premium, work income left out",
+      "value": "1200",
+      "source": "Schedule P, Part E, column 2, line 70: $1,200"
+    },
+    "adaptedWorkPremiumRateChildCouple": {
+      "label": "Adapted work premium rate, couple with a designated child",
+      "value": "0.2",
+      "source": "Schedule P, Part E, section 1, line 75: 20%"
+    },
+    "adaptedWorkPremiumRateChildSingle": {
+      "label": "Adapted work premium rate, single parent",
+      "value": "0.25",
+      "source": "Schedule P, Part E, section 2, line 75: 25%"
+    },
+    "adaptedWorkPremiumRate": {
+      "label": "Adapted work premium rate without a designated child",
+      "value": "0.136",
+      "source": "Schedule P, Part E, line 75: 13.6%"
+    },
     "workPremiumMaxFamilyCouple": {
       "label": "Family income from which a couple gets no work premium",
       "value": "59369",
@@ -8777,9 +8807,39 @@
       "formula": "max(0, line.QCP.76 - line.QCP.83)",
       "source": "Schedule P, line 84"
     },
+    "QCP.adapted": {
+      "label": "Column 2 (adapted work premium) applies (1 for yes)",
+      "formula": "if(line.TP1.376 > 0 or (line.QC.couple == 1 and spouse.line.TP1.376 > 0), 1, 0)",
+      "source": "Schedule P, Part E: column 2 when you or your spouse were entitled to the amount on line 376"
+    },
+    "QCP.72_2": {
+      "label": "Work income counted, adapted work premium",
+      "formula": "max(0, min(line.QCP.64, if(line.HH.partner == 1, param.adaptedWorkPremiumCapCouple, param.adaptedWorkPremiumCapSingle)) - param.adaptedWorkPremiumExclusion)",
+      "source": "Schedule P, Part E, column 2, lines 66 to 72"
+    },
+    "QCP.76_2": {
+      "label": "Adapted work premium before reduction",
+      "formula": "round(line.QCP.72_2 * if(household.childrenUnder18 > 0, if(line.HH.partner == 1, param.adaptedWorkPremiumRateChildCouple, param.adaptedWorkPremiumRateChildSingle), param.adaptedWorkPremiumRate), 2)",
+      "source": "Schedule P, Part E, column 2, lines 75 and 76"
+    },
+    "QCP.83_2": {
+      "label": "Reduction based on family income, adapted work premium",
+      "formula": "round(max(0, line.QC.family - if(line.HH.partner == 1, param.adaptedWorkPremiumCapCouple, param.adaptedWorkPremiumCapSingle)) * param.workPremiumReductionRate, 2)",
+      "source": "Schedule P, Part E, column 2, lines 78 to 83"
+    },
+    "QCP.84_2": {
+      "label": "Adapted work premium",
+      "formula": "if(line.QCP.adapted == 1, max(0, line.QCP.76_2 - line.QCP.83_2), 0)",
+      "source": "Schedule P, Part E, column 2, line 84"
+    },
+    "QCP.87": {
+      "label": "Work premium or adapted work premium, whichever is greater",
+      "formula": "max(line.QCP.84, line.QCP.84_2)",
+      "source": "Schedule P, lines 85 and 87"
+    },
     "QCP.90": {
       "label": "Tax credits respecting the work premium",
-      "formula": "if(line.QC.couple == 1, if(line.QC.work > spouse.line.QC.work or (line.QC.work == spouse.line.QC.work and person.role == \"self\"), line.QCP.84, 0), line.QCP.84)",
+      "formula": "if(line.QC.couple == 1, if(line.QC.work > spouse.line.QC.work or (line.QC.work == spouse.line.QC.work and person.role == \"self\"), line.QCP.87, 0), line.QCP.87)",
       "source": "Schedule P, lines 85 to 90: a couple's premium, claimed by the spouse with the higher work income (line 86 is the other's line 89)"
     },
     "QCQ.20": {
@@ -8992,8 +9052,8 @@
     },
     "TP1.111": {
       "label": "Employment Insurance benefits",
-      "formula": "line.T1.11900",
-      "source": "TP-1 line 111: the T4E slip (box 14)"
+      "formula": "sum(T4E.box14)",
+      "source": "TP-1 line 111: the T4E slip (box 14). Parental insurance benefits (RL-6) go on line 110 only"
     },
     "TP1.114": {
       "label": "Old Age Security pension",
@@ -9259,9 +9319,9 @@
       "source": "TP-1 line 413: line 401 minus line 406 (negative when the credits are more than the tax)"
     },
     "TP1.414": {
-      "label": "Tax credit for contributions to authorized Quebec political parties",
-      "formula": "round(min(answer.provincialPoliticalContributions, param.qcPoliticalFirst) * param.qcPoliticalFirstRate, 2) + round(max(0, min(answer.provincialPoliticalContributions, param.qcPoliticalMax) - param.qcPoliticalFirst) * param.qcPoliticalRate, 2)",
-      "source": "Work Chart 414: 85% of the first $50 and 75% of the rest, of up to $200 of contributions (the credit is then at most $155)"
+      "label": "Tax credit for contributions to authorized Quebec municipal political parties",
+      "formula": "round(min(answer.qcMunicipalPoliticalContributions, param.qcPoliticalFirst) * param.qcPoliticalFirstRate, 2) + round(max(0, min(answer.qcMunicipalPoliticalContributions, param.qcPoliticalMax) - param.qcPoliticalFirst) * param.qcPoliticalRate, 2)",
+      "source": "Work Chart 414: contributions to authorized Quebec municipal parties and candidates, 85% of the first $50 and 75% of the rest, of up to $200 (at most $155). A contribution to a provincial party gets no credit"
     },
     "TP1.415": {
       "label": "Dividend tax credit",
@@ -9345,8 +9405,8 @@
     },
     "TP1.452": {
       "label": "QPP overpayment",
-      "formula": "if(line.QCU.33 > 0, max(0, line.TP1.98 + line.TP1.98_2 - param.qppMaxEmployeeTotal), max(0, line.TP1.98 - round(line.QCU.14_4 * param.qppEmployeeRate, 2)) + max(0, line.TP1.98_2 - line.QCU.21))",
-      "source": "Guide, line 452: the contributions deducted (lines 98 and 98.2) less those required on the pensionable salary (Schedule U lines 17.2 and 21); with self-employment, the part over $4,735.20"
+      "formula": "if(line.QCU.33 > 0, max(0, line.TP1.98 + line.TP1.98_2 - param.qppMaxEmployeeTotal), max(0, line.TP1.98 + line.TP1.98_2 - round(line.QCU.14_4 * param.qppEmployeeRate, 2) - line.QCU.21))",
+      "source": "Guide, line 452: the contributions deducted (lines 98 and 98.2 together) less all those required on the pensionable salary (Schedule U lines 17.2 and 21), so an over-deducted base contribution pays a second additional contribution no employer deducted; with self-employment, the part over $4,735.20"
     },
     "TP1.453": {
       "label": "Income tax paid in instalments",
@@ -10815,7 +10875,14 @@
       "type": "money",
       "ask": "Provincial or territorial political contributions",
       "module": "credits",
-      "help": "To a registered party, association or candidate of your province or territory, on official receipts. In Quebec, to an authorized Quebec political party.",
+      "help": "To a registered party, association or candidate of your province or territory, on official receipts. In Quebec, a contribution to a provincial party gives no credit.",
+      "default": "0"
+    },
+    "qcMunicipalPoliticalContributions": {
+      "type": "money",
+      "ask": "Contributions to Quebec municipal political parties or candidates",
+      "module": "credits",
+      "help": "To an authorized municipal party or independent candidate in Quebec, on official receipts. Up to $200 counts.",
       "default": "0"
     },
     "hasRentedHome": {
@@ -28792,5 +28859,5 @@
     }
   },
   "outcome": "RESULT.net",
-  "version": "86f94847501a782f"
+  "version": "ef70fb662f035817"
 }

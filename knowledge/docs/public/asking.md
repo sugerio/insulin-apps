@@ -18,6 +18,8 @@ question, and a model writes a short answer from those passages alone, citing ea
 
 > It needs sign-off from the alliance lead, because it is above the $25,000 limit [1].
 
+![An answer on a collection's Ask tab: two sentences, each with a numbered citation, then the two sources, page 3 of a PDF and a note, with the words used, the model that wrote it and Was this right?](/docs/assets/screenshots/knowledge-answer.png "An answer with its numbered sources")
+
 Knowledge checks every number in the answer against the passages the model was given. If the answer cites something it
 wasn't given, or nothing at all, you get the sources without a written answer instead. Under the answer, Knowledge
 says which model wrote it: Insulin Knowledge's built-in model, Gemma 4, or the organization's own model, as an Admin
@@ -31,10 +33,14 @@ owns the collection and when the file was added. Values hidden before
 learning show as hidden: nobody, not even the collection's owner, can see what was there. Anyone who can ask a
 collection can open every source it used.
 
+![The source viewer beside an answer: deal-desk-faq.md with its collection, owner, last edit and status, and the paragraph the answer used highlighted in the file's text](/docs/assets/screenshots/knowledge-source-viewer.png "A source, opened at the exact words the answer used")
+
 ## "I won't guess"
 
 When nothing in the collections you picked covers the question, Knowledge answers "I couldn't find this in …, so I
 won't guess." It never answers without a source. The question is kept for the collection's owner as a gap.
+
+![A question nothing in the collection covers, answered I couldn't find this in “Partner Program”, so I won't guess, with the buttons Ask Ana Lima to add it and Write the answer](/docs/assets/screenshots/knowledge-wont-guess.png "“I won't guess”: no answer without a source")
 
 - **Ask the owner to add it** sends the question to the collection's owner and its admins by e-mail.
 - **Write the answer** (owners, admins and editors) adds the answer as a note the collection learns, so the next

@@ -40,6 +40,8 @@ rules apply to every collection in the organization.
 **Try it** shows what the rules would hide in a text you paste, before anything changes. It uses the same rules
 Insulin applies to files (`POST /api/rules/hiding-preview` does the same through the API).
 
+![Rules and data: the five Hide before learning switches, all on, and Try it with a sample text whose e-mail address, phone number, card number, API token and password show as hidden, beside Usage and limits](/docs/assets/screenshots/knowledge-rules.png "Hide before learning, with Try it")
+
 A new or stricter rule also re-reads the files learned before, in the background, and hides what Knowledge keeps of
 corrections and waiting notes. Re-reading doesn't count toward documents learned; the time it takes counts toward awake
 hours. Earlier restore points that still hold the newly hidden text

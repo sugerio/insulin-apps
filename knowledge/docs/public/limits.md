@@ -13,6 +13,8 @@ usage, and for AI agents that get a `quota_exceeded` error.
 These are the defaults. Admins see their organization's own under **Usage and limits** in **Rules and data**, with
 what was used beside each; a raised limit shows there within five minutes.
 
+![Rules and data with Usage and limits: each limit with what was used this month beside it, such as 3 of 20 collections and 3.6 of 100 awake hours, the day the monthly ones start again, and Ask for more](/docs/assets/screenshots/knowledge-rules.png "Usage and limits, in Rules and data")
+
 | Limit | Key | Default | What counts |
 |---|---|---|---|
 | Collections | `collections` | 20 | Every collection, asleep or not |

@@ -15,6 +15,12 @@ organization. Owners and admins invite the team and give each person a role: Adm
 
 ## Start your first collection
 
+Until you have a collection, yours or one shared with you, **Home** shows how Knowledge works (add files, Insulin
+learns, ask, answers with sources) and your next step: **New collection**, or for a Viewer, asking a colleague to share
+one.
+
+![Knowledge's Home before the first collection: Your team's knowledge, answered with sources, the steps done so far, the New collection button, How it works in four steps and six tiles on what makes Knowledge different](/docs/assets/screenshots/knowledge-home-first-visit.png "Home on a first visit, before any collection")
+
 Admins and Editors in Knowledge can start collections. **New collection** takes five steps:
 
 1. **What it is for.** Give it a name and say, in one sentence, what it is for. AI assistants read that sentence to
@@ -29,7 +35,12 @@ Admins and Editors in Knowledge can start collections. **New collection** takes 
 5. **Share it.** Share it with everyone in your organization or with specific people, and choose whether AI assistants
    and API clients can ask it.
 
-Then ask it on its **Ask** tab, or from **Home** across up to five collections at once.
+![Step 4 of New collection, Here's what Insulin learned: the collection's counts, eight facts from three files with Looks right and Fix, one checked by Ana Lima, three questions to try made from them and a box to ask your own](/docs/assets/screenshots/knowledge-learned.png "Step 4: check what it learned, then try a question")
+
+Then ask it on its **Ask** tab, or from **Home**, which becomes **Ask your collections**: pick up to five collections
+and ask. Below are your collections and, for Editors and Admins, what needs attention.
+
+![Home with collections, Ask your collections: a question asked across two collections picked out of three, its answer with one numbered source from the Support Handbook, Needs your attention, and the collections as cards with their state](/docs/assets/screenshots/knowledge-home.png "Home: ask across the collections you pick")
 
 ## What each role sees
 

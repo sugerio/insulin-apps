@@ -77,7 +77,7 @@ passages back rather than a written answer:
 
 ```diagram
 title: How an AI assistant asks Knowledge
-description: An AI assistant such as Claude, ChatGPT, Codex, Gemini or opencode connects once to Knowledge's MCP server at knowledge.insulinapps.com/mcp, signing in as its person, and from then on acts with that person's roles and no more. Each search names one to five collections the person can ask. Knowledge answers with passages, each with its file, its pages and the exact words, from which the assistant writes its answer and links to the sources on the site; with covered false when nothing in those collections covers the question, so the assistant says it won't guess; or, when a collection is asleep or learning, with the time to ask again.
+description: An AI assistant signs in once to Knowledge's MCP server and asks with its person's roles, naming one to five collections in each search. Knowledge returns passages with their files, pages and exact words, covered false when nothing covers the question, or a time to ask again while a collection wakes or learns.
 size: 760 x 360
 box assistant 20 30 180 84 "Your AI assistant" "Claude, ChatGPT, Codex," "Gemini, opencode…"
 box mcp 240 30 260 84 accent "Knowledge's MCP server" "knowledge.insulinapps.com/mcp" "acts as you: your roles, no more"

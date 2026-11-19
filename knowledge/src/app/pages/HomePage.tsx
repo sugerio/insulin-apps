@@ -122,7 +122,7 @@ function HowItWorks() {
           const last = index === FLOW.length - 1
           return (
             <li key={step.title} style={{ animationDelay: `${index * 150}ms` }}
-              className="relative flex items-center gap-4 py-4 sm:flex-col sm:gap-3 sm:px-2 sm:py-0 sm:text-center motion-safe:animate-in motion-safe:fill-mode-both motion-safe:fade-in motion-safe:slide-in-from-bottom-2 motion-safe:duration-500">
+              className="relative flex items-center gap-4 py-4 sm:flex-col sm:gap-3 sm:px-2 sm:py-0 sm:text-center motion-safe:animate-in motion-safe:fill-mode-both motion-safe:fade-in motion-safe:slide-in-from-bottom-2 motion-safe:animation-duration-500">
               {last ? null : <Connector index={index} />}
               <span aria-hidden="true" className={cn('relative flex size-12 shrink-0 items-center justify-center rounded-full ring-1',
                 last ? 'bg-primary text-primary-foreground ring-primary' : 'bg-background ring-foreground/15')}>

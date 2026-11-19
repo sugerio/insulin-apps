@@ -27,7 +27,7 @@ back is itself a new restore point. **Undo** brings everything back as it was be
 
 ```diagram
 title: Going back, then undo
-description: Three changes saved three restore points: three files learned, a note added, then one more file learned. Going back to the second restore point makes a fourth, which answers from the second version; the file added in the third is set aside, not deleted. Undo makes a fifth restore point with everything as it was in the third. Older restore points stay in History throughout, and who has access never changes.
+description: Three changes saved three restore points; going back to the second makes a fourth that answers from that version, with the third's file set aside, not deleted. Undo then makes a fifth with everything as it was in the third.
 size: 760 x 330
 box p1 20 70 150 70 "Restore point 1" "learned 3 files"
 box p2 195 70 150 70 "Restore point 2" "added a note"

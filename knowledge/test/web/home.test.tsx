@@ -69,6 +69,10 @@ describe('J0 the first visit', () => {
     expect(animated).toContain('sm:motion-safe:animate-flow-across')
     // Must catch: an animation class without motion-safe: would run with reduced motion too.
     expect(animated.filter((name) => !name.split(':').includes('motion-safe'))).toEqual([])
+    // Must catch: duration-* also sets transition-duration, so every style change (a resize past sm:) would slide for
+    // that long; the entrance takes its length from animation-duration-* alone.
+    const transitions = [...flow.querySelectorAll<HTMLElement>('[class]')].flatMap((node) => [...node.classList].filter((name) => /(^|:)duration-/.test(name)))
+    expect(transitions).toEqual([])
     // The dots are hidden unless motion is welcome, so reduced motion leaves still lines with arrowheads.
     const dots = [...flow.querySelectorAll<HTMLElement>('[data-flow-dot]')]
     expect(dots).toHaveLength(3)

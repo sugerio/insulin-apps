@@ -15,7 +15,7 @@ the app can reach, keeps each collection apart from every other.
 
 ```diagram
 title: Where Knowledge runs and where your data lives
-description: People, AI assistants and programs reach Knowledge through Insulin Apps at insulinapps.com, which signs people in, keeps organizations, people and roles, and passes each request on with who is asking. The Knowledge app checks the caller's role, the collection's sharing and the limits, and keeps sharing, the lists, questions asked and logs in its own database. Only the app reaches the engine, which runs one Durable Object and one container for each collection, asleep when nobody asks. It saves a restore point after every change, kept 30 days, keeps the learned text with hidden values removed in storage (original files are deleted once read), and takes daily backups, the latest kept as long as the collection exists. The built-in model, Gemma 4, writes the answers on the site, unless an Admin chose the organization's own model, which is reached through the organization's integration on Insulin Apps. An export is a zip file of the learned text, notes, facts, corrections, history and settings, never the original files.
+description: Insulin Apps signs people in and passes each request to the Knowledge app, which checks roles, sharing and limits; only the app reaches the engine, where each collection runs on its own, asleep when unused, with its restore points, learned text and daily backups. An export holds the learned text, notes, facts, corrections, history and settings, never the original files.
 size: 760 x 600
 box people 20 20 230 50 "People" "in a web browser"
 box assistants 265 20 230 50 "AI assistants" "over MCP, as their person"

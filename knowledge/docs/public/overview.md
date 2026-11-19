@@ -35,7 +35,7 @@ name and nothing else.
 
 ```diagram
 title: From your files to an answer with its sources
-description: Files, web pages and notes added to a collection first have e-mail addresses, phone numbers, card numbers, API keys and passwords removed (the hiding rules an Admin keeps on, all of them for a new organization), before anything is learned; the original files are deleted once read. The collection then learns what is left, as passages and facts, each with its file and pages, and saves a restore point. A question asked on the site, by an AI assistant over MCP or by a program through the API names one to five collections; Knowledge finds the passages in them that answer it. When they do, the answer cites them by number, at the exact words; when nothing in them covers the question, Knowledge says it won't guess.
+description: Hidden values are removed from your files, web pages and notes before the collection learns them, and a restore point is saved. A question from the site, an AI assistant or the API names one to five collections, and Knowledge answers with numbered sources, or says it won't guess.
 size: 820 x 410
 box files 20 20 170 46 "Files" "PDF, Word, Excel, slides…"
 box web 20 76 170 46 "Web pages" "public pages"

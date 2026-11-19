@@ -33,7 +33,7 @@ restore point after every change:
 
 ```diagram
 title: A collection's day: asleep, waking, ready, learning
-description: A collection sleeps when nobody has asked it for 10 minutes. The next question wakes it, in about a minute; after more than 30 days unused it comes back from its latest backup instead, in a few minutes. Ready, it answers in a few seconds. When files, web pages, notes or corrections are added it learns them, and questions to it wait; then it saves a restore point and is ready again. Going back to an earlier restore point takes about a minute, and it then answers from that version; undo works the same way.
+description: A collection sleeps after 10 minutes without a question and wakes in about a minute when asked again, or in a few minutes from its backup after 30 days unused. While it learns, questions wait; after each change it saves a restore point and is ready again.
 size: 780 x 380
 box asleep 20 150 140 64 muted "Asleep" "nobody asked for" "10 minutes"
 box waking 210 150 140 64 "Waking up" "for a question:" "about a minute"

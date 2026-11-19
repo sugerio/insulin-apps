@@ -64,6 +64,45 @@
   --radius-4xl: calc(var(--radius) * 2.6);
 }
 
+/*
+ * Home's "How it works" picture: a dot runs along each connector in turn (across on wide screens, down on a phone),
+ * three times, then stops. Screens use these only behind motion-safe:, so with reduced motion nothing moves.
+ */
+@theme {
+  --animate-flow-across: flow-across 3s ease-in-out 3 both;
+  --animate-flow-down: flow-down 3s ease-in-out 3 both;
+  @keyframes flow-across {
+    0% {
+      transform: translateX(0);
+      opacity: 0;
+    }
+    6%,
+    27% {
+      opacity: 1;
+    }
+    33.3%,
+    100% {
+      transform: translateX(100%);
+      opacity: 0;
+    }
+  }
+  @keyframes flow-down {
+    0% {
+      transform: translateY(0);
+      opacity: 0;
+    }
+    6%,
+    27% {
+      opacity: 1;
+    }
+    33.3%,
+    100% {
+      transform: translateY(100%);
+      opacity: 0;
+    }
+  }
+}
+
 :root {
   color-scheme: light dark;
   --radius: 0.625rem;

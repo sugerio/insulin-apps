@@ -25,6 +25,29 @@ anything happens, Knowledge explains what it will do: what the collection will k
 Going back takes about a minute, and questions wait meanwhile. Then the collection answers from that version, and going
 back is itself a new restore point. **Undo** brings everything back as it was before.
 
+```diagram
+title: Going back, then undo
+description: Three changes saved three restore points; going back to the second makes a fourth that answers from that version, with the third's file set aside, not deleted. Undo then makes a fifth with everything as it was in the third.
+size: 760 x 330
+box p1 20 70 150 70 "Restore point 1" "learned 3 files"
+box p2 195 70 150 70 "Restore point 2" "added a note"
+box p3 370 70 150 70 "Restore point 3" "learned 1 more file"
+box p4 550 70 190 70 accent "Restore point 4" "went back to 2; the file" "from 3 is set aside"
+box p5 550 210 190 70 "Restore point 5" "undo: as it was at 3"
+arrow p1.r -> p2.l
+arrow p2.r -> p3.l
+arrow p3.r -> p4.l
+arrow p2.t -> p4.t:0.4 dashed mid=36 "answers from version 2"
+arrow p4.b -> p5.t "Undo"
+arrow p3.b -> p5.l dashed "everything comes back"
+text 380 310 small muted "Changes within 5 minutes of each other share one restore point. Who has access never changes."
+```
+
+The same steps in a collection's History, before undo: three files learned, a note, one more file, then going back to
+the note's version, which can be undone.
+
+![A collection's History after going back: the newest restore point, Went back to the version from earlier today, marked Now with Undo, then Added 1 file, Added a note and Added 3 files, each with Go back to this version](/docs/assets/screenshots/knowledge-history.png "History: restore points, going back and undo")
+
 Through the API: `GET /api/collections/{id}/history`, then `GET /api/collections/{id}/history/{version}/preview` for
 the explanation, then `POST /api/collections/{id}/history/{version}/go-back`; `POST /api/collections/{id}/history/undo`
 undoes it. Going back and undo need the collection's Editor role and an `Idempotency-Key`.
@@ -47,6 +70,8 @@ Besides restore points, every collection is backed up daily. Daily backups are k
 daily backups (30 by default; History's footer and Health say how many), and the latest one as long as the collection
 exists, so a collection is never lost by sitting unused. Admins see each collection's last restore
 point and last backup on **Health**. See [Your data](/docs/knowledge/your-data).
+
+![Health, for Admins in Knowledge: each collection they have a role in, asleep or awake, with its documents, last restore point, last backup, repairs and when it was last used, then the organization's totals](/docs/assets/screenshots/knowledge-health.png "Health: how each collection is doing, in plain words")
 
 Health also says when what Knowledge's engine did in a collection is waiting to be recorded, and since when: its lists,
 counts, history and usage may be behind until it is. Answers aren't affected, other collections go on, and Knowledge

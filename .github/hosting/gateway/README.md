@@ -196,21 +196,27 @@ Playwright through synthetic data (`.github/hosting/docs/screenshots.mjs`, a sma
 ```bash
 (cd ../../../captable && npm ci && NITRO_PRESET=cloudflare_module npm run build)
 (cd ../../../esign && npm ci && NITRO_PRESET=cloudflare_module npm run build)
-(cd ../docs && npm ci && node screenshots.mjs)   # --only <name,...>, --headed, --debug <dir>, --chrome <path>
+(cd ../../../knowledge && npm ci && NITRO_PRESET=cloudflare_module npm run build)
+(cd ../docs && npm ci && node screenshots.mjs)   # --app, --only <name,...>, --headed, --debug <dir>, --chrome <path>
 npm run build:docs
 ```
 
-It starts the gateway with both apps over https (`wrangler dev --local-protocol https`, which Esign's embedded editor
-needs) in a fresh local state, signs up through the captured-mail page, creates an organization, a custom role and
-invitations, stores a credential, creates two OAuth clients and rotates one's secret, connects an MCP client, imports
-Cap Table's own spreadsheet template filled with a fictional company, places Esign fields, sends an envelope and signs
-it, then creates a second organization under the same email domain so that the next one is a request to support
-(`ORG_REQUEST_EMAIL` is set to a synthetic address; mail is captured), with Cloudflare's always-passing Turnstile test
-widget as the only outside call. A completed Esign envelope can't be captured locally (its seal needs a seal key
+It starts the gateway with the three apps over https (`wrangler dev --local-protocol https`, which Esign's embedded
+editor needs) in a fresh local state, signs up through the captured-mail page, creates an organization, a custom role
+and invitations, stores a credential, creates two OAuth clients and rotates one's secret, connects an MCP client,
+imports Cap Table's own spreadsheet template filled with a fictional company, places Esign fields, sends an envelope
+and signs it, captures Knowledge with its in-memory engine (`knowledge-screenshots.mjs`), then creates a second
+organization under the same email domain so that the next one is a request to support (`ORG_REQUEST_EMAIL` is set to
+a synthetic address; mail is captured), with Cloudflare's always-passing Turnstile test widget as the only outside
+call. A completed Esign envelope can't be captured locally (its seal needs a seal key
 binding `wrangler dev` can't provide, and a timestamp service), so `esign-completed.png` is a labelled placeholder. Nor
 can a domain be verified (`wrangler dev` can't stub the DNS-over-HTTPS lookup), so `platform-organization.png` shows
 the invitation setting before one is.
-`--only` writes just the named images, so a change to a few pages doesn't rewrite the rest.
+`--only` writes just the named images, so a change to a few pages doesn't rewrite the rest, and `--app knowledge` starts
+and captures Knowledge alone (`--app captable,esign` the rest). Knowledge's step moves the in-memory engine's clock
+between changes, so that History has restore points of their own, through a relay to the engine's control interface
+on the next port; the screenshots are written to the run's own folder and copied at the end, since writing into the
+assets folder would reload the stack and empty that engine.
 
 `npm run dev` writes `.dev/gateway.wrangler.json` (from `wrangler.local.jsonc`) and the app Worker's config, applies
 the D1 migrations locally and runs `wrangler dev --local` with the configs. Open:

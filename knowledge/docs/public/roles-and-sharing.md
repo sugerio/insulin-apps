@@ -50,6 +50,8 @@ Sharing isn't part of a collection's content: going back to an earlier restore p
 Sharing, settings, export, transfer and delete can only be done on the site, by a person, never by an AI assistant or
 an API client.
 
+![A collection's Sharing tab: the owner, an Editor and a Viewer shared with by name, general access Viewer for everyone in the organization, then the collection's settings with the switch for AI assistants and API clients and keep it ready, Export, and the owner's Transfer and Delete](/docs/assets/screenshots/knowledge-sharing.png "The Sharing tab: people, general access, settings, export, transfer and delete")
+
 ## AI assistants and API clients
 
 **AI assistants and API clients can ask it** is one switch per collection, on by default. Off, neither can reach the

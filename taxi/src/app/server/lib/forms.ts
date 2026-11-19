@@ -1,7 +1,7 @@
-import { printBlockers, type Slip, type TaxYear } from "#shared";
+import { PROVINCE_NAMES, isAdult, printBlockers, type Province, type Slip, type TaxYear } from "#shared";
 import { Dec } from "../../shared/engine/decimal.ts";
 import { Evaluation } from "../../shared/engine/evaluate.ts";
-import { fillForms } from "../../shared/engine/forms.ts";
+import { fillForms, personalFacts } from "../../shared/engine/forms.ts";
 import { documentName, type FormSpec, type RuleSet } from "../../shared/engine/rules.ts";
 import { rulesFor } from "../../shared/rules/index.ts";
 import { buildReturnPdf, type Worksheet, type WorksheetRow } from "./forms-pdf.ts";
@@ -51,7 +51,10 @@ export async function printReturn(db: Db, orgId: string, year: number, personId:
   if (blockers.length > 0) {
     throw conflict(`The return isn't finished, so its forms can't be printed yet: ${blockers.map((blocker) => blocker.text).join(" ")}`);
   }
-  const filled = fillForms(rules, evaluation, personId);
+  // Step 1 names the spouse even when their return isn't prepared here: the household's other adult.
+  const partner = view.people.find((each) => each.id !== personId && isAdult(each.relationship));
+  const facts = personalFacts(evaluation.input, personId, { spouseName: partner?.name, provinceName: (code) => PROVINCE_NAMES[code as Province] ?? code });
+  const filled = fillForms(rules, evaluation, personId, facts);
   const forms = [];
   for (const each of filled) forms.push({ filled: each, template: await formTemplate(db, orgId, each.form, source, now) });
   const person = view.people.find((each) => each.id === personId)!;
@@ -114,7 +117,7 @@ function worksheetOf(rules: RuleSet, evaluation: Evaluation, view: TaxYear, inpu
   const refund = line("T1.48400");
   const owing = line("T1.48500");
   const prepared = new Date(input.now).toISOString().slice(0, 10);
-  const formNames = input.forms.map((form) => form.title).join(" and ");
+  const formNames = input.forms.map((form) => form.title).join("; ");
 
   const result: WorksheetRow[] = [
     owing && !owing.isZero() ? { text: "Balance owing (line 48500)", amount: money(owing) } : { text: "Refund (line 48400)", amount: money(refund ?? Dec.ZERO) },
@@ -169,10 +172,11 @@ function worksheetOf(rules: RuleSet, evaluation: Evaluation, view: TaxYear, inpu
   return {
     title: `${input.name}: ${view.year} return worksheet`,
     intro: [
-      `Prepared with Taxi on ${prepared}. Taxi doesn't file returns. Before this worksheet are the CRA's own forms (${formNames}) with the amounts filled in.`,
-      "To file on paper: fill in Step 1 of the T1 by hand (your name, address, date of birth, social insurance number, marital status and the other questions), sign it, and mail it with the provincial form to your tax centre. Keep your slips and receipts; the CRA may ask for them.",
+      `Prepared with Taxi on ${prepared}. Taxi doesn't file returns. Before this worksheet are the CRA's own forms, filled in with what Taxi knows: ${formNames}.`,
+      "Filled in for you: in Step 1 of the T1, your name, date of birth, marital status and province of residence, and your spouse's or partner's first name and net income; on the T1 and on each schedule and form above, every row Taxi works out. A row left blank is one Taxi doesn't know or that doesn't apply to you.",
+      "Still to do by hand before you file on paper: in Step 1 of the T1, your social insurance number, mailing address, email address and language, your spouse's or partner's social insurance number, and the other questions (Elections Canada, income exempt under the Indian Act, the organ donor registry); any blank row of a schedule that applies to you (such as each dependant's details, or each property's address); and any form not listed above (such as Schedule 7 for RRSP contributions, Form T1135, or a provincial form such as ON428-A). Then sign the T1 and mail it with the other forms to your tax centre. Keep your slips and receipts; the CRA may ask for them.",
       "To file online: copy the amounts into NETFILE-certified tax software and file there.",
-      "Schedules aren't filled in (for example Schedule 9 for donations and Schedule 11 for tuition). Their lines are worked out below; copy them onto the CRA's schedules if you file on paper.",
+      "Every line Taxi works out is listed below with how it was worked out.",
     ],
     sections: [
       { heading: "Result", rows: result },

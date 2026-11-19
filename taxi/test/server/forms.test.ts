@@ -111,6 +111,20 @@ describe("printing a return", () => {
     const on1 = rules.forms.get("ON428")!.fields.find((field) => field.key === "1")!;
     expect(pages[t1.pages + on1.page - 1]!.some((item) => item.text === "60,000" && Math.abs(item.y - on1.y) < 0.5)).toBe(true);
 
+    // Step 1: the name split into first and last, the birth date one digit per box, the marital status ticked, the
+    // province; never a SIN or an address (the app has none).
+    const place = (key: string) => t1.fields.find((field) => field.key === key)!;
+    const at = (key: string) =>
+      pages[place(key).page - 1]!.filter((item) => Math.abs(item.y - place(key).y) < 4 && item.x >= place(key).x - 6 && item.x < place(key).x + 130).map((item) => item.text);
+    expect(at("firstName")).toEqual(["Alex"]);
+    expect(at("lastName")).toEqual(["Martin"]);
+    expect(at("province")).toEqual(["Ontario"]);
+    expect(at("birthDate")).toEqual([..."19850402"]);
+    const single = place("single");
+    expect(pages[0]!.some((item) => item.text === "X" && Math.abs(item.x + 3 - single.x) < 1 && Math.abs(item.y - single.y) < 4)).toBe(true);
+    expect(pages[0]!.some((item) => item.text === "X" && Math.abs(item.y - place("married").y) < 4)).toBe(false);
+    expect(pages[0]!.map((item) => item.text)).toEqual(expect.arrayContaining(["Alex", "Martin", "Ontario"]));
+
     const worksheet = pages.slice(t1.pages + 4).flat().map((item) => item.text);
     expect(worksheet).toContain("Alex Martin: 2025 return worksheet");
     expect(worksheet).toContain("How each line is worked out");
@@ -122,6 +136,31 @@ describe("printing a return", () => {
     // A viewer can print it too; the forms kept from the first download are used again.
     expect((await download(alex.id, VIEWER)).status).toBe(200);
     expect(source.fetched).toEqual([t1.url, rules.forms.get("ON428")!.url]);
+  });
+
+  it("names the spouse in Step 1 from the household when their return isn't prepared here, with a net income of zero", async () => {
+    server = await startServer({ forms: standIn() });
+    const alex = await json<Person>(server.call("POST", "/api/people", { body: { name: "Alex Martin", relationship: "self", birthDate: "1985-04-02" } }), 201);
+    await json<Person>(server.call("POST", "/api/people", { body: { name: "Jordan Lee Park", relationship: "spouse", birthDate: "1986-01-09" } }), 201);
+    await json<TaxYear>(server.call("POST", "/api/years", { body: { year: 2025, people: [alex.id] } }), 201);
+    let year = await json<TaxYear>(
+      server.call("PUT", "/api/years/2025/household", { body: { revision: 1, maritalStatus: "married", adults: [{ personId: alex.id, province: "ON", residentAllYear: true }] } }),
+    );
+    year = await json<TaxYear>(
+      server.call("POST", "/api/years/2025/slips", { body: { revision: year.revision, personId: alex.id, type: "T4", issuer: "Maple Corp", boxes: { 14: "60000", 22: "9000" } } }),
+      201,
+    );
+    year = await json<TaxYear>(server.call("PUT", "/api/years/2025/answers", { body: { revision: year.revision, personId: alex.id, answers: { spouseNetIncome: "0" } } }));
+    await finish(alex, year.revision);
+
+    const pages = await pagesOf(await (await download(alex.id)).arrayBuffer());
+    const t1 = rules.forms.get("T1")!;
+    const field = (key: string) => t1.fields.find((each) => each.key === key)!;
+    const near = (key: string) => pages[field(key).page - 1]!.filter((item) => Math.abs(item.y - field(key).y) < 4 && Math.abs(item.x - field(key).x) < 60).map((item) => item.text);
+    expect(near("spouseFirstName")).toEqual(["Jordan Lee"]);
+    // The CRA asks for the spouse's net income even when it is zero.
+    expect(near("spouseNetIncome")).toEqual(["0", "00"]);
+    expect(pages[0]!.some((item) => item.text === "X" && Math.abs(item.y - field("married").y) < 4)).toBe(true);
   });
 
   it("refuses a form that isn't the one the layout was measured on", async () => {

@@ -94,17 +94,22 @@ T5. Moving claims between the returns works only when both spouses' returns are 
 ## The CRA's forms
 
 A finished return (every slip confirmed, every line worked out from answers, nothing the app doesn't handle) downloads
-as one PDF: the CRA's own T1 and the provincial form (ON428, BC428 or AB428), then a worksheet.
+as one PDF: the CRA's own T1, the schedules and forms the return uses (such as Schedule 9, Schedule 11, Form T2125 or
+Form T778, each only when it applies), the provincial forms, then a worksheet.
 
 - The forms are the CRA's print versions. The first time an organization prints a return, Taxi downloads them from
   canada.ca and keeps them in its database. It checks each file against the one it was measured on, and refuses to fill
   a form the CRA has changed, rather than write amounts in the wrong places.
 - Each amount is written in its box, by row number, from the same lines as the estimate. A box that is zero is left
-  blank. The tax bracket tables are filled in the column of your bracket.
+  blank. The tax bracket tables are filled in the column of your bracket. A number of children or months is written as
+  a whole number.
+- Step 1 of the T1 gets the name (split at its last space into first and last name), date of birth, marital status,
+  province of residence, the spouse's or partner's first name and net income, and the foreign property answer. Taxi
+  never stores a social insurance number, an address or bank details, so those boxes stay blank.
 - A couple's returns read each other (the spouse amount reads the other's net income), so a question left on one return
   can hold the other's forms too. Finish then names it under the other person, with a link to it.
-- Step 1 (identification) and the schedules aren't filled in. The worksheet lists the slips, the answers, the hints
-  applied and every line with its formula, to copy onto the schedules.
+- A row Taxi doesn't know (a dependant's details, each expense category, a property's address) is left blank. The
+  worksheet lists the slips, the answers, the hints applied and every line with its formula.
 
 ## How saves stay consistent
 
@@ -120,7 +125,8 @@ a name, a birth date, an amount or a document.
 
 ## Limits today
 
-- The forms leave Step 1 of the T1 and the schedules to fill in by hand.
+- The forms leave the social insurance number, address, signature and the other Step 1 answers to fill in by hand, and
+  Schedule 7 (RRSP contributions), Form T1135 and the provincial forms Taxi doesn't print (such as ON428-A).
 - The 2025 rules cover the T1 and the Ontario, British Columbia and Alberta forms for one or two adults:
   - income: employment, OAS, CPP, workplace pensions, annuities and RRIFs (T4A, T4A(P), T4A(OAS), T4RIF), EI
     benefits (T4E), interest, dividends, trust income, capital gains, self-employment (Forms T2125, T2042 for farming and

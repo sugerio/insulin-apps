@@ -2,7 +2,7 @@ import { z } from "zod";
 import { Dec } from "./decimal.ts";
 import { RuleError } from "./errors.ts";
 import { percentToDecimal } from "./formula.ts";
-import { HINT_KINDS, MODULES, loadRuleSet, type CompiledRules } from "./rules.ts";
+import { HINT_KINDS, MODULES, PERSONAL_FACTS, loadRuleSet, type CompiledRules } from "./rules.ts";
 
 // Compiles a year's rule files into the JSON the app imports. A year is a folder of YAML files: `year.yaml` names the
 // country, the year, the filing unit and the year it extends; the other files hold entries (params, lines, questions,
@@ -74,12 +74,23 @@ const sourceHint = z.strictObject({
   effectLabel: z.string().min(1).optional(),
 });
 
+const sourceFormula = z.string().min(1);
+/**
+ * A form's field, by its row (or line code, or named place): an amount (a formula, or `value` with `when` and `zero`),
+ * a whole number (`count`), a tick (`tick`, a yes/no formula) or a personal fact as text (`text`).
+ */
+const sourceField = z.union([
+  sourceFormula,
+  z.strictObject({ value: sourceFormula, when: sourceFormula.optional(), zero: z.boolean().optional() }),
+  z.strictObject({ count: sourceFormula, when: sourceFormula.optional() }),
+  z.strictObject({ tick: sourceFormula }),
+  z.strictObject({ text: z.enum(PERSONAL_FACTS), when: sourceFormula.optional() }),
+]);
 const sourceForm = z.strictObject({
   title: z.string().min(1),
   url: z.url(),
   applies: z.string().min(1),
-  /** Row (or line code) → the amount, or the amount and when to write it. */
-  fields: z.record(z.string(), z.union([z.string().min(1), z.strictObject({ value: z.string().min(1), when: z.string().min(1).optional() })])),
+  fields: z.record(z.string(), sourceField),
   tables: z
     .array(
       z.strictObject({
@@ -96,6 +107,10 @@ const sourceLayout = z.strictObject({
   rows: z.record(z.string(), z.tuple([z.number().int().min(1), z.number(), z.number()])),
   columns: z.record(z.string(), z.array(z.number())).optional(),
   printed: z.array(z.string()).optional(),
+  plain: z.array(z.string()).optional(),
+  text: z.record(z.string(), z.tuple([z.number().int().min(1), z.number(), z.number(), z.number()])).optional(),
+  combs: z.record(z.string(), z.tuple([z.number().int().min(1), z.number(), z.number(), z.number()])).optional(),
+  ticks: z.record(z.string(), z.tuple([z.number().int().min(1), z.number(), z.number()])).optional(),
 });
 
 const manifestSchema = z.strictObject({
@@ -215,21 +230,42 @@ export function compileRules(chain: SourceYear[], hash: (text: string) => string
   return compiled;
 }
 
-/** A form's rows placed where form-layout.yaml measured them. */
+/** A form's fields placed where form-layout.yaml measured them; each kind of field goes in its kind of place. */
 function placeForm(form: z.infer<typeof sourceForm>, layout: z.infer<typeof sourceLayout> | undefined, fail: (message: string) => never): CompiledRules["forms"][string] {
   if (!layout) fail("form-layout.yaml has no layout for this form: run npm run form-layout on its PDF");
   const row = (key: string) => layout!.rows[key] ?? fail(`The form has no row ${key} (form-layout.yaml)`);
+  /** A row's box, or `<row>@<n>`: the row's n-th box from the left (a second column, an amount carried in). */
+  const box = (key: string): [number, number, number] => {
+    const [name, column] = key.split("@") as [string, string | undefined];
+    const [page, x, y] = row(name);
+    if (column === undefined) return [page, x, y];
+    const columns = layout!.columns?.[name] ?? fail(`Row ${name} has only one box (form-layout.yaml)`);
+    return [page, columns[Number(column) - 1] ?? fail(`Row ${name} has ${columns.length} boxes, not ${column}`), y];
+  };
   return {
     title: form.title,
     url: form.url,
     sha256: layout!.sha256,
     pages: layout!.pages,
     applies: form.applies,
-    fields: Object.entries(form.fields).map(([key, field]) => {
-      if (layout!.printed?.includes(key)) fail(`Row ${key} already has an amount printed on the form`);
-      const [page, x, y] = row(key);
-      const { value, when } = typeof field === "string" ? { value: field, when: undefined } : field;
-      return { key, page, x, y, value, ...(when === undefined ? {} : { when }) };
+    fields: Object.entries(form.fields).map(([key, field]): CompiledRules["forms"][string]["fields"][number] => {
+      const spec = typeof field === "string" ? { value: field } : field;
+      if ("text" in spec) {
+        const place = layout!.text?.[key] ?? layout!.combs?.[key] ?? fail(`The form has no text box or date boxes ${key} (form-layout.yaml)`);
+        const [page, x, y, size] = place;
+        return { key, kind: "text", page, x, y, value: spec.text, ...(key in (layout!.text ?? {}) ? { width: size } : { cell: size }), ...(spec.when === undefined ? {} : { when: spec.when }) };
+      }
+      if ("tick" in spec) {
+        const [page, x, y] = layout!.ticks?.[key] ?? fail(`The form has no tick box ${key} (form-layout.yaml)`);
+        return { key, kind: "tick", page, x, y, value: spec.tick };
+      }
+      const name = key.split("@")[0]!;
+      if (layout!.printed?.includes(name)) fail(`Row ${key} already has an amount printed on the form`);
+      const [page, x, y] = box(key);
+      if ("count" in spec) return { key, kind: "count", page, x, y, value: spec.count, ...(spec.when === undefined ? {} : { when: spec.when }) };
+      // A box with no cents line (x is its right end) gets the amount with its decimal point.
+      const plain = (layout!.plain ?? []).some((each) => each === key || each === name);
+      return { key, kind: "amount", page, x, y, value: spec.value, ...(spec.when === undefined ? {} : { when: spec.when }), ...(spec.zero ? { zero: true } : {}), ...(plain ? { plain } : {}) };
     }),
     tables: (form.tables ?? []).map((table) => ({
       brackets: table.brackets,

@@ -4,11 +4,13 @@ import { describe, expect, it } from "vitest";
 import { compileRules } from "../../src/app/shared/engine/compile.ts";
 import { Dec } from "../../src/app/shared/engine/decimal.ts";
 import { Evaluation } from "../../src/app/shared/engine/evaluate.ts";
-import { fillForms, formAmount } from "../../src/app/shared/engine/forms.ts";
+import { fillForms, formAmount, personalFacts, splitName } from "../../src/app/shared/engine/forms.ts";
 import { rulesFor } from "../../src/app/shared/rules/index.ts";
+import { PROVINCE_NAMES, type Province } from "../../src/app/shared/household.ts";
 
-// The CRA forms a return is printed on (rules/ca/2025/forms.yaml): every amount written on a form for three golden
-// households, against their expected lines, and the bracket tables against the tax lines.
+// The CRA forms a return is printed on (rules/ca/2025/forms.yaml): which forms each golden household's returns get,
+// every amount written on them against the household's expected lines, the bracket tables against the tax lines, and
+// the other kinds of field (Step 1's name and dates, ticks, counts).
 
 const rules = rulesFor(2025)!;
 const GOLDEN = resolve(import.meta.dirname, "../golden/ca-2025");
@@ -24,11 +26,12 @@ function checkForms(name: string, forms: readonly string[]) {
   const household = golden(name);
   const evaluation = new Evaluation(rules, household.input);
   for (const [personId, expected] of Object.entries(household.expected)) {
-    const filled = fillForms(rules, evaluation, personId);
+    const filled = fillForms(rules, evaluation, personId, personalFacts(evaluation.input, personId));
     expect(filled.map((each) => each.form.id)).toEqual(forms);
     let checked = 0;
     for (const { form, amounts } of filled) {
       for (const field of form.fields) {
+        if (field.kind !== "amount") continue;
         const line = /^line\.([A-Z0-9]+\.[A-Za-z0-9]+)$/.exec(field.text)?.[1];
         if (!line || !(line in expected) || field.when) continue;
         const written = amounts.find((amount) => amount.key === field.key)?.value.toString() ?? "0";
@@ -41,57 +44,71 @@ function checkForms(name: string, forms: readonly string[]) {
 }
 
 describe("2025 forms", () => {
-  for (const [name, ...provincial] of [
-    ["on-couple-kids", "ON428"],
-    ["bc-employee", "BC428", "BC479"],
-    ["ab-couple", "AB428"],
-    ["pensioner-on", "ON428"],
-    ["oas-clawback-bc", "BC428"],
-    ["young-family-on", "ON428", "ON479"],
-    ["consultant-ab", "AB428"],
-    ["shop-owner-bc", "BC428"],
-    ["sales-rep-on", "ON428"],
-    ["mb-high-earner-couple", "MB428"],
-    ["sk-senior-couple", "SK428"],
-    ["nb-senior-couple", "NB428", "NBS12"],
-    ["farm-and-fishing-couple-sk", "SK428"],
-    ["nb-young-couple", "NB428"],
-    ["nl-senior-couple", "NL428"],
-    ["nl-single-parent", "NL428"],
-    ["ns-senior-couple", "NS428"],
-    ["pe-senior-couple", "PE428"],
-    ["pe-single-parent", "PE428"],
-    ["yt-senior-couple", "YT428"],
-    ["pe-caregiver-family", "PE428"],
-    ["nb-caregivers", "NB428"],
-    ["nl-caregivers", "NL428"],
-    ["yt-single-parent", "YT428", "YT479"],
-    ["nt-senior-couple", "NT428", "NT479"],
-    ["nt-student-couple", "NT428", "NT479"],
-    ["nu-young-family", "NU428", "NU479"],
-    ["nu-single-parent", "NU428", "NU479"],
-    ["yt-caregiver-family", "YT428", "YT479"],
-    ["nt-caregiver-couple", "NT428", "NT479"],
-    ["nu-volunteer-couple", "NU428", "NU479"],
-    ["on-caregiver-family", "ON428", "ON479"],
-    ["on-senior-care-couple", "ON428", "ON479"],
+  // Each household's forms, per person, in the order they print: the T1, the schedules and forms the return uses, then
+  // the provincial ones. A schedule is printed only when its key line isn't zero.
+  for (const [name, ...people] of [
+    ["on-couple-kids", "T1,S2,S5,ON428", "T1,S11,ON428"],
+    ["bc-employee", "T1,S9,BC428,BC479"],
+    ["ab-couple", "T1,S5,AB428", "T1,AB428"],
+    ["pensioner-on", "T1,ON428"],
+    ["oas-clawback-bc", "T1,S3,BC428"],
+    ["capital-gains-on", "T1,S3,ON428"],
+    ["caregiver-family-bc", "T1,S2,S5,S12,BC428,BCS2,BC479", "T1,BC428"],
+    ["young-family-on", "T1,T776,T777,T2209,T2036,ON428,ON479", "T1,T778,ON428,ON479"],
+    ["consultant-ab", "T1,S8,T2125,T1M,T2209,T2036,AB428"],
+    ["shop-owner-bc", "T1,S3,S8,T2125,T2209,T2036,BC428"],
+    ["sales-rep-on", "T1,S8,T2125,ON428"],
+    ["low-income-worker-ab", "T1,S5,S6,S11,AB428"],
+    ["cross-province-couple", "T1,S2,ON428,ONS2", "T1,BC428"],
+    ["ab-senior-couple", "T1,S2,S5,AB428,ABS2", "T1,AB428"],
+    ["mb-high-earner-couple", "T1,S2,S5,S9,T2209,T2036,MB428,MBS2", "T1,S11,MB428,MBS11"],
+    ["mb-single-parent-student", "T1,S5,S6,S11,MB428,MBS11,MB479"],
+    ["sk-senior-couple", "T1,S2,S9,SK428,SKS2", "T1,SK428"],
+    ["nb-senior-couple", "T1,S2,S5,S9,T2036,NB428,NBS2,NBS12", "T1,NB428,NBS12"],
+    ["nb-young-couple", "T1,S2,S5,S6,NB428,NBS2", "T1,S11,NB428,NBS11"],
+    ["nb-single-parent", "T1,S5,S6,S9,S11,T778,NB428,NBS11"],
+    ["nl-senior-couple", "T1,S2,S5,S9,T2209,T2036,NL428,NLS2", "T1,NL428"],
+    ["nl-single-parent", "T1,S5,S6,S11,NL428,NLS11"],
+    ["ns-senior-couple", "T1,S2,S5,S9,T2209,T2036,NS428,NSS2", "T1,NS428"],
+    ["ns-young-family", "T1,S2,S5,S11,NS428,NSS2,NSS11,NS479", "T1,S11,NS428,NSS11"],
+    ["pe-senior-couple", "T1,S2,S5,S9,S11,T2209,T2036,PE428,PES2,PES11", "T1,S11,PE428,PES11"],
+    ["pe-single-parent", "T1,S5,S6,S9,PE428"],
+    ["yt-senior-couple", "T1,S2,S5,S9,YT428,YTS2", "T1,YT428"],
+    ["yt-single-parent", "T1,S5,S6,S9,S11,YT428,YTS11,YT479"],
+    ["nt-senior-couple", "T1,S2,S5,S9,NT428,NTS2,NT479", "T1,S2,NT428,NTS2,NT479"],
+    ["nt-student-couple", "T1,S2,S5,T2209,T2036,NT428,NTS2,NT479", "T1,S11,NT428,NTS11,NT479"],
+    ["nu-young-family", "T1,S2,S5,T2209,T2036,NU428,NUS2,NU479", "T1,S11,NU428,NUS11,NU479"],
+    ["nu-single-parent", "T1,S5,S9,S11,NU428,NUS11,NU479"],
   ] as const) {
-    it(`${name}: the T1 and ${provincial.join(" and ")} hold the household's expected lines`, () => {
-      checkForms(name, ["T1", ...provincial]);
-    });
-  }
-
-  // A resident of Quebec files the T1 for residents of Quebec (5005-R) instead, with no Form 428 or 479.
-  for (const name of ["qc-fed-employee", "qc-fed-self-employed", "qc-fed-single-parent", "qc-fed-couple", "qc-fed-ei-ppip-overpayment"]) {
-    it(`${name}: the T1 for residents of Quebec holds the household's expected lines`, () => {
-      checkForms(name, ["T1QC"]);
+    it(`${name}: its forms hold the household's expected lines`, () => {
+      const household = golden(name);
+      const evaluation = new Evaluation(rules, household.input);
+      household.input.people.forEach((person, index) => {
+        const personId = person.id;
+        const expected = household.expected[personId]!;
+        const filled = fillForms(rules, evaluation, personId, personalFacts(evaluation.input, personId));
+        expect(filled.map((each) => each.form.id).join(","), name).toBe(people[index]);
+        let checked = 0;
+        for (const { form, amounts } of filled) {
+          for (const field of form.fields) {
+            // A row that holds a line as it is: blank when the expected line is zero, else that amount.
+            if (field.kind !== "amount") continue;
+            const line = /^line\.([A-Z0-9]+\.[A-Za-z0-9]+)$/.exec(field.text)?.[1];
+            if (!line || !(line in expected) || field.when) continue;
+            const written = amounts.find((amount) => amount.key === field.key)?.value.toString() ?? "0";
+            expect(written, `${form.id} row ${field.key} (${line})`).toBe(Dec.from(expected[line]!).roundTo(2, "HALF_UP").toString());
+            checked += 1;
+          }
+        }
+        expect(checked).toBeGreaterThan(30);
+      });
     });
   }
 
   it("numbers the T1 for residents of Quebec's rows as 5005-R prints them", () => {
     const household = golden("qc-fed-ei-ppip-overpayment");
     const evaluation = new Evaluation(rules, household.input);
-    const [t1qc] = fillForms(rules, evaluation, "p1");
+    const [t1qc] = fillForms(rules, evaluation, "p1", personalFacts(evaluation.input, "p1"));
     const row = (key: string) => t1qc!.amounts.find((amount) => amount.key === key)?.value.toString();
     // PPIP premiums paid (31205), the refundable Quebec abatement (44000), EI and net EI overpayment (45000, 45100).
     expect([row("91"), row("156"), row("157"), row("159"), row("171")]).toEqual(["484.12", "2575.56", "580.33", "580.33", "18655.89"]);
@@ -108,7 +125,8 @@ describe("2025 forms", () => {
     const household = golden("on-couple-kids");
     const evaluation = new Evaluation(rules, household.input);
     const person = household.input.people[0]!.id;
-    const [t1, on428] = fillForms(rules, evaluation, person);
+    const filled = fillForms(rules, evaluation, person, personalFacts(evaluation.input, person));
+    const [t1, on428] = ["T1", "ON428"].map((id) => filled.find((each) => each.form.id === id));
     // $88,926 is in the second federal bracket ($57,375 to $114,750): 31,551 over, at 20.5% = 6,467.96, + 8,319.38.
     expect(t1!.amounts.filter((amount) => amount.key.includes("@")).map((amount) => [amount.key, amount.value.toString()])).toEqual([
       ["70@1", "88926"],
@@ -118,6 +136,85 @@ describe("2025 forms", () => {
     ]);
     expect(evaluation.line(person, "T1.40400").value!.toString()).toBe("14787.34");
     expect(on428!.amounts.find((amount) => amount.key === "8@1")!.value.toString()).toBe(evaluation.line(person, "ON428.8").value!.toString());
+  });
+
+  const marksOf = (name: string | Golden["input"], index: number, form: string) => {
+    const input = typeof name === "string" ? golden(name).input : name;
+    const evaluation = new Evaluation(rules, input);
+    const personId = input.people[index]!.id;
+    const facts = personalFacts(evaluation.input, personId, { provinceName: (code) => PROVINCE_NAMES[code as Province] });
+    const filled = fillForms(rules, evaluation, personId, facts).find((each) => each.form.id === form);
+    return {
+      marks: Object.fromEntries((filled?.marks ?? []).map((mark) => [mark.key, mark.kind === "tick" ? "X" : mark.text])),
+      amounts: Object.fromEntries((filled?.amounts ?? []).map((amount) => [amount.key, amount.value.toString()])),
+    };
+  };
+
+  it("fills Step 1 of the T1: the name split at its last space, the birth date in its boxes, the ticks, the spouse", () => {
+    const alex = marksOf("on-couple-kids", 0, "T1");
+    expect(alex.marks).toEqual({
+      firstName: "Alex",
+      lastName: "Martin",
+      birthDate: "19840615",
+      married: "X",
+      province: "Ontario",
+      spouseFirstName: "Sam",
+      foreignPropertyNo: "X",
+    });
+    // Sam's net income, read from Sam's return.
+    expect(alex.amounts.spouseNetIncome).toBe("8945");
+    expect(marksOf("nb-single-parent", 0, "T1").marks).toMatchObject({ single: "X", province: "New Brunswick" });
+    expect(marksOf("nb-single-parent", 0, "T1").amounts.spouseNetIncome).toBeUndefined();
+  });
+
+  it("writes the spouse's net income even when it is zero, and ticks only what the person answered", () => {
+    const input = structuredClone(golden("single-employee-on").input) as Golden["input"] & {
+      household: { maritalStatus: string };
+      answers: Record<string, Record<string, string | boolean>>;
+    };
+    const personId = input.people[0]!.id;
+    input.household.maritalStatus = "common_law";
+    input.answers[personId] = { ...input.answers[personId], spouseNetIncome: "0" };
+    delete input.answers[personId]!.hasForeignProperty;
+    const t1 = marksOf(input, 0, "T1");
+    expect(t1.amounts.spouseNetIncome).toBe("0");
+    expect(t1.marks.commonLaw).toBe("X");
+    // Their spouse isn't in the household, so their first name stays blank; foreign property wasn't answered.
+    expect(t1.marks.spouseFirstName).toBeUndefined();
+    expect(t1.marks.foreignPropertyNo).toBeUndefined();
+  });
+
+  it("fills a schedule of each kind: amounts and counts (Schedule 11, T778) and ticks (Schedule 3)", () => {
+    // Robin's tuition: 4 months part time (T2202 box 24), and one child aged 7 to 16 for child care.
+    expect(marksOf("nb-single-parent", 0, "S11").marks).toEqual({ "32010": "4" });
+    expect(marksOf("nb-single-parent", 0, "T778").marks).toEqual({ "3@1": "1" });
+    const s11 = marksOf("student-on", 0, "S11");
+    expect(s11.marks).toEqual({ "32020": "8" });
+    expect(s11.amounts["1"]).toBe("9800");
+    // A home sold, designated a principal residence for every year: Schedule 3 is ticked, with no gain.
+    const input = structuredClone(golden("single-employee-on").input) as Golden["input"] & { answers: Record<string, Record<string, string | boolean>> };
+    const personId = input.people[0]!.id;
+    input.answers[personId] = {
+      ...input.answers[personId],
+      soldProperty: true,
+      propertyUse: "principal_residence",
+      propertyProceeds: "500000",
+      propertyCost: "300000",
+      propertyOutlays: "20000",
+    };
+    expect(marksOf(input, 0, "S3").marks).toEqual({ flippedNo: "X", principalResidenceAllYears: "X" });
+    expect(marksOf(input, 0, "T2091").amounts).toEqual({ "9954": "500000" });
+  });
+
+  it("splits a name at its last space, and names the province as the caller says", () => {
+    expect(splitName("  Mary Ann   Lee ")).toEqual({ first: "Mary Ann", last: "Lee" });
+    expect(splitName("Cher")).toEqual({ first: "Cher", last: "" });
+    const input = golden("bc-employee").input as unknown as Parameters<typeof personalFacts>[0];
+    const facts = personalFacts(input, input.people[0]!.id, { spouseName: "Jordan Lee", provinceName: (code) => PROVINCE_NAMES[code as Province] });
+    expect(facts.province).toBe("British Columbia");
+    expect(facts.spouseFirstName).toBe("Jordan");
+    // Without a namer, the engine (which knows no country) writes the code.
+    expect(personalFacts(input, input.people[0]!.id).province).toBe("BC");
   });
 
   it("writes amounts as on a paper form: separators, cents, and a negative one in brackets", () => {
@@ -140,10 +237,21 @@ describe("form rules", () => {
               data: {
                 params: { brackets: { label: "B", source: "S", value: [{ upTo: 100, rate: "10%", base: 0 }, { rate: "20%", base: 10 }] } },
                 lines: { "R.net": { label: "Net", formula: "answer.amount" } },
-                questions: { amount: { type: "money", ask: "Amount", default: 0 } },
+                questions: { amount: { type: "money", ask: "Amount", default: 0 }, moved: { type: "boolean", ask: "Moved", default: false } },
                 forms: { F1: { title: "F", url: "https://example.com/f.pdf", applies: "true", ...form } },
                 formLayout: {
-                  F1: { sha256: "a".repeat(64), pages: 1, rows: { "1": [1, 552, 700], "2": [1, 552, 680], "3": [1, 552, 660], "4": [1, 552, 640] }, columns: { "2": [300, 552] }, printed: ["3"], ...layout },
+                  F1: {
+                    sha256: "a".repeat(64),
+                    pages: 1,
+                    rows: { "1": [1, 552, 700], "2": [1, 552, 680], "3": [1, 552, 660], "4": [1, 552, 640], "5": [1, 405, 620] },
+                    columns: { "2": [300, 552] },
+                    printed: ["3"],
+                    plain: ["5", "2@1"],
+                    text: { name: [1, 32, 591, 128] },
+                    combs: { born: [1, 333, 531, 12] },
+                    ticks: { yes: [1, 479, 600] },
+                    ...layout,
+                  },
                 },
               },
             },
@@ -154,7 +262,39 @@ describe("form rules", () => {
     );
 
   it("places each row where the layout measured it", () => {
-    expect(compile({ fields: { "1": "line.R.net" } }).forms.F1!.fields).toEqual([{ key: "1", page: 1, x: 552, y: 700, value: "line.R.net" }]);
+    expect(compile({ fields: { "1": "line.R.net" } }).forms.F1!.fields).toEqual([{ key: "1", kind: "amount", page: 1, x: 552, y: 700, value: "line.R.net" }]);
+  });
+
+  it("places each kind of field in its kind of place: a row's other box, a plain box, a count, a tick, text and a date", () => {
+    const fields = compile({
+      fields: {
+        "2@1": "line.R.net",
+        "2@2": { value: "line.R.net", zero: true },
+        "5": { count: "answer.amount" },
+        yes: { tick: "answer.moved" },
+        name: { text: "firstName" },
+        born: { text: "birthDate", when: "answer.moved" },
+      },
+    }).forms.F1!.fields;
+    // Rows numbered like integers come first (JavaScript's key order); the order doesn't matter on paper.
+    expect(fields).toEqual([
+      { key: "5", kind: "count", page: 1, x: 405, y: 620, value: "answer.amount" },
+      { key: "2@1", kind: "amount", page: 1, x: 300, y: 680, value: "line.R.net", plain: true },
+      { key: "2@2", kind: "amount", page: 1, x: 552, y: 680, value: "line.R.net", zero: true },
+      { key: "yes", kind: "tick", page: 1, x: 479, y: 600, value: "answer.moved" },
+      { key: "name", kind: "text", page: 1, x: 32, y: 591, value: "firstName", width: 128 },
+      { key: "born", kind: "text", page: 1, x: 333, y: 531, value: "birthDate", cell: 12, when: "answer.moved" },
+    ]);
+  });
+
+  it("refuses a field in a place the form doesn't have, a tick that isn't yes/no, a count that isn't a number, and an unknown fact", () => {
+    expect(() => compile({ fields: { "2@3": "line.R.net" } })).toThrow(/has 2 boxes, not 3/);
+    expect(() => compile({ fields: { "1@1": "line.R.net" } })).toThrow(/has only one box/);
+    expect(() => compile({ fields: { no: { tick: "answer.moved" } } })).toThrow(/no tick box no/);
+    expect(() => compile({ fields: { yes: { tick: "answer.amount" } } })).toThrow(/A tick must be a yes\/no value/);
+    expect(() => compile({ fields: { "5": { count: "answer.moved" } } })).toThrow(/A count on a form must be a number/);
+    expect(() => compile({ fields: { name: { text: "sin" } } })).toThrow();
+    expect(() => compile({ fields: { surname: { text: "lastName" } } })).toThrow(/no text box or date boxes surname/);
   });
 
   it("refuses a row the form doesn't have, one with a printed amount, a wrong table, and a formula that isn't a number", () => {

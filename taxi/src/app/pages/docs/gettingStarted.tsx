@@ -83,9 +83,10 @@ export const gettingStarted: DocTopic = {
               <b>Finish.</b> The return's refund or balance owing, its key lines with why each is what it is, and what to check before filing.
               Under <b>Check and save</b>, hints show ways to pay less, such as claiming both spouses' donations on one return, with what each saves
               for the household. <b>Apply</b> changes your answers; <b>Undo</b> puts them back. When nothing is left before filing,{" "}
-              <b>Download the forms</b> gives one PDF: the CRA's T1 and provincial form with your amounts filled in, and a worksheet that shows
-              how each amount was worked out. Fill in Step 1 of the T1 (your name, address and social insurance number) by hand, sign it and
-              mail it, or copy the amounts into NETFILE-certified software.
+              <b>Download the forms</b> gives one PDF: the CRA's T1, the schedules and forms your return uses and the provincial forms, filled in
+              with your name, date of birth, marital status, province and amounts, and a worksheet that shows how each amount was worked out. Add
+              your social insurance number, address and the other Step 1 answers by hand, sign the T1 and mail it, or copy the amounts into
+              NETFILE-certified software.
             </li>
           </ol>
         </>

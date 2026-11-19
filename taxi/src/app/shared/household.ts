@@ -35,6 +35,22 @@ export function maritalStatusesFor(hasSpouse: boolean): readonly MaritalStatus[]
 export const PROVINCES = ["AB", "BC", "MB", "NB", "NL", "NS", "NT", "NU", "ON", "PE", "QC", "SK", "YT"] as const;
 export const provinceSchema = z.enum(PROVINCES);
 export type Province = z.infer<typeof provinceSchema>;
+/** Each province's and territory's name, as the T1 asks for it in Step 1. */
+export const PROVINCE_NAMES: Record<Province, string> = {
+  AB: "Alberta",
+  BC: "British Columbia",
+  MB: "Manitoba",
+  NB: "New Brunswick",
+  NL: "Newfoundland and Labrador",
+  NS: "Nova Scotia",
+  NT: "Northwest Territories",
+  NU: "Nunavut",
+  ON: "Ontario",
+  PE: "Prince Edward Island",
+  QC: "Quebec",
+  SK: "Saskatchewan",
+  YT: "Yukon",
+};
 /** The provinces whose tax this app works out. Quebec, with its own return, comes later. */
 export const SUPPORTED_PROVINCES: readonly Province[] = ["ON", "BC", "AB", "MB", "SK", "NB", "NL", "NS", "PE", "YT", "NT", "NU"];
 

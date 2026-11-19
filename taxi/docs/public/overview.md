@@ -37,9 +37,11 @@ don't add counts as none. Some items are groups: add self-employment, for exampl
 income, what you earned and your expenses.
 
 > [!NOTE]
-> The forms are filled in from Step 2 on. Fill in Step 1 of the T1 (your name, address, social insurance number and
-> the other identification) by hand, then sign and mail it, or copy the amounts into NETFILE-certified software.
-> Schedules, such as Schedule 9 for donations, aren't filled in: the worksheet shows their lines to copy.
+> The forms are filled in with what Taxi knows: in Step 1 of the T1 your name, date of birth, marital status and
+> province, and your spouse's first name and net income; then every amount Taxi works out, on the T1, the schedules
+> and forms your return uses (such as Schedule 9 for donations), and the provincial forms. Add your social insurance
+> number, address and the other Step 1 answers by hand, then sign and mail it, or copy the amounts into
+> NETFILE-certified software.
 
 ## Who it is for
 

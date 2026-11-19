@@ -107,8 +107,9 @@ function Download({ ready, href }: { ready: boolean; href: string }) {
     <section aria-label="Your forms" className="flex flex-col gap-2 rounded-lg border p-4">
       <h2 className="text-sm font-medium">Your forms</h2>
       <p className="text-xs text-muted-foreground">
-        The CRA's T1 and provincial form with your amounts filled in, and a worksheet that shows how each amount was worked out. Fill in Step 1 of the
-        T1 (your name, address and social insurance number) by hand, sign it and mail it; or copy the amounts into NETFILE-certified software.
+        The CRA's T1, the schedules and forms your return uses and the provincial forms, filled in with what Taxi knows, and a worksheet that shows how
+        each amount was worked out. Add your social insurance number, address and the other Step 1 answers by hand, sign the T1 and mail it; or copy the
+        amounts into NETFILE-certified software.
       </p>
       {ready ? (
         <div className="flex flex-wrap gap-2">

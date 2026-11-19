@@ -146,18 +146,34 @@ export interface Hint {
   effectLabel?: string;
 }
 
-/** An amount on a CRA form: where it goes (page, the x of the line between dollars and cents, the baseline) and what. */
-export interface FormField {
-  /** The form's row number, or the line code of a box without one (form-layout.yaml). */
+/**
+ * What a form's text box can hold: facts about the person that no tax line computes, kept out of the formulas. A name
+ * is split at its last space (first name, last name).
+ */
+export const PERSONAL_FACTS = ["firstName", "lastName", "birthDate", "province", "spouseFirstName"] as const;
+export type PersonalFact = (typeof PERSONAL_FACTS)[number];
+export const FIELD_KINDS = ["amount", "count", "tick", "text"] as const;
+
+/** Where a form's field is (form-layout.yaml): the page, and x and y in PDF points from the bottom left. */
+interface FieldPlace {
+  /** The form's row number, the line code of a box without one, or a named place (Step 1's `firstName`). */
   key: string;
   page: number;
   x: number;
   y: number;
-  formula: Formula;
-  text: string;
   /** Written only when this is yes. */
   when?: { formula: Formula; text: string };
 }
+/**
+ * What a form gets, by kind: an amount in dollars and cents (x is the line between them, or the right end of a `plain`
+ * box with no such line; `zero` writes 0.00 where the CRA asks for an amount even when it is zero), a whole number (x is
+ * where its box ends), a tick (x and y are the box's centre) and a personal fact as text (x is where it starts; a date's
+ * boxes have a cell width).
+ */
+export type FormField =
+  | (FieldPlace & { kind: "amount"; formula: Formula; text: string; zero: boolean; plain: boolean })
+  | (FieldPlace & { kind: "count" | "tick"; formula: Formula; text: string })
+  | (FieldPlace & { kind: "text"; fact: PersonalFact; width?: number; cell?: number });
 
 /**
  * A bracket table printed on a form (one column per bracket, in one or more parts): the column of the bracket the amount
@@ -271,7 +287,20 @@ export const compiledRulesSchema = z.strictObject({
       pages: z.number().int().min(1),
       applies: z.string(),
       fields: z.array(
-        z.strictObject({ key: z.string(), page: z.number().int().min(1), x: z.number(), y: z.number(), value: z.string(), when: z.string().optional() }),
+        z.strictObject({
+          key: z.string(),
+          kind: z.enum(FIELD_KINDS),
+          page: z.number().int().min(1),
+          x: z.number(),
+          y: z.number(),
+          /** A formula; for text, the personal fact. */
+          value: z.string(),
+          when: z.string().optional(),
+          zero: z.boolean().optional(),
+          plain: z.boolean().optional(),
+          width: z.number().optional(),
+          cell: z.number().optional(),
+        }),
       ),
       tables: z.array(
         z.strictObject({
@@ -411,15 +440,22 @@ export function loadRuleSet(json: unknown, where: (entry: string) => string = ()
           pages: form.pages,
           applies: parse(entry, form.applies),
           appliesText: form.applies,
-          fields: form.fields.map((field) => ({
-            key: field.key,
-            page: field.page,
-            x: field.x,
-            y: field.y,
-            formula: parse(`${entry}.fields.${field.key}`, field.value),
-            text: field.value,
-            ...(field.when === undefined ? {} : { when: { formula: parse(`${entry}.fields.${field.key}`, field.when), text: field.when } }),
-          })),
+          fields: form.fields.map((field): FormField => {
+            const where = `${entry}.fields.${field.key}`;
+            const place = {
+              key: field.key,
+              page: field.page,
+              x: field.x,
+              y: field.y,
+              ...(field.when === undefined ? {} : { when: { formula: parse(where, field.when), text: field.when } }),
+            };
+            if (field.kind === "text") {
+              const fact = PERSONAL_FACTS.find((each) => each === field.value) ?? fail(where, `No personal fact ${field.value}`);
+              return { ...place, kind: "text", fact, ...(field.width === undefined ? {} : { width: field.width }), ...(field.cell === undefined ? {} : { cell: field.cell }) };
+            }
+            const formula = { formula: parse(where, field.value), text: field.value };
+            return field.kind === "amount" ? { ...place, kind: "amount", ...formula, zero: field.zero ?? false, plain: field.plain ?? false } : { ...place, kind: field.kind, ...formula };
+          }),
           tables: form.tables.map((table) => ({ brackets: table.brackets, amount: parse(entry, table.amount), amountText: table.amount, parts: table.parts })),
         };
         return [id, spec];
@@ -574,7 +610,7 @@ function checkRuleSet(ruleSet: RuleSet, fail: (entry: string, message: string, c
     if (hint.change.length > 0 && ruleSet.outcome === undefined) fail(entry, "A hint with a change needs the year's outcome line (outcome in year.yaml)");
   }
 
-  // A form's formulas: which returns get it (yes/no), each amount a number, and its condition yes/no. A bracket table
+  // A form's formulas: which returns get it (yes/no), each amount and count a number, each tick and condition yes/no. A bracket table
   // names a bracket param with printed bases, and its parts have a column for each bracket.
   for (const form of ruleSet.forms.values()) {
     const entry = `forms.${form.id}`;
@@ -583,7 +619,11 @@ function checkRuleSet(ruleSet: RuleSet, fail: (entry: string, message: string, c
     for (const field of form.fields) {
       const where = `${entry}.fields.${field.key}`;
       if (field.page > form.pages) fail(where, `The form has ${form.pages} pages`);
-      if (formulaType(ruleSet, field.formula, at(where), new Set()) !== "number") fail(where, "An amount on a form must be a number");
+      if (field.kind === "amount" || field.kind === "count") {
+        if (formulaType(ruleSet, field.formula, at(where), new Set()) !== "number") fail(where, `${field.kind === "amount" ? "An amount" : "A count"} on a form must be a number`);
+      } else if (field.kind === "tick" && formulaType(ruleSet, field.formula, at(where), new Set()) !== "boolean") {
+        fail(where, "A tick must be a yes/no value");
+      }
       if (field.when && formulaType(ruleSet, field.when.formula, at(where), new Set()) !== "boolean") fail(where, "when must be a yes/no value");
     }
     for (const table of form.tables) {

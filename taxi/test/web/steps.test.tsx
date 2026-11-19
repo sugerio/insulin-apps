@@ -136,6 +136,14 @@ describe("Income", () => {
     expect(screen.queryByRole("region", { name: "Add to your return" })).toBeNull();
   });
 
+  it("says at the top what is left before the step is done", async () => {
+    await renderApp("/returns/2025/income", { seed: (s) => seed(s).then(() => undefined) });
+    const banner = (await screen.findByText("To finish this step")).closest("[role=status]")!;
+    expect(banner.textContent).toMatch(/Not answered yet: Employment income, Interest or dividends/);
+    fireEvent.click(screen.getByRole("button", { name: "Save and continue" }));
+    await waitFor(() => expect(screen.queryByText("To finish this step")).toBeNull());
+  });
+
   it("marks a kind of income added without its slip as missing, and saves the rest as none", async () => {
     const { router, server } = await renderApp("/returns/2025/income", { seed: (s) => seed(s).then(() => undefined) });
     const add = await screen.findByRole("region", { name: "Add to your return" });

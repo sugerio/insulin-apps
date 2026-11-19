@@ -101,6 +101,8 @@ as one PDF: the CRA's own T1 and the provincial form (ON428, BC428 or AB428), th
   a form the CRA has changed, rather than write amounts in the wrong places.
 - Each amount is written in its box, by row number, from the same lines as the estimate. A box that is zero is left
   blank. The tax bracket tables are filled in the column of your bracket.
+- A couple's returns read each other (the spouse amount reads the other's net income), so a question left on one return
+  can hold the other's forms too. Finish then names it under the other person, with a link to it.
 - Step 1 (identification) and the schedules aren't filled in. The worksheet lists the slips, the answers, the hints
   applied and every line with its formula, to copy onto the schedules.
 

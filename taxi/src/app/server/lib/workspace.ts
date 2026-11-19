@@ -1,4 +1,4 @@
-import { STEPS, isIssueOf, printBlockers, type AdultYear, type Issue, type Person, type ReturnProgress, type Slip, type StepStatuses } from "#shared";
+import { STEPS, isIssueOf, leftInModule, printBlockers, spouseOf, type AdultYear, type Issue, type Person, type ReturnProgress, type Slip, type StepStatuses } from "#shared";
 import { Evaluation, type EngineInput, type EvaluationResult } from "../../shared/engine/evaluate.ts";
 import type { Module } from "../../shared/engine/rules.ts";
 import { rulesFor } from "../../shared/rules/index.ts";
@@ -123,26 +123,13 @@ export function evaluateYear(facts: YearFacts, workspace: Workspace): { input: E
  */
 export function stepStatuses(facts: YearFacts, issues: Issue[], workspace: Workspace): ReturnProgress[] {
   const rules = rulesFor(facts.year);
-  const questions = [...(rules?.questions.values() ?? [])];
   const evaluation = evaluateYear(facts, workspace);
   return facts.adults.map(({ personId }) => {
     const slips = workspace.slips.filter((slip) => slip.personId === personId);
     const answers = workspace.answers[personId] ?? {};
     const result = evaluation?.result.people.find((person) => person.personId === personId);
     const reached = result?.questions;
-    const answered = (module: Module) =>
-      questions
-        .filter((question) => question.module === module)
-        .every((question) => {
-          // A kind of income or expense: answered by the slip itself; a yes without the slip is still missing.
-          if (question.type === "boolean") {
-            if (question.slip && slips.some((slip) => slip.type === question.slip)) return true;
-            const answer = answers[question.id];
-            return answer !== undefined && !(question.slip && answer === true);
-          }
-          // An amount: only the ones the result reads are asked.
-          return !(reached ?? []).includes(question.id) || answers[question.id] !== undefined;
-        });
+    const answered = (module: Module) => rules !== undefined && leftInModule(rules, module, answers, slips, reached ?? []).length === 0;
     const state = (done: boolean) => (done ? "done" : "todo");
     const status: StepStatuses = {
       household: state(!issues.some((issue) => issue.kind === "blocking" && isIssueOf(issue, personId)) && answered("about")),
@@ -151,8 +138,15 @@ export function stepStatuses(facts: YearFacts, issues: Issue[], workspace: Works
       deductions: state(answered("deductions")),
       credits: state(answered("credits")),
       confirm: state(slips.length > 0 && slips.every((slip) => slip.status === "confirmed")),
-      finish: state(result !== undefined && printBlockers(result, workspace.slips).length === 0),
+      finish: state(result !== undefined && printBlockers(result, workspace.slips, spouseResult(facts, evaluation?.result.people ?? [], personId)).length === 0),
     };
     return { personId, steps: Object.fromEntries(STEPS.map((step) => [step, status[step]])) as StepStatuses };
   });
+}
+
+/** The other adult's name and result, when both returns of a couple are prepared here. */
+export function spouseResult(facts: YearFacts, people: EvaluationResult["people"], personId: string): { name: string; result: EvaluationResult["people"][number] } | undefined {
+  const result = spouseOf(people, personId);
+  if (!result) return undefined;
+  return { name: facts.people.find((person) => person.id === result.personId)?.name ?? "Your spouse", result };
 }

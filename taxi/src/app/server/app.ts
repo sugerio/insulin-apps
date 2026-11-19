@@ -135,7 +135,8 @@ export function createApp(options: AppOptions = {}) {
     return new Response(pdf.bytes, {
       headers: {
         "Content-Type": "application/pdf",
-        "Content-Disposition": `attachment; filename*=UTF-8''${encodeURIComponent(pdf.name)}`,
+        // Opened in a tab to look at, or saved with ?download=1.
+        "Content-Disposition": `${c.req.query("download") ? "attachment" : "inline"}; filename*=UTF-8''${encodeURIComponent(pdf.name)}`,
         "Cache-Control": "private, no-store",
         "X-Content-Type-Options": "nosniff",
       },

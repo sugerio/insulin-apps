@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { Link } from "react-router";
-import { FileDown } from "lucide-react";
-import { printBlockers, type Estimate, type SlipList, type Step } from "#shared";
+import { ExternalLink, FileDown } from "lucide-react";
+import { printBlockers, spouseOf, type Estimate, type SlipList, type Step } from "#shared";
 import { Button } from "@/components/ui/button.tsx";
 import { Card, CardContent } from "@/components/ui/card.tsx";
 import { ResultLine } from "../components/EstimateCard.tsx";
@@ -47,8 +47,11 @@ function Results({ estimate, slips }: { estimate: Estimate; slips: SlipList }) {
     const module = rules.questions.get(id)?.module;
     return module === "income" || module === "deductions" || module === "credits" ? module : "household";
   };
-  const checks = printBlockers(person, slips.slips).map((blocker) => ({
+  const other = spouseOf(estimate.result.people, owner.id);
+  const spouse = other ? { name: year.people.find((each) => each.id === other.personId)?.name ?? "Your spouse", result: other } : undefined;
+  const checks = printBlockers(person, slips.slips, spouse).map((blocker) => ({
     text: blocker.text,
+    personId: blocker.personId ?? owner.id,
     step: blocker.confirm ? ("confirm" as const) : blocker.question ? stepOfQuestion(blocker.question) : null,
   }));
   return (
@@ -70,7 +73,7 @@ function Results({ estimate, slips }: { estimate: Estimate; slips: SlipList }) {
                 <li key={check.text} className="flex flex-wrap items-baseline justify-between gap-x-3">
                   <span className="text-muted-foreground">{check.text}</span>
                   {check.step ? (
-                    <Link className="text-xs underline underline-offset-2" to={stepPath(year.year, owner.id, check.step)}>
+                    <Link className="text-xs underline underline-offset-2" to={stepPath(year.year, check.personId, check.step)}>
                       Go to the step
                     </Link>
                   ) : null}
@@ -108,12 +111,20 @@ function Download({ ready, href }: { ready: boolean; href: string }) {
         T1 (your name, address and social insurance number) by hand, sign it and mail it; or copy the amounts into NETFILE-certified software.
       </p>
       {ready ? (
-        <Button asChild size="sm" className="self-start">
-          <a href={href} download>
-            <FileDown aria-hidden="true" />
-            Download the forms (PDF)
-          </a>
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button asChild size="sm">
+            <a href={href} target="_blank" rel="noreferrer">
+              <ExternalLink aria-hidden="true" />
+              Open the forms (PDF)
+            </a>
+          </Button>
+          <Button asChild size="sm" variant="outline">
+            <a href={`${href}?download=1`} download>
+              <FileDown aria-hidden="true" />
+              Download
+            </a>
+          </Button>
+        </div>
       ) : (
         <p className="text-xs text-muted-foreground">Finish the items under Before you file, above, to download them.</p>
       )}

@@ -31,7 +31,8 @@ Each return has seven steps:
    When the return is finished, download its forms: the CRA's T1 and provincial form with your amounts filled in, and
    a worksheet that shows how each amount was worked out.
 
-In Income, Deductions and Credits, add what you have; what you don't add counts as none. Something the app doesn't
+A step that isn't done says at its top what is left. In Income, Deductions and Credits, add what you have; what you
+don't add counts as none. Something the app doesn't
 handle yet, such as self-employment or working from home, can be added too: the return then says it isn't included.
 
 > [!NOTE]

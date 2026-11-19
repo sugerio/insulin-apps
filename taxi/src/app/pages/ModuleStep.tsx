@@ -1,7 +1,7 @@
 import { useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link, useNavigate } from "react-router";
 import { ChevronRight, FileUp, PencilLine, Plus } from "lucide-react";
-import { canPrepare, type Estimate, type Slip, type SlipList, type Step, type TaxYear } from "#shared";
+import { canPrepare, leftInModule, type Estimate, type Slip, type SlipList, type Step, type TaxYear } from "#shared";
 import { Badge } from "@/components/ui/badge.tsx";
 import { Button } from "@/components/ui/button.tsx";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card.tsx";
@@ -181,9 +181,28 @@ function ModuleForm({
   const issues = state.status === "error" && state.error instanceof ApiError ? (state.error.body?.error.issues ?? []) : [];
   const stale = state.status === "error" && state.error instanceof ApiError && state.error.status === 409;
   const busy = state.status === "saving";
+  // What keeps this step from done, as saved (the step's state in the row of steps says the same).
+  const left = leftInModule(rules, module, given, slips.slips.filter((slip) => slip.personId === person.id), result?.questions ?? []);
+  const unanswered = left.filter((item) => item.reason === "unanswered");
+  const waiting = left.filter((item) => item.reason === "slip");
 
   return (
     <>
+      {left.length > 0 ? (
+        <Banner kind="info" title="To finish this step">
+          <span className="flex flex-col gap-1">
+            {unanswered.length > 0 ? (
+              <span>
+                Not answered yet: {unanswered.map((item) => item.ask).join(", ")}.{" "}
+                {editable ? "Add what applies below, then choose Save and continue: what you don't add is saved as none." : null}
+              </span>
+            ) : null}
+            {waiting.length > 0 ? (
+              <span>Waiting for a slip: {waiting.map((item) => `the ${item.slip} (${item.ask})`).join(", ")}. Upload or enter it below, or remove the item.</span>
+            ) : null}
+          </span>
+        </Banner>
+      ) : null}
       <section aria-label="On your return" className="flex flex-col gap-3">
         <h2 className="text-base font-semibold">On your return</h2>
         {onReturn.length === 0 ? <p className="text-sm text-muted-foreground">Nothing yet. Add what you have below.</p> : null}

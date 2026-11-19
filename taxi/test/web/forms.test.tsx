@@ -23,8 +23,10 @@ describe("the forms on Finish", () => {
   it("can be downloaded once the return is finished", async () => {
     await renderApp("/returns/2025/finish", { seed: (s) => seed(s, true) });
     const forms = await screen.findByRole("region", { name: "Your forms" });
-    const link = within(forms).getByRole("link", { name: "Download the forms (PDF)" }) as HTMLAnchorElement;
-    expect(link.getAttribute("href")).toMatch(/^\/api\/years\/2025\/returns\/[0-9a-f-]+\/forms$/);
+    const open = within(forms).getByRole("link", { name: "Open the forms (PDF)" }) as HTMLAnchorElement;
+    expect(open.getAttribute("href")).toMatch(/^\/api\/years\/2025\/returns\/[0-9a-f-]+\/forms$/);
+    expect(open.getAttribute("target")).toBe("_blank");
+    expect(within(forms).getByRole("link", { name: "Download" }).getAttribute("href")).toBe(`${open.getAttribute("href")}?download=1`);
     expect(screen.queryByRole("region", { name: "Before you file" })).toBeNull();
   });
 

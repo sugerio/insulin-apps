@@ -94,7 +94,9 @@ describe("printing a return", () => {
     const response = await download(alex.id);
     expect(response.status).toBe(200);
     expect(response.headers.get("Content-Type")).toBe("application/pdf");
-    expect(response.headers.get("Content-Disposition")).toBe(`attachment; filename*=UTF-8''${encodeURIComponent("Taxi 2025 return - Alex Martin.pdf")}`);
+    expect(response.headers.get("Content-Disposition")).toBe(`inline; filename*=UTF-8''${encodeURIComponent("Taxi 2025 return - Alex Martin.pdf")}`);
+    const saved = await server.call("GET", `/api/years/2025/returns/${alex.id}/forms?download=1`);
+    expect(saved.headers.get("Content-Disposition")).toMatch(/^attachment; /);
     const pages = await pagesOf(await response.arrayBuffer());
     const t1 = rules.forms.get("T1")!;
     expect(pages.length).toBeGreaterThan(t1.pages + rules.forms.get("ON428")!.pages);

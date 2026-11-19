@@ -5,6 +5,7 @@ import { FormulaSyntaxError } from "./errors.ts";
 //
 //   min(param.canadaEmploymentAmount, line.T1.10100)
 //   bracket(param.taxBrackets, line.T1.26000)
+//   step(param.onCareRates, line.ONCARE.5)        the rate of the chart row the amount falls in
 //   if(answer.maritalStatus == "married", spouse.line.T1.23600, 0)
 //
 // Numbers are exact decimals; `14.5%` is 0.145. Names are dotted paths (`param.x`, `line.T1.10100`, `answer.x`,

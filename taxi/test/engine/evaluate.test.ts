@@ -24,9 +24,11 @@ const rules = loadRuleSet(
                 "R.deduction": { label: "Deduction", formula: "answer.deduction" },
                 "R.total": { label: "Total", formula: "max(0, line.R.income - line.R.deduction)" },
                 "R.tax": { label: "Tax", formula: "round(bracket(param.brackets, line.R.total), 2)" },
+                "R.rate": { label: "Rate", formula: "step(param.brackets, line.R.total)" },
                 "R.partner": { label: "Partner's total", formula: "spouse.line.R.total" },
                 "R.gated": { label: "Gated", formula: 'if(answer.hasPet and answer.petKind == "dog", answer.petCost, 0)' },
                 "R.older": { label: "Older", formula: "if(person.age >= 65, 1, 0)" },
+                "R.birthMonth": { label: "Birth month", formula: "person.birthMonth" },
               },
               questions: {
                 deduction: { type: "money", ask: "Deduction", default: 0 },
@@ -78,6 +80,12 @@ describe("evaluating a household", () => {
     expect(value(answered, "a", "R.tax")).toEqual(["30", "complete"]);
   });
 
+  it("reads a chart of rates: the rate of the row the amount falls in, up to and including its top", () => {
+    expect(value(new Evaluation(rules, input()), "a", "R.rate")).toEqual(["0.5", "estimate"]);
+    expect(value(new Evaluation(rules, input({ answers: { a: { deduction: "150.5" } } })), "a", "R.rate")).toEqual(["0.1", "complete"]);
+    expect(value(new Evaluation(rules, input({ answers: { a: { deduction: "150.49" } } })), "a", "R.rate")).toEqual(["0.2", "complete"]);
+  });
+
   it("reads the spouse's return, and is missing without a spouse", () => {
     expect(value(new Evaluation(rules, input()), "a", "R.partner")).toEqual(["80", "estimate"]);
     expect(value(new Evaluation(rules, input()), "b", "R.partner")).toEqual(["250.5", "estimate"]);
@@ -97,6 +105,11 @@ describe("evaluating a household", () => {
   it("uses the age on December 31", () => {
     expect(value(new Evaluation(rules, input()), "a", "R.older")).toEqual(["1", "complete"]);
     expect(value(new Evaluation(rules, input()), "b", "R.older")).toEqual(["0", "complete"]);
+  });
+
+  it("reads the month of birth", () => {
+    expect(value(new Evaluation(rules, input()), "a", "R.birthMonth")).toEqual(["4", "complete"]);
+    expect(value(new Evaluation(rules, input()), "b", "R.birthMonth")).toEqual(["9", "complete"]);
   });
 
   it("summarizes the result lines with what is estimated and what isn't handled", () => {
@@ -182,23 +195,38 @@ describe("the 2025 rules", () => {
       slips: [],
     });
     expect(evaluation.line("p1", "T1.42000").status).toBe("missing");
-    expect(evaluation.result().people[0]!.missing).toEqual([
+    // In no particular order: which fact a formula reads first is the rules' business.
+    expect([...evaluation.result().people[0]!.missing].sort((a, b) => a.question.localeCompare(b.question))).toEqual([
       { question: "household.maritalStatus", ask: "Marital status on December 31" },
       { question: "person.province", ask: "Province on December 31" },
     ]);
   });
 
   it("say what they can't compute instead of guessing", () => {
-    const manitoba = alone([t4({ 14: "60000", 22: "9000" })], "MB");
-    expect(manitoba.line("p1", "T1.42800")).toEqual({ value: null, status: "missing" });
-    expect(manitoba.line("p1", "T1.48400").status).toBe("missing");
-    expect(manitoba.line("p1", "T1.42000").status).toBe("estimate");
-    expect(manitoba.result().people[0]!.unhandled).toContain("Provincial tax for this province isn't handled by this app");
-    expect(manitoba.explain("p1", "line.T1.42800").notes).toEqual(["Provincial tax for this province isn't handled by this app"]);
+    const quebec = alone([t4({ 14: "60000", 22: "9000" })], "QC");
+    expect(quebec.line("p1", "T1.42800")).toEqual({ value: null, status: "missing" });
+    expect(quebec.line("p1", "T1.48400").status).toBe("missing");
+    expect(quebec.line("p1", "T1.42000").status).toBe("estimate");
+    expect(quebec.result().people[0]!.unhandled).toContain("Provincial tax for this province isn't handled by this app");
+    expect(quebec.explain("p1", "line.T1.42800").notes).toEqual(["Provincial tax for this province isn't handled by this app"]);
 
-    const twoJobs = alone([t4({ 14: "60000", 16: "3361.75", 22: "9000" }), t4({ 14: "30000", 16: "1576.75", 22: "4000" }, "s2")]);
-    expect(twoJobs.line("p1", "T1.44800").status).toBe("missing");
-    expect(twoJobs.result().people[0]!.unhandled[0]).toMatch(/More CPP was deducted than the 2025 maximum/);
+    // Box 26 on one slip and not the other: Schedule 8 takes box 14 for the blank one, which a sum of slips can't do.
+    const oneBlank = alone([t4({ 14: "60000", 16: "3361.75", 26: "60000" }), t4({ 14: "30000", 16: "1576.75" }, "s2")]);
+    expect(oneBlank.line("p1", "T1.44800").status).toBe("missing");
+    expect(oneBlank.result().people[0]!.unhandled).toContainEqual(expect.stringMatching(/Enter box 26 on each slip/));
+  });
+
+  it("refund the CPP and EI two employers deducted over the year's maximum", () => {
+    // Each employer deducted on its own earnings: 5.95% over $3,500 twice, and no second additional contributions.
+    const twoJobs = alone([
+      t4({ 14: "60000", 16: "3361.75", 18: "984", 22: "9000" }),
+      t4({ 14: "30000", 16: "1576.75", 18: "492", 22: "4000" }, "s2"),
+    ]);
+    const line = (id: string) => twoJobs.line("p1", id).value!.toString();
+    // Schedule 8, Part 3: required 3,356.10 + 678 + 396 on $90,000; deducted 4,938.50.
+    expect([line("T1.30800"), line("T1.22215"), line("T1.44800")]).toEqual(["3356.1", "1074", "508.4"]);
+    // Form T2204: 1,476 deducted, $1,077.48 required.
+    expect([line("T1.31200"), line("T1.45000")]).toEqual(["1077.48", "398.52"]);
   });
 
   it("phase out the basic personal amount between the 26% and 33% brackets", () => {

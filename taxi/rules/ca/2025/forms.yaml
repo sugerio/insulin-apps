@@ -34,16 +34,22 @@ forms:
       "12799": line.T1.12799
       "15": line.T1.12800
       "16": line.T1.12900
+      "17": line.T1.12905
+      "18": line.T1.12906
       "19": line.T1.13000
       "20": line.T1.13010
-      "21": line.T1.15000 - line.T1.13500 - line.T1.13700 - line.T1.13900 - line.T1.14700
+      "21": line.T1.15000 - line.SE.net - line.T1.14700
       "13499": line.T1.13499
       "22": line.T1.13500
       "13699": line.T1.13699
       "23": line.T1.13700
       "13899": line.T1.13899
       "24": line.T1.13900
-      "27": line.T1.13500 + line.T1.13700 + line.T1.13900
+      "14099": line.T1.14099
+      "25": line.T1.14100
+      "14299": line.T1.14299
+      "26": line.T1.14300
+      "27": line.SE.net
       "28": line.T1.15000 - line.T1.14700
       "29": line.T1.14400
       "30": line.T1.14500
@@ -77,6 +83,7 @@ forms:
       "60": line.T1.25000
       "62": line.T1.25200
       "63": line.T1.25300
+      "66": line.T1.25500
       "68": line.T1.25700
       "69": line.T1.26000
       # Step 5 – Federal tax: Part B, non-refundable tax credits
@@ -156,6 +163,7 @@ forms:
       "46800": line.T1.46800
       "161": line.T1.46900
       "164": line.T1.47600
+      "165": line.T1.47900
       "166": line.T1.48200
       "167": line.T1.43500 - line.T1.48200
       "48400": line.T1.48400
@@ -179,24 +187,32 @@ forms:
       "12": "if(line.HH.partner == 1, line.HH.spouseNetIncome, 0)"
       "13": line.ON428.13
       "16": line.ON428.16
-      "18": line.ON428.9 + line.ON428.10 + line.ON428.13 + line.ON428.16
+      "17": line.ON428.17
+      "18": line.ON428.18
       "19": line.T1.30800
       "20": line.T1.31000
       "21": line.T1.31200
+      "23": line.ON428.23
       "24": line.ON428.24
-      "25": line.ON428.9 + line.ON428.10 + line.ON428.13 + line.ON428.16 + line.ON428.24
-      "26": line.ON428.9 + line.ON428.10 + line.ON428.13 + line.ON428.16 + line.ON428.24
+      "25": line.ON428.18 + line.ON428.24
+      "26": line.ON428.18 + line.ON428.24
       "27": line.ON428.27
-      "28": line.ON428.9 + line.ON428.10 + line.ON428.13 + line.ON428.16 + line.ON428.24 + line.ON428.27
-      "31": line.ON428.9 + line.ON428.10 + line.ON428.13 + line.ON428.16 + line.ON428.24 + line.ON428.27
+      "28": line.ON428.28
+      "29": line.ON428.29
+      "30": line.ON428.30
+      "31": line.ON428.31
+      "32": line.ON428.32
+      "33": line.ON428.33
       "34": line.ON428.34
-      "35": line.ON428.9 + line.ON428.10 + line.ON428.13 + line.ON428.16 + line.ON428.24 + line.ON428.27 + line.ON428.34
+      "35": line.ON428.35
       "36": line.ON428.36
       "37": line.T1.23600
       "39": round(line.T1.23600 * param.medicalThresholdRate, 2)
       "40": min(param.onMedicalThresholdMax, round(line.T1.23600 * param.medicalThresholdRate, 2))
       "41": line.ON428.41
-      "43": line.ON428.41
+      "42": line.ON428.42
+      "58769": line.ON428.43
+      "43": line.ON428.43
       "44": line.ON428.44
       "46": line.ON428.46
       "47": round(line.S9.13 * param.onDonationLowRate, 2)
@@ -222,10 +238,12 @@ forms:
       "70": line.ON428.57
       "71": line.ON428.73
       "73": line.ON428.73
-      # The Ontario tax reduction: worked out only when there is tax to reduce (line 74, $294, is printed).
+      # The Ontario tax reduction: worked out only when there is tax to reduce (line 74, $294, is printed). The numbers
+      # of children and of dependants with an impairment (boxes 60969 and 60970) aren't written: they hold counts.
       "75": line.ON428.75
-      "77": { value: "param.onTaxReductionBasic + line.ON428.75", when: "line.ON428.73 > 0" }
-      "78": { value: "2 * (param.onTaxReductionBasic + line.ON428.75)", when: "line.ON428.73 > 0" }
+      "76": line.ON428.76
+      "77": { value: "line.ON428.77", when: "line.ON428.73 > 0" }
+      "78": { value: "2 * line.ON428.77", when: "line.ON428.73 > 0" }
       "79": { value: "line.ON428.73", when: "line.ON428.73 > 0" }
       "80": line.ON428.80
       "81": line.ON428.81
@@ -256,24 +274,34 @@ forms:
       "19": "if(line.HH.partner == 1, line.HH.spouseNetIncome, 0)"
       "20": line.BC428.20
       "23": line.BC428.23
-      "25": line.BC428.16 + line.BC428.17 + line.BC428.20 + line.BC428.23
-      "26": line.BC428.16 + line.BC428.17 + line.BC428.20 + line.BC428.23
+      "24": line.BC428.24
+      "25": line.BC428.25
+      "26": line.BC428.25
       "27": line.T1.30800
       "28": line.T1.31000
       "29": line.T1.31200
+      "31": line.BC428.31
+      "32": line.BC428.32
       "33": line.BC428.33
-      "35": line.BC428.16 + line.BC428.17 + line.BC428.20 + line.BC428.23 + line.BC428.33
+      "34": line.BC428.34
+      "35": line.BC428.35
       "36": line.BC428.36
-      "37": line.BC428.16 + line.BC428.17 + line.BC428.20 + line.BC428.23 + line.BC428.33 + line.BC428.36
-      "40": line.BC428.16 + line.BC428.17 + line.BC428.20 + line.BC428.23 + line.BC428.33 + line.BC428.36
+      "37": line.BC428.37
+      "38": line.BC428.38
+      "39": line.BC428.39
+      "40": line.BC428.40
+      "41": line.BC428.41
+      "42": line.BC428.42
+      "43": line.BC428.43
       "44": line.BC428.44
-      "45": line.BC428.16 + line.BC428.17 + line.BC428.20 + line.BC428.23 + line.BC428.33 + line.BC428.36 + line.BC428.44
+      "45": line.BC428.45
       "46": line.T1.33099
       "47": line.T1.23600
       "49": round(line.T1.23600 * param.medicalThresholdRate, 2)
       "50": min(param.bcMedicalThresholdMax, round(line.T1.23600 * param.medicalThresholdRate, 2))
       "51": line.BC428.51
-      "53": line.BC428.51
+      "52": line.BC428.52
+      "53": line.BC428.53
       "54": line.BC428.54
       "56": line.BC428.56
       "57": line.BC428.57
@@ -295,9 +323,11 @@ forms:
       "76": { value: "max(0, line.T1.23600 - param.bcTaxReductionBase)", when: "line.T1.23600 < param.bcTaxReductionLimit" }
       "78": { value: "round(max(0, line.T1.23600 - param.bcTaxReductionBase) * param.bcTaxReductionRate, 2)", when: "line.T1.23600 < param.bcTaxReductionLimit" }
       "79": line.BC428.79
-      "80": line.BC428.91
-      "82": line.BC428.91
-      "85": line.BC428.91
+      "80": line.BC428.80
+      "82": line.BC428.80
+      "83": line.BC428.83
+      "84": line.BC428.84
+      "85": line.BC428.85
       "89": line.BC428.91
       "91": line.BC428.91
     tables:
@@ -314,34 +344,46 @@ forms:
     applies: 'person.province == "AB"'
     fields:
       "1": line.T1.26000
-      # Part B – Alberta non-refundable tax credits
+      # Part B – Alberta non-refundable tax credits. A line worked out in the middle column (its line code) is carried
+      # to the right column: both boxes are filled.
       "16": line.AB428.16
       "17": line.AB428.17
       "19": "if(line.HH.partner == 1, line.HH.spouseNetIncome, 0)"
+      "58120": line.AB428.20
       "20": line.AB428.20
+      "58160": line.AB428.23
       "23": line.AB428.23
-      "25": line.AB428.16 + line.AB428.17 + line.AB428.20 + line.AB428.23
-      "26": line.AB428.16 + line.AB428.17 + line.AB428.20 + line.AB428.23
+      "24": line.AB428.24
+      "25": line.AB428.25
+      "26": line.AB428.25
       "27": line.T1.30800
       "28": line.T1.31000
       "29": line.T1.31200
+      "31": line.AB428.31
       "32": line.AB428.32
-      "33": line.AB428.16 + line.AB428.17 + line.AB428.20 + line.AB428.23 + line.AB428.32
+      "33": line.AB428.33
       "34": line.AB428.34
-      "36": line.AB428.16 + line.AB428.17 + line.AB428.20 + line.AB428.23 + line.AB428.32 + line.AB428.34
-      "39": line.AB428.16 + line.AB428.17 + line.AB428.20 + line.AB428.23 + line.AB428.32 + line.AB428.34
+      "35": line.AB428.35
+      "36": line.AB428.36
+      "37": line.AB428.37
+      "38": line.AB428.38
+      "39": line.AB428.39
+      "40": line.AB428.40
       "42": line.AB428.42
-      "43": line.AB428.16 + line.AB428.17 + line.AB428.20 + line.AB428.23 + line.AB428.32 + line.AB428.34 + line.AB428.42
+      "43": line.AB428.43
       "44": line.T1.33099
       "45": line.T1.23600
       "47": round(line.T1.23600 * param.medicalThresholdRate, 2)
       "48": min(param.abMedicalThresholdMax, round(line.T1.23600 * param.medicalThresholdRate, 2))
       "49": line.AB428.49
-      "51": line.AB428.49
+      "50": line.AB428.50
+      "58769": line.AB428.51
+      "51": line.AB428.51
       "52": line.AB428.52
       "54": line.AB428.54
       "55": round(line.S9.13 * param.abDonationLowRate, 2)
       "56": round(line.S9.14 * param.abDonationHighRate, 2)
+      "58969": line.AB428.57
       "57": line.AB428.57
       "58": line.AB428.58
       # Part C – Alberta tax
@@ -354,7 +396,9 @@ forms:
       "68": line.AB428.66
       "69": line.AB428.69
       "70": line.AB428.70
-      "73": line.AB428.70
+      "71": line.AB428.71
+      "72": line.AB428.72
+      "73": line.AB428.73
       "74": line.AB428.74
       "75": line.AB428.75
     tables:
@@ -364,3 +408,944 @@ forms:
         parts:
           - { columns: "3", amount: "2", over: "4", times: "6", tax: "8" }
           - { columns: "10", amount: "9", over: "11", times: "13", tax: "15" }
+
+  MB428:
+    title: Form MB428, Manitoba Tax
+    url: https://www.canada.ca/content/dam/cra-arc/formspubs/pbg/5007-c/5007-c-25e.pdf
+    applies: 'person.province == "MB"'
+    fields:
+      "1": line.T1.26000
+      # Part B – Manitoba non-refundable tax credits. A line worked out in the middle column (its line code) is carried
+      # to the right column: both boxes are filled.
+      "9": line.MB428.9
+      "10": line.MB428.10
+      "12": "if(line.HH.partner == 1, line.HH.spouseNetIncome, 0)"
+      "58120": line.MB428.13
+      "13": line.MB428.13
+      "58160": line.MB428.16
+      "16": line.MB428.16
+      "17": line.MB428.17
+      "18": line.MB428.9 + line.MB428.10 + line.MB428.13 + line.MB428.16 + line.MB428.17
+      "19": line.T1.30800
+      "20": line.T1.31000
+      "21": line.T1.31200
+      "23": line.MB428.23
+      "24": line.MB428.24
+      "25": line.MB428.25
+      "26": line.MB428.26
+      "27": line.MB428.27
+      "28": line.MB428.28
+      "29": line.MB428.9 + line.MB428.10 + line.MB428.13 + line.MB428.16 + line.MB428.17 + line.MB428.28
+      "30": line.MB428.9 + line.MB428.10 + line.MB428.13 + line.MB428.16 + line.MB428.17 + line.MB428.28
+      "31": line.MB428.31
+      "33": line.MB428.9 + line.MB428.10 + line.MB428.13 + line.MB428.16 + line.MB428.17 + line.MB428.28 + line.MB428.31
+      "34": line.MB428.34
+      "35": line.MB428.35
+      "36": line.MB428.36
+      "37": line.MB428.37
+      "38": line.MB428.38
+      "39": line.MB428.39
+      "40": line.MB428.40
+      "41": line.MB428.41
+      "42": line.MB428.36 + line.MB428.37 + line.MB428.38 + line.MB428.39 + line.MB428.40 + line.MB428.41
+      "43": line.T1.33099
+      "44": line.T1.23600
+      "46": round(line.T1.23600 * param.medicalThresholdRate, 2)
+      "47": min(param.mbMedicalThresholdMax, round(line.T1.23600 * param.medicalThresholdRate, 2))
+      "48": line.MB428.48
+      "49": line.MB428.49
+      "58769": line.MB428.48 + line.MB428.49
+      "50": line.MB428.48 + line.MB428.49
+      "51": line.MB428.51
+      "53": line.MB428.53
+      "54": round(line.S9.13 * param.mbDonationLowRate, 2)
+      "55": round(line.S9.14 * param.mbDonationHighRate, 2)
+      "58969": line.MB428.56
+      "56": line.MB428.56
+      "57": line.MB428.57
+      # Part C – Manitoba tax
+      "58": line.MB428.8
+      "60": line.MB428.8
+      "61": line.MB428.57
+      "62": line.MB428.62
+      "64": line.MB428.57 + line.MB428.62
+      "65": line.MB428.65
+      "67": line.MB428.65
+      "68": line.MB428.68
+      "69": line.MB428.69
+      "70": line.MB428.72
+      "72": line.MB428.72
+      "73": line.MB428.73
+      "74": line.MB428.82
+      "76": line.MB428.82
+      "78": line.MB428.82
+      "80": line.MB428.82
+      "82": line.MB428.82
+    tables:
+      # Part A – Manitoba tax on taxable income
+      - brackets: mbTaxBrackets
+        amount: line.T1.26000
+        parts:
+          - { columns: "3", amount: "2", over: "4", times: "6", tax: "8" }
+
+  # Lines 1 to 5 (net income, in a column for you and one for your spouse) are left for the person: the layout
+  # measures only the right column of that table. Line 81 is set off the row-number column, so it isn't measured; the
+  # total goes on line 47900 of the return. Boxes that hold a number of months or days, or a share of the year, are
+  # left for the person too.
+  MB479:
+    title: Form MB479, Manitoba Credits
+    url: https://www.canada.ca/content/dam/cra-arc/formspubs/pbg/5007-tc/5007-tc-25e.pdf
+    applies: 'person.province == "MB" and line.MB479.81 > 0'
+    fields:
+      "6": line.MB479.6
+      # Personal tax credit, on the return that claims it for the family (line 7, $195, is printed)
+      "8": { value: "if(person.age >= 65, param.mbPersonalCreditAge, 0)", when: "line.MB.claimsPersonalCredit == 1" }
+      "9": { value: "if(line.HH.partner == 1, param.mbPersonalCreditBasic, 0)", when: "line.MB.claimsPersonalCredit == 1" }
+      "10": { value: "if(line.HH.partner == 1 and household.partnerInYear, if(spouse.person.age >= 65, param.mbPersonalCreditAge, 0), 0)", when: "line.MB.claimsPersonalCredit == 1" }
+      "11": { value: "if(line.HH.partner == 1 and household.partnerInYear, if(spouse.answer.hasDisability, param.mbPersonalCreditDisability, 0), 0)", when: "line.MB.claimsPersonalCredit == 1" }
+      "60900": { value: "line.MB479.12", when: "line.MB.claimsPersonalCredit == 1" }
+      "12": { value: "line.MB479.12", when: "line.MB.claimsPersonalCredit == 1" }
+      "13": { value: "if(line.MB428.16 > 0, param.mbPersonalCreditBasic, 0)", when: "line.MB.claimsPersonalCredit == 1" }
+      "14": { value: "line.MB479.14", when: "line.MB.claimsPersonalCredit == 1" }
+      "15": { value: "line.MB479.15", when: "line.MB.claimsPersonalCredit == 1" }
+      "16": { value: "line.MB479.16", when: "line.MB.claimsPersonalCredit == 1" }
+      "17": { value: "line.MB479.17", when: "line.MB.claimsPersonalCredit == 1" }
+      "18": { value: "round(line.MB479.6 * param.mbPersonalCreditRate, 2)", when: "line.MB.claimsPersonalCredit == 1" }
+      "19": line.MB479.19
+      # Homeowners affordability tax credit (line 23, $1,500, is printed)
+      "20": max(0, line.MB479.22 - line.MB479.27)
+      "21": line.MB479.27
+      "22": line.MB479.22
+      "25": round(param.mbHomeownersCreditMax * line.MB479.24, 2)
+      "26": line.MB479.26
+      "27": line.MB479.27
+      "28": line.MB479.28
+      # Renters affordability tax credit (lines 31 to 35 only when you or your spouse were 65 or older)
+      "29": line.MB479.28
+      "30": line.MB479.30
+      "32": { value: "min(param.mbRentersSeniorReductionMax, round(line.MB479.6 * param.mbRentersSeniorRate, 2))", when: "line.MB479.35 > 0" }
+      "33": { value: "param.mbRentersSeniorBase - min(param.mbRentersSeniorReductionMax, round(line.MB479.6 * param.mbRentersSeniorRate, 2))", when: "line.MB479.35 > 0" }
+      "35": line.MB479.35
+      "36": { value: "max(line.MB479.35, param.mbRentersMonthly)", when: "line.MB479.30 > 0" }
+      "38": line.MB479.38
+      "39": line.MB479.39
+      "40": line.MB479.28 + line.MB479.39
+      "41": line.MB479.28 + line.MB479.39
+      # Seniors school tax rebate (lines 46, $40,000, and 48, 1%, are printed)
+      "42": { value: "line.MB479.22", when: "line.MB479.44 > 0" }
+      "43": { value: "line.MB479.26", when: "line.MB479.44 > 0" }
+      "44": line.MB479.44
+      "45": { value: "line.MB479.6", when: "line.MB479.44 > 0" }
+      "47": { value: "max(0, line.MB479.6 - param.mbSeniorsRebateBase)", when: "line.MB479.44 > 0" }
+      "49": { value: "line.MB479.49", when: "line.MB479.44 > 0" }
+      "50": { value: "max(0, line.MB479.44 - line.MB479.49)", when: "line.MB479.44 > 0" }
+      "52": line.MB479.52
+      "53": line.MB479.28 + line.MB479.39 + line.MB479.52
+      "54": line.MB479.19
+      "55": line.MB479.55
+      "57": line.MB479.57
+      # Other tax credits: the total runs down to line 78; the teaching expense tax credit is line 79.
+      "58": line.MB479.57
+      "60": line.MB479.57
+      "62": line.MB479.57
+      "64": line.MB479.57
+      "66": line.MB479.57
+      "70": line.MB479.57
+      "72": line.MB479.57
+      "74": line.MB479.57
+      "76": line.MB479.57
+      "78": line.MB479.57
+      "61495": min(answer.teacherSupplies, param.mbTeachingMax)
+      "79": line.MB479.79
+
+  SK428:
+    title: Form SK428, Saskatchewan Tax
+    url: https://www.canada.ca/content/dam/cra-arc/formspubs/pbg/5008-c/5008-c-25e.pdf
+    applies: 'person.province == "SK"'
+    fields:
+      "1": line.T1.26000
+      # Part B – Saskatchewan non-refundable tax credits. The number of children (box 58209) is left for the person to
+      # write: its box is narrower than an amount's.
+      "9": line.SK428.9
+      "10": line.SK428.10
+      "12": "if(line.HH.partner == 1, line.HH.spouseNetIncome, 0)"
+      "13": line.SK428.13
+      "16": line.SK428.16
+      "17": line.SK428.17
+      "18": line.SK428.18
+      "19": line.SK428.19
+      "20": line.SK428.20
+      "21": line.SK428.20
+      "22": line.T1.30800
+      "23": line.T1.31000
+      "24": line.T1.31200
+      "26": line.SK428.26
+      "27": line.SK428.27
+      "29": line.SK428.29
+      "30": line.SK428.30
+      "31": line.SK428.31
+      "32": line.SK428.20 + line.SK428.31
+      "33": line.SK428.33
+      "34": line.SK428.34
+      "35": line.SK428.20 + line.SK428.31 + line.SK428.33 + line.SK428.34
+      "36": line.SK428.36
+      "37": line.SK428.37
+      "38": line.SK428.38
+      "39": line.SK428.39
+      "40": line.SK428.40
+      "41": line.SK428.41
+      "42": line.SK428.38 + line.SK428.39 + line.SK428.40 + line.SK428.41
+      "43": line.T1.33099
+      "44": line.T1.23600
+      "46": round(line.T1.23600 * param.medicalThresholdRate, 2)
+      "47": min(param.skMedicalThresholdMax, round(line.T1.23600 * param.medicalThresholdRate, 2))
+      "48": line.SK428.48
+      "49": line.SK428.49
+      "50": line.SK428.48 + line.SK428.49
+      "51": line.SK428.51
+      "53": line.SK428.53
+      "54": round(line.S9.13 * param.skDonationLowRate, 2)
+      "55": round(line.S9.14 * param.skDonationHighRate, 2)
+      "56": line.SK428.56
+      "57": line.SK428.57
+      # Part C – Saskatchewan tax
+      "58": line.SK428.8
+      "60": line.SK428.8
+      "62": line.SK428.8
+      "63": line.SK428.57
+      "64": line.SK428.64
+      "66": line.SK428.57 + line.SK428.64
+      "67": line.SK428.67
+      "69": line.SK428.67
+      "70": line.SK428.70
+      "71": line.SK428.71
+      "72": answer.provincialPoliticalContributions
+      "73": line.SK428.73
+      "74": line.SK428.82
+      "78": line.SK428.82
+      "80": line.SK428.82
+      "82": line.SK428.82
+    tables:
+      # Part A – Saskatchewan tax on taxable income
+      - brackets: skTaxBrackets
+        amount: line.T1.26000
+        parts:
+          - { columns: "3", amount: "2", over: "4", times: "6", tax: "8" }
+
+  SK479:
+    title: Form SK479, Saskatchewan Credits
+    url: https://www.canada.ca/content/dam/cra-arc/formspubs/pbg/5008-tc/5008-tc-25e.pdf
+    applies: 'person.province == "SK" and line.SK479.10 > 0'
+    fields:
+      # Lines 1 to 5 have a column for each spouse, and only the spouse's column has a row number to place it by: the
+      # person writes them. The children's chart is theirs to fill in too, and so are the fertility expenses (box
+      # 61268), whose box is narrower than an amount's.
+      "6": { value: "line.SK479.6", when: "line.SK479.8 > 0" }
+      "7": line.SK479.7
+      "8": line.SK479.8
+      "9": line.SK479.9
+      "10": line.SK479.10
+
+  NB428:
+    title: Form NB428, New Brunswick Tax and Credits
+    url: https://www.canada.ca/content/dam/cra-arc/formspubs/pbg/5004-c/5004-c-25e.pdf
+    applies: 'person.province == "NB"'
+    fields:
+      "1": line.T1.26000
+      # Part B – New Brunswick non-refundable tax credits
+      "9": line.NB428.9
+      "10": line.NB428.10
+      "12": "if(line.HH.partner == 1, line.HH.spouseNetIncome, 0)"
+      "13": line.NB428.13
+      "16": line.NB428.16
+      "17": line.NB428.17
+      "18": line.NB428.9 + line.NB428.10 + line.NB428.13 + line.NB428.16 + line.NB428.17
+      "19": line.T1.30800
+      "20": line.T1.31000
+      "21": line.T1.31200
+      "23": line.NB428.23
+      "24": line.NB428.24
+      "25": line.NB428.25
+      "26": line.NB428.9 + line.NB428.10 + line.NB428.13 + line.NB428.16 + line.NB428.17 + line.NB428.25
+      "27": line.NB428.9 + line.NB428.10 + line.NB428.13 + line.NB428.16 + line.NB428.17 + line.NB428.25
+      "28": line.NB428.28
+      "29": line.NB428.29
+      "30": line.NB428.9 + line.NB428.10 + line.NB428.13 + line.NB428.16 + line.NB428.17 + line.NB428.25 + line.NB428.28 + line.NB428.29
+      "31": line.NB428.31
+      "32": line.NB428.32
+      "33": line.NB428.33
+      "34": line.NB428.34
+      "35": line.NB428.35
+      "36": line.NB428.36
+      "37": line.NB428.37
+      "38": line.NB428.38
+      "39": line.T1.33099
+      "40": line.T1.23600
+      "42": round(line.T1.23600 * param.medicalThresholdRate, 2)
+      "43": min(param.nbMedicalThresholdMax, round(line.T1.23600 * param.medicalThresholdRate, 2))
+      "44": line.NB428.44
+      "45": line.NB428.45
+      "46": line.NB428.46
+      "47": line.NB428.47
+      "49": line.NB428.49
+      "50": round(line.S9.13 * param.nbDonationLowRate, 2)
+      "51": round(line.S9.14 * param.nbDonationHighRate, 2)
+      "52": line.NB428.52
+      "53": line.NB428.53
+      # Part C – New Brunswick tax
+      "54": line.NB428.8
+      "56": line.NB428.8
+      "57": line.NB428.53
+      "58": line.NB428.58
+      "59": line.NB428.58
+      "60": line.NB428.60
+      "62": line.NB428.60
+      "63": line.NB428.63
+      "65": line.NB428.63
+      "66": line.NB428.66
+      "67": line.NB428.67
+      "68": line.NB428.68
+      "69": line.NB428.69
+      # The low-income tax reduction: worked out only by the spouse who claims it, and only when they are eligible.
+      # The chart's rows 70 to 74 have a column for each spouse, which the layout can't place; their total is row 75.
+      "75": { value: "line.NB428.75", when: "line.NB428.86 > 0" }
+      "76": { value: "line.NB428.69", when: "line.NB.claimsReduction == 1" }
+      "77": { value: "param.nbLowIncomeReduction", when: "line.NB428.86 > 0" }
+      "78": { value: "param.nbLowIncomeReduction", when: "line.NB428.86 > 0 and line.HH.partner == 1" }
+      "79": { value: "param.nbLowIncomeReduction", when: "line.NB428.86 > 0 and line.HH.partner == 0 and line.T1.30400 > 0" }
+      "80": { value: "line.NB428.80", when: "line.NB428.86 > 0" }
+      "81": { value: "line.NB428.75", when: "line.NB428.86 > 0" }
+      "83": { value: "max(0, line.NB428.75 - param.nbLowIncomeBase)", when: "line.NB428.86 > 0" }
+      "85": { value: "line.NB428.85", when: "line.NB428.86 > 0" }
+      "86": { value: "line.NB428.86", when: "line.NB.claimsReduction == 1" }
+      "87": line.NB428.87
+      "88": { value: "line.NB428.86", when: "line.HH.partner == 1" }
+      "89": { value: "line.NB428.67", when: "line.HH.partner == 1 and line.NB428.86 > 0" }
+      "90": line.NB428.90
+      "91": line.NB428.91
+      "92": line.NB428.92
+      "93": line.NB428.93
+      "95": line.NB428.93
+      "97": line.NB428.97
+    tables:
+      # Part A – New Brunswick tax on taxable income
+      - brackets: nbTaxBrackets
+        amount: line.T1.26000
+        parts:
+          - { columns: "3", amount: "2", over: "4", times: "6", tax: "8" }
+
+  NL428:
+    title: Form NL428, Newfoundland and Labrador Tax
+    url: https://www.canada.ca/content/dam/cra-arc/formspubs/pbg/5001-c/5001-c-25e.pdf
+    applies: 'person.province == "NL"'
+    fields:
+      "1": line.T1.26000
+      # Part B – Newfoundland and Labrador non-refundable tax credits
+      "16": line.NL428.16
+      "17": line.NL428.17
+      "19": "if(line.HH.partner == 1, line.HH.spouseNetIncome, 0)"
+      "20": line.NL428.20
+      "23": line.NL428.23
+      "24": line.NL428.24
+      "25": line.NL428.16 + line.NL428.17 + line.NL428.20 + line.NL428.23 + line.NL428.24
+      "26": line.NL428.16 + line.NL428.17 + line.NL428.20 + line.NL428.23 + line.NL428.24
+      "27": line.T1.30800
+      "28": line.T1.31000
+      "29": line.T1.31200
+      "31": line.NL428.31
+      "32": line.NL428.32
+      "33": line.NL428.33
+      "34": line.NL428.34
+      "35": line.NL428.35
+      "36": line.NL428.16 + line.NL428.17 + line.NL428.20 + line.NL428.23 + line.NL428.24 + line.NL428.35
+      "37": line.NL428.37
+      "38": line.NL428.38
+      "39": line.NL428.16 + line.NL428.17 + line.NL428.20 + line.NL428.23 + line.NL428.24 + line.NL428.35 + line.NL428.37 + line.NL428.38
+      "40": line.NL428.40
+      "41": line.NL428.41
+      "42": line.NL428.42
+      "43": line.NL428.43
+      "44": line.NL428.44
+      "45": line.NL428.45
+      "46": line.NL428.46
+      "47": line.NL428.47
+      "48": line.T1.33099
+      "49": line.T1.23600
+      "51": round(line.T1.23600 * param.medicalThresholdRate, 2)
+      "52": min(param.nlMedicalThresholdMax, round(line.T1.23600 * param.medicalThresholdRate, 2))
+      "53": line.NL428.53
+      "54": line.NL428.54
+      "55": line.NL428.55
+      "56": line.NL428.56
+      "58": line.NL428.58
+      "59": round(line.S9.13 * param.nlDonationLowRate, 2)
+      "60": round(line.S9.14 * param.nlDonationHighRate, 2)
+      "61": line.NL428.61
+      "62": line.NL428.62
+      # Part C – Newfoundland and Labrador tax
+      "63": line.NL428.8
+      "65": line.NL428.8
+      "66": line.NL428.62
+      "67": line.NL428.67
+      "69": line.NL428.62 + line.NL428.67
+      "70": line.NL428.70
+      "72": line.NL428.70
+      "73": line.NL428.73
+      "74": line.NL428.74
+      "75": line.NL428.75
+      "76": line.NL428.76
+      "77": line.NL428.85
+      "79": line.NL428.85
+      "81": line.NL428.85
+      "85": line.NL428.85
+      "86": line.NL428.86
+      "87": line.NL428.87
+      # The low-income tax reduction: worked out only by the spouse who claims it, and only when they are eligible.
+      # The chart's rows 88 to 92 have a column for each spouse, which the layout can't place; their total is row 93.
+      "93": { value: "line.NL428.93", when: "line.NL428.104 > 0" }
+      "94": { value: "line.NL428.87", when: "line.NL.claimsReduction == 1" }
+      "95": { value: "param.nlLowIncomeBasic", when: "line.NL428.104 > 0" }
+      "96": { value: "param.nlLowIncomeFamily", when: "line.NL428.104 > 0 and line.HH.partner == 1" }
+      "97": { value: "param.nlLowIncomeFamily", when: "line.NL428.104 > 0 and line.HH.partner == 0 and line.NL428.23 > 0" }
+      "98": { value: "line.NL428.98", when: "line.NL428.104 > 0" }
+      "99": { value: "line.NL428.93", when: "line.NL428.104 > 0" }
+      "100": { value: "line.NL428.100", when: "line.NL428.104 > 0" }
+      "101": { value: "max(0, line.NL428.93 - line.NL428.100)", when: "line.NL428.104 > 0" }
+      "103": { value: "line.NL428.103", when: "line.NL428.104 > 0" }
+      "104": { value: "line.NL428.104", when: "line.NL.claimsReduction == 1" }
+      "105": line.NL428.105
+    tables:
+      # Part A – Newfoundland and Labrador tax on taxable income, in two printed tables
+      - brackets: nlTaxBrackets
+        amount: line.T1.26000
+        parts:
+          - { columns: "3", amount: "2", over: "4", times: "6", tax: "8" }
+          - { columns: "10", amount: "9", over: "11", times: "13", tax: "15" }
+
+  NL479:
+    title: Form NL479, Newfoundland and Labrador Credits
+    url: https://www.canada.ca/content/dam/cra-arc/formspubs/pbg/5001-tc/5001-tc-25e.pdf
+    applies: 'person.province == "NL" and line.NL479.9 > 0'
+    fields:
+      "1": answer.physicalActivityFees
+      "3": line.NL479.5
+      "5": line.NL479.5
+      "7": line.NL479.7
+      "9": line.NL479.9
+
+  NS428:
+    title: Form NS428, Nova Scotia Tax
+    url: https://www.canada.ca/content/dam/cra-arc/formspubs/pbg/5003-c/5003-c-25e.pdf
+    applies: 'person.province == "NS"'
+    fields:
+      "1": line.T1.26000
+      # Part B – Nova Scotia non-refundable tax credits
+      "9": line.NS428.9
+      "10": line.NS428.10
+      "12": "if(line.HH.partner == 1, max(param.nsSpouseIncomeFloor, line.HH.spouseNetIncome), 0)"
+      "13": line.NS428.13
+      "15": "if(line.NS428.16 > 0, param.nsSpouseIncomeFloor, 0)"
+      "16": line.NS428.16
+      "17": line.NS428.17
+      # The months (box 58229) aren't written: that box is narrower than the layout assumes for a line code's box.
+      "18": line.NS428.18
+      "19": line.NS428.9 + line.NS428.10 + line.NS428.13 + line.NS428.16 + line.NS428.17 + line.NS428.18
+      "20": line.NS428.9 + line.NS428.10 + line.NS428.13 + line.NS428.16 + line.NS428.17 + line.NS428.18
+      "21": line.T1.30800
+      "22": line.T1.31000
+      "23": line.T1.31200
+      "25": line.NS428.25
+      "26": line.NS428.9 + line.NS428.10 + line.NS428.13 + line.NS428.16 + line.NS428.17 + line.NS428.18 + line.NS428.25
+      "27": line.NS428.27
+      "29": line.NS428.32 - line.NS428.30 - line.NS428.31
+      "30": line.NS428.30
+      "31": line.NS428.31
+      "32": line.NS428.32
+      "33": line.NS428.33
+      "34": line.NS428.34
+      "35": line.NS428.35
+      "36": line.NS428.36
+      "37": line.NS428.32 + line.NS428.33 + line.NS428.34 + line.NS428.35 + line.NS428.36
+      "38": line.T1.33099
+      "39": line.T1.23600
+      "41": round(line.T1.23600 * param.medicalThresholdRate, 2)
+      "42": min(param.nsMedicalThresholdMax, round(line.T1.23600 * param.medicalThresholdRate, 2))
+      "43": line.NS428.43
+      "44": line.NS428.44
+      "45": line.NS428.43 + line.NS428.44
+      "46": line.NS428.46
+      "48": line.NS428.48
+      "49": round(line.S9.13 * param.nsDonationLowRate, 2)
+      "50": round(line.S9.14 * param.nsDonationHighRate, 2)
+      "51": line.NS428.51
+      "52": line.NS428.52
+      # Part C – Nova Scotia tax
+      "53": line.NS428.8
+      "55": line.NS428.8
+      "56": line.NS428.52
+      "57": line.NS428.57
+      "59": line.NS428.52 + line.NS428.57
+      "60": line.NS428.60
+      "62": line.NS428.60
+      "63": line.NS428.63
+      "64": line.NS428.64
+      # The low-income tax reduction: worked out only on the return that claims it, when there is one. The adjusted
+      # family income table (lines 65 to 70) has two columns whose row numbers sit left of the layout's columns, so it
+      # isn't measured; its total is line 79.
+      "71": { value: "param.nsTaxReductionEach", when: "line.NS428.84 > 0" }
+      "72": { value: "if(line.HH.partner == 1, param.nsTaxReductionEach, 0)", when: "line.NS428.84 > 0" }
+      "73": { value: "if(line.NS428.16 > 0, param.nsTaxReductionEach, 0)", when: "line.NS428.84 > 0" }
+      "74": { value: "line.NS428.74", when: "line.NS428.84 > 0" }
+      "75": { value: "line.NS428.75", when: "line.NS428.84 > 0" }
+      "76": { value: "line.NS428.76", when: "line.NS428.84 > 0" }
+      "77": line.NS428.64
+      "78": { value: "line.NS428.76", when: "line.NS428.84 > 0" }
+      "79": { value: "line.NS428.70", when: "line.NS428.84 > 0" }
+      "81": { value: "max(0, line.NS428.70 - param.nsTaxReductionBase)", when: "line.NS428.84 > 0" }
+      "83": { value: "line.NS428.83", when: "line.NS428.84 > 0" }
+      "84": line.NS428.84
+      "85": line.NS428.85
+      "62100": answer.provincialPoliticalContributions
+      "86": line.NS428.86
+      "87": line.NS428.87
+      "89": line.NS428.87
+      "91": line.NS428.87
+      "93": line.NS428.87
+      "95": line.NS428.87
+      "97": line.NS428.87
+      "98": line.NS428.98
+      "99": line.NS428.99
+    tables:
+      # Part A – Nova Scotia tax on taxable income
+      - brackets: nsTaxBrackets
+        amount: line.T1.26000
+        parts:
+          - { columns: "3", amount: "2", over: "4", times: "6", tax: "8" }
+
+  NS479:
+    title: Form NS479, Nova Scotia Credits
+    url: https://www.canada.ca/content/dam/cra-arc/formspubs/pbg/5003-tc/5003-tc-25e.pdf
+    applies: 'person.province == "NS" and line.NS479.5 > 0'
+    fields:
+      "1": line.NS479.1
+      "2": line.NS479.2
+      "4": line.NS479.4
+      "5": line.NS479.5
+
+  PE428:
+    title: Form PE428, Prince Edward Island Tax and Credits
+    url: https://www.canada.ca/content/dam/cra-arc/formspubs/pbg/5002-c/5002-c-25e.pdf
+    applies: 'person.province == "PE"'
+    fields:
+      "1": line.T1.26000
+      # Part B – Prince Edward Island non-refundable tax credits
+      "9": line.PE428.9
+      "10": line.PE428.10
+      "12": "if(line.HH.partner == 1, line.HH.spouseNetIncome, 0)"
+      "13": line.PE428.13
+      "16": line.PE428.16
+      "17": line.PE428.17
+      # The months (box 58229) aren't written: that box is narrower than the layout assumes for a line code's box.
+      "18": line.PE428.18
+      "19": line.PE428.9 + line.PE428.10 + line.PE428.13 + line.PE428.16 + line.PE428.17 + line.PE428.18
+      "20": line.T1.30800
+      "21": line.T1.31000
+      "22": line.T1.31200
+      "24": line.PE428.24
+      "25": line.PE428.9 + line.PE428.10 + line.PE428.13 + line.PE428.16 + line.PE428.17 + line.PE428.18 + line.PE428.24
+      "26": line.PE428.9 + line.PE428.10 + line.PE428.13 + line.PE428.16 + line.PE428.17 + line.PE428.18 + line.PE428.24
+      "27": line.PE428.27
+      "28": line.PE428.28
+      "30": line.PE428.34 - line.PE428.31 - line.PE428.32 - line.PE428.33
+      "31": line.PE428.31
+      "32": line.PE428.32
+      "33": line.PE428.33
+      "34": line.PE428.34
+      "35": line.PE428.35
+      "36": line.PE428.36
+      "37": line.PE428.37
+      "38": line.PE428.38
+      "39": line.PE428.34 + line.PE428.35 + line.PE428.36 + line.PE428.37 + line.PE428.38
+      "40": line.T1.33099
+      "41": line.T1.23600
+      "43": round(line.T1.23600 * param.medicalThresholdRate, 2)
+      "44": min(param.peMedicalThresholdMax, round(line.T1.23600 * param.medicalThresholdRate, 2))
+      "45": line.PE428.45
+      "46": line.PE428.46
+      "47": line.PE428.45 + line.PE428.46
+      "48": line.PE428.48
+      "50": line.PE428.50
+      "51": round(line.S9.13 * param.peDonationLowRate, 2)
+      "52": round(line.S9.14 * param.peDonationHighRate, 2)
+      "53": line.PE428.53
+      "54": line.PE428.54
+      # Part C – Prince Edward Island tax
+      "55": line.PE428.8
+      "57": line.PE428.8
+      "58": line.PE428.54
+      "59": line.PE428.59
+      "60": line.PE428.60
+      "62": line.PE428.60
+      "63": line.PE428.63
+      "65": line.PE428.63
+      "66": line.PE428.66
+      "67": line.PE428.67
+      # The low-income tax reduction: worked out only on the return that claims it, when there is one. The adjusted
+      # family income table (lines 68 to 72) has a column for each spouse and the layout knows only the right one, so it
+      # is left blank; its total is line 73.
+      "73": { value: "line.PE428.73", when: "line.PE428.87 > 0" }
+      "74": { value: "line.PE428.67", when: "line.PE.claimsReduction == 1" }
+      "75": { value: "param.peTaxReductionBasic", when: "line.PE428.87 > 0" }
+      "76": { value: "if(person.age >= 65, param.peTaxReductionAge, 0)", when: "line.PE428.87 > 0" }
+      "77": { value: "if(line.HH.partner == 1, param.peTaxReductionBasic, 0)", when: "line.PE428.87 > 0" }
+      "78": { value: "line.PE428.78", when: "line.PE428.87 > 0" }
+      "79": { value: "if(line.PE428.16 > 0, param.peTaxReductionBasic, 0)", when: "line.PE428.87 > 0" }
+      "80": { value: "param.peTaxReductionChild * max(0, household.childrenUnder19 - if(line.PE428.16 > 0, 1, 0))", when: "line.PE428.87 > 0" }
+      "81": { value: "line.PE428.81", when: "line.PE428.87 > 0" }
+      "82": { value: "line.PE428.73", when: "line.PE428.87 > 0" }
+      "84": { value: "max(0, line.PE428.73 - param.peTaxReductionBase)", when: "line.PE428.87 > 0" }
+      "86": { value: "line.PE428.86", when: "line.PE428.87 > 0" }
+      "87": { value: "line.PE428.87", when: "line.PE.claimsReduction == 1" }
+      "88": line.PE428.88
+      "89": line.PE428.89
+      "90": line.PE428.90
+      "91": answer.provincialPoliticalContributions
+      "92": line.PE428.92
+      "93": line.PE428.97
+      "97": line.PE428.97
+      # Part D – the refundable credit, on line 47900 of the return
+      "98": line.PE428.98
+    tables:
+      # Part A – Prince Edward Island tax on taxable income
+      - brackets: peTaxBrackets
+        amount: line.T1.26000
+        parts:
+          - { columns: "3", amount: "2", over: "4", times: "6", tax: "8" }
+
+  YT428:
+    title: Form YT428, Yukon Tax
+    url: https://www.canada.ca/content/dam/cra-arc/formspubs/pbg/5011-c/5011-c-25e.pdf
+    applies: 'person.province == "YT"'
+    fields:
+      "1": line.T1.26000
+      # Part B – Yukon non-refundable tax credits
+      "9": line.YT428.9
+      "10": line.YT428.10
+      "11": line.YT428.11
+      "12": line.YT428.12
+      "13": line.YT428.13
+      "14": line.YT428.14
+      "15": line.YT428.15
+      "16": line.YT428.9 + line.YT428.10 + line.YT428.11 + line.YT428.12 + line.YT428.13 + line.YT428.14 + line.YT428.15
+      "17": line.T1.30800
+      "18": line.T1.31000
+      "19": line.T1.31200
+      "21": line.T1.31260
+      "22": line.YT428.22
+      "23": line.YT428.23
+      "24": line.YT428.24
+      "25": line.YT428.25
+      "26": line.YT428.26
+      "27": line.YT428.27
+      "28": line.YT428.28
+      "29": line.YT428.28
+      "30": line.YT428.30
+      "31": line.YT428.31
+      "32": line.YT428.32
+      "33": line.YT428.33
+      "34": line.YT428.28 + line.YT428.30 + line.YT428.31 + line.YT428.32 + line.YT428.33
+      "35": line.T1.33099
+      "36": line.T1.23600
+      "38": round(line.T1.23600 * param.medicalThresholdRate, 2)
+      "39": min(param.ytMedicalThresholdMax, round(line.T1.23600 * param.medicalThresholdRate, 2))
+      "40": line.YT428.40
+      "41": line.YT428.41
+      "42": line.YT428.40 + line.YT428.41
+      "43": line.YT428.43
+      "45": line.YT428.45
+      "46": round(line.S9.13 * param.ytDonationLowRate, 2)
+      "47": round(line.S9.14 * param.ytDonationHighRate, 2)
+      "48": line.YT428.48
+      "49": line.YT428.49
+      # Part C – Yukon tax
+      "50": line.YT428.8
+      "52": line.YT428.8
+      "53": line.YT428.49
+      "54": line.YT428.54
+      "56": line.YT428.49 + line.YT428.54
+      "57": line.YT428.57
+      "59": line.YT428.57
+      "60": line.YT428.57
+      "61": line.YT428.61
+      "62": line.YT428.62
+      "74": line.YT428.62
+      "76": line.YT428.62
+      "77": line.YT428.63850
+      "78": line.YT428.78
+      "79": line.YT428.79
+    tables:
+      # Part A – Yukon tax on taxable income
+      - brackets: ytTaxBrackets
+        amount: line.T1.26000
+        parts:
+          - { columns: "3", amount: "2", over: "4", times: "6", tax: "8" }
+
+  YT479:
+    title: Form YT479, Yukon Credits
+    url: https://www.canada.ca/content/dam/cra-arc/formspubs/pbg/5011-tc/5011-tc-25e.pdf
+    applies: 'person.province == "YT" and line.YT479.6 > 0'
+    fields:
+      "63800": line.YT479.63800
+      "1": line.YT479.1
+      "61268": line.YT479.61268
+      "5": line.YT479.5
+      "6": line.YT479.6
+
+  NT428:
+    title: Form NT428, Northwest Territories Tax
+    url: https://www.canada.ca/content/dam/cra-arc/formspubs/pbg/5012-c/5012-c-25e.pdf
+    applies: 'person.province == "NT"'
+    fields:
+      "1": line.T1.26000
+      # Part B – Northwest Territories non-refundable tax credits
+      "9": line.NT428.9
+      "10": line.NT428.10
+      "12": "if(line.HH.partner == 1, line.HH.spouseNetIncome, 0)"
+      "13": line.NT428.13
+      "16": line.NT428.16
+      "17": line.NT428.17
+      "18": line.NT428.9 + line.NT428.10 + line.NT428.13 + line.NT428.16 + line.NT428.17
+      "19": line.T1.30800
+      "20": line.T1.31000
+      "21": line.T1.31200
+      "23": line.NT428.23
+      "24": line.NT428.9 + line.NT428.10 + line.NT428.13 + line.NT428.16 + line.NT428.17 + line.NT428.23
+      "25": line.NT428.9 + line.NT428.10 + line.NT428.13 + line.NT428.16 + line.NT428.17 + line.NT428.23
+      "26": line.NT428.26
+      "28": line.NT428.9 + line.NT428.10 + line.NT428.13 + line.NT428.16 + line.NT428.17 + line.NT428.23 + line.NT428.26
+      "29": line.NT428.29
+      "30": line.NT428.30
+      "31": line.NT428.31
+      "32": line.NT428.32
+      "33": line.NT428.33
+      "34": line.NT428.34
+      "35": line.NT428.35
+      "36": line.NT428.31 + line.NT428.32 + line.NT428.33 + line.NT428.34 + line.NT428.35
+      "37": line.T1.33099
+      "38": line.T1.23600
+      "40": round(line.T1.23600 * param.medicalThresholdRate, 2)
+      "41": min(param.ntMedicalThresholdMax, round(line.T1.23600 * param.medicalThresholdRate, 2))
+      "42": line.NT428.42
+      "43": line.NT428.43
+      "44": line.NT428.42 + line.NT428.43
+      "45": line.NT428.45
+      "47": line.NT428.47
+      "48": round(line.S9.13 * param.ntDonationLowRate, 2)
+      "49": round(line.S9.14 * param.ntDonationHighRate, 2)
+      "50": line.NT428.50
+      "51": line.NT428.51
+      # Part C – Northwest Territories tax
+      "52": line.NT428.8
+      "54": line.NT428.8
+      "55": line.NT428.51
+      "56": line.NT428.56
+      "58": line.NT428.51 + line.NT428.56
+      "59": line.NT428.59
+      "61": line.NT428.59
+      "62": line.NT428.62
+      "63": line.NT428.63
+      "64": line.NT428.62550
+      "65": line.NT428.65
+      "66": line.NT428.66
+    tables:
+      # Part A – Northwest Territories tax on taxable income
+      - brackets: ntTaxBrackets
+        amount: line.T1.26000
+        parts:
+          - { columns: "3", amount: "2", over: "4", times: "6", tax: "8" }
+
+  NT479:
+    title: Form NT479, Northwest Territories Credit
+    url: https://www.canada.ca/content/dam/cra-arc/formspubs/pbg/5012-tc/5012-tc-25e.pdf
+    applies: 'person.province == "NT" and line.NT479.21 > 0'
+    fields:
+      "1": line.T1.23600
+      "2": line.T1.24400 + line.T1.25000
+      "3": line.NT479.5
+      "5": line.NT479.5
+      "13": line.NT479.13
+      # The supplement is worked out only on the return that claims it for the family (line 14, $350, is printed).
+      "15": { value: "if(line.HH.partner == 1, param.ntCostOfLivingSupplement, 0)", when: "person.age >= 18 and line.NTCOL.claimant == 1" }
+      "16": { value: "line.NT479.16", when: "person.age >= 18 and line.NTCOL.claimant == 1" }
+      "17": { value: "line.NT479.13", when: "person.age >= 18 and line.NTCOL.claimant == 1" }
+      "18": { value: "line.NT479.18", when: "person.age >= 18 and line.NTCOL.claimant == 1" }
+      "19": { value: "line.NT479.13 + line.NT479.18", when: "person.age >= 18 and line.NTCOL.claimant == 1" }
+      "20": line.NT479.20
+      "21": line.NT479.21
+    tables:
+      # The basic credit for self: the chart is skipped at $66,000 or more, where the credit is $942.
+      - brackets: ntCostOfLivingBrackets
+        amount: "if(line.NT479.5 >= param.ntCostOfLivingFullAt, 0, line.NT479.5)"
+        parts:
+          - { columns: "7", amount: "6", over: "8", times: "10", tax: "12" }
+
+  NU428:
+    title: Form NU428, Nunavut Tax
+    url: https://www.canada.ca/content/dam/cra-arc/formspubs/pbg/5014-c/5014-c-25e.pdf
+    applies: 'person.province == "NU"'
+    fields:
+      "1": line.T1.26000
+      # Part B – Nunavut non-refundable tax credits. The number of young children (box 63710) isn't written: the box
+      # holds a count, not an amount.
+      "9": line.NU428.9
+      "10": line.NU428.10
+      "12": "if(line.HH.partner == 1, line.HH.spouseNetIncome, 0)"
+      "13": line.NU428.13
+      "16": line.NU428.16
+      "17": line.NU428.17
+      "18": line.NU428.18
+      "19": line.NU428.9 + line.NU428.10 + line.NU428.13 + line.NU428.16 + line.NU428.17 + line.NU428.18
+      "20": line.T1.30800
+      "21": line.T1.31000
+      "22": line.T1.31200
+      "24": line.NU428.24
+      "25": line.NU428.9 + line.NU428.10 + line.NU428.13 + line.NU428.16 + line.NU428.17 + line.NU428.18 + line.NU428.24
+      "26": line.NU428.9 + line.NU428.10 + line.NU428.13 + line.NU428.16 + line.NU428.17 + line.NU428.18 + line.NU428.24
+      "27": line.NU428.27
+      "29": line.NU428.9 + line.NU428.10 + line.NU428.13 + line.NU428.16 + line.NU428.17 + line.NU428.18 + line.NU428.24 + line.NU428.27
+      "30": line.NU428.30
+      "31": line.NU428.31
+      "32": line.NU428.32
+      "33": line.NU428.33
+      "34": line.NU428.34
+      "35": line.NU428.35
+      "36": line.NU428.36
+      "37": line.NU428.32 + line.NU428.33 + line.NU428.34 + line.NU428.35 + line.NU428.36
+      "38": line.T1.33099
+      "39": line.T1.23600
+      "41": round(line.T1.23600 * param.medicalThresholdRate, 2)
+      "42": min(param.nuMedicalThresholdMax, round(line.T1.23600 * param.medicalThresholdRate, 2))
+      "43": line.NU428.43
+      "44": line.NU428.44
+      "45": line.NU428.43 + line.NU428.44
+      "46": line.NU428.46
+      "48": line.NU428.48
+      "49": round(line.S9.13 * param.nuDonationLowRate, 2)
+      "50": round(line.S9.14 * param.nuDonationHighRate, 2)
+      "51": line.NU428.51
+      "52": line.NU428.52
+      # Part C – Nunavut tax
+      "53": line.NU428.8
+      "55": line.NU428.8
+      "56": line.NU428.52
+      "57": line.NU428.57
+      "59": line.NU428.52 + line.NU428.57
+      "60": line.NU428.60
+      "62": line.NU428.60
+      "63": line.NU428.63
+      "64": line.NU428.64
+      "65": line.NU428.65
+      "66": line.NU428.66
+    tables:
+      # Part A – Nunavut tax on taxable income
+      - brackets: nuTaxBrackets
+        amount: line.T1.26000
+        parts:
+          - { columns: "3", amount: "2", over: "4", times: "6", tax: "8" }
+
+  NU479:
+    title: Form NU479, Nunavut Credits
+    url: https://www.canada.ca/content/dam/cra-arc/formspubs/pbg/5014-tc/5014-tc-25e.pdf
+    applies: 'person.province == "NU" and line.NU479.21 > 0'
+    fields:
+      "1": line.T1.23600
+      "2": line.T1.24400 + line.T1.25000
+      "3": line.NU479.5
+      "5": line.NU479.5
+      "6": line.NU479.5
+      "8": line.NU479.8
+      # The supplement for single parents (lines 10 and 12, the base and the rate, are printed).
+      "9": { value: "line.NU479.5", when: "line.HH.partner == 0 and household.childrenUnder18 > 0" }
+      "11": { value: "max(0, line.NU479.5 - param.nuSingleParentThreshold)", when: "line.HH.partner == 0 and household.childrenUnder18 > 0" }
+      "13": line.NU479.13
+      "14": line.NU479.14
+      # The political contribution credit; the chart on page 2 is worked out only between $100 and $900.
+      "15": line.NU479.63991
+      "16": line.NU479.16
+      "17": { value: "line.NU428.66", when: "line.NU479.63991 > 0" }
+      "18": { value: "line.NU479.14", when: "line.NU479.63991 > 0" }
+      "19": { value: "max(0, line.NU428.66 - line.NU479.14)", when: "line.NU479.63991 > 0" }
+      "20": line.NU479.20
+      "21": line.NU479.21
+      "22": { value: "line.NU479.63991", when: "line.NU479.63991 > param.nuPoliticalFullUpTo and line.NU479.16 < param.nuPoliticalMax" }
+      "24": { value: "line.NU479.63991 - param.nuPoliticalFullUpTo", when: "line.NU479.63991 > param.nuPoliticalFullUpTo and line.NU479.16 < param.nuPoliticalMax" }
+      "26": { value: "round((line.NU479.63991 - param.nuPoliticalFullUpTo) * param.nuPoliticalRate, 2)", when: "line.NU479.63991 > param.nuPoliticalFullUpTo and line.NU479.16 < param.nuPoliticalMax" }
+      "28": { value: "line.NU479.16", when: "line.NU479.63991 > param.nuPoliticalFullUpTo and line.NU479.16 < param.nuPoliticalMax" }
+
+  NBS12:
+    title: Schedule NB(S12), New Brunswick Seniors' Home Renovation Tax Credit
+    url: https://www.canada.ca/content/dam/cra-arc/formspubs/pbg/5004-s12/5004-s12-25e.pdf
+    applies: 'person.province == "NB" and line.NBS12.7 > 0'
+    fields:
+      "1": answer.homeAccessibility
+      "3": line.NBS12.3
+      "5": line.NBS12.5
+      "7": line.NBS12.7
+
+  BC479:
+    title: Form BC479, British Columbia Credits
+    url: https://www.canada.ca/content/dam/cra-arc/formspubs/pbg/5010-tc/5010-tc-25e.pdf
+    applies: 'person.province == "BC" and line.BC479.45 > 0'
+    fields:
+      # Lines 1 to 5 have a column for each spouse, and only the spouse's column has a row number to place it by: the
+      # person writes them. Line 6 is the family income of both the sales tax and the renter's credits.
+      "6": { value: "line.BC479.6", when: "line.BC.claimsSalesCredit == 1 or line.BC.claimsRentersCredit == 1" }
+      # Sales tax credit, on the return that claims it
+      "7": { value: "line.BC479.7", when: "line.BC.claimsSalesCredit == 1" }
+      "8": { value: "line.BC479.8", when: "line.BC.claimsSalesCredit == 1" }
+      "9": { value: "param.bcSalesCreditAmount", when: "line.BC.claimsSalesCredit == 1" }
+      "10": { value: "line.BC479.10", when: "line.BC.claimsSalesCredit == 1" }
+      "11": { value: "line.BC479.11", when: "line.BC.claimsSalesCredit == 1" }
+      "12": { value: "round(line.BC479.8 * param.bcSalesCreditRate, 2)", when: "line.BC.claimsSalesCredit == 1" }
+      "13": line.BC479.13
+      # Home renovation tax credit for seniors and persons with disabilities
+      "60480": line.BC479.60480
+      "14": line.BC479.14
+      "15": line.BC479.15
+      "16": line.BC479.15
+      "35": line.BC479.15
+      "36": line.BC479.15
+      # Renter's tax credit: the months (line 37) are column D of the declaration, which the person fills in, and lines
+      # 39 to 42 sit in a column the layout doesn't measure. Line 38 ($400) is printed.
+      "43": line.BC479.43
+      "44": line.BC479.44
+      "45": line.BC479.45
+
+  # The CARE credit (line 2) is worked out on Schedule ON479-A, which isn't printed. Lines 17 and 20 (flow-through
+  # shares, co-operative education) aren't handled.
+  ON479:
+    title: Form ON479, Ontario Credits
+    url: https://www.canada.ca/content/dam/cra-arc/formspubs/pbg/5006-tc/5006-tc-25e.pdf
+    applies: 'person.province == "ON" and line.ON479.21 > 0'
+    fields:
+      "61268": { value: "line.ON479.61268", when: "line.ON479.1 > 0" }
+      "1": line.ON479.1
+      "2": line.ON479A.8
+      # The seniors care at home credit: written only when it is claimed (lines 4, 9 and 11 are printed). Lines 9 to 12
+      # are skipped at $35,000 or less, where line 5 goes on line 13.
+      "3": { value: "line.ON428.43", when: "line.ON479.13 > 0" }
+      "5": { value: "line.ON479.5", when: "line.ON479.13 > 0" }
+      "6": { value: "line.T1.23600", when: "line.ON479.13 > 0" }
+      "7": { value: "line.HH.spouseNetIncome", when: "line.ON479.13 > 0" }
+      "8": { value: "line.ON479.8", when: "line.ON479.13 > 0" }
+      "10": { value: "line.ON479.8 - param.onSeniorsCareBase", when: "line.ON479.13 > 0 and line.ON479.8 > param.onSeniorsCareBase" }
+      "12": { value: "round((line.ON479.8 - param.onSeniorsCareBase) * param.onSeniorsCareReductionRate, 2)", when: "line.ON479.13 > 0 and line.ON479.8 > param.onSeniorsCareBase" }
+      "63095": line.ON479.13
+      "13": line.ON479.13
+      "63100": { value: "min(answer.publicTransitPaid, param.onTransitMax)", when: "line.ON479.14 > 0" }
+      "14": line.ON479.14
+      "15": { value: "line.ON479.15", when: "line.ON479.16 > 0" }
+      "16": line.ON479.16
+      "18": line.ON479.18
+      "19": line.ON479.18
+      "21": line.ON479.21

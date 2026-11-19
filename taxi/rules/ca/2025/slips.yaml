@@ -21,7 +21,7 @@ slips:
       44: Union dues
       46: Charitable donations
       52: Pension adjustment
-    informational: [24, 26, 52]   # used by the CRA to check the slip, and for next year's RRSP limit
+    informational: [52]   # for next year's RRSP limit
 
   T5:
     title: T5 Statement of Investment Income
@@ -67,8 +67,7 @@ slips:
       24: Number of months part-time
       25: Number of months full-time
       26: Eligible tuition fees
-    informational: [24, 25]
-    counts: [24, 25]       # months, not dollars
+    counts: [24, 25]       # months, not dollars; some provinces' education amounts count them
 
   # Pensions and government benefits. An id is a name formulas can use; `name` is how the slip is printed.
   T4AOAS:
@@ -130,6 +129,19 @@ slips:
       30: Income tax deducted
       34: Amounts deemed received on death
     informational: [25, 27]   # withdrawals under the two plans aren't income; repaying them isn't handled yet
+  T4FHSA:
+    title: T4FHSA First Home Savings Account Statement
+    about: Contributions to and withdrawals from a first home savings account (FHSA) in the year, and the tax deducted from them
+    boxes:
+      18: Contributions
+      20: Qualifying withdrawals
+      22: Taxable withdrawals
+      24: FHSA beneficiary distributions received
+      26: Amount deemed received on FHSA cessation
+      30: Income tax deducted
+      32: RRSP transfers in
+      34: Spousal RRSP transfers in
+    informational: [20, 32, 34]   # a withdrawal for a first home isn't income; a transfer from an RRSP isn't deductible
   T5007:
     title: T5007 Statement of Benefits
     about: Workers' compensation benefits or social assistance payments received in the year
@@ -150,7 +162,7 @@ slips:
       14: Total benefits paid
       15: Regular and other benefits paid
       22: Income tax deducted
-    informational: [7]
+      30: Total repayment
     counts: [7]                  # a rate, not dollars
 
   # Receipts and notices: amounts with no box number printed beside them. The numbers below are this app's, so the

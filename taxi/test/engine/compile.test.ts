@@ -100,6 +100,12 @@ describe("compiling rule files", () => {
     expect(compileError(withQuestions({ share: { type: "money", module: "income", parent: "status", ask: "Share" } }))).toContain("parent must be a yes/no question");
     expect(compileError(withQuestions({ kind: { type: "choice", ask: "Kind", options: ["a"], optionLabels: { b: "B" } } }))).toContain("optionLabels name the options");
     expect(compileError(withQuestions({ amount: { type: "money", ask: "Amount", note: "File a form" } }))).toContain("Only a yes/no question has a note");
+    // A part asked only for some options of a choice: the choice is a part of the same group, and the options its own.
+    const kind = { type: "choice", module: "income", parent: "hasBusiness", ask: "Kind", options: ["shop", "farm"] };
+    const acres = (askedWhen: object) => ({ ...group, kind, acres: { type: "count", module: "income", parent: "hasBusiness", ask: "Acres", askedWhen } });
+    expect(() => compileRules(withQuestions(acres({ question: "kind", options: ["farm"] })), hash)).not.toThrow();
+    expect(compileError(withQuestions(acres({ question: "kind", options: ["ranch"] })))).toContain("ranch isn't an option of kind");
+    expect(compileError(withQuestions(acres({ question: "hasBusiness", options: ["farm"] })))).toContain("askedWhen names a choice of the same group");
   });
 
   it("checks a bracket base printed on a form against the brackets below it", () => {

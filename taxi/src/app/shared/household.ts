@@ -36,7 +36,7 @@ export const PROVINCES = ["AB", "BC", "MB", "NB", "NL", "NS", "NT", "NU", "ON", 
 export const provinceSchema = z.enum(PROVINCES);
 export type Province = z.infer<typeof provinceSchema>;
 /** The provinces whose tax this app works out. Quebec, with its own return, comes later. */
-export const SUPPORTED_PROVINCES: readonly Province[] = ["ON", "BC", "AB"];
+export const SUPPORTED_PROVINCES: readonly Province[] = ["ON", "BC", "AB", "MB", "SK", "NB", "NL", "NS", "PE", "YT", "NT", "NU"];
 
 export const idSchema = z.uuid();
 const isoDateSchema = z.iso.date();
@@ -84,7 +84,6 @@ export const issueSchema = z.strictObject({
     "no_province",
     "no_residency",
     "unsupported_province",
-    "part_year_resident",
   ]),
   /** The person it is about, if any. */
   personId: idSchema.nullable(),

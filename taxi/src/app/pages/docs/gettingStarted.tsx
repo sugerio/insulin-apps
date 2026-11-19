@@ -23,8 +23,8 @@ export const gettingStarted: DocTopic = {
           </p>
           <p>
             <b>Who it is for:</b> residents of Ontario, British Columbia and Alberta who lived in Canada all year, with income from work,
-            pensions, EI, investments, self-employment, rent or abroad. It doesn't handle Quebec returns, farming or fishing income, or pension
-            income splitting yet.
+            pensions, EI, investments, self-employment (a business, a profession, farming or fishing), rent or abroad. It doesn't handle
+            Quebec returns or pension income splitting yet.
           </p>
         </>
       ),
@@ -60,12 +60,14 @@ export const gettingStarted: DocTopic = {
               funds, sales of investments), each opening into its boxes to check and change (a changed slip is confirmed again at Confirm).
               Under <b>Add to your return</b>, add the other kinds of income you had. One added without its slip is missing, to upload or enter
               right there. Self-employment, rental income, income earned abroad and a sale of real estate are groups: their card asks what
-              they need. What you don't add counts as none.
+              they need, and shows a part only once it applies (a class's capital cost allowance once you pick the class, the years of a
+              home that was your residence only some of the years). What you don't add counts as none.
             </li>
             <li>
               <b>Deductions.</b> RRSP and FHSA contributions (RRSP receipts and your notice of assessment give a starting amount, up to
-              your deduction limit), working from home (with a T2200 from your employer), child care (claimed by the spouse with the lower
-              income) and moving expenses. <b>From your slips</b> shows what your slips already deduct, such as union dues.
+              your deduction limit), working from home (with a T2200 from your employer), child care (entered once for a couple: the
+              spouse with the lower income claims it, and the other a part when the lower-income spouse was a student, infirm, in prison
+              or living apart, Form T778 Part C) and moving expenses. <b>From your slips</b> shows what your slips already deduct, such as union dues.
             </li>
             <li>
               <b>Credits.</b> Tuition (T2202, and unused tuition from last year), medical expenses and donations, and what your slips

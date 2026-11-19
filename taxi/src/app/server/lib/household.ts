@@ -134,9 +134,6 @@ export function assess(people: Person[], members: ReadonlySet<string>, maritalSt
       );
     }
     if (adult.residentAllYear === null) add("no_residency", "blocking", adult.personId, `Say whether ${name} lived in Canada all year.`);
-    else if (!adult.residentAllYear) {
-      add("part_year_resident", "unsupported", adult.personId, `${name} moved to or from Canada during the year, which this app doesn't handle yet.`);
-    }
   }
   return issues;
 }

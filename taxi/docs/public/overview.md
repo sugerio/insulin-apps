@@ -44,10 +44,10 @@ income, what you earned and your expenses.
 ## Who it is for
 
 Residents of Ontario, British Columbia and Alberta who lived in Canada all year. The returns it prepares cover
-employment income, pensions (OAS, CPP, workplace pensions and annuities, RRIFs), EI benefits, investment slips, self-employment and rental income, income earned abroad with its foreign tax credit, and the sale of real estate; RRSP and FHSA contributions, child care, moving and home-office expenses; tuition, donations and
+employment income, pensions (OAS, CPP, workplace pensions and annuities, RRIFs), EI benefits, investment slips, self-employment (including farming and fishing) and rental income with capital cost allowance, income earned abroad with its foreign tax credit, and the sale of real estate; RRSP and FHSA contributions, child care, moving and home-office expenses; tuition, donations and
 medical expenses.
 
-It doesn't handle Quebec returns, farming or fishing income, capital cost allowance, or pension income splitting. The
+It doesn't handle Quebec returns or pension income splitting. The
 app says so when a case it doesn't handle applies.
 
 ## What it stores

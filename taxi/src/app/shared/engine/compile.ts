@@ -47,6 +47,7 @@ const sourceQuestion = z.strictObject({
   default: z.union([sourceNumber, z.boolean()]).optional(),
   decision: z.boolean().optional(),
   parent: z.string().min(1).optional(),
+  askedWhen: z.strictObject({ question: z.string().min(1), options: z.array(z.string().min(1)).min(1) }).optional(),
   note: z.string().min(1).optional(),
   optionLabels: z.record(z.string(), z.string().min(1)).optional(),
   options: z.array(z.string()).optional(),
@@ -103,6 +104,8 @@ const manifestSchema = z.strictObject({
   filingUnit: z.literal("person"),
   extends: z.number().int().nullable(),
   result: z.array(z.string()).optional(),
+  /** A result line shown only on the returns where this is yes (the Quebec return's refund, for residents of Quebec). */
+  resultWhen: z.record(z.string(), z.string()).optional(),
   /** The line hints compare with and without their change: the refund less the balance owing. */
   outcome: z.string().optional(),
 });
@@ -123,6 +126,7 @@ export function compileRules(chain: SourceYear[], hash: (text: string) => string
   const origin = new Map<string, string>();
   let manifest: z.infer<typeof manifestSchema> | undefined;
   let result: string[] | undefined;
+  let resultWhen: Record<string, string> | undefined;
   let outcome: string | undefined;
 
   chain.forEach((year, index) => {
@@ -136,6 +140,7 @@ export function compileRules(chain: SourceYear[], hash: (text: string) => string
     if (manifest && parsedManifest.country !== manifest.country) throw new RuleError({ file: manifestFile.path }, "A year can only extend the same country");
     manifest = parsedManifest;
     result = parsedManifest.result ?? result;
+    resultWhen = parsedManifest.resultWhen ?? resultWhen;
     outcome = parsedManifest.outcome ?? outcome;
 
     const seen = new Map<string, string>();
@@ -171,6 +176,7 @@ export function compileRules(chain: SourceYear[], hash: (text: string) => string
     year: manifest!.year,
     filingUnit: manifest!.filingUnit,
     result: result ?? [],
+    resultWhen: resultWhen ?? {},
     params: mapValues(merged.params as Record<string, z.infer<typeof sourceParam>>, (param, id) => ({
       label: param.label,
       value: Array.isArray(param.value)

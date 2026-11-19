@@ -87,6 +87,29 @@ describe("Personal info", () => {
     fireEvent.click(screen.getByRole("button", { name: "Save and continue" }));
     await waitFor(async () => expect(Object.values((await estimate(server)).input.answers)[0]).toMatchObject({ spouseNetIncome: "12000" }));
   });
+
+  it("asks the days in Canada and the income while away of someone who moved during the year", async () => {
+    const { server } = await renderApp("/returns/2025/household", {
+      seed: async (s) => {
+        const alex = (await (await s.call("POST", "/api/people", { as: OWNER, body: { name: "Alex Martin", relationship: "self", birthDate: "1985-04-02" } })).json()) as Person;
+        await s.call("POST", "/api/years", { as: OWNER, body: { year: 2025, people: [alex.id] } });
+        await s.call("PUT", "/api/years/2025/household", {
+          as: OWNER,
+          body: { revision: 1, maritalStatus: "single", adults: [{ personId: alex.id, province: "ON", residentAllYear: false }] },
+        });
+      },
+    });
+    // A count of days, not dollars.
+    const days = await screen.findByLabelText("Days you lived in Canada in 2025");
+    expect(days.getAttribute("inputmode")).toBe("numeric");
+    fireEvent.change(days, { target: { value: "183" } });
+    fireEvent.change(screen.getByLabelText("Your world income for the part of 2025 you didn't live in Canada"), { target: { value: "28,000" } });
+    fireEvent.change(screen.getByLabelText("The part of it from Canada"), { target: { value: "0" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save and continue" }));
+    await waitFor(async () =>
+      expect(Object.values((await estimate(server)).input.answers)[0]).toMatchObject({ daysResident: "183", nonResidentIncome: "28000", nonResidentCanadianIncome: "0" }),
+    );
+  });
 });
 
 describe("Income", () => {
@@ -161,6 +184,10 @@ describe("Income", () => {
     fireEvent.change(screen.getByLabelText("Kind of income"), { target: { value: "professional" } });
     fireEvent.change(screen.getByLabelText("Gross income"), { target: { value: "90,000" } });
     fireEvent.change(screen.getByLabelText("Business expenses"), { target: { value: "20000" } });
+    // A part asked only for some options of a choice waits for that choice: a class's balances, once a class is chosen.
+    expect(screen.queryByLabelText("Undepreciated capital cost at the start of 2025")).toBeNull();
+    fireEvent.change(screen.getByLabelText("Capital cost allowance"), { target: { value: "class8" } });
+    fireEvent.change(screen.getByLabelText("Undepreciated capital cost at the start of 2025"), { target: { value: "4,000" } });
     const deductions = stepOf(router, "deductions");
     fireEvent.click(screen.getByRole("button", { name: "Save and continue" }));
     await waitFor(() => expect(router.state.location.pathname).toBe(deductions));
@@ -170,11 +197,15 @@ describe("Income", () => {
       selfEmploymentKind: "professional",
       selfEmploymentGross: "90000",
       selfEmploymentExpenses: "20000",
+      businessCcaClass: "class8",
+      businessUccStart: "4000",
+      businessCcaAdditions: "0",
       hasEmploymentIncome: false,
       hasRentalIncome: false,
       soldProperty: false,
     });
     expect(answers).not.toHaveProperty("rentalGross");
+    expect(answers).not.toHaveProperty("propertyYearsOwned");
   });
 
   it("enters a missing slip by hand right there, keeping what was added", async () => {

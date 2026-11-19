@@ -26,8 +26,8 @@ describe("a year's estimate", () => {
     expect(estimate.input).toEqual({
       year: 2025,
       people: [
-        { id: alex.id, name: "Alex Martin", role: "self", birthDate: "1985-04-02", province: "ON" },
-        { id: sam.id, name: "Sam Martin", role: "spouse", birthDate: "1987-09-15", province: "BC" },
+        { id: alex.id, name: "Alex Martin", role: "self", birthDate: "1985-04-02", province: "ON", residentAllYear: true },
+        { id: sam.id, name: "Sam Martin", role: "spouse", birthDate: "1987-09-15", province: "BC", residentAllYear: true },
       ],
       household: { maritalStatus: "married", dependants: [] },
       answers: {},

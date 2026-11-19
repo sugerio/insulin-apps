@@ -13,10 +13,15 @@ import { parseFormula, references, type Formula } from "./formula.ts";
 //   answer.<question>             the person's answer; the question's default when there is none (an estimate)
 //   <SLIP>.box<key>               that box of every one of the person's slips of that type (a list: sum, count, max)
 //   person.age, person.province, person.role   the person's age and province on December 31, and "self" for the
-//                                 person preparing or "spouse"
+//                                 person preparing or "spouse"; person.residentAllYear whether they lived in Canada all year
+//   person.birthMonth             the month the person was born, 1 to 12 (with person.age, the month they turned an
+//                                 age this year, which prorates CPP in the year they turn 18 or 70)
 //   household.maritalStatus, household.partnerInYear, household.childrenUnder18, household.childrenUnder19
 //                                 the year's marital status, whether the spouse's return is prepared too, and the
-//                                 number of dependants under 18 (or 19) at the end of the year
+//                                 number of dependants under 18 (or 19) at the end of the year; also childrenUnder6,
+//                                 childrenUnder7 and childrenUnder17
+//   household.childMonthsUnder6   for each dependant under 18, the months on whose first day they were born and under 6
+//                                 (a list: sum, min)
 //   spouse.<any of the above but param>   the same, for the spouse
 
 export const STATUSES = ["complete", "estimate", "missing"] as const;
@@ -78,6 +83,12 @@ export interface Question {
   suggest?: string;
   /** A part of a yes/no question (a group): asked in its card once it applies (self-employment's income and expenses). */
   parent?: string;
+  /**
+   * A part asked only when another part of its group, a choice, has one of these options: the years of a home that was
+   * your residence only some of the years, the balances of a class of capital cost allowance. It keeps a group's card
+   * to what applies; the rules read such a part only in the same case.
+   */
+  askedWhen?: { question: string; options: string[] };
   /** For a yes/no question: shown when it is answered yes (what else to do, such as a form to file separately). */
   note?: string;
   /** For a choice: each option's words on screen. */
@@ -189,6 +200,8 @@ export interface RuleSet {
   version: string;
   /** The lines a summary shows, in order. */
   result: string[];
+  /** A result line shown only on the returns where its formula is yes. */
+  resultWhen: Map<string, Formula>;
   params: Map<string, Param>;
   lines: Map<string, Line>;
   questions: Map<string, Question>;
@@ -213,6 +226,7 @@ export const compiledRulesSchema = z.strictObject({
   filingUnit: z.literal("person"),
   version: z.string(),
   result: z.array(z.string()),
+  resultWhen: z.record(z.string(), z.string()),
   params: z.record(z.string(), z.strictObject({ label: z.string(), value: z.union([decimalText, z.array(bracketRowSchema).min(1)]), source: z.string() })),
   lines: z.record(z.string(), z.strictObject({ label: z.string(), formula: z.string(), source: z.string().optional(), module: z.enum(MODULES).optional() })),
   questions: z.record(
@@ -229,6 +243,7 @@ export const compiledRulesSchema = z.strictObject({
       decision: z.boolean().optional(),
       options: z.array(z.string()).optional(),
       parent: z.string().optional(),
+      askedWhen: z.strictObject({ question: z.string(), options: z.array(z.string()) }).optional(),
       note: z.string().optional(),
       optionLabels: z.record(z.string(), z.string()).optional(),
     }),
@@ -378,6 +393,7 @@ export function loadRuleSet(json: unknown, where: (entry: string) => string = ()
     filingUnit: compiled.filingUnit,
     version: compiled.version,
     result: compiled.result,
+    resultWhen: new Map(Object.entries(compiled.resultWhen).map(([id, text]) => [id, parse(`resultWhen.${id}`, text)])),
     params,
     lines,
     questions,
@@ -461,6 +477,9 @@ const FUNCTIONS: Record<string, { args: [number, number]; check: (types: Type[],
     },
   },
   bracket: { args: [2, 2], check: (types) => (types[0] === "table" && types[1] === "number" ? "number" : "takes a bracket table and an amount") },
+  // A chart of rates by amount (a rate that steps down as income goes up), read as a bracket table: the rate of the
+  // row the amount falls in, not a progressive tax.
+  step: { args: [2, 2], check: (types) => (types[0] === "table" && types[1] === "number" ? "number" : "takes a bracket table and an amount") },
   // A case the rules know about but the app can't compute yet: the value is missing, and the text says why.
   unsupported: {
     args: [1, 1],
@@ -472,6 +491,12 @@ export const FUNCTION_NAMES = Object.keys(FUNCTIONS);
 
 function checkRuleSet(ruleSet: RuleSet, fail: (entry: string, message: string, column?: number) => never) {
   for (const id of ruleSet.result) if (!ruleSet.lines.has(id)) fail("result", `No line ${id}`);
+  for (const [id, when] of ruleSet.resultWhen) {
+    if (!ruleSet.result.includes(id)) fail(`resultWhen.${id}`, "Names a line of the result");
+    if (formulaType(ruleSet, when, (message, column) => fail(`resultWhen.${id}`, message, column), new Set()) !== "boolean") {
+      fail(`resultWhen.${id}`, "Must be a yes/no value");
+    }
+  }
   for (const [id, question] of ruleSet.questions) {
     const entry = `questions.${id}`;
     if (question.type === "choice" && !question.options?.length) fail(entry, "A choice needs options");
@@ -501,8 +526,16 @@ function checkRuleSet(ruleSet: RuleSet, fail: (entry: string, message: string, c
       if (parent!.module !== question.module) fail(entry, "A question and its parent are asked in the same module");
       if (question.type === "boolean") fail(entry, "A part of a group is an amount, a percent, a count or a choice");
     }
-    if (question.type === "count" && question.parent === undefined) {
-      fail(entry, "A count is asked as a part of a group");
+    if (question.askedWhen !== undefined) {
+      const choice = ruleSet.questions.get(question.askedWhen.question);
+      if (question.parent === undefined || !choice || choice.type !== "choice" || choice.parent !== question.parent) {
+        fail(entry, "askedWhen names a choice of the same group, on a part");
+      }
+      const unknown = question.askedWhen.options.find((option) => !choice!.options!.includes(option));
+      if (unknown !== undefined) fail(entry, `askedWhen: ${unknown} isn't an option of ${choice!.id}`);
+    }
+    if (question.type === "count" && question.parent === undefined && question.module !== "about") {
+      fail(entry, "A count is asked as a part of a group, or about the person");
     }
     if (question.optionLabels && (question.type !== "choice" || Object.keys(question.optionLabels).some((option) => !question.options!.includes(option)))) {
       fail(entry, "optionLabels name the options of a choice");
@@ -669,12 +702,14 @@ function refType(ruleSet: RuleSet, path: string[], fail: (message: string) => ne
       if (spouse) return fail(`${name}: the household is the same for both spouses; write household.${rest.join(".")}`);
       if (rest.length === 1 && rest[0] === "maritalStatus") return "string";
       if (rest.length === 1 && rest[0] === "partnerInYear") return "boolean";
-      if (rest.length === 1 && ["childrenUnder7", "childrenUnder17", "childrenUnder18", "childrenUnder19"].includes(rest[0]!)) return "number";
-      return fail(`${name}: the household has maritalStatus, partnerInYear, childrenUnder7, childrenUnder17, childrenUnder18 and childrenUnder19`);
+      if (rest.length === 1 && ["childrenUnder6", "childrenUnder7", "childrenUnder17", "childrenUnder18", "childrenUnder19"].includes(rest[0]!)) return "number";
+      if (rest.length === 1 && rest[0] === "childMonthsUnder6") return "list";
+      return fail(`${name}: the household has maritalStatus, partnerInYear, childrenUnder6, childrenUnder7, childrenUnder17, childrenUnder18, childrenUnder19 and childMonthsUnder6`);
     case "person":
-      if (rest.length === 1 && rest[0] === "age") return "number";
+      if (rest.length === 1 && (rest[0] === "age" || rest[0] === "birthMonth")) return "number";
       if (rest.length === 1 && (rest[0] === "province" || rest[0] === "role")) return "string";
-      return fail(`${name}: a person has age, province and role`);
+      if (rest.length === 1 && rest[0] === "residentAllYear") return "boolean";
+      return fail(`${name}: a person has age, birthMonth, province, role and residentAllYear`);
     default: {
       const slip = ruleSet.slips.get(head ?? "");
       if (!slip) return fail(`Unknown name ${name}`);

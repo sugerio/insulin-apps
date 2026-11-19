@@ -18,11 +18,7 @@ interface Golden {
 
 /** Lines no golden household makes non-zero, and why that is fine. Every other line must be non-zero in at least one. */
 const ALWAYS_ZERO: Record<string, string> = {
-  "T1.44800": "a CPP overpayment is not handled yet: the line is zero or says so",
-  "T1.45000": "an EI overpayment is not handled yet: the line is zero or says so",
-  "BC428.44": "a spouse's unused British Columbia age amount is not handled yet: the line is zero or says so",
-  "AB428.42": "a spouse's unused Alberta age amount is not handled yet: the line is zero or says so",
-  "SCOPE.income": "income this app doesn't handle: the line is zero or says so",
+  "SCOPE.departure": "property deemed sold on leaving Canada is not handled: the line is zero or says so",
 };
 
 for (const folder of readdirSync(ROOT)) {

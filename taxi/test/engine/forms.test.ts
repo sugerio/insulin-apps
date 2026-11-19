@@ -20,23 +20,47 @@ interface Golden {
 const golden = (name: string) => JSON.parse(readFileSync(join(GOLDEN, `${name}.json`), "utf8")) as Golden;
 
 describe("2025 forms", () => {
-  for (const [name, province] of [
+  for (const [name, ...provincial] of [
     ["on-couple-kids", "ON428"],
-    ["bc-employee", "BC428"],
+    ["bc-employee", "BC428", "BC479"],
     ["ab-couple", "AB428"],
     ["pensioner-on", "ON428"],
     ["oas-clawback-bc", "BC428"],
-    ["young-family-on", "ON428"],
+    ["young-family-on", "ON428", "ON479"],
     ["consultant-ab", "AB428"],
     ["shop-owner-bc", "BC428"],
     ["sales-rep-on", "ON428"],
+    ["mb-high-earner-couple", "MB428"],
+    ["sk-senior-couple", "SK428"],
+    ["nb-senior-couple", "NB428", "NBS12"],
+    ["farm-and-fishing-couple-sk", "SK428"],
+    ["nb-young-couple", "NB428"],
+    ["nl-senior-couple", "NL428"],
+    ["nl-single-parent", "NL428"],
+    ["ns-senior-couple", "NS428"],
+    ["pe-senior-couple", "PE428"],
+    ["pe-single-parent", "PE428"],
+    ["yt-senior-couple", "YT428"],
+    ["pe-caregiver-family", "PE428"],
+    ["nb-caregivers", "NB428"],
+    ["nl-caregivers", "NL428"],
+    ["yt-single-parent", "YT428", "YT479"],
+    ["nt-senior-couple", "NT428", "NT479"],
+    ["nt-student-couple", "NT428", "NT479"],
+    ["nu-young-family", "NU428", "NU479"],
+    ["nu-single-parent", "NU428", "NU479"],
+    ["yt-caregiver-family", "YT428", "YT479"],
+    ["nt-caregiver-couple", "NT428", "NT479"],
+    ["nu-volunteer-couple", "NU428", "NU479"],
+    ["on-caregiver-family", "ON428", "ON479"],
+    ["on-senior-care-couple", "ON428", "ON479"],
   ] as const) {
-    it(`${name}: the T1 and ${province} hold the household's expected lines`, () => {
+    it(`${name}: the T1 and ${provincial.join(" and ")} hold the household's expected lines`, () => {
       const household = golden(name);
       const evaluation = new Evaluation(rules, household.input);
       for (const [personId, expected] of Object.entries(household.expected)) {
         const filled = fillForms(rules, evaluation, personId);
-        expect(filled.map((each) => each.form.id)).toEqual(["T1", province]);
+        expect(filled.map((each) => each.form.id)).toEqual(["T1", ...provincial]);
         let checked = 0;
         for (const { form, amounts } of filled) {
           for (const field of form.fields) {

@@ -123,18 +123,22 @@ a name, a birth date, an amount or a document.
 - The forms leave Step 1 of the T1 and the schedules to fill in by hand.
 - The 2025 rules cover the T1 and the Ontario, British Columbia and Alberta forms for one or two adults:
   - income: employment, OAS, CPP, workplace pensions, annuities and RRIFs (T4A, T4A(P), T4A(OAS), T4RIF), EI
-    benefits (T4E), interest, dividends, trust income, capital gains, self-employment (Form T2125, with CPP on it from
-    Schedule 8), rental income (Form T776), income earned abroad, and the sale of real estate (Schedule 3);
+    benefits (T4E), interest, dividends, trust income, capital gains, self-employment (Forms T2125, T2042 for farming and
+    T2121 for fishing, with CPP on it from Schedule 8), rental income (Form T776), capital cost allowance for one class
+    of each, income earned abroad, the sale of real estate (Schedule 3), a home that was your residence only some of
+    the years (Form T2091(IND)) and a flipped property (business income);
   - deductions: RRSP, FHSA, pension plan, union dues, child care (Form T778), moving (Form T1-M), home office as an
-    employee (Form T777) and the OAS repayment (line 23500);
+    employee (Form T777), and the EI and OAS repayments (line 23500);
   - credits: the basic, age, CPP, EI, employment, pension, tuition, medical and donation amounts, the spouse and
     eligible dependant amounts, a spouse's unused age, pension and tuition amounts, and the federal and provincial
-    foreign tax credits (Forms T2209 and T2036).
+    foreign tax credits (Forms T2209 and T2036);
+  - refunds: CPP and EI deducted over what was required (Schedule 8 and Form T2204), with CPP for the part of the year
+    after you turned 18 or up to the month you turned 70.
 - Not handled, and said so when it applies: capital cost allowance, farming and fishing income, pension income
-  splitting (Form T1032), repaying EI benefits, a home that was your residence only some of the years, CPP for part of
-  a year, a disabled child's child care limit, and moving a spouse's age or pension amount in British Columbia or
-  Alberta.
-- When the rules meet a case they don't handle, such as a CPP overpayment from two jobs, the number is shown as
+  splitting (Form T1032), a home that was your residence only some of the years, a disabled child's child care limit,
+  and moving a spouse's age or pension amount in British Columbia or Alberta. Not handled and not asked: electing to
+  stop CPP contributions (Form CPT30) and a CPP disability pension, which change the months of CPP.
+- When the rules meet a case they don't handle, such as T4 slips where only some show box 26, the number is shown as
   missing with the reason, never guessed.
 - Only the 2025 tax year.
 - Ontario, British Columbia and Alberta residents who lived in Canada all year.

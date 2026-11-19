@@ -1,0 +1,370 @@
+# Nunavut tax: Form NU428, Schedules NU(S2) and NU(S11), and Form NU479 (the cost of living tax credit). Line ids are
+# the line numbers in the forms' right margin. Every number below was checked against the 2025 NU428 (5014-C),
+# Worksheet NU428 (5014-D), NU(S2) (5014-S2), NU(S11) (5014-S11) and NU479 (5014-TC).
+
+params:
+  nuTaxBrackets:
+    label: Nunavut tax brackets
+    source: "NU428 Part A, bases as printed on the form"
+    value:
+      - { upTo: 54707, rate: 4%, base: 0 }
+      - { upTo: 109413, rate: 7%, base: 2188.28 }
+      - { upTo: 177881, rate: 9%, base: 6017.70 }
+      - { rate: 11.5%, base: 12179.82 }
+  nuFirstBracketTop:
+    label: Top of the first Nunavut bracket
+    source: "NU428 Part A, NU(S2) line 7 and NU(S11) line 11: $54,707"
+    value: 54707
+  nuCreditRate:
+    label: Nunavut credit rate
+    source: "NU428 line 47: 4%"
+    value: 4%
+  nuBasicPersonalAmount:
+    label: Nunavut basic personal amount
+    source: "NU428 line 9 (58040): claim $19,274"
+    value: 19274
+  nuAgeAmountMax:
+    label: Nunavut age amount, full
+    source: "Worksheet NU428, line 58080: $12,303"
+    value: 12303
+  nuAgeAmountThreshold:
+    label: Net income where the Nunavut age amount starts to go down
+    source: "Worksheet NU428, line 58080: income threshold $45,522"
+    value: 45522
+  nuAgeAmountRate:
+    label: Nunavut age amount reduction rate
+    source: "Worksheet NU428, line 58080: applicable rate"
+    value: 15%
+  nuSpouseBase:
+    label: Nunavut spouse and eligible dependant amount, base
+    source: "NU428 lines 11 and 14: $19,274"
+    value: 19274
+  nuYoungChildAmount:
+    label: Nunavut amount for each child under 6
+    source: "NU428 line 18 (58230): $1,200 for each child less than 6 years of age"
+    value: 1200
+  nuMedicalThresholdMax:
+    label: Nunavut medical expense threshold, most
+    source: "NU428 line 42: whichever is less, $2,834 or 3% of net income"
+    value: 2834
+  nuDonationLowRate:
+    label: Nunavut donation credit rate on the first $200
+    source: "NU428 line 49: 4%"
+    value: 4%
+  nuDonationHighRate:
+    label: Nunavut donation credit rate above $200
+    source: "NU428 line 50: 11.5%"
+    value: 11.5%
+  nuDividendEligibleRate:
+    label: Nunavut dividend tax credit rate, eligible dividends
+    source: "Worksheet NU428, line 61520: 5.51% of the taxable amount"
+    value: 5.51%
+  nuDividendOtherRate:
+    label: Nunavut dividend tax credit rate, other dividends
+    source: "Worksheet NU428, line 61520: 2.61% of the taxable amount"
+    value: 2.61%
+  nuInfirmDependantBase:
+    label: Nunavut amount for infirm dependants age 18 or older, base
+    source: "Worksheet NU428, line 58200, line 1: $14,305"
+    value: 14305
+  nuInfirmDependantMax:
+    label: Most Nunavut amount for an infirm dependant
+    source: "Worksheet NU428, line 58200, line 3: maximum $5,914 per dependant"
+    value: 5914
+  nuDisabilityAmount:
+    label: Nunavut disability amount
+    source: "NU428 line 30 (58440) and Worksheet NU428, line 58480, line 1: $16,405"
+    value: 16405
+  nuDisabilitySupplementMax:
+    label: Nunavut disability supplement for a person under 18
+    source: "Worksheet NU428, line 58480, line 2: $5,914"
+    value: 5914
+  nuDisabilityCareThreshold:
+    label: Child care and attendant care that the Nunavut disability supplement allows
+    source: "Worksheet NU428, line 58480, line 4: $3,464"
+    value: 3464
+  nuVolunteerCredit:
+    label: Nunavut tax credit for volunteer firefighters and search and rescue volunteers
+    source: "NU428 line 65 (62290): claim $722"
+    value: 722
+  nuPoliticalFullUpTo:
+    label: Nunavut political contributions credited in full
+    source: "NU479 line 16 chart: contributions of $100 or less"
+    value: 100
+  nuPoliticalRate:
+    label: Nunavut political contribution credit rate above $100
+    source: "NU479 line 25: 50%"
+    value: 50%
+  nuPoliticalMax:
+    label: Most Nunavut political contribution tax credit
+    source: "NU479 line 16: maximum $500"
+    value: 500
+  nuEducationPartTime:
+    label: Nunavut education amount for each month part-time
+    source: "NU(S11) line 3: $120 a month"
+    value: 120
+  nuTextbookPartTime:
+    label: Nunavut textbook amount for each month part-time
+    source: "NU(S11) line 4: $20 a month"
+    value: 20
+  nuEducationFullTime:
+    label: Nunavut education amount for each month full-time
+    source: "NU(S11) line 6: $400 a month"
+    value: 400
+  nuTextbookFullTime:
+    label: Nunavut textbook amount for each month full-time
+    source: "NU(S11) line 7: $65 a month"
+    value: 65
+  nuTuitionTransferMax:
+    label: Most Nunavut tuition, education and textbook amounts a student can transfer
+    source: "NU(S11) line 21: maximum $5,000"
+    value: 5000
+  nuCostOfLivingRate:
+    label: Nunavut cost of living tax credit rate
+    source: "NU479 line 7: 2%"
+    value: 2%
+  nuCostOfLivingMax:
+    label: Most Nunavut basic cost of living credit
+    source: "NU479 line 8: maximum $1,500"
+    value: 1500
+  nuSingleParentThreshold:
+    label: Adjusted net income above which a single parent gets the cost of living supplement
+    source: "NU479 line 10: $60,000"
+    value: 60000
+  nuSingleParentRate:
+    label: Nunavut cost of living supplement rate for single parents
+    source: "NU479 line 12: 2%"
+    value: 2%
+  nuSingleParentMax:
+    label: Most Nunavut cost of living supplement for single parents
+    source: "NU479 line 13 (63940): maximum $255.12"
+    value: 255.12
+
+lines:
+  # Part A – Nunavut tax on taxable income
+  NU428.8:
+    label: Nunavut tax on taxable income
+    formula: "round(bracket(param.nuTaxBrackets, line.T1.26000), 2)"
+
+  # Part B – Nunavut non-refundable tax credits
+  NU428.9:
+    label: Nunavut basic personal amount
+    formula: >-
+      round((param.nuBasicPersonalAmount) * line.RES.factor, 2)
+
+  NU428.10:
+    label: Nunavut age amount
+    formula: >-
+      round((if(person.age >= 65, max(0, param.nuAgeAmountMax - round(max(0, line.T1.23600 - param.nuAgeAmountThreshold) * param.nuAgeAmountRate, 2)), 0)) * line.RES.factor, 2)
+    source: "Worksheet NU428, line 58080: for people born in 1960 or earlier"
+  NU428.13:
+    label: Nunavut spouse or common-law partner amount
+    formula: >-
+      round((if(line.HH.partner == 1, max(0, param.nuSpouseBase - line.HH.spouseNetIncome), 0)) * line.RES.factor, 2)
+
+  NU428.16:
+    label: Nunavut amount for an eligible dependant
+    formula: >-
+      round((if(line.HH.partner == 0 and household.childrenUnder18 > 0, param.nuSpouseBase, 0)) * line.RES.factor, 2)
+    source: "NU428 lines 14 to 16. The app assumes the child had no income"
+  # The worksheet's infirm dependant amount, which needn't live with you, rather than the caregiver amount (line 28),
+  # which needs a dependant living with you: the app doesn't ask where they live. One dependant, as line 30450.
+  NU428.17:
+    label: Nunavut amount for infirm dependants age 18 or older
+    formula: >-
+      round((if(line.T1.30450 > 0, min(param.nuInfirmDependantMax, max(0, param.nuInfirmDependantBase - answer.infirmDependantIncome)), 0)) * line.RES.factor, 2)
+    source: "Worksheet NU428, line 58200: $14,305 less the dependant's net income, up to $5,914"
+  # Only one spouse claims the amount for each young child. The one with the higher net income claims it (the person
+  # preparing when they are equal), unless the other lives outside Nunavut; what they can't use moves to the other on
+  # NU(S2).
+  NUYC.claimant:
+    label: This return claims the amount for young children (1 for yes)
+    formula: >-
+      if(line.HH.partner == 0 or not household.partnerInYear, 1, if(spouse.person.province != "NU", 1,
+      if(line.T1.23600 < spouse.line.T1.23600 or (line.T1.23600 == spouse.line.T1.23600 and person.role == "self"), 1, 0)))
+    source: "canada.ca/nu-tax-info, line 58230: the spouse with the lower net income makes the first claim; the other claims the unused part on NU(S2)"
+  NU428.18:
+    label: Nunavut amount for young children less than 6 years of age
+    formula: >-
+      round((if(household.childrenUnder6 > 0, if(line.NUYC.claimant == 1, param.nuYoungChildAmount * household.childrenUnder6, 0), 0)) * line.RES.factor, 2)
+    source: "NU428 line 18 (58230): $1,200 for each child under 6 at the end of the year"
+  NU428.24:
+    label: CPP and EI credit amounts
+    formula: "line.T1.30800 + line.T1.31000 + line.T1.31200"
+    source: "NU428 lines 20 to 24: lines 30800, 31000 and 31200 of your return"
+  NU428.27:
+    label: Nunavut pension income amount
+    formula: "line.T1.31400"
+    source: "NU428 line 27 (58360): line 31400 of your return, up to $2,000"
+  NU428.30:
+    label: Nunavut disability amount for self
+    formula: >-
+      round((if(line.T1.31600 > 0, param.nuDisabilityAmount, 0)) * line.RES.factor, 2)
+    source: "NU428 line 30 (58440): claim $16,405 with an approved Form T2201"
+  NU428.31:
+    label: Nunavut disability amount transferred from a dependant
+    formula: >-
+      round((if(line.T1.31800 > 0, answer.disabledChildren * (param.nuDisabilityAmount + param.nuDisabilitySupplementMax) - min(answer.disabledChildren * param.nuDisabilitySupplementMax, max(0, answer.disabledChildCare - param.nuDisabilityCareThreshold)) + answer.disabledAdults * param.nuDisabilityAmount, 0)) * line.RES.factor, 2)
+    source: "Worksheet NU428, line 58480: $16,405, plus up to $5,914 for a child under 18, less care over $3,464. The app assumes the dependant had no income"
+  NU428.32:
+    label: Nunavut credit amounts before tuition and transfers
+    formula: >-
+      line.NU428.9 + line.NU428.10 + line.NU428.13 + line.NU428.16 + line.NU428.17 + line.NU428.18 + line.NU428.24
+      + line.NU428.27 + line.NU428.30 + line.NU428.31
+    source: "NU428 lines 19, 25, 29 and 32"
+  NU428.33:
+    label: Interest paid on your student loans
+    formula: "line.T1.31900"
+    source: "NU428 line 33 (58520): line 31900 of your return"
+  NU428.34:
+    label: Nunavut tuition, education and textbook amounts
+    formula: "line.NUS11.17"
+    source: "NU428 line 34 (58560): Schedule NU(S11)"
+  NU428.35:
+    label: Nunavut tuition, education and textbook amounts transferred from a child or grandchild
+    formula: "line.CHILD.provincialTuition"
+    source: "NU428 line 35 (58600): the territorial amount designated to you on their T2202 (the app takes the federal one, line 32400)"
+  NU428.36:
+    label: Amounts transferred from your spouse or common-law partner
+    formula: "if(line.HH.partner == 1 and household.partnerInYear, line.NUS2.13, 0)"
+    source: "NU428 line 36 (58640): Schedule NU(S2)"
+  NU428.43:
+    label: Allowable medical expenses
+    formula: "max(0, line.T1.33099 - min(param.nuMedicalThresholdMax, round(line.T1.23600 * param.medicalThresholdRate, 2)))"
+    source: "NU428 lines 38 to 43: expenses over whichever is less, $2,834 or 3% of net income"
+  NU428.44:
+    label: Allowable amount of medical expenses for other dependants
+    formula: "line.T1.33199"
+    source: "NU428 line 44 (58729): line 33199 of your return"
+  NU428.46:
+    label: Nunavut credit amounts
+    formula: "line.NU428.32 + line.NU428.33 + line.NU428.34 + line.NU428.35 + line.NU428.36 + line.NU428.43 + line.NU428.44"
+    source: "NU428 lines 37, 45 and 46"
+  NU428.48:
+    label: Nunavut credit amounts at the credit rate
+    formula: "round(line.NU428.46 * param.nuCreditRate, 2)"
+  NU428.51:
+    label: Nunavut donations credit
+    formula: "round(line.S9.13 * param.nuDonationLowRate, 2) + round(line.S9.14 * param.nuDonationHighRate, 2)"
+    source: "NU428 lines 49 to 51: Schedule 9 lines 13 and 14 at 4% and 11.5%"
+  NU428.52:
+    label: Nunavut non-refundable tax credits
+    formula: "line.NU428.48 + line.NU428.51"
+
+  # Part C – Nunavut tax
+  NU428.57:
+    label: Nunavut dividend tax credit
+    formula: "round(line.T1.12010 * param.nuDividendOtherRate, 2) + round((line.T1.12000 - line.T1.12010) * param.nuDividendEligibleRate, 2)"
+    source: "Worksheet NU428, line 61520"
+  NU428.60:
+    label: Nunavut tax after credits
+    formula: "max(0, line.NU428.8 - line.NU428.52 - line.NU428.57)"
+  # Form T2036 – the territorial foreign tax credit: the foreign tax left after the federal credit, up to the share of
+  # the territory's tax otherwise payable (NU428 line 62, which is line 60 here) on the foreign income.
+  NU428.63:
+    label: Territorial foreign tax credit
+    formula: >-
+      if(line.FTC.left > 0 and line.T1.23600 > 0, min(line.FTC.left,
+      round(min(line.FTC.netForeign, line.T1.23600) * line.NU428.60 / line.T1.23600, 2), line.NU428.60), 0)
+    source: "Form T2036, line 5; note 4: the tax before the foreign tax credit, NU428 line 62"
+  NU428.64:
+    label: Nunavut tax after the foreign tax credit
+    formula: "max(0, line.NU428.60 - line.NU428.63)"
+  NU428.65:
+    label: Tax credit for volunteer firefighters and search and rescue volunteers
+    formula: "if(line.T1.31220 + line.T1.31240 > 0, param.nuVolunteerCredit, 0)"
+    source: "NU428 line 65 (62290): claim $722, on the same service as line 31220 or 31240"
+  NU428.66:
+    label: Nunavut tax
+    formula: "max(0, line.NU428.64 - line.NU428.65)"
+    source: "NU428 lines 65 and 66"
+
+  # Schedule NU(S11) – Nunavut tuition, education and textbook amounts (the student's own). A month counts once:
+  # full-time months first, up to 12 in all.
+  NUS11.1:
+    label: Unused Nunavut tuition, education and textbook amounts from your 2024 notice of assessment
+    formula: "answer.unusedProvincialTuition"
+  NUS11.9:
+    label: Tuition, education and textbook amounts for 2025
+    formula: >-
+      line.S11.8 + min(12, sum(T2202.box25)) * (param.nuEducationFullTime + param.nuTextbookFullTime)
+      + min(12 - min(12, sum(T2202.box25)), sum(T2202.box24)) * (param.nuEducationPartTime + param.nuTextbookPartTime)
+    source: "NU(S11) lines 2 to 9: line 8 of your federal Schedule 11, and the months of study on your T2202 at $400 and $65 full-time, $120 and $20 part-time"
+  NUS11.13:
+    label: Income the Nunavut tuition amount can reduce to zero tax
+    formula: "max(0, if(line.T1.26000 <= param.nuFirstBracketTop, line.T1.26000, round(line.NU428.8 / param.nuCreditRate, 2)) - line.NU428.32)"
+    source: "NU(S11) lines 11 to 13: taxable income, or above $54,707, NU428 line 8 ÷ 4%, less NU428 line 32"
+  NUS11.14:
+    label: Unused Nunavut amounts claimed for 2025
+    formula: "min(line.NUS11.1, line.NUS11.13)"
+  NUS11.16:
+    label: 2025 Nunavut tuition, education and textbook amounts claimed
+    formula: "min(line.NUS11.9, line.NUS11.13 - line.NUS11.14)"
+  NUS11.17:
+    label: Nunavut tuition, education and textbook amounts claimed for 2025
+    formula: "line.NUS11.14 + line.NUS11.16"
+  NUS11.23:
+    label: Nunavut tuition, education and textbook amounts you can transfer
+    formula: "max(0, min(param.nuTuitionTransferMax, line.NUS11.9) - line.NUS11.16)"
+    source: "NU(S11) lines 21 to 23: this year's amounts up to $5,000, less what you used"
+  NUS11.24:
+    label: Nunavut amounts transferred to your spouse or common-law partner
+    formula: "if(line.HH.partner == 1 and household.partnerInYear and line.NUS11.9 > 0, min(answer.tuitionTransfer, line.NUS11.23), 0)"
+    source: "NU(S11) line 24: the amount you designate on your T2202 (the app takes the federal one), up to line 23"
+
+  # Schedule NU(S2) – Nunavut amounts transferred from your spouse (read from their NU428, whatever their province)
+  NUS2.6:
+    label: Their Nunavut young children, age, pension and disability amounts, and the tuition they designate to you
+    formula: 'if(spouse.person.province == "NU", spouse.line.NU428.18, 0) + spouse.line.NU428.10 + spouse.line.NU428.27 + spouse.line.NU428.30 + spouse.line.NUS11.24'
+    source: "NU(S2) lines 1 to 5. The young children amount comes over only from a spouse in Nunavut, who can claim it"
+  NUS2.7:
+    label: Their taxable income, for the transfer
+    formula: "if(spouse.line.T1.26000 <= param.nuFirstBracketTop, spouse.line.T1.26000, round(spouse.line.NU428.8 / param.nuCreditRate, 2))"
+    source: "NU(S2) line 7"
+  NUS2.11:
+    label: Their basic personal amount, CPP and EI amounts, and tuition
+    formula: "spouse.line.NU428.9 + spouse.line.NU428.24 + spouse.line.NU428.34"
+    source: "NU(S2) lines 8 to 11: their NU428 lines 58040, 24 and 58560"
+  NUS2.12:
+    label: Their adjusted taxable income
+    formula: "max(0, line.NUS2.7 - line.NUS2.11)"
+  NUS2.13:
+    label: Nunavut amounts transferred from your spouse or common-law partner
+    formula: "max(0, line.NUS2.6 - line.NUS2.12)"
+
+  # Form NU479 – the cost of living tax credit. Treaty-exempt foreign income (line 62450) isn't in this app.
+  NU479.5:
+    label: Adjusted net income
+    formula: "max(0, line.T1.23600 - line.T1.24400 - line.T1.25000)"
+    source: "NU479 lines 1 to 5: net income less lines 24400 and 25000 of your return"
+  NU479.8:
+    label: Basic cost of living credit
+    formula: "min(param.nuCostOfLivingMax, round(line.NU479.5 * param.nuCostOfLivingRate, 2))"
+    source: "NU479 lines 6 to 8: 2% of adjusted net income, up to $1,500"
+  NU479.13:
+    label: Cost of living supplement for single parents
+    formula: "if(line.HH.partner == 0 and household.childrenUnder18 > 0, min(param.nuSingleParentMax, round(max(0, line.NU479.5 - param.nuSingleParentThreshold) * param.nuSingleParentRate, 2)), 0)"
+    source: "NU479 lines 9 to 13: 2% of adjusted net income over $60,000, up to $255.12. The app takes a single parent to be a person without a spouse who has a child under 18"
+  NU479.14:
+    label: Total cost of living tax credit
+    formula: "line.NU479.8 + line.NU479.13"
+    source: "NU479 line 14 (63990)"
+  NU479.63991:
+    label: Nunavut political contributions made in 2025
+    formula: "answer.provincialPoliticalContributions"
+  NU479.16:
+    label: Political contribution amount
+    formula: >-
+      if(line.NU479.63991 <= param.nuPoliticalFullUpTo, line.NU479.63991,
+      min(param.nuPoliticalMax, param.nuPoliticalFullUpTo + round((line.NU479.63991 - param.nuPoliticalFullUpTo) * param.nuPoliticalRate, 2)))
+    source: "NU479 lines 22 to 28: contributions up to $100, then 50% of the rest, up to $500"
+  # The political contribution credit is on the refundable form but can't be more than the Nunavut tax left after the
+  # cost of living credit.
+  NU479.20:
+    label: Political contribution tax credit
+    formula: "min(line.NU479.16, max(0, line.NU428.66 - line.NU479.14))"
+    source: "NU479 lines 17 to 20: whichever is less, line 16 or NU428 line 66 less line 14"
+  NU479.21:
+    label: Nunavut credits
+    formula: "line.NU479.14 + line.NU479.20"
+    source: "NU479 line 21, entered on line 47900 of your return"

@@ -175,6 +175,7 @@ function YearFacts({ showMissing, onMissing }: { showMissing: boolean; onMissing
                 key={question.id}
                 label={question.ask}
                 help={question.help}
+                unit={question.type === "count" ? "" : "$"}
                 value={amountOf(question.id)}
                 disabled={!editable}
                 onChange={(value) => setAmounts((current) => ({ ...current, [question.id]: value }))}

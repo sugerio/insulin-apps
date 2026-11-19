@@ -85,7 +85,14 @@ export function engineInputOf(facts: YearFacts, workspace: Workspace): EngineInp
     year: facts.year,
     people: facts.adults.map((adult) => {
       const person = facts.people.find((each) => each.id === adult.personId)!;
-      return { id: person.id, name: person.name, role: person.relationship === "self" ? "self" : "spouse", birthDate: person.birthDate, province: adult.province };
+      return {
+        id: person.id,
+        name: person.name,
+        role: person.relationship === "self" ? "self" : "spouse",
+        birthDate: person.birthDate,
+        province: adult.province,
+        residentAllYear: adult.residentAllYear,
+      };
     }),
     household: {
       maritalStatus: facts.maritalStatus,

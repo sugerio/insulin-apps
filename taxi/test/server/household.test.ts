@@ -214,12 +214,10 @@ describe("the year's facts", () => {
     const alex = await addPerson("Alex Martin", "self");
     await startYear([alex]);
     const saved = await json<TaxYear>(
-      server.call("PUT", "/api/years/2025/household", { body: facts(1, "single", [{ personId: alex.id, province: "QC", residentAllYear: false }]) }),
+      server.call("PUT", "/api/years/2025/household", { body: facts(1, "single", [{ personId: alex.id, province: "QC", residentAllYear: true }]) }),
     );
-    expect(saved.issues.map((issue) => [issue.code, issue.kind])).toEqual([
-      ["unsupported_province", "unsupported"],
-      ["part_year_resident", "unsupported"],
-    ]);
+    // Moving to or from Canada during the year is handled: only the province is named.
+    expect(saved.issues.map((issue) => [issue.code, issue.kind])).toEqual([["unsupported_province", "unsupported"]]);
     expect(saved.returns[0]!.steps.household).toBe("done");
   });
 

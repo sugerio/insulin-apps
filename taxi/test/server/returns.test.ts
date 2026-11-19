@@ -64,10 +64,16 @@ describe("an adult's answers", () => {
   it("name what the app doesn't handle once answered so", async () => {
     const { alex, revision } = await year();
     await json<TaxYear>(
-      server.call("PUT", "/api/years/2025/answers", { body: { revision, personId: alex.id, answers: { soldProperty: true, propertyUse: "flipped" } } }),
+      server.call("PUT", "/api/years/2025/answers", {
+        body: {
+          revision,
+          personId: alex.id,
+          answers: { hasSelfEmployment: true, selfEmploymentKind: "business", selfEmploymentGross: "1000", selfEmploymentExpenses: "0", businessCcaClass: "several" },
+        },
+      }),
     );
     const result = await estimate();
-    expect(result.result.people[0]!.unhandled).toContain("A home owned less than 12 months (a flipped property) is business income, which this app doesn't handle yet");
+    expect(result.result.people[0]!.unhandled).toContain("Capital cost allowance for more than one class of business property isn't handled by this app yet");
     expect(lineOf(result, alex.id, "T1.15000").status).toBe("missing");
   });
 

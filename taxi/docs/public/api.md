@@ -83,7 +83,7 @@ per return:
 - `estimates`: questions with no answer whose usual answer was used, with the `assumed` value.
 - `missing`: questions with no answer and no usual answer.
 - `unhandled`: what was entered that the app doesn't use, such as a slip box, and the cases the rules can't compute
-  yet, such as a CPP overpayment from two jobs. A line those cases reach is `missing`.
+  yet, such as T4 slips where only some show box 26. A line those cases reach is `missing`.
 
 `result.rulesVersion` names the rules the result was computed with. Nothing is stored: each request computes again.
 Each entry of `result.people` also lists `questions`: every question its result lines read. The year's rules say what

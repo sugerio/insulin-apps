@@ -70,18 +70,20 @@ questions:
     type: boolean
     module: income
     ask: Self-employment or business income
-    help: Income from your own business, freelancing or gig work (Form T2125). Attach a T2125 to a paper return.
+    help: Income from your own business, profession, farm or fishing, freelancing or gig work (Form T2125, T2042 or T2121). Attach the form to a paper return.
     default: false
   selfEmploymentKind:
     type: choice
     module: income
     parent: hasSelfEmployment
     ask: Kind of income
-    options: [business, professional, commission]
+    options: [business, professional, commission, farming, fishing]
     optionLabels:
       business: Business (a shop, trade or gig work)
       professional: Professional (a consultant, accountant, designer…)
       commission: Commission sales
+      farming: Farming (Form T2042)
+      fishing: Fishing (Form T2121)
   selfEmploymentGross:
     type: money
     module: income
@@ -93,7 +95,60 @@ questions:
     module: income
     parent: hasSelfEmployment
     ask: Business expenses
-    help: Supplies, rent, phone, travel, fees and other costs of earning it. Capital cost allowance isn't claimed.
+    help: Supplies, rent, phone, travel, fees and other costs of earning it. Not capital cost allowance, which is asked next.
+  # Capital cost allowance (Area A of the form): one class, because a group asks a fixed set of amounts. Most small
+  # businesses have one (a vehicle, or computers); more than one class is said not to be handled rather than guessed.
+  businessCcaClass:
+    type: choice
+    module: income
+    parent: hasSelfEmployment
+    ask: Capital cost allowance
+    help: "Depreciation of property you use in the business: equipment, a vehicle, computers or a building. This app works out one class."
+    options: [none, class1, class8, class10, class10_1, class50, several]
+    optionLabels:
+      none: None
+      class1: Class 1 (4%), a building
+      class8: Class 8 (20%), furniture, tools, equipment
+      class10: Class 10 (30%), a vehicle, other than class 10.1
+      class10_1: Class 10.1 (30%), a car that cost more than $38,000
+      class50: Class 50 (55%), computers and software
+      several: More than one class
+    default: none
+  businessUccStart:
+    type: money
+    module: income
+    parent: hasSelfEmployment
+    askedWhen: { question: businessCcaClass, options: [class1, class8, class10, class10_1, class50] }
+    ask: Undepreciated capital cost at the start of 2025
+    help: The class's balance at the end of 2024, from last year's form (Area A, last column). 0 for property first bought in 2025.
+  businessCcaAdditions:
+    type: money
+    module: income
+    parent: hasSelfEmployment
+    askedWhen: { question: businessCcaClass, options: [class1, class8, class10, class10_1, class50] }
+    ask: Property bought and put in use in 2025
+    help: Its cost. For a class 10.1 car, at most $38,000 plus GST/HST and PST.
+  businessCcaDispositions:
+    type: money
+    module: income
+    parent: hasSelfEmployment
+    askedWhen: { question: businessCcaClass, options: [class1, class8, class10, class10_1, class50] }
+    ask: Property of the class sold in 2025
+    help: What you got for it, up to what it cost you. If you sold everything in the class, the terminal loss isn't worked out here.
+  businessCcaPersonalUse:
+    type: percent
+    module: income
+    parent: hasSelfEmployment
+    askedWhen: { question: businessCcaClass, options: [class1, class8, class10, class10_1, class50] }
+    ask: Personal use of the property
+    help: For a car you also drive for yourself, the share of the kilometres that were personal. That part of the allowance isn't deducted. Leave it empty for none.
+  businessCcaLimit:
+    type: money
+    module: income
+    parent: hasSelfEmployment
+    askedWhen: { question: businessCcaClass, options: [class1, class8, class10, class10_1, class50] }
+    ask: Most capital cost allowance to claim, if less than the maximum
+    help: Leave it empty to claim the most allowed. What you don't claim stays in the class for later years.
   hasRentalIncome:
     type: boolean
     module: income
@@ -110,7 +165,51 @@ questions:
     module: income
     parent: hasRentalIncome
     ask: Rental expenses
-    help: Mortgage interest, property tax, insurance, repairs, utilities you paid, and fees. Capital cost allowance isn't claimed.
+    help: Mortgage interest, property tax, insurance, repairs, utilities you paid, and fees. Not capital cost allowance, which is asked next.
+  # As for a business: one class, the rental building's (class 1 or 3, by when it was bought, Guide T4036) or its
+  # furniture and appliances (class 8).
+  rentalCcaClass:
+    type: choice
+    module: income
+    parent: hasRentalIncome
+    ask: Capital cost allowance
+    help: Depreciation of the rental building, or of its furniture and appliances. It can't make or increase a rental loss. This app works out one class.
+    options: [none, class1, class3, class8, several]
+    optionLabels:
+      none: None
+      class1: Class 1 (4%), a building bought after 1987
+      class3: Class 3 (5%), a building bought before 1988
+      class8: Class 8 (20%), furniture and appliances
+      several: More than one class
+    default: none
+  rentalUccStart:
+    type: money
+    module: income
+    parent: hasRentalIncome
+    askedWhen: { question: rentalCcaClass, options: [class1, class3, class8] }
+    ask: Undepreciated capital cost at the start of 2025
+    help: The class's balance at the end of 2024, from last year's Form T776 (Area A, last column). 0 for property first bought in 2025.
+  rentalCcaAdditions:
+    type: money
+    module: income
+    parent: hasRentalIncome
+    askedWhen: { question: rentalCcaClass, options: [class1, class3, class8] }
+    ask: Property bought and put in use in 2025
+    help: Its cost, the rental part only. Not the land, which isn't depreciated.
+  rentalCcaDispositions:
+    type: money
+    module: income
+    parent: hasRentalIncome
+    askedWhen: { question: rentalCcaClass, options: [class1, class3, class8] }
+    ask: Property of the class sold in 2025
+    help: What you got for the building (not the land), up to what it cost you. If you sold everything in the class, the terminal loss isn't worked out here.
+  rentalCcaLimit:
+    type: money
+    module: income
+    parent: hasRentalIncome
+    askedWhen: { question: rentalCcaClass, options: [class1, class3, class8] }
+    ask: Most capital cost allowance to claim, if less than the maximum
+    help: Leave it empty to claim the most allowed. What you don't claim stays in the class for later years.
   hasForeignIncome:
     type: boolean
     module: income
@@ -148,20 +247,21 @@ questions:
     type: boolean
     module: income
     ask: Sold your home or other real estate
-    help: The sale of a home, cottage or rental property in 2025 (Schedule 3; Form T2091 for a home).
+    help: The sale of a home, cottage or rental property in 2025 (Schedule 3; Form T2091(IND) for a home).
     default: false
   propertyUse:
     type: choice
     module: income
     parent: soldProperty
     ask: What the property was
+    help: "For your home, file Form T2091(IND) and tick the box at line 17900 of Schedule 3: box 1 for every year, box 2 for some years."
     options: [principal_residence, principal_residence_some_years, rental_or_investment, personal_use, flipped]
     optionLabels:
       principal_residence: Your home, every year you owned it
       principal_residence_some_years: Your home, but only some of the years
       rental_or_investment: A rental or investment property
       personal_use: A cottage or other property for your own use
-      flipped: Owned less than 12 months
+      flipped: A home owned less than 12 months, not sold because of a life event
   propertyProceeds:
     type: money
     module: income
@@ -179,6 +279,20 @@ questions:
     parent: soldProperty
     ask: Selling costs
     help: Real estate commission, legal fees and other costs of selling.
+  propertyYearsOwned:
+    type: count
+    module: income
+    parent: soldProperty
+    askedWhen: { question: propertyUse, options: [principal_residence_some_years] }
+    ask: Years you owned it
+    help: The tax years, from the year you bought it to 2025, counting both (Form T2091(IND), line 7).
+  propertyYearsDesignated:
+    type: count
+    module: income
+    parent: soldProperty
+    askedWhen: { question: propertyUse, options: [principal_residence_some_years] }
+    ask: Years it was your principal residence
+    help: The years you designate it as your principal residence (Form T2091(IND), line 3). One more year is added for you.
 
   hasRrspIncome:
     type: boolean
@@ -192,6 +306,12 @@ questions:
     slip: T5007
     ask: Workers' compensation or social assistance
     help: A T5007 from the board or the government that paid you.
+  hasFhsaWithdrawals:
+    type: boolean
+    module: income
+    slip: T4FHSA
+    ask: First home savings account (FHSA)
+    help: A T4FHSA from each FHSA you contributed to or withdrew from in 2025.
   hasSupportReceived:
     type: boolean
     module: income
@@ -222,7 +342,10 @@ questions:
   fhsaDeduction:
     type: money
     module: deductions
+    receipts: T4FHSA
+    suggest: SUGGEST.fhsaDeduction
     ask: FHSA contributions to deduct for 2025
+    help: Contributions in 2025 (box 18 of your T4FHSA), and any from earlier years you haven't deducted yet. You can also leave some for a later year.
     default: 0
   hasWorkFromHome:
     type: boolean
@@ -246,7 +369,7 @@ questions:
     type: boolean
     module: deductions
     ask: Child care expenses
-    help: Daycare, before- and after-school programs or day camps, so you could work (Form T778). For a couple, the one with the lower net income claims it.
+    help: Daycare, before- and after-school programs or day camps, so you or your spouse could work (Form T778). Enter them on one return of a couple; the app has the right spouse claim them.
     default: false
   childCareExpenses:
     type: money
@@ -255,6 +378,54 @@ questions:
     receipts: CHILDCARE
     ask: Child care paid
     help: Uploaded receipts are added; enter what isn't on one.
+  # The limit is by birth year (Form T778, Part B): the household's dependants give the age bands, and these counts
+  # move a child with the disability tax credit to the $11,000 limit, or an older infirm child to the $5,000 one.
+  childCareDisabledUnder7:
+    type: count
+    module: deductions
+    parent: hasChildCare
+    ask: Children born in 2019 or later with the disability tax credit
+    default: "0"
+  childCareDisabled7to16:
+    type: count
+    module: deductions
+    parent: hasChildCare
+    ask: Children born from 2009 to 2018 with the disability tax credit
+    default: "0"
+  childCareDisabledOlder:
+    type: count
+    module: deductions
+    parent: hasChildCare
+    ask: Children born in 2008 or earlier with the disability tax credit
+    help: An infirm child who depends on you, of any age.
+    default: "0"
+  childCareInfirmOlder:
+    type: count
+    module: deductions
+    parent: hasChildCare
+    ask: Children born in 2008 or earlier with an infirmity, without the disability tax credit
+    help: An infirm child who depends on you.
+    default: "0"
+  childCareSpouseUnable:
+    type: boolean
+    module: deductions
+    ask: Your spouse or partner couldn't care for the children for part of 2025
+    help: "They went to school, were confined for 2 weeks or more by an infirmity, or in prison, or you lived apart 90 days or more and reconciled (Form T778, Part C). Then you, with the higher net income, can claim part of the child care."
+    default: false
+  childCareSpouseWeeks:
+    type: count
+    module: deductions
+    parent: childCareSpouseUnable
+    ask: Weeks they were a full-time student, infirm, in prison, or you lived apart
+    help: Form T778, Part C, situations b) to f).
+    default: "0"
+  childCareSpouseMonths:
+    type: count
+    module: deductions
+    parent: childCareSpouseUnable
+    ask: Months they were a part-time student
+    help: Form T778, Part C, situation a). Don't count a month with one of the weeks above.
+    default: "0"
   hasMovingExpenses:
     type: boolean
     module: deductions
@@ -321,6 +492,27 @@ questions:
     ask: Net capital losses of earlier years to apply
     help: From your notice of assessment. They can only reduce this year's taxable capital gains.
     default: 0
+  hasNorthernResidence:
+    type: boolean
+    module: deductions
+    ask: Lived in the North
+    help: You lived in Yukon, the Northwest Territories or Nunavut for at least six months in a row, starting or ending in 2025. All three are a prescribed northern zone (Form T2222, northern residents deductions).
+    default: false
+  northernDays:
+    type: count
+    module: deductions
+    parent: hasNorthernResidence
+    ask: Days you lived there in 2025
+  northernHome:
+    type: choice
+    module: deductions
+    parent: hasNorthernResidence
+    ask: Others in your home claiming it
+    help: The additional residency amount is only for the one person in a home who claims the basic residency amount.
+    options: [alone, shared]
+    optionLabels:
+      alone: No one else in my home claims the northern residents deduction
+      shared: Someone else in my home claims it too
 
   # Credits
   hasDisability:
@@ -363,6 +555,16 @@ questions:
     parent: hasInfirmDependant
     ask: Their net income
     help: Line 23600 of their return, or what it would be.
+  infirmDependantHome:
+    type: choice
+    module: credits
+    parent: hasInfirmDependant
+    ask: Where they lived
+    help: Some provinces give a larger caregiver amount for a dependant who lived in your home.
+    options: [with_you, elsewhere]
+    optionLabels:
+      with_you: In your home
+      elsewhere: Somewhere else
   hasDisabledDependant:
     type: boolean
     module: credits
@@ -441,6 +643,11 @@ questions:
     ask: Tuition transferred from a child or grandchild
     help: The amount they designated to you on their T2202, up to $5,000 each.
     default: 0
+  childProvincialTuitionTransfer:
+    type: money
+    module: credits
+    ask: Provincial or territorial tuition transferred from a child or grandchild
+    help: The provincial or territorial amount they designated to you on their T2202. It can differ from the federal amount, since some provinces add education amounts.
   hasOtherDependantMedical:
     type: boolean
     module: credits
@@ -462,6 +669,66 @@ questions:
     module: credits
     ask: Federal political contributions
     help: To a registered federal party, association or candidate, on official receipts.
+    default: 0
+  provincialPoliticalContributions:
+    type: money
+    module: credits
+    ask: Provincial or territorial political contributions
+    help: To a registered party, association or candidate of your province or territory, on official receipts.
+    default: 0
+  hasRentedHome:
+    type: boolean
+    module: credits
+    ask: Rented the home you lived in
+    help: A home you rented and lived in during 2025. Some provincial credits depend on the rent and on how many months you rented.
+    default: false
+  rentPaid:
+    type: money
+    module: credits
+    parent: hasRentedHome
+    ask: Rent paid in 2025
+    help: For the home you lived in, not counting any part a roommate or someone else paid.
+  rentMonths:
+    type: count
+    module: credits
+    parent: hasRentedHome
+    ask: Months you paid rent
+    help: Months of 2025 you rented and lived in it. Don't count months you paid rent to a relative, or for a campsite or a mobile home pad.
+  propertyTaxPaid:
+    type: money
+    module: credits
+    ask: Property tax paid on your home for 2025
+    help: Municipal and school taxes on the home you owned and lived in.
+    default: 0
+  paidSchoolTaxes:
+    type: boolean
+    module: credits
+    ask: School taxes on a home you owned and lived in
+    help: The school taxes on your 2025 property tax statement. A couple enters them on one return.
+    default: false
+  schoolTaxes:
+    type: money
+    module: credits
+    parent: paidSchoolTaxes
+    ask: School taxes for 2025
+    help: The gross school taxes, before the homeowners affordability tax credit advance was taken off.
+  schoolTaxAdvance:
+    type: money
+    module: credits
+    parent: paidSchoolTaxes
+    ask: Homeowners affordability tax credit advance
+    help: The advance taken off your property tax statement, or credited to your property tax account. 0 if none.
+  homeOwnedDays:
+    type: count
+    module: credits
+    parent: paidSchoolTaxes
+    ask: Days in 2025 you owned it and lived in it
+    help: 365 for the whole year.
+  publicTransitPaid:
+    type: money
+    module: credits
+    ask: Public transit paid as a senior
+    help: Passes, tickets and fares for local public transit you used in 2025, at the senior fare where there is one, less any amount paid back to you. Ontario gives 15% of up to $3,000 if you were 65 or older on December 31, 2024.
     default: 0
   teacherSupplies:
     type: money
@@ -508,6 +775,13 @@ questions:
     suggest: SUGGEST.unusedTuition
     ask: Unused federal tuition from your 2024 notice of assessment
     default: 0
+  unusedProvincialTuition:
+    type: money
+    module: credits
+    receipts: NOA
+    ask: Unused provincial or territorial tuition from your 2024 notice of assessment
+    help: The unused tuition and education amounts your notice shows for your province or territory, apart from the federal amount. If you lived in another one at the end of 2024, enter your unused federal amount.
+    default: 0
   tuitionTransfer:
     type: money
     module: credits
@@ -521,12 +795,48 @@ questions:
     ask: Medical expenses
     help: For you, your spouse or your children. Uploaded receipts are added; enter what isn't on one. Either spouse can claim the family's medical expenses; it usually saves more on the lower income.
     default: 0
+  physicalActivityFees:
+    type: money
+    module: credits
+    ask: Physical activity fees to claim on this return
+    help: Fees paid in 2025 to register you, your spouse or your children in a program of physical activity, or for membership in an eligible organization. In Newfoundland and Labrador your family can claim up to $2,000 in all; in Manitoba up to $500 for each person (you or your spouse under 25, each child under 18). Claim on one return or split between yours and your spouse's.
+    default: 0
   donations:
     type: money
     module: credits
     receipts: DONATION
     ask: Donations
     help: On official receipts. Uploaded receipts and box 46 of your T4 are added; enter what isn't on one. Either spouse can claim both spouses' donations; claiming them together usually saves more.
+    default: 0
+  childActivityFees:
+    type: money
+    module: credits
+    ask: Children's sports, arts and activity fees
+    help: Registration or membership fees paid in 2025 for your children's sports, arts, cultural or recreational programs, less any reimbursement. For each child, count at most your province's limit ($300 in Saskatchewan, or $400 for a child with the disability tax credit; $500 in Nova Scotia; $1,000 in Prince Edward Island). A couple can split them; enter only what you claim on this return.
+    default: 0
+  homeRenovationExpenses:
+    type: money
+    module: credits
+    ask: Home renovation expenses
+    help: Renovations to the home you own and live in, in Saskatchewan, paid from October 1, 2024 to December 31, 2025 (Schedule SK(S12)), such as a kitchen, bathroom, roof, floors, deck or furnace. Not repairs, maintenance, furniture or appliances. Enter the family's expenses on one return.
+    default: 0
+  fertilityExpenses:
+    type: money
+    module: credits
+    ask: Fertility or surrogacy treatment expenses
+    help: Fertility treatment, fertility preservation or surrogacy costs paid in 2025, not covered by insurance, also entered with your medical expenses. Ontario, Saskatchewan and Yukon each have a credit for them, with their own rules on what counts. In Ontario and Saskatchewan only one spouse can claim it; in Yukon each spouse claims what they paid.
+    default: 0
+  childFitnessFees:
+    type: money
+    module: credits
+    ask: Children's fitness fees
+    help: Fees you paid in 2025 for a program of physical activity for a child under 16, such as a sports team or a swimming class (Form YT479). Up to $1,000 for each child.
+    default: 0
+  childArtsFees:
+    type: money
+    module: credits
+    ask: Children's arts and learning program fees
+    help: Fees paid in 2025 for your children's arts, cultural, nature, learning or developmental programs, such as music or dance lessons, that aren't sports or physical activity, less any reimbursement. Count at most $500 for each child under 16. A couple can split them; enter only what you claim on this return.
     default: 0
 
   # About the person (Personal info)
@@ -536,12 +846,39 @@ questions:
     ask: Your spouse's or partner's 2025 net income
     help: Line 23600 of their return. Their return isn't prepared here, but some of your credits depend on it.
 
+  daysResident:
+    type: count
+    module: about
+    ask: Days you lived in Canada in 2025
+    help: From the day you arrived, or up to the day you left, counting that day. 365 if you lived here all year.
+  nonResidentIncome:
+    type: money
+    module: about
+    ask: Your world income for the part of 2025 you didn't live in Canada
+    help: All the income you had while you weren't a resident, from anywhere, in Canadian dollars. 0 if none.
+  nonResidentCanadianIncome:
+    type: money
+    module: about
+    ask: The part of it from Canada
+    help: Employment or business income from Canada in that period. If it is 90% or more of that world income, you can claim your full personal amounts.
+  departureProperty:
+    type: boolean
+    module: income
+    ask: You left Canada owning shares, funds or other property
+    help: Only if you left Canada in 2025. Property other than Canadian real estate, a business in Canada, pensions and registered plans (RRSP, TFSA, FHSA) is treated as sold the day you left.
+    default: false
+
   # Decisions between spouses: which return claims what either spouse may claim. Changed by accepting a hint
   # (hints.yaml); each spouse claims their own until then.
   claimSpouseDonations:
     type: boolean
     ask: Claim your spouse's or partner's donations on this return
     default: false
+    decision: true
+  pensionSplit:
+    type: money
+    ask: Pension income split with your spouse or partner (Form T1032)
+    default: 0
     decision: true
   claimSpouseMedical:
     type: boolean

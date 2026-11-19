@@ -1,7 +1,7 @@
 import { useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link, useNavigate } from "react-router";
 import { ChevronRight, FileUp, PencilLine, Plus } from "lucide-react";
-import { canPrepare, leftInModule, type Estimate, type Slip, type SlipList, type Step, type TaxYear } from "#shared";
+import { canPrepare, isAsked, leftInModule, type Estimate, type Slip, type SlipList, type Step, type TaxYear } from "#shared";
 import { Badge } from "@/components/ui/badge.tsx";
 import { Button } from "@/components/ui/button.tsx";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card.tsx";
@@ -105,11 +105,10 @@ function ModuleForm({
     return value && !value.isZero() ? value.toString() : null;
   };
   const receiptsOf = (question: Question) => (question.receipts ? slipsOf(question.receipts) : []);
-  // An amount is asked only when the return reads it (tuition to transfer needs a T2202 and a spouse), or was entered.
   const partsOf = (question: Question) => [...rules.questions.values()].filter((part) => part.parent === question.id);
   const items: Item[] = [...rules.questions.values()]
     .filter((question) => question.module === module && question.parent === undefined)
-    .filter((question) => question.type !== "money" || reached.has(question.id) || question.id in given)
+    .filter((question) => isAsked(question, reached, question.id in given))
     .map((question) => ({ question, kind: kindOf(question, partsOf(question)) }));
   const parts = items.filter((item) => item.kind === "group").flatMap((item) => partsOf(item.question));
 
@@ -142,6 +141,9 @@ function ModuleForm({
     ]),
   );
   const [state, setState] = useState<{ status: "idle" | "saving" } | { status: "error"; error: unknown }>({ status: "idle" });
+  /** A group's parts that apply: one asked only for some options of a choice waits for that choice. */
+  const shownPartsOf = (question: Question) =>
+    partsOf(question).filter((part) => !part.askedWhen || part.askedWhen.options.includes(amounts[part.askedWhen.question] ?? ""));
 
   /** Every item of the module: on the return or not (none). A kind of income its slips already show isn't asked. */
   const answersToSave = () => ({
@@ -150,10 +152,11 @@ function ModuleForm({
         if (kind === "slip") return slipsOf(question.slip!).length > 0 ? [] : [[question.id, added[question.id] === true]];
         if (kind === "amount") return [[question.id, added[question.id] ? cleanAmount(amounts[question.id] ?? "") || "0" : "0"]];
         if (kind === "group" && added[question.id]) {
-          // Its parts are saved with it; a choice not made is left unanswered, so the step says so.
+          // Its parts are saved with it; a choice not made is left unanswered, so the step says so. A part that doesn't
+          // apply to the choice made isn't saved: the rules don't read it.
           return [
             [question.id, true],
-            ...partsOf(question).flatMap((part): [string, string][] => {
+            ...shownPartsOf(question).flatMap((part): [string, string][] => {
               const value = amounts[part.id] ?? "";
               if (part.type === "choice") return value ? [[part.id, value]] : [];
               return [[part.id, cleanAmount(value) || "0"]];
@@ -268,7 +271,7 @@ function ModuleForm({
               />
             ) : kind === "group" ? (
               <div className="flex flex-col gap-4">
-                {partsOf(question).map((part) =>
+                {shownPartsOf(question).map((part) =>
                   part.type === "choice" ? (
                     <ChoiceField
                       key={part.id}

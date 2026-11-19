@@ -110,6 +110,20 @@ describe("2025 hints", () => {
     expect(ids(input).filter((id) => id.endsWith(":interestWithoutSlip"))).toEqual(["b:interestWithoutSlip"]);
   });
 
+  it("splits a pension with the spouse to bring the two net incomes together, up to half the pension", () => {
+    const input = couple([0, 0], [{}, {}], [{ id: "p", person: "a", type: "T4A", issuer: "Teachers' Plan", boxes: { "016": "60000", "022": "9000" } }]);
+    input.people[0]!.birthDate = "1955-01-01";
+    const hint = findHints(rules, input).find((each) => each.id === "pensionSplit" && each.personId === "a");
+    // Net incomes $60,001 and $1 (a T5 each): half the difference is $30,000, the most that can be split.
+    expect(hint).toMatchObject({ kind: "saving", amount: { value: "30000" } });
+    expect(Number(hint!.effect)).toBeGreaterThan(1000);
+    const split = { ...input, answers: { ...input.answers, a: { ...input.answers.a!, pensionSplit: "30000" } } };
+    const evaluation = new Evaluation(rules, split);
+    expect(evaluation.line("b", "T1.11600").value!.toString()).toBe("30000");
+    expect(evaluation.line("b", "T1.43700").value!.toString()).toBe("4500");
+    expect(ids(split).filter((id) => id.endsWith(":pensionSplit"))).toEqual([]);
+  });
+
   it("offers no allocation to a single person", () => {
     const input = couple([60000, 60000], [{ donations: "150", medicalExpenses: "3000" }, {}]);
     const single: EngineInput = { ...input, people: [input.people[0]!], household: { maritalStatus: "single", dependants: [] }, answers: { a: input.answers.a! }, slips: input.slips.filter((slip) => slip.person === "a") };

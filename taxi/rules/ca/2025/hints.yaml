@@ -48,6 +48,22 @@ hints:
     amount: "line.S11.23"
     amountLabel: Tuition you can transfer
 
+  pensionSplit:
+    kind: saving
+    title: Split your pension income with your spouse or partner
+    text: >-
+      You can move up to half of your eligible pension income to your spouse's or partner's return (Form T1032). With
+      the lower income taxed there, the household usually pays less, and a spouse with no pension of their own can
+      claim the pension income amount. The split brings your two net incomes as close as the limit allows. Both of you
+      sign Form T1032 and attach it to both returns if you file on paper.
+    when: >-
+      line.SPOUSES.together == 1 and line.PEN.splitMax > 0 and answer.pensionSplit == 0 and spouse.answer.pensionSplit == 0
+      and line.T1.23600 > spouse.line.T1.23600
+    change:
+      answer.pensionSplit: "min(line.PEN.splitMax, round((line.T1.23600 - spouse.line.T1.23600) / 2, 2))"
+    amount: "min(line.PEN.splitMax, round((line.T1.23600 - spouse.line.T1.23600) / 2, 2))"
+    amountLabel: Pension income to split
+
   rrspNowOrLater:
     kind: info
     title: You can deduct your RRSP contributions in a later year
@@ -61,6 +77,32 @@ hints:
     effectLabel: Deducting it this year saves
     amount: "answer.rrspDeduction"
     amountLabel: RRSP deduction for 2025
+
+  fhsaNowOrLater:
+    kind: info
+    title: You can deduct your FHSA contributions in a later year
+    text: >-
+      Your taxable income is in the lowest federal bracket. FHSA contributions you don't deduct for 2025 carry forward
+      with no time limit, and may save more in a year when your income is higher. To deduct less, change the amount on
+      Deductions.
+    when: "answer.fhsaDeduction > 0 and line.T1.26000 <= param.lowestBracketTop"
+    change:
+      answer.fhsaDeduction: "0"
+    effectLabel: Deducting it this year saves
+    amount: "answer.fhsaDeduction"
+    amountLabel: FHSA deduction for 2025
+
+  fhsaOverContribution:
+    kind: warning
+    title: Your FHSA contributions may be over your participation room
+    text: >-
+      Your FHSA participation room is $8,000 a year, plus at most $8,000 carried forward from last year, for
+      contributions and RRSP transfers together. Your contributions and transfers for 2025 are more than $16,000. The
+      CRA charges a tax of 1% a month on an excess FHSA amount until it is removed, on form RC727. This app doesn't
+      prepare that form.
+    when: "sum(T4FHSA.box18) + sum(T4FHSA.box32) + sum(T4FHSA.box34) > param.fhsaRoomMax"
+    amount: "sum(T4FHSA.box18) + sum(T4FHSA.box32) + sum(T4FHSA.box34) - param.fhsaRoomMax"
+    amountLabel: Over $16,000
 
   rrspOverContribution:
     kind: warning

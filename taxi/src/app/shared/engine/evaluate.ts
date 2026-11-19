@@ -20,6 +20,8 @@ export const engineInputSchema = z.strictObject({
         role: z.enum(["self", "spouse"]),
         birthDate: z.iso.date(),
         province: z.string().nullable(),
+        /** Lived in Canada all year; null when not said yet. Left out, it is taken as yes. */
+        residentAllYear: z.boolean().nullable().optional(),
       }),
     )
     .min(1)
@@ -161,8 +163,16 @@ export class Evaluation {
       reached.add(key);
       for (const next of this.node(key).reads) walk(next);
     };
-    for (const id of this.rules.result) walk(this.key(personId, ["line", ...splitLine(id)]));
+    for (const id of this.resultOf(personId)) walk(this.key(personId, ["line", ...splitLine(id)]));
     return [...this.rules.lines.keys()].filter((id) => reached.has(this.key(personId, ["line", ...splitLine(id)])));
+  }
+
+  /** The result lines a person's return shows: all of them but those whose `resultWhen` is no for this person. */
+  resultOf(personId: string): string[] {
+    return this.rules.result.filter((id) => {
+      const when = this.rules.resultWhen.get(id);
+      return when === undefined || this.evaluate(personId, when).value === true;
+    });
   }
 
   /** The other adult of the year, if both returns are prepared together. */
@@ -184,7 +194,7 @@ export class Evaluation {
       for (const next of this.node(key).reads) walk(next);
     };
     const people = this.input.people.map((person) => {
-      const lines = this.rules.result.map((id) => {
+      const lines = this.resultOf(person.id).map((id) => {
         const key = this.key(person.id, ["line", ...splitLine(id)]);
         walk(key);
         const node = this.node(key);
@@ -302,7 +312,14 @@ export class Evaluation {
           // Age on December 31 of the year: the birthday has always passed by then.
           return { value: Dec.of(this.input.year - Number(person.birthDate.slice(0, 4))), status: "complete", label: "Age on December 31", reads: [] };
         }
+        if (rest[0] === "birthMonth") {
+          return { value: Dec.of(Number(person.birthDate.slice(5, 7))), status: "complete", label: "Month of birth", reads: [] };
+        }
         if (rest[0] === "role") return { value: person.role, status: "complete", label: "The person preparing, or their spouse", reads: [] };
+        if (rest[0] === "residentAllYear") {
+          const resident = person.residentAllYear === undefined ? true : person.residentAllYear;
+          return { value: resident, status: resident === null ? "missing" : "complete", label: "Lived in Canada all year", reads: [] };
+        }
         return { value: person.province, status: person.province === null ? "missing" : "complete", label: "Province on December 31", reads: [] };
       default: {
         const slip = this.rules.slips.get(head!)!;
@@ -336,6 +353,8 @@ export class Evaluation {
         };
       case "partnerInYear":
         return { value: this.input.people.length > 1, status: "complete", label: "Both returns are prepared together", reads: [] };
+      case "childrenUnder6":
+        return { value: childrenUnder(6), status: "complete", label: "Dependants under 6 at the end of the year", reads: [] };
       case "childrenUnder7":
         return { value: childrenUnder(7), status: "complete", label: "Dependants under 7 at the end of the year", reads: [] };
       case "childrenUnder17":
@@ -344,6 +363,21 @@ export class Evaluation {
         return { value: childrenUnder(18), status: "complete", label: "Dependants under 18 at the end of the year", reads: [] };
       case "childrenUnder19":
         return { value: childrenUnder(19), status: "complete", label: "Dependants under 19 at the end of the year", reads: [] };
+      case "childMonthsUnder6": {
+        // Some credits (Nova Scotia's and Prince Edward Island's amount for young children) count the months on whose
+        // first day a child was born and not yet 6. One entry per dependant under 18, so a formula can also leave out
+        // the child claimed as an eligible dependant.
+        const items = household.dependants
+          .filter((dependant) => year - Number(dependant.birthDate.slice(0, 4)) < 18)
+          .map((dependant) => {
+            const sixth = `${Number(dependant.birthDate.slice(0, 4)) + 6}${dependant.birthDate.slice(4)}`;
+            const months = Array.from({ length: 12 }, (_, month) => `${year}-${String(month + 1).padStart(2, "0")}-01`).filter(
+              (first) => first >= dependant.birthDate && first < sixth,
+            ).length;
+            return { label: `Months ${dependant.name} was under 6`, value: Dec.of(months) };
+          });
+        return { value: items.map((item) => item.value), status: "complete", label: "Months each dependant under 18 was under 6", reads: [], items };
+      }
       default:
         throw new EngineError("ENGINE_NAME", `No household.${name}`);
     }
@@ -489,6 +523,11 @@ function call(name: string, args: Value[]): Value {
     }
     case "bracket":
       return bracket(args[0] as BracketRow[], args[1] as Dec);
+    case "step": {
+      // Each row is "more than the row above, but not more than upTo", as the CRA's charts print it.
+      const amount = args[1] as Dec;
+      return (args[0] as BracketRow[]).find((row) => row.upTo === null || amount.lte(row.upTo))!.rate;
+    }
     default:
       throw new EngineError("ENGINE_FUNCTION", `No function ${name}`);
   }

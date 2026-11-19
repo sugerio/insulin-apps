@@ -8,7 +8,7 @@ import { ResultLine } from "../components/EstimateCard.tsx";
 import { HintList } from "../components/HintList.tsx";
 import { ResourceView } from "../components/Feedback.tsx";
 import { StepLayout } from "../components/StepLayout.tsx";
-import { stepPath, useReturn, useYear } from "../components/YearFrame.tsx";
+import { STEP_LABELS, stepPath, useReturn, useYear } from "../components/YearFrame.tsx";
 import { formatMoney } from "../lib/format.ts";
 import { useEstimate, useSlips } from "../lib/useYearData.ts";
 import { Evaluation } from "../shared/engine/evaluate.ts";
@@ -53,11 +53,15 @@ function Results({ estimate, slips }: { estimate: Estimate; slips: SlipList }) {
   };
   const other = spouseOf(estimate.result.people, owner.id);
   const spouse = other ? { name: year.people.find((each) => each.id === other.personId)?.name ?? "Your spouse", result: other } : undefined;
-  const checks = printBlockers(person, slips.slips, spouse).map((blocker) => ({
-    text: blocker.text,
-    personId: blocker.personId ?? owner.id,
-    step: blocker.confirm ? ("confirm" as const) : blocker.question ? stepOfQuestion(blocker.question) : null,
-  }));
+  const checks = groupUnanswered(
+    printBlockers(person, slips.slips, spouse).map((blocker) => ({
+      text: blocker.text,
+      personId: blocker.personId ?? owner.id,
+      step: blocker.confirm ? ("confirm" as const) : blocker.question ? stepOfQuestion(blocker.question) : null,
+      ask: blocker.question && blocker.text.includes("not answered yet:") ? (rules.questions.get(blocker.question)?.ask ?? null) : null,
+    })),
+    (personId) => (personId === owner.id ? "" : `${spouse?.name ?? "Your spouse"}'s return: `),
+  );
   return (
     <Card>
       <CardContent className="flex flex-col gap-5">
@@ -148,4 +152,45 @@ function Download({ ready, href }: { ready: boolean; href: string }) {
       )}
     </section>
   );
+}
+
+interface Check {
+  text: string;
+  personId: string;
+  step: Step | null;
+  /** The question, when the check is an answer not given yet. */
+  ask: string | null;
+}
+
+/**
+ * Answers not given yet, put together by return and step when there are three or more: a list of every question of
+ * a step reads as noise, and "Go to the step" leads to all of them at once.
+ */
+function groupUnanswered(checks: Check[], prefixOf: (personId: string) => string): Check[] {
+  const groups = new Map<string, Check[]>();
+  for (const check of checks) {
+    if (check.ask === null || check.step === null) continue;
+    const key = `${check.personId}:${check.step}`;
+    groups.set(key, [...(groups.get(key) ?? []), check]);
+  }
+  const out: Check[] = [];
+  const done = new Set<string>();
+  for (const check of checks) {
+    const key = `${check.personId}:${check.step}`;
+    const group = check.ask !== null ? groups.get(key) : undefined;
+    if (!group || group.length < 3) {
+      out.push(check);
+      continue;
+    }
+    if (done.has(key)) continue;
+    done.add(key);
+    const asks = group.map((each) => each.ask!);
+    out.push({
+      text: `${prefixOf(check.personId)}${asks.length} questions on ${STEP_LABELS[check.step!]} not answered yet: ${asks.slice(0, 2).join(", ")} and ${asks.length - 2} more.`,
+      personId: check.personId,
+      step: check.step,
+      ask: null,
+    });
+  }
+  return out;
 }

@@ -520,7 +520,8 @@ function AmountItem({
   const [entering, setEntering] = useState(false);
   const type = question.receipts ? rulesFor(year.year)!.slips.get(question.receipts)! : null;
   const added = type !== null && question.suggest === undefined;
-  const noun = type?.title.replace(/^Official /, "").toLowerCase() ?? "";
+  // A receipt by its title in lower case ("medical expense receipt"), keeping acronyms (RRSP); a slip by its code (T4FHSA).
+  const noun = !type ? "" : type.receipt ? lowerCaseTitle(type.title.replace(/^Official /, "")) : documentName(type, type.id);
   return (
     <div className="flex flex-col gap-3">
       {receipts.length > 0 ? (
@@ -537,10 +538,10 @@ function AmountItem({
           </div>
         ) : (
           <div className="flex flex-wrap items-center gap-2">
-            <UploadSlip label={`Upload ${receipts.length > 0 ? "another" : "a"} ${noun}`} busy={busy} onFile={onFile} />
+            <UploadSlip label={`Upload ${receipts.length > 0 ? "another" : article(noun)} ${noun}`} busy={busy} onFile={onFile} />
             <Button variant="ghost" size="sm" onClick={() => setEntering(true)} disabled={busy}>
               <PencilLine aria-hidden="true" />
-              Enter {receipts.length > 0 ? "another" : "a"} {noun}
+              Enter {receipts.length > 0 ? "another" : article(noun)} {noun}
             </Button>
           </div>
         )
@@ -644,4 +645,19 @@ function ChoiceField({ question, value, disabled, issue, onChange }: { question:
 /** How a slip type is named on screen: T4A(OAS) for T4AOAS. */
 function slipName(year: number, type: string): string {
   return rulesFor(year)?.slips.get(type)?.name ?? type;
+}
+
+/** A title in lower case, but for its acronyms and codes (RRSP, T2202), which stay as printed. */
+function lowerCaseTitle(title: string): string {
+  return title
+    .split(" ")
+    .map((word) => (/^[A-Z0-9()]{2,}$/.test(word) ? word : word.toLowerCase()))
+    .join(" ");
+}
+
+/** "a" or "an", as the noun is said: an RRSP receipt, a T4FHSA, an official receipt. */
+function article(noun: string): string {
+  const first = noun.split(" ")[0] ?? "";
+  if (/^[A-Z0-9]{2,}/.test(first)) return /^[AEFHILMNORSX]/.test(first) ? "an" : "a";
+  return /^[aeiou]/i.test(first) ? "an" : "a";
 }

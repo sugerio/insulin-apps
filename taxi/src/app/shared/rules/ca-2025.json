@@ -5133,7 +5133,7 @@
     "T1.22215": {
       "label": "Deduction for CPP enhanced contributions on employment income",
       "formula": "if(line.CPP.employmentDiff > 0 and line.CPP.withSelfEmployment == 0, line.CPP.requiredFirst + line.CPP.requiredSecond, line.CPP.enhancedDeduction)",
-      "source": "Schedule 8, Part 3a line 28 (more deducted than required: the required first and second additional contributions), else Part 3b line 48 or Part 5 line 69. In Quebec, 5005-S8 Part 2a line 28, Part 2b line 47 or Part 4 line 67",
+      "source": "Schedule 8 (5005-S8 in Quebec), Part 3a line 28, Part 3b line 48 or Part 5 line 69: the enhanced part of the contributions on your T4 slips, up to what was required",
       "module": "deductions"
     },
     "T1.22300": {
@@ -5495,7 +5495,7 @@
     "T1.30800": {
       "label": "Base CPP contributions through employment",
       "formula": "if(line.CPP.employmentDiff > 0 and line.CPP.withSelfEmployment == 0, line.CPP.requiredBase, line.CPP.baseCredit)",
-      "source": "Schedule 8, Part 3a line 25 (more deducted than required: the required base contributions), else Part 3b line 36 or Part 5 line 57. In Quebec, 5005-S8 Part 2a line 25, Part 2b line 35 or Part 4 line 55",
+      "source": "Schedule 8 (5005-S8 in Quebec), Part 3a line 25, Part 3b line 36 or Part 5 line 57: the base part of the contributions on your T4 slips, up to what was required",
       "module": "credits"
     },
     "T1.31000": {
@@ -5516,7 +5516,7 @@
     "T1.31200": {
       "label": "Employment insurance premiums through employment",
       "formula": "if(person.province == \"QC\", min(line.EI.required, sum(T4.box18)), min(max(0, min(param.eiMaxInsurableEarnings, line.EI.insurable) - param.eiMinInsurableEarnings), sum(T4.box18), line.EI.required))",
-      "source": "Form T2204, line 16: whichever is least of insurable earnings (up to $65,700) over $2,000, the premiums deducted (box 18), and the premiums required. In Quebec, 5005-S10 Part C, line 24: whichever is less, line 20 or the premiums deducted (box 18)",
+      "source": "Form T2204 (5005-S10 in Quebec): the EI premiums on your T4 slips, up to what was required",
       "module": "credits"
     },
     "PPIP.insurable": {
@@ -28792,5 +28792,5 @@
     }
   },
   "outcome": "RESULT.net",
-  "version": "a10d3ba95c82695e"
+  "version": "86f94847501a782f"
 }

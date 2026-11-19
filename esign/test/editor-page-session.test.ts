@@ -8,16 +8,13 @@ import {PDFDocument} from 'pdf-lib';
 import {Miniflare} from 'miniflare';
 import * as editor from '../src/app/server/esign/editor-session.ts';
 import app from './helpers/gateway.ts';
-import {setEditorOrigins} from './helpers/editor-origins.ts';
 
-test('page identifier is not a credential; code is bound to page, tenant and allowed parent and consumed once', async () => {
+test('page identifier is not a credential; code is bound to page, tenant and the parent the host named, and consumed once', async () => {
   const mf = new Miniflare({modules:true,script:'export default {fetch(){return new Response("ok")}}',d1Databases:['DB']});
   try {
     const db = await mf.getD1Database('DB');
     await applyMigrations(db);
     await db.prepare("INSERT INTO tenants(id) VALUES ('a'),('b')").run();
-    await setEditorOrigins(db,'a',['https://host.example.com']);
-    await setEditorOrigins(db,'b',['https://other.example.com']);
     const first = await editor.issueEditorPage(db,'a','https://host.example.com',100);
     const other = await editor.issueEditorPage(db,'b','https://other.example.com',100);
     assert.notEqual(first.pageId,first.code);
@@ -32,12 +29,12 @@ test('page identifier is not a credential; code is bound to page, tenant and all
     assert.deepEqual({tenantId:context.tenantId,parentOrigin:context.parentOrigin,pageId:context.pageId},{tenantId:'a',parentOrigin:'https://host.example.com',pageId:first.pageId});
     await assert.rejects(()=>editor.editorPageContext(db,first.pageId,102));
     await assert.rejects(()=>editor.editorPageContext(db,token,900101));
-    await setEditorOrigins(db,'a',[]);
-    await assert.rejects(()=>editor.editorPageContext(db,token,103));
+    await assert.rejects(()=>editor.issueEditorPage(db,'a','http://host.example.com',100),/Invalid origin/);
+    await assert.rejects(()=>editor.issueEditorPage(db,'a','https://host.example.com/page',100),/Invalid origin/);
   } finally { await mf.dispose(); }
 });
 
-test('removing an origin from the tenant list stops that origin\'s editor codes, pages and tokens at their next check', async () => {
+test('the host names the editor\'s parent origin per session: no list, and only that origin frames the page', async () => {
   const mf = new Miniflare({modules:true,script:'export default {fetch(){return new Response("ok")}}',d1Databases:['DB']});
   try {
     const db = await mf.getD1Database('DB');
@@ -47,38 +44,26 @@ test('removing an origin from the tenant list stops that origin\'s editor codes,
     const keyHash = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(key))),n=>n.toString(16).padStart(2,'0')).join('');
     await db.prepare("INSERT INTO tenants (id) VALUES ('a')").run();
     await db.prepare("INSERT INTO api_keys (key_hash,tenant_id) VALUES (?,'a')").bind(keyHash).run();
-    const host = 'https://host.example.com', kept = 'https://kept.example.com', self = 'https://esign.example.com';
-    await setEditorOrigins(db,'a',[host,kept]);
+    const host = 'https://host.example.com', other = 'https://other.example.com', self = 'https://esign.example.com';
     const env = {DB:db,ARTIFACTS:await blobStore(mf,'artifacts'),ASSETS:{fetch:async()=>new Response('<html>editor</html>',{headers:{'content-type':'text/html'}})}};
     const req = (path:string,init:RequestInit={})=>app.fetch(new Request(self+path,init),env);
     const post = (path:string,body:unknown,headers:Record<string,string>)=>req(path,{method:'POST',headers:{...headers,'content-type':'application/json'},body:JSON.stringify(body)});
     const start = async(origin:string)=>{const r=await post('/api/template-editing-sessions',{allowedParentOrigin:origin,roles:['Signer']},{authorization:`Bearer ${key}`});assert.equal(r.status,201);const s=await r.json() as {sessionId:string;url:string};return {id:s.sessionId,code:new URL(s.url).hash.slice(1)};};
-    const exchange = (s:{id:string;code:string})=>post('/api/public/editor/exchange',{pageId:s.id,code:s.code},{origin:self});
-    const tokenOf = async(s:{id:string;code:string})=>{const r=await exchange(s);assert.equal(r.status,200);return ((await r.json()) as {token:string}).token;};
-    const current = (token:string)=>req('/api/public/editor/current',{headers:{'x-esign-session':token,origin:self}});
-    const unopened = await start(host), opened = await start(host), other = await start(kept);
-    const openedToken = await tokenOf(opened), otherToken = await tokenOf(other);
-    assert.equal((await current(openedToken)).status,200);
+    const exchange = (s:{id:string;code:string},embedder?:string)=>post('/api/public/editor/exchange',{pageId:s.id,code:s.code,...(embedder?{embedded:true,embedder,embedders:[embedder]}:{})},{origin:self});
 
-    // The host origin leaves the list; the other entry stays.
-    await setEditorOrigins(db,'a',[kept]);
-    assert.equal(await editor.editorPageParent(db,unopened.id,Date.now()),null);
-    const pdf = await PDFDocument.create();pdf.addPage();
-    assert.equal((await req(`/api/template-editing-sessions/${unopened.id}/source`,{method:'POST',headers:{authorization:`Bearer ${key}`,'content-type':'application/pdf'},body:await pdf.save()})).status,404);
-    assert.equal((await exchange(unopened)).status,401,'an unused code of the removed origin is refused');
-    assert.equal((await current(openedToken)).status,401,'a live token of the removed origin is refused');
-    const form = new FormData();form.set('roles','["Signer"]');form.set('fields','[]');form.set('file',new File([await pdf.save()],'a.pdf',{type:'application/pdf'}));
-    assert.equal((await req('/api/public/editor/save',{method:'POST',headers:{'x-esign-session':openedToken,origin:self},body:form})).status,401);
-    assert.equal((await post('/api/template-editing-sessions',{allowedParentOrigin:host},{authorization:`Bearer ${key}`})).status,403);
-    assert.equal((await db.prepare('SELECT count(*) AS n FROM editor_sessions WHERE result_template_id IS NOT NULL').first<{n:number}>())!.n,0);
-    // The origin still listed keeps working.
-    assert.equal((await current(otherToken)).status,200);
-    assert.equal((await exchange(await start(kept))).status,200);
+    // Any https origin, named by the host and listed nowhere, gets a session bound to it.
+    const forHost = await start(host), forOther = await start(other);
+    assert.equal(await editor.editorPageParent(db,forHost.id,Date.now()),host);
+    assert.equal(await editor.editorPageParent(db,forOther.id,Date.now()),other);
+    // Framed by another origin, the page gets no session, and its code stays unused for its own parent.
+    assert.equal((await exchange(forHost,other)).status,403);
+    assert.equal((await exchange(forHost,host)).status,200);
+    assert.equal((await exchange(forOther)).status,200,'the page opened on its own, unframed');
 
-    // Entries that are not strings equal to the origin never match; a list that is not an array is refused by the column's CHECK.
-    await db.prepare(`UPDATE tenants SET editor_origins_json=? WHERE id='a'`).bind(JSON.stringify([[kept],{origin:kept},`${kept}/`,` ${kept}`,7,null])).run();
-    assert.equal((await current(otherToken)).status,401);
-    assert.equal((await post('/api/template-editing-sessions',{allowedParentOrigin:kept},{authorization:`Bearer ${key}`})).status,403);
-    await assert.rejects(db.prepare(`UPDATE tenants SET editor_origins_json=? WHERE id='a'`).bind(JSON.stringify({origin:kept})).run(),/CHECK/);
+    // What is not a bare https origin (http only on a loopback host) is refused before a session exists.
+    for (const bad of ['http://host.example.com','https://host.example.com/page','https://host.example.com?x=1','https://Host.example.com','null'])
+      assert.equal((await post('/api/template-editing-sessions',{allowedParentOrigin:bad,roles:['Signer']},{authorization:`Bearer ${key}`})).status,422,bad);
+    assert.equal((await start('http://localhost:3000')).id.length,64);
+    assert.equal((await db.prepare("SELECT count(*) AS n FROM editor_sessions WHERE parent_origin NOT IN (?,?,'http://localhost:3000')").bind(host,other).first<{n:number}>())!.n,0);
   } finally { await mf.dispose(); }
 });

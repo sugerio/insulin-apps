@@ -14,7 +14,7 @@ import { waitUntilOf } from '../src/app/server/wait-until.ts';
 const HTML = 'text/html; charset=utf-8';
 const PAGE_ID = 'a'.repeat(64);
 const context = (over: Partial<Parameters<typeof pageHeaders>[2]> = {}) => ({
-  frameAncestors: 'https://host.example.test https://second.example.test',
+  signingHost: 'https://host.example.test',
   editorParent: async () => null,
   viaGateway: true,
   ...over,
@@ -29,14 +29,24 @@ test('each path is the page its audience opens; the API and built assets are no 
   for (const path of ['/api/me', '/api/public/signing/current', '/assets/index.js']) assert.equal(pageKind(path), null, path);
 });
 
-test('the signing page: scripts only from this origin, framed only by this origin and ESIGN_FRAME_ANCESTORS, never cached', async () => {
+test('the signing page: scripts only from this origin, framed only by this origin and the one its link names, never cached', async () => {
   const headers = (await pageHeaders('/sign', HTML, context()))!;
   const csp = headers['Content-Security-Policy']!;
   assert.equal(directive(csp, 'script-src'), "script-src 'self'");
   assert.equal(directive(csp, 'connect-src'), "connect-src 'self'");
   assert.equal(directive(csp, 'object-src'), "object-src 'none'");
   assert.equal(directive(csp, 'base-uri'), "base-uri 'none'");
-  assert.equal(directive(csp, 'frame-ancestors'), "frame-ancestors 'self' https://host.example.test https://second.example.test");
+  assert.equal(directive(csp, 'frame-ancestors'), "frame-ancestors 'self' https://host.example.test");
+  const unnamed = (await pageHeaders('/sign', HTML, context({ signingHost: null })))!;
+  assert.equal(directive(unnamed['Content-Security-Policy']!, 'frame-ancestors'), "frame-ancestors 'self'", 'a link that names no host: only the app frames it');
+  const many = (await pageHeaders('/sign', HTML, context({ signingHost: 'https://host.example.test https://second.example.test' })))!;
+  assert.equal(directive(many['Content-Security-Policy']!, 'frame-ancestors'), "frame-ancestors 'self' https://host.example.test", 'one origin at most');
+  // The link's host is anyone's to write: only a concrete origin, as a host may bind a code to, ever reaches the header.
+  for (const host of ['https://*', 'https://*.example.test', 'https://host.example.test:*', 'https://ho\u0101st.example.test', 'https://HOST.example.test']) {
+    const loose = (await pageHeaders('/sign', HTML, context({ signingHost: host })))!;
+    assert.equal(directive(loose['Content-Security-Policy']!, 'frame-ancestors'), "frame-ancestors 'self'", host);
+    assert.doesNotThrow(() => new Headers(loose), host);
+  }
   assert.doesNotMatch(csp, /unsafe-eval/);
   assert.equal(headers['Cache-Control'], 'no-store');
   assert.equal(headers['Referrer-Policy'], 'no-referrer');
@@ -46,7 +56,7 @@ test('the editor is framed by its session\'s parent, the copy page and the membe
   const editor = (await pageHeaders(`/editor/page/${PAGE_ID}`, HTML, context({ editorParent: async (id) => (id === PAGE_ID ? 'https://parent.example.test' : null) })))!;
   assert.equal(directive(editor['Content-Security-Policy']!, 'frame-ancestors'), "frame-ancestors 'self' https://parent.example.test");
   const unknown = (await pageHeaders(`/editor/page/${'b'.repeat(64)}`, HTML, context()))!;
-  assert.equal(directive(unknown['Content-Security-Policy']!, 'frame-ancestors'), "frame-ancestors 'self' https://host.example.test https://second.example.test", 'no session: the deployment\'s hosts');
+  assert.equal(directive(unknown['Content-Security-Policy']!, 'frame-ancestors'), "frame-ancestors 'self'", 'no session: only the app');
   const copy = (await pageHeaders('/copy', HTML, context()))!;
   assert.equal(directive(copy['Content-Security-Policy']!, 'frame-ancestors'), "frame-ancestors 'none'");
   const member = (await pageHeaders('/envelopes/1', HTML, context()))!;
@@ -60,7 +70,7 @@ test('frame-ancestors only behind the gateway (the console frames its own previe
   assert.equal(directive(consoleHeaders['Content-Security-Policy']!, 'frame-ancestors'), '');
   assert.match(consoleHeaders['Content-Security-Policy']!, /script-src 'self'/, 'the rest of the policy stays');
   assert.deepEqual(originsIn("https://ok.example.test 'unsafe-inline' https://x.example.test/path javascript:alert(1) http://local.test:8080"), ['https://ok.example.test', 'http://local.test:8080']);
-  const injected = (await pageHeaders('/sign', HTML, context({ frameAncestors: "https://ok.example.test; script-src *" })))!;
+  const injected = (await pageHeaders('/sign', HTML, context({ signingHost: "https://ok.example.test; script-src *" })))!;
   assert.equal(directive(injected['Content-Security-Policy']!, 'frame-ancestors'), "frame-ancestors 'self'");
   assert.equal(await pageHeaders('/sign', 'application/json', context()), null, 'only HTML is a page');
 });

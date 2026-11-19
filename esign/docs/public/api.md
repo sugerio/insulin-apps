@@ -79,7 +79,7 @@ that are shared with them (see [Owners, sharing and tags](#owners-sharing-and-ta
 | `GET /api/envelopes/{id}` | Viewer | The status, `documentName`, `metadata` and `message`, the pre-filled fields' values drawn on the document (`prefill: [{name, label, value}]`), a draft's request as saved (`draft`), for a draft with an uploaded document `upload: {document, changes, roles, fields}` (`changes`: what Esign changed in it, see [Uploaded PDFs](#uploaded-pdfs)), and each signer's task, in order: `id`, `role`, `recipientName`, `recipientEmail`, `routingOrder`, `status`, `delivery`, `message`, `expiresAt`, `openedAt`, `invitedAt`; its owner, your role and your tags. |
 | `GET /api/envelopes/{id}/audit` | Viewer | The audit trail, in order: `{events: [{type, at, recipient?, ip?, userAgent?, detail?}]}`. Never codes or message ids. |
 | `POST /api/envelopes/{id}/void` | Editor | Withdraw an envelope that is out for signature, with an optional `{reason}` (up to 500 characters). Repeating it is harmless; any other status answers `409 envelope_not_voidable`. A draft is discarded: deleted, with its shares and tags (`{id, status: "DISCARDED"}`). |
-| `POST /api/envelopes/{id}/tasks/{taskId}/recipient-view` † | Editor | A one-time code for the active signer's signing page: `{code}`. Body: `{signedInEmail, origin?, hostAuthentication?}`; see [Embed the signing page](#embed-the-signing-page). |
+| `POST /api/envelopes/{id}/tasks/{taskId}/recipient-view` † | Editor | A one-time code for the active signer's signing page and the page to frame: `{code, url}`. Body: `{signedInEmail, allowedParentOrigin?, origin?, hostAuthentication?}`; see [Embed the signing page](#embed-the-signing-page). |
 | `POST /api/envelopes/{id}/tasks/{taskId}/invitation` | Editor | Email the active signer's invitation again, with a new link; the earlier link stops working. Answers `204`; `409 not_invited` for a signer Esign doesn't invite. |
 | `GET /api/envelopes/{id}/delivery-pdf` | Viewer | A completed envelope's signed PDF followed by its certificate of completion. `Content-Disposition` names it by its document and the day it was completed (UTC), such as `Reseller Agreement - Signed 2026-11-13.pdf`; each signer's copy has the same name. |
 | `GET /api/envelopes/{id}/certificate` | Viewer | A completed envelope's certificate as JSON: the seal, checked against the stored files on every read. `upload` is `{uploadedSha256, changes, fromTemplate}` when Esign changed the PDF on upload (a database record, not sealed), else null. |
@@ -382,10 +382,11 @@ clients uploaded.
 A host product shows the signing page inside its own pages:
 
 1. When it is a signer's turn (their task is `ACTIVE`), the host's backend calls
-   `POST /api/envelopes/{id}/tasks/{taskId}/recipient-view` with `{"signedInEmail": "…"}`, the email of the account
-   signed in to the host, and gets `{code}`.
-2. The host frames `https://esign.insulinapps.com/sign#code=CODE&host=HOST_ORIGIN`, where `HOST_ORIGIN` is the host
-   page's origin (for messages). Put the code in the fragment, never in a query string, and never log it.
+   `POST /api/envelopes/{id}/tasks/{taskId}/recipient-view` with
+   `{"signedInEmail": "…", "allowedParentOrigin": "https://app.example.com"}`: the email of the account signed in to the
+   host, and the origin of the host page that will frame the signing page. It gets `{code, url}`.
+2. The host frames `url`, which is `https://esign.insulinapps.com/sign?host=HOST_ORIGIN#code=CODE`. The code stays in
+   the fragment, which browsers never send; never log it.
 3. The page exchanges the code for a 15-minute session, takes the signer through review, the emailed code and signing,
    and posts `esign.signing.finished` (`signed` or `declined`) or `esign.signing.cancel` to the host.
 4. The host treats the message as a prompt and reads the envelope's status with `GET /api/envelopes/{id}`.
@@ -397,8 +398,10 @@ Rules:
   regard to case: otherwise `422 signed_in_email_required` or `403 signer_mismatch`. Esign records the account it
   checked, and the certificate shows it. This holds for every caller, a member in the browser included: Esign's own
   console opens no signer's page.
-- The host's origin must be one of the origins the deployment allows to embed Esign's pages. The page refuses to start
-  in a frame from any other origin, or in one that hides its origin.
+- The code is bound to `allowedParentOrigin` (https; anything else answers `422 invalid_parent_origin`). There is no
+  list of origins to register: only that origin may frame the page, which refuses to start in a frame from any other
+  origin, or in one that hides its origin, and posts its messages to that origin only. Without `allowedParentOrigin`
+  the page opens only on its own, never in a frame.
 - `hostAuthentication` (`{method, provider?, domain?, signedInAt?}`, `method` an upper-case word such as `SSO`) tells
   Esign how the host signed the signer in. Esign can't check it; it shows it to the signer and records it as the
   host's statement.

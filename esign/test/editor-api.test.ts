@@ -6,7 +6,6 @@ import {readFile,readdir} from 'node:fs/promises';
 import {Miniflare} from 'miniflare';
 import {PDFDocument} from 'pdf-lib';
 import app from './helpers/gateway.ts';
-import {setEditorOrigins} from './helpers/editor-origins.ts';
 
 test('editor sessions enforce scope and persist immutable template versions with field signing blocked',async()=>{
  const mf=new Miniflare({modules:true,script:'export default {fetch(){return new Response("ok")}}',d1Databases:['DB']});
@@ -19,11 +18,12 @@ test('editor sessions enforce scope and persist immutable template versions with
   const digest=async(s:string)=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(s))),n=>n.toString(16).padStart(2,'0')).join('');
   await db.prepare("INSERT INTO tenants(id) VALUES ('a'),('b')").run();
   await db.prepare("INSERT INTO api_keys(key_hash,tenant_id) VALUES (?, 'a'), (?, 'b')").bind(await digest(a),await digest(b)).run();
-  await setEditorOrigins(db,'a',['https://host.example.com']);await setEditorOrigins(db,'b',['https://other.example.com']);
   const env={DB:db,ARTIFACTS:await blobStore(mf,'artifacts'),ASSETS:{fetch:async()=>new Response('<html>editor</html>',{headers:{'content-type':'text/html'}})}};
   const req=(path:string,options:RequestInit={})=>app.fetch(new Request('https://esign.example.com'+path,options),env);
   const management=(key:string,body:unknown)=>({method:'POST',headers:{authorization:`Bearer ${key}`,'content-type':'application/json'},body:JSON.stringify(body)});
-  assert.equal((await req('/api/template-editing-sessions',management(a,{allowedParentOrigin:'https://evil.example.com'}))).status,403);
+  // Any origin the host names gets a session bound to it (no list); what isn't an origin is refused.
+  assert.equal((await req('/api/template-editing-sessions',management(a,{allowedParentOrigin:'https://elsewhere.example.com'}))).status,201);
+  assert.equal((await req('/api/template-editing-sessions',management(a,{allowedParentOrigin:'https://host.example.com/'}))).status,422);
   assert.equal((await req('/api/template-editing-sessions',management(a,{allowedParentOrigin:'https://host.example.com',sourceTemplateId:''}))).status,422);
   const created=await req('/api/template-editing-sessions',management(a,{allowedParentOrigin:'https://host.example.com',roles:['Partner','Seller']}));
   assert.equal(created.status,201,await created.clone().text());const first=await created.json() as any;

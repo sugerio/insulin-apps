@@ -182,9 +182,7 @@ chip that removes it, and **Clear all**; below it, pages. An envelope sent from 
 ## The editor on the Templates page
 
 The **Templates** page hosts the editor exactly as a host product would: it opens an editing session for its own address,
-stages the PDF, frames the editor and confirms the save with the server. The deployment's list of origins allowed to
-embed Esign's pages must therefore include Esign's own address for **Upload and place fields** and **Place fields** to
-work.
+stages the PDF, frames the editor and confirms the save with the server.
 
 ## Embed the editor in a host product
 
@@ -207,8 +205,9 @@ A host product can show the field editor inside its own pages. Its backend calls
 
 Rules for embedding:
 
-- `allowedParentOrigin` must be one of the origins the deployment allows to embed Esign (https). The editor refuses to
-  open inside any other page, and stops working at its next request if that origin is removed.
+- `allowedParentOrigin` is the origin of the host page that frames the editor (https; anything else answers
+  `422 invalid_origin`). There is no list of origins to register: the session is bound to it, and the editor refuses
+  to open inside any other page.
 - One session saves once. For another version, open a new session.
 - `prefill`, `[{"name": "partner.name", "label": "Partner name"}, …]` (1 to 30): the [pre-filled fields](#pre-filled-fields)
   your product fills in when it sends. The editor offers those, to drag onto the page, and the author can't add their

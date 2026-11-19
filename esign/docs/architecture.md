@@ -119,7 +119,7 @@ published app is `prod` (`environment.ts`).
 | Codes | kept in the test mailbox, read back with `GET /api/test-mail/:id`; emailed only if a relay is configured; without one only synthetic addresses (`example.com`, `.test`) get a code | emailed to the recipient through the relay, kept nowhere |
 | Seal | the seal key + TSA when bound, else the HMAC test seal | the seal key + TSA only |
 | Signing page hosts | the app, plus `SIGNING_PAGE_ORIGINS` | the app only |
-| Origins that may embed | https, or http on a loopback host | https only |
+| Origins a host may name to frame a page | https, or http on a loopback host | https only |
 | Identity | the platform's, or a preview Owner when there is none | the platform's |
 
 prod signs nothing until it has `ESIGN_OTP_KEY` (at least 32 characters), the mail relay, the
@@ -134,7 +134,6 @@ Secrets are declared in `package.json` `insulin.secrets` and read with `readAppE
 | Secret | What |
 | --- | --- |
 | `ESIGN_OTP_KEY` | The pepper of the emailed codes (at least 32 characters) |
-| `ESIGN_FRAME_ANCESTORS` | Space-separated host origins that may embed the signing page and the editor (the app's own origin always may) |
 
 The platform provides `SUGER_MAIL_URL`, `SUGER_METRICS_URL`, `SUGER_APP_TOKEN` and the `SUGER_GATEWAY` service binding
 they are used over. Without `SUGER_METRICS_URL` Esign works as before and only reports no usage.
@@ -205,7 +204,9 @@ finished envelope then waits, `FINALIZING`, until it is fixed.
    The host's (the default): for the active task the host calls
    `POST /api/envelopes/:id/tasks/:taskId/recipient-view` with `signedInEmail`, the email of the
    account signed in to it, which must be the task's (whoever calls; Esign's console opens no
-   signer's page), and embeds `<worker origin>/sign#code=<code>`. `email`: when the task
+   signer's page), and `allowedParentOrigin`, the origin of its page that frames the signing page; the
+   answer's `url` is `<worker origin>/sign?host=<allowedParentOrigin>#code=<code>`, which the host
+   frames ("Who may frame the pages" below). `email`: when the task
    becomes active (at creation, after the previous signature in `completeEnvelope`, or by due work),
    Esign emails an invitation (`invitations.ts`) with `<worker origin>/sign#invite=<token>`; the page
    trades the token for a code (`POST /api/public/signing/invitation`) while the task is active, and
@@ -348,7 +349,9 @@ history before it was folded into one migration while nothing had shipped), the 
 triggers Drizzle can't declare), `0002_envelope_documents.sql`, `0003_api_client_people.sql`, and the custom
 `0004_scheduled_send.sql`: the partial index `envelopes_scheduled` on a draft's `json_extract(draft_json,
 '$.schedule.at')`, through which the tick finds the drafts to send later (`scheduled-send.ts`; there is no column for
-it). Every record
+it), `0005_prefill_catalog.sql`, `0006_pdf_upload_changes.sql` (the upload record, Uploaded PDFs above), and the custom
+`0007_drop_editor_origins.sql`, which deletes the `app_settings` row the removed list of embedding origins was kept in
+("Who may frame the pages" below). Every record
 of an organization carries `tenant_id`, the Insulin organization id. A fresh database has these
 tables:
 
@@ -373,7 +376,7 @@ tables:
 | `document_tags` | Each person's own tags on what they see (`tags.ts`), by `tag_key` (trimmed, lower-cased) |
 | `members` | The members and API clients Esign has seen (`members.ts`): kind, email, name, organization role, when first and last seen |
 | `api_client_people` | Per API client, the members who see everything it owns, as admin (read live, never copied into shares) |
-| `app_settings` | Deployment settings SQL reads: `editor_origins`, the app's own origin and those from `ESIGN_FRAME_ANCESTORS` |
+| `app_settings` | Deployment settings SQL reads: the scheduled sends' `scheduled_cursor` and `scheduled_lease` (above) |
 | `blobs`, `blob_chunks` | The object store (below): a key in a bucket points to one upload's 256 KiB chunks |
 | `metrics_reports` | One per UTC hour (epoch ms of its start): when a tick claimed its usage report and when it was sent; kept three days |
 
@@ -395,13 +398,6 @@ real column (`tasks.expires_at`).
   the slot, input page count, name, printed time and renderer. `"kind": "fields"`: every placed
   field of the document at signing and, for each of the signer's fields, its value, renderer name
   and hash, image hash and geometry.
-- `app_settings.editor_origins`: a JSON array of the bare origins (https, or http on `localhost`
-  or `127.0.0.1`) allowed to start an editing session and frame the editor: the app's own origin,
-  whose Templates page hosts the editor, and those in `ESIGN_FRAME_ANCESTORS`. The editor routes
-  write it when it changes (`syncEditorOrigins`), keeping only valid origins. Every
-  statement that relies on an origin checks it with `json_each` inside that statement
-  (`editorOriginAllowed` in `src/app/server/esign/access.ts`), matching only string elements exactly,
-  so removing an origin takes effect at its next check.
 - `templates.roles_json`, `templates.fields_json`, `editor_sessions.preset_roles_json`,
   `audit_events.detail_json`.
 
@@ -487,15 +483,14 @@ bearer credential. Only SHA-256 hashes are stored. Each row has a scope and a su
 
 | Scope | Subject | Origin | Issued by | Exchanged at | Accepted by |
 | --- | --- | --- | --- | --- | --- |
-| `recipient` | A task | The signing page origin; the request's must match at exchange and on every call | `POST /api/envelopes/:id/tasks/:taskId/recipient-view` | `POST /api/public/page-sessions/exchange` | `/api/public/signing/*` |
-| `editor` | An editor session | The parent origin allowed to frame the editor | `POST /api/template-editing-sessions` | `POST /api/public/editor/exchange` (with the page id) | `/api/public/editor/*` |
+| `recipient` | A task | The signing page origin; the request's must match at exchange and on every call. The code's entry also keeps the host's `allowedParentOrigin`, the only origin that may frame the page | `POST /api/envelopes/:id/tasks/:taskId/recipient-view` | `POST /api/public/page-sessions/exchange` | `/api/public/signing/*` |
+| `editor` | An editor session | The parent origin the host named, the only one that may frame the editor | `POST /api/template-editing-sessions` | `POST /api/public/editor/exchange` (with the page id) | `/api/public/editor/*` |
 
 Every statement names the scope, so a code or token of one scope is never accepted by the other.
 Exchange and authorization also require the subject to be open: the task `ACTIVE` in an
-`IN_PROGRESS` envelope of the tenant, or the editor session's parent still allowed.
+`IN_PROGRESS` envelope of the tenant, or the editor session of the tenant, for the code's origin.
 A recipient session therefore loses its authority once its task is no longer active or its envelope
-leaves `IN_PROGRESS`, and an editor session once its parent origin is removed from
-`ESIGN_FRAME_ANCESTORS`.
+leaves `IN_PROGRESS`.
 
 **Signing page origins.** The recipient-view code is for the app's own origin (`/sign`) unless the
 request names another allowed one; in the local preview only, `SIGNING_PAGE_ORIGINS` adds origins
@@ -506,19 +501,28 @@ same-origin GETs, so the signing API then takes the origin from `Sec-Fetch-Site:
 reads from `nitro.config.ts` (`src/app/server/page-headers.ts`, policy in `page-policy.ts`) gives
 each page its Content-Security-Policy: scripts, styles, workers and requests only from this origin,
 no `eval`, `object-src 'none'`, `base-uri 'none'`. Behind insulinapps.com's gateway (the request
-has `x-suger-access-via`) it adds who may frame the page: the signing page this origin and
-`ESIGN_FRAME_ANCESTORS`, the editor this origin and its session's parent, the signed-copy page and
+has `x-suger-access-via`) it adds who may frame the page: the signing page this origin and the one
+its link names in `?host=` (at most one, an origin only), the editor this origin and its session's
+parent, the signed-copy page and
 the members' pages nobody, so another page can't frame them and trick a signed-in member into
 sending or voiding. The Insulin console frames its own preview, so there it leaves framing to the
 console. The signing, editor and copy pages also get `Cache-Control: no-store` and
 `Referrer-Policy: no-referrer`.
 
-**Who may frame the pages, at the exchange too.** Each page also reports at its code exchange
-whether it is framed and by whom: every ancestor in `location.ancestorOrigins` (Chromium, Safari),
-else the referrer's origin. The exchange refuses a framed page with any ancestor that is neither the
-app nor allowed: `ESIGN_FRAME_ANCESTORS` for the signing page, the session's parent origin for the
-editor (`embedderAllowed` in `src/app/server/esign/signing-page.ts`). A frame that hides its origin
-is refused.
+**Who may frame the pages, at the exchange too.** There is no list of origins allowed to embed
+Esign. The host that asks for a page's code, as its organization, names the origin of its page that
+will frame it (`allowedParentOrigin`: on recipient-view for the signing page, on the editing session
+for the editor; https, or http on a loopback host outside prod), and the code is bound to it. Anyone
+who may ask for a code could hand it to any page anyway, so a list would not stop them; binding stops
+a page elsewhere from framing a code it got. Each page reports at its code exchange whether it is
+framed and by whom: every ancestor in `location.ancestorOrigins` (Chromium, Safari), else the
+referrer's origin. The exchange refuses a framed page with any ancestor that is neither the app nor
+the code's parent (`embedderAllowed` in `src/app/server/esign/signing-page.ts`, `recipientCodeParent`
+in `otp.ts`). A frame that hides its origin is refused. A code issued without a parent (an emailed
+invitation's, or a host's that names none) opens only on its own. The signing page's exchange also
+returns that parent as `host`, the one origin the page tells that the signer closed, signed or
+declined. The signing link's `?host=` only shapes the CSP: a link naming another origin is framed
+by nothing the exchange accepts.
 
 **The page session's header.** A signing page or an editor sends its page session in
 `x-esign-session` (`session-header.ts`), never in `Authorization`: the gateway forwards public paths
@@ -616,7 +620,7 @@ is enabled.
 | `GET /api/envelopes/:id` | Status and tasks (role, name, email, order, status, `expiresAt`, `openedAt`) |
 | `POST /api/envelopes/:id/void` | Optional `{reason}` (at most 500 characters); a repeat is a no-op; any status other than `IN_PROGRESS` answers `409 envelope_not_voidable` |
 | `GET /api/envelopes/:id/audit` | Events with type, time, recipient, IP, user agent and an allow-listed detail; never codes or message ids |
-| `POST /api/envelopes/:id/tasks/:taskId/recipient-view` † | `{signedInEmail, origin?, hostAuthentication?}`, `signedInEmail` the account signed in to the host, which must be the signer's; returns `{code}` for the active task (`409 recipient_signs_by_email` for a signer Esign invites) |
+| `POST /api/envelopes/:id/tasks/:taskId/recipient-view` † | `{signedInEmail, origin?, allowedParentOrigin?, hostAuthentication?}`, `signedInEmail` the account signed in to the host, which must be the signer's; `allowedParentOrigin` the page that will frame the signing page, which the code is bound to (`422 invalid_parent_origin` unless https; http on a loopback host outside prod); returns `{code, url}` for the active task, `url` being `/sign?host=<allowedParentOrigin>#code=<code>` (`409 recipient_signs_by_email` for a signer Esign invites) |
 | `GET /api/envelopes/:id/delivery-pdf` | The signed PDF with its certificate, for a `COMPLETED` envelope |
 | `GET /api/envelopes/:id/certificate` | The completion certificate as JSON (shown on the envelope page), verified on every read |
 | `GET /api/contacts`, `GET /api/contacts/:id` | The address book, most recently used first (`q`, `limit`, `cursor`), and one contact with the envelopes that name them |
@@ -631,7 +635,7 @@ is enabled.
 
 **Signing page** (†, recipient session token, page origin checked)
 
-`POST /api/public/page-sessions/exchange` `{code}` → `{token}`; `GET /api/public/signing/current` (the document,
+`POST /api/public/page-sessions/exchange` `{code, embedded, embedder?, embedders?}` → `{token, host?}` (`403 embedder_not_allowed` for a page framed by any origin but the one the code is bound to; `host` that origin, when it frames the page); `GET /api/public/signing/current` (the document,
 fields, disclosure, intent, whether verified); `GET /api/public/signing/pdf`; `POST /api/public/signing/page-views`;
 `POST /api/public/signing/otp` → `202 {messageId, emailed?, testMailbox?}` (`testMailbox` only in dev, where the code is kept in the test mailbox; never the code itself); `POST /api/public/signing/otp/verify` `{otp}`;
 `POST /api/public/signing/preview`; `POST /api/public/signing/decline` `{reason}` (at most 1000 characters);
@@ -643,7 +647,7 @@ by the same live session with the same input and values, and returns the same si
 
 | Route | Auth | Purpose |
 | --- | --- | --- |
-| `POST /api/template-editing-sessions` | Management | `{allowedParentOrigin, roles?, sourceTemplateId?, envelopeId?, prefill?}` (`envelopeId`: an upload draft's own document and roles, instead of a template) (`prefill`: the host's pre-filled fields, the only ones offered); returns `{sessionId, url}`, the code in the URL fragment |
+| `POST /api/template-editing-sessions` | Management | `{allowedParentOrigin, roles?, sourceTemplateId?, envelopeId?, prefill?}` (`envelopeId`: an upload draft's own document and roles, instead of a template) (`prefill`: the host's pre-filled fields, the only ones offered); `allowedParentOrigin` the page that will frame the editor, which the session is bound to (`422 invalid_origin` unless https; http on a loopback host outside prod); returns `{sessionId, url}`, the code in the URL fragment |
 | `POST /api/template-editing-sessions/:id/source` | Management | The PDF bytes (`Content-Type: application/pdf`, at most 5 MiB and 100 pages), once, before the page is opened; prepared as Uploaded PDFs says, `{ok, changes}` |
 | `GET /api/template-editing-sessions/:id` | Management | `{templateId}` once saved, else null |
 | `GET /editor/page/:id` | — | The editor page, framable only by the session's parent origin |
@@ -672,9 +676,9 @@ that hash; missing, changed or oversized bytes fail closed. The editor sends onl
 the server uses the bound bytes and refuses a replacement file. The embedded UI refuses a session
 without a source.
 
-The host's parent origin must be in `ESIGN_FRAME_ANCESTORS` (https, or http on `localhost` or
-`127.0.0.1`), and the exchange refuses a page framed by any other origin ("Who may frame the
-pages" above); the iframe removes the code from its URL before the exchange and
+The host names its parent origin, `allowedParentOrigin` (https, or http on `localhost` or
+`127.0.0.1` outside prod; anything else is 422 `invalid_origin`), and the exchange refuses a page
+framed by any other origin ("Who may frame the pages" above); the iframe removes the code from its URL before the exchange and
 keeps its token in memory. It posts `esign.editor.ready`, and answers the parent's
 `esign.editor.save` (with a request id) with `esign.editor.saved` or `esign.editor.save-error`, only
 to the parent origin. A message is only a prompt: the host's backend reads the result with

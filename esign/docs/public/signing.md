@@ -139,14 +139,15 @@ decline, completion, and each signed copy sent and downloaded. Codes themselves 
 
 ## Embedding the signing page
 
-A host product embeds `https://esign.insulinapps.com/sign#code=...`, with a code its backend gets from
-`POST /api/envelopes/{id}/tasks/{taskId}/recipient-view`. See [API](/docs/esign/api#embed-the-signing-page).
+A host product embeds the `url` its backend gets from `POST /api/envelopes/{id}/tasks/{taskId}/recipient-view`, which
+names the origin of the host page that frames it (`allowedParentOrigin`). See
+[API](/docs/esign/api#embed-the-signing-page).
 
-- The page works only inside the origins the deployment allows to embed it, and refuses to open in a frame it can't
-  identify.
-- Add `&host=` followed by the host's origin to the fragment to receive the page's messages: `esign.signing.finished`
-  with the outcome `signed` or `declined`, and `esign.signing.cancel` when the signer chooses **Cancel**. The messages
-  carry no token, address or signing data.
+- The page works only inside that origin, and refuses to open in a frame from any other or in one it can't identify.
+  There is no list of origins to register with Esign.
+- The page tells that origin when the signer is done: `esign.signing.finished` with the outcome `signed` or
+  `declined`, and `esign.signing.cancel` when the signer chooses **Cancel**. The messages carry no token, address or
+  signing data.
 - The page renders the PDF itself (to images, not with the browser's PDF viewer), so it works inside a sandboxed frame.
   It offers signing only after every page has rendered; if one fails, it offers **Retry document**. The rendered pages
   have no selectable text, and are not an accessible reader.

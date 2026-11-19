@@ -9,7 +9,6 @@ import { Miniflare } from 'miniflare';
 import { degrees, PDFDocument, PDFName, PDFString } from 'pdf-lib';
 import { blobStore, MIGRATIONS_DIR, splitSql } from './helpers/platform.ts';
 import app from './helpers/gateway.ts';
-import { setEditorOrigins } from './helpers/editor-origins.ts';
 
 const KEY = 'local-test-key-' + 'f'.repeat(32), HOST = 'https://host.example.com', ORIGIN = 'http://localhost';
 const signature = (id: string, role: string, x: number, required = true) => ({ id, type: 'Signature', role, page: 1, required, rect: { x, y: 0.2, width: 0.25, height: 0.06 } });
@@ -21,7 +20,6 @@ async function setup() {
   for (const name of (await readdir(MIGRATIONS_DIR)).filter((n) => n.endsWith('.sql')).sort()) await db.batch(splitSql(await readFile(new URL(name, MIGRATIONS_DIR), 'utf8')).map((s) => db.prepare(s)));
   const hash = Buffer.from(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(KEY))).toString('hex');
   await db.batch([db.prepare("INSERT INTO tenants (id) VALUES ('t')"), db.prepare("INSERT INTO api_keys (key_hash, tenant_id) VALUES (?, 't')").bind(hash)]);
-  await setEditorOrigins(db, 't', [HOST]);
   const bucket = await blobStore(mf, 'artifacts');
   const env = { DB: db, ARTIFACTS: bucket, TEST_MAIL: await blobStore(mf, 'test-mail'), SIGNING_PAGE_ORIGINS: HOST, OTP_KEY: 'local-test-pepper-at-least-32-bytes', TEST_SEAL_KEY: 'local-test-seal-key-at-least-32-bytes', ASSETS: { fetch: async () => new Response('<html></html>', { headers: { 'content-type': 'text/html' } }) } };
   const req = (path: string, init: RequestInit = {}) => app.fetch(new Request(ORIGIN + path, init), env);

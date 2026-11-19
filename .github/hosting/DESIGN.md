@@ -548,7 +548,7 @@ declared in the app's `package.json` under `insulin`:
   "publicPaths": ["/sign", "/api/public/", "/assets/"],
   "scheduled": "/api/scheduled",
   "clientSettings": { "path": "/client-settings", "description": "Choose who in your organization sees … in Esign." },
-  "secrets": ["ESIGN_OTP_KEY", "ESIGN_FRAME_ANCESTORS"]
+  "secrets": ["ESIGN_OTP_KEY"]
 }
 ```
 

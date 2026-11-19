@@ -6,7 +6,6 @@ import {readFile,readdir} from 'node:fs/promises';
 import {Miniflare} from 'miniflare';
 import {PDFDocument} from 'pdf-lib';
 import app from './helpers/gateway.ts';
-import {setEditorOrigins} from './helpers/editor-origins.ts';
 
 test('staged PDF is tenant and session bound, immutable and verified at save',async()=>{
  const mf=new Miniflare({modules:true,script:'export default {fetch(){return new Response("ok")}}',d1Databases:['DB']});
@@ -15,7 +14,6 @@ test('staged PDF is tenant and session bound, immutable and verified at save',as
   const keys=['local-test-key-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa','local-test-key-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'];
   const hash=async(s:string)=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(s))),n=>n.toString(16).padStart(2,'0')).join('');
   await db.prepare("INSERT INTO tenants(id) VALUES ('a'),('b')").run();for(let i=0;i<2;i++)await db.prepare('INSERT INTO api_keys(key_hash,tenant_id) VALUES (?,?)').bind(await hash(keys[i]),i?'b':'a').run();
-  await setEditorOrigins(db,'a',['https://host.example.com']);
   const bucket=await blobStore(mf,'artifacts');const env={DB:db,ARTIFACTS:bucket};const req=(path:string,init:RequestInit={})=>app.fetch(new Request('https://esign.example.com'+path,init),env);
   const created=await req('/api/template-editing-sessions',{method:'POST',headers:{authorization:`Bearer ${keys[0]}`,'content-type':'application/json'},body:JSON.stringify({allowedParentOrigin:'https://host.example.com',roles:['Signer']})});const session=await created.json() as any;
   const pdf=await PDFDocument.create();pdf.addPage();const bytes=await pdf.save();const upload=(key:string,data:Uint8Array=bytes)=>req(`/api/template-editing-sessions/${session.sessionId}/source`,{method:'POST',headers:{authorization:`Bearer ${key}`,'content-type':'application/pdf'},body:data as BodyInit});

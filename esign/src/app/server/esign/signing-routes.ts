@@ -4,7 +4,7 @@ import { documentUpload } from './envelope-documents.ts';
 import { SESSION_HEADER, sessionToken } from './session-header.ts';
 import {PDFDocument} from 'pdf-lib';
 import { bodyLimit } from 'hono/body-limit';
-import { issueRecipientCode, exchangeRecipientCode, authorizeRecipientSession, sendRecipientOtp, verifyRecipientOtp, otpEntryRefusal, OtpSendRefused } from './otp.ts';
+import { issueRecipientCode, exchangeRecipientCode, recipientCodeParent, authorizeRecipientSession, sendRecipientOtp, verifyRecipientOtp, otpEntryRefusal, OtpSendRefused } from './otp.ts';
 import { DateChanged, recordSignature, retrySignature } from './signature-record.ts';
 import { assertNoOverlappingFields, validateFields, validateFieldPlacement, validateFieldsPdf, type TemplateField } from './fields.ts';
 import { assertSignatureGeometrySafe, assertTextFits, renderText, renderTypedSignature, signatureGeometry, signaturePreviewHash, textGeometry, TextDoesNotFitError } from './field-render.ts';
@@ -22,7 +22,8 @@ import { CONSENT_DISCLOSURE, consentDisclosure } from './disclosure.ts';
 import { taskDetails } from './details.ts';
 import { hasManagedEvidence, managedDelivery, verifyManagedEvidence } from './seal/managed.ts';
 import { isValidOtpEmailAddress } from './email-address.ts';
-import { embedderAllowed, frameAncestors } from './signing-page.ts';
+import { embedderAllowed } from './signing-page.ts';
+import { validParentOrigin } from './access.ts';
 import { releaseCopyLink, useCopyLink } from './signed-copies.ts';
 import type { Env } from './app.ts';
 import { deliveryPdf } from './delivery-pdf.ts';
@@ -90,20 +91,18 @@ export function mountSigningRoutes(app: Hono<Env>): void {
   };
   app.use('/api/public/page-sessions/*', cors);
   app.use('/api/public/signing/*', cors);
-  // What the signing page needs before it opens a session: the hosts it may tell that the signer
-  // closed, signed or declined (the app first), whether signing is available.
+  // Whether signing is available.
   app.get('/api/public/signing-page', c => {
     c.header('Cache-Control','no-store');
-    const own=new URL(c.req.url).origin;
-    return c.json({hosts:[own,...frameAncestors(c.env.SIGNING_PAGE_FRAME_ANCESTORS,isProd(c.env))],signingEnabled:signingEnabled(c.env)});
+    return c.json({signingEnabled:signingEnabled(c.env)});
   });
   app.post('/api/envelopes/:id/tasks/:taskId/recipient-view', whenSigningEnabled, bodyLimit({maxSize:4096}), async c => {
     // Opening a signer's page acts on the envelope: its editors, admins and owner (ownership.ts).
     const refused=await requireRole(c,'envelope',c.req.param('id') ?? '','editor');if(refused)return refused;
     await expireIfDue(c.env.DB, c.req.param('id') ?? '');
-    let body: {origin?:unknown;hostAuthentication?:unknown;signedInEmail?:unknown};try {body=await c.req.json();} catch {return c.json({error:'invalid_request'},400);}
-    if (!body || typeof body !== 'object' || Array.isArray(body) || (body.origin !== undefined && typeof body.origin !== 'string') || (body.signedInEmail !== undefined && typeof body.signedInEmail !== 'string')) return c.json({error:'invalid_request'},400);
-    const unknown=Object.keys(body).filter(key=>!['origin','hostAuthentication','signedInEmail'].includes(key));
+    let body: {origin?:unknown;allowedParentOrigin?:unknown;hostAuthentication?:unknown;signedInEmail?:unknown};try {body=await c.req.json();} catch {return c.json({error:'invalid_request'},400);}
+    if (!body || typeof body !== 'object' || Array.isArray(body) || (body.origin !== undefined && typeof body.origin !== 'string') || (body.allowedParentOrigin !== undefined && typeof body.allowedParentOrigin !== 'string') || (body.signedInEmail !== undefined && typeof body.signedInEmail !== 'string')) return c.json({error:'invalid_request'},400);
+    const unknown=Object.keys(body).filter(key=>!['origin','allowedParentOrigin','hostAuthentication','signedInEmail'].includes(key));
     if (unknown.length) return c.json({error:'unknown_field',fields:unknown},422);
     // The host opens only its own signers' pages, for the account signed in to it, which must have the
     // signer's email; a signer Esign invites signs from their invitation. Every caller alike: Esign's own
@@ -117,12 +116,19 @@ export function mountSigningRoutes(app: Hono<Env>): void {
     // The page origin the code is for: the app's own unless the host names another allowed one.
     const origin=typeof body.origin==='string'?body.origin:new URL(c.req.url).origin;
     if (!pageOrigins(c).has(origin)) return c.json({error:'invalid_origin'},400);
+    // The page that will frame the signing page, when the host embeds it: the code is bound to it, and only it may
+    // frame the page and hear from it (signing-page.ts). Without it the page opens only on its own.
+    const parentOrigin=typeof body.allowedParentOrigin==='string'?body.allowedParentOrigin:undefined;
+    if (parentOrigin!==undefined && !validParentOrigin(parentOrigin,isProd(c.env))) return c.json({error:'invalid_parent_origin'},422);
     // How the host signed the recipient in, recorded as the host's statement.
     const hostAuthentication=parseHostAuthentication(body.hostAuthentication);
     if (hostAuthentication==='invalid') return c.json({error:'invalid_request'},400);
-    try {const code=await issueRecipientCode(c.env.DB,{tenantId:c.get('tenantId'),envelopeId:c.req.param('id'),taskId:c.req.param('taskId'),origin,now:Date.now(),entry:{...(hostAuthentication?{hostAuthentication}:{}),...{signedInEmail}}});
-      await recordAuditQuietly(c.env.DB,{envelopeId:c.req.param('id') ?? '',taskId:c.req.param('taskId'),type:AUDIT.viewIssued,...requestFacts(c.req.raw),detail:{pageOrigin:origin,...(hostAuthentication?{hostAuthentication}:{}),signedInEmail}});
-      return c.json({code},201);}
+    try {const code=await issueRecipientCode(c.env.DB,{tenantId:c.get('tenantId'),envelopeId:c.req.param('id'),taskId:c.req.param('taskId'),origin,now:Date.now(),entry:{...(hostAuthentication?{hostAuthentication}:{}),...{signedInEmail},...(parentOrigin?{parentOrigin}:{})}});
+      await recordAuditQuietly(c.env.DB,{envelopeId:c.req.param('id') ?? '',taskId:c.req.param('taskId'),type:AUDIT.viewIssued,...requestFacts(c.req.raw),detail:{pageOrigin:origin,...(parentOrigin?{parentOrigin}:{}),...(hostAuthentication?{hostAuthentication}:{}),signedInEmail}});
+      // The page to frame: the code in the fragment, which browsers never send, and the framing origin in the query,
+      // which the page's CSP names (page-policy.ts).
+      const url=new URL('/sign',origin);if(parentOrigin)url.searchParams.set('host',parentOrigin);url.hash=`code=${code}`;
+      return c.json({code,url:url.toString()},201);}
     catch {return c.json({error:'recipient_unavailable'},404);}
   });
   // The sender sends an invited signer's invitation again, with a new link (the old one stops working).
@@ -152,11 +158,13 @@ export function mountSigningRoutes(app: Hono<Env>): void {
   app.post('/api/public/page-sessions/exchange', async c => {
     let body: {code?:unknown;embedded?:unknown;embedder?:unknown;embedders?:unknown};try {body=await c.req.json();} catch {return c.json({error:'invalid_request'},400);}
     if (!body || typeof body.code !== 'string') return c.json({error:'invalid_request'},400);
-    // A page framed by a site that may not embed it gets no session (signing-page.ts).
-    if (!embedderAllowed(body,new URL(c.req.url).origin,frameAncestors(c.env.SIGNING_PAGE_FRAME_ANCESTORS,isProd(c.env)))) return c.json({error:'embedder_not_allowed'},403);
+    // A page framed by any origin but the one its code was issued for gets no session (signing-page.ts).
+    const parent=await recipientCodeParent(c.env.DB,body.code,Date.now());
+    if (!embedderAllowed(body,new URL(c.req.url).origin,parent?[parent]:[])) return c.json({error:'embedder_not_allowed'},403);
     try {const token=await exchangeRecipientCode(c.env.DB,body.code,requestOrigin(c),Date.now());
       const session=await sessionContext(c.env.DB,token);if(session)await recordAuditQuietly(c.env.DB,{envelopeId:session.envelopeId,taskId:session.taskId,type:AUDIT.sessionOpened,...requestFacts(c.req.raw)});
-      return c.json({token});}
+      // The host the page tells that the signer closed, signed or declined: the origin the code is bound to, framing it.
+      return c.json({token,...(parent&&body.embedded===true&&body.embedder===parent?{host:parent}:{})});}
     catch {return c.json({error:'invalid_code'},401);}
   });
   app.post('/api/public/signing/otp', async c => {

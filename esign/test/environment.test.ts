@@ -2,7 +2,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { environmentOf, prodProblems, signingEnabled, testSealKey } from '../src/app/server/esign/environment.ts';
-import { embedderAllowed, frameAncestors } from '../src/app/server/esign/signing-page.ts';
+import { embedderAllowed } from '../src/app/server/esign/signing-page.ts';
+import { validParentOrigin } from '../src/app/server/esign/access.ts';
 import { MailRelayError, mailerFor, relayConfig } from '../src/app/server/esign/mail.ts';
 import { mailRelay } from './helpers/mail-relay.ts';
 import { makeSealKey } from './helpers/seal-key.ts';
@@ -63,10 +64,11 @@ test('the relay is used only at an https address with its token, and refusals ar
   }
 });
 
-test('prod lets only https origins embed the signing page', () => {
-  const raw = 'https://console.example http://localhost:3000';
-  assert.deepEqual(frameAncestors(raw), ['https://console.example', 'http://localhost:3000']);
-  assert.deepEqual(frameAncestors(raw, true), ['https://console.example']);
+test('prod lets a host name only an https origin to frame a page', () => {
+  assert.equal(validParentOrigin('https://console.example', true), true);
+  assert.equal(validParentOrigin('http://localhost:3000', false), true);
+  assert.equal(validParentOrigin('http://localhost:3000', true), false);
+  assert.equal(validParentOrigin('http://console.example', false), false, 'plain http only on a loopback host');
 });
 
 test('a framed page opens a session only for the app itself or an origin allowed to embed it', () => {

@@ -31,7 +31,7 @@ test('the migrations make the app\'s tables only: the organization comes from th
     assert.deepEqual(triggers.results.map((row) => row.name), [
       'audit_events_no_delete', 'audit_events_no_update', 'immutable_task_recipient_email', 'signatures_facts_immutable', 'signatures_no_delete', 'signatures_output_final',
     ]);
-    await assert.rejects(() => db.prepare("INSERT INTO app_settings (name, value) VALUES ('editor_origins', 'not json')").run(), /CHECK/);
+    await assert.rejects(() => db.prepare("INSERT INTO app_settings (name, value) VALUES ('scheduled_cursor', 'not json')").run(), /CHECK/);
   } finally { await mf.dispose(); }
 });
 
@@ -42,5 +42,20 @@ test('the custom migration can run again from the start, as publishing does afte
     const triggers = splitSql(await readFile(new URL('0001_triggers.sql', MIGRATIONS), 'utf8'));
     assert.equal(triggers.length, 6);
     for (const statement of triggers) await db.prepare(statement).run();
+  } finally { await mf.dispose(); }
+});
+
+test('0007 removes the old frame-ancestors list from a live database and keeps the scheduled sends\' settings', async () => {
+  const { mf, db } = await database();
+  try {
+    const files = (await readdir(MIGRATIONS)).filter((name) => name.endsWith('.sql')).sort();
+    const run = async (name: string) => { for (const statement of splitSql(await readFile(new URL(name, MIGRATIONS), 'utf8'))) await db.prepare(statement).run(); };
+    // A database at 0005, as released, with the list the old Worker wrote; then the migrations since, in order.
+    for (const name of files.filter((n) => n < '0006_')) await run(name);
+    await db.prepare("INSERT INTO app_settings (name, value) VALUES ('editor_origins', '[\"https://host.example.com\"]'), ('scheduled_cursor', '\"org-a\"')").run();
+    for (const name of files.filter((n) => n >= '0006_')) await run(name);
+    await run('0007_drop_editor_origins.sql');
+    const { results } = await db.prepare('SELECT name FROM app_settings ORDER BY name').all<{ name: string }>();
+    assert.deepEqual(results.map((row) => row.name), ['scheduled_cursor']);
   } finally { await mf.dispose(); }
 });

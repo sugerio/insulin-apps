@@ -185,7 +185,7 @@ export function RecipientPage({renderDocument=defaultRender}:{renderDocument?:Re
     const params=new URLSearchParams(window.location.hash.slice(1));const given=params.get('code'),invite=params.get('invite');
     window.history.replaceState(null,'',window.location.pathname);
     // The API is this page's own origin (the app). The host told when the signer closes, signs or
-    // declines must be one the app lets frame this page (GET /api/public/signing-page).
+    // declines is the origin the code was issued for, which the exchange returns when it frames this page.
     api.current=window.location.origin;
     if (!given && !invite) {setMessage('No recipient code provided.');return;}
     let invitationRefused=false;
@@ -196,14 +196,12 @@ export function RecipientPage({renderDocument=defaultRender}:{renderDocument?:Re
       return (await response.json() as {code:string}).code;
     };
     const frame=embedding(window,window.document?.referrer??'');
-    fetch(`${api.current}/api/public/signing-page`,{cache:'no-store'})
-      .then(async response=>{
-        const page=response.ok?await response.json() as {hosts?:unknown}:{};
-        const hosts=Array.isArray(page.hosts)?page.hosts.filter((h):h is string=>typeof h==='string').join(' '):'';
-        try {host.current=signingHost(params.get('host'),hosts,frame.embedded,frame.embedder||undefined);} catch {host.current='';}
-        const code=await codeFor();
+    codeFor()
+      .then(async code=>{
         const exchange=await fetch(`${api.current}/api/public/page-sessions/exchange`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({code,...frame})});
-        if(!exchange.ok) throw new Error();const value=await exchange.json() as {token:string};setToken(value.token);setMessage('Loading document…');
+        if(!exchange.ok) throw new Error();const value=await exchange.json() as {token:string;host?:unknown};
+        host.current=signingHost(value.host,frame.embedded,frame.embedder||undefined);
+        setToken(value.token);setMessage('Loading document…');
       })
       .catch(()=>setMessage(invitationRefused?'This invitation link no longer works: a newer email replaced it, your turn has passed, or the signing has ended. Use the latest email, or ask the sender to send it again.':'Session unavailable or expired.'));
   },[]);

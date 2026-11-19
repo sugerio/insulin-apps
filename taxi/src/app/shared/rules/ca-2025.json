@@ -115,6 +115,11 @@
       "value": "0.25",
       "source": "Worksheet AB428, line 61545, line 8: 25%"
     },
+    "abFirstBracketTop": {
+      "label": "Top of the lowest Alberta tax bracket",
+      "value": "60000",
+      "source": "AB(S2) line 5: $60,000"
+    },
     "abPensionAmountMax": {
       "label": "Most Alberta pension income amount",
       "value": "1719",
@@ -250,6 +255,11 @@
       "label": "Net income from which there is no British Columbia tax reduction",
       "value": "40807",
       "source": "BC428: no reduction when net income is $40,807 or more"
+    },
+    "bcFirstBracketTop": {
+      "label": "Top of the lowest British Columbia tax bracket",
+      "value": "49279",
+      "source": "BC(S2) line 6: $49,279"
     },
     "bcPensionAmountMax": {
       "label": "Most British Columbia pension income amount",
@@ -527,6 +537,217 @@
       "value": "0.5",
       "source": "Schedule 3 line 23: 50%"
     },
+    "scholarshipExemption": {
+      "label": "Basic scholarship exemption",
+      "value": "500",
+      "source": "canada.ca/line-13010: a scholarship is taxable only above $500 when you aren't a qualifying student"
+    },
+    "caregiverChildAmount": {
+      "label": "Canada caregiver amount for an infirm child, and the infirmity addition",
+      "value": "2687",
+      "source": "T1 line 30500 and Schedule 5 lines 51090 and 51100: $2,687"
+    },
+    "caregiverBase": {
+      "label": "Canada caregiver amount, base",
+      "value": "28798",
+      "source": "Schedule 5, lines 30425 and 30450, line 1: $28,798"
+    },
+    "caregiverMax": {
+      "label": "Most Canada caregiver amount for one person",
+      "value": "8601",
+      "source": "Schedule 5, lines 30425 and 30450, line 3: maximum $8,601"
+    },
+    "volunteerAmount": {
+      "label": "Volunteer firefighters' or search and rescue volunteers' amount",
+      "value": "6000",
+      "source": "canada.ca/line-31220: $6,000 for 2025, for at least 200 hours of eligible volunteer service"
+    },
+    "homeBuyersMax": {
+      "label": "Most home buyers' amount",
+      "value": "10000",
+      "source": "T1 line 31270: maximum $10,000, shared with a spouse or partner"
+    },
+    "homeAccessibilityMax": {
+      "label": "Most home accessibility expenses",
+      "value": "20000",
+      "source": "T1 line 31285 and Federal Worksheet: maximum $20,000"
+    },
+    "adoptionMax": {
+      "label": "Most adoption expenses for each child",
+      "value": "19580",
+      "source": "canada.ca/line-31300: federal maximum $19,580 for each child for 2025"
+    },
+    "disabilityAmount": {
+      "label": "Disability amount",
+      "value": "10138",
+      "source": "T1 line 31600 and Federal Worksheet, line 1: $10,138"
+    },
+    "disabilitySupplementMax": {
+      "label": "Disability supplement for a person under 18",
+      "value": "5914",
+      "source": "Federal Worksheet, lines 31600 and 31800, line 2: $5,914"
+    },
+    "disabilityCareThreshold": {
+      "label": "Child care and attendant care that the disability supplement allows",
+      "value": "3464",
+      "source": "Federal Worksheet, lines 31600 and 31800, line 4: $3,464"
+    },
+    "politicalCreditRates": {
+      "label": "Federal political contribution tax credit",
+      "value": [
+        {
+          "upTo": "400",
+          "rate": "0.75",
+          "base": "0"
+        },
+        {
+          "upTo": "750",
+          "rate": "0.5",
+          "base": "300"
+        },
+        {
+          "upTo": null,
+          "rate": "0.3333",
+          "base": "475"
+        }
+      ],
+      "source": "Federal Worksheet, line 41000: 75% of the first $400, 50% of the next $350 and 33.33% of the rest"
+    },
+    "politicalCreditMaxContributions": {
+      "label": "Contributions that give the most political contribution credit",
+      "value": "1275",
+      "source": "Federal Worksheet, line 41000: $1,275 or more"
+    },
+    "politicalCreditMax": {
+      "label": "Most federal political contribution tax credit",
+      "value": "650",
+      "source": "T1 line 41000: maximum $650"
+    },
+    "medicalSupplementThreshold": {
+      "label": "Family net income where the refundable medical expense supplement starts to go down",
+      "value": "33294",
+      "source": "Federal Worksheet, line 45200, line 7: $33,294"
+    },
+    "medicalSupplementRate": {
+      "label": "Refundable medical expense supplement rate",
+      "value": "0.25",
+      "source": "Federal Worksheet, line 45200, line 12: 25%"
+    },
+    "medicalSupplementMax": {
+      "label": "Most refundable medical expense supplement",
+      "value": "1504",
+      "source": "Federal Worksheet, line 45200, line 14: $1,504"
+    },
+    "medicalSupplementReductionRate": {
+      "label": "Refundable medical expense supplement reduction rate",
+      "value": "0.05",
+      "source": "Federal Worksheet, line 45200, line 15: 5%"
+    },
+    "medicalSupplementMinEarnings": {
+      "label": "Earnings needed for the refundable medical expense supplement",
+      "value": "4390",
+      "source": "Federal Worksheet, line 45200: employment and self-employment income of $4,390 or more"
+    },
+    "cwbWorkingIncomeBase": {
+      "label": "Working income where the basic Canada workers benefit starts",
+      "value": "3000",
+      "source": "Schedule 6, line 17: $3,000"
+    },
+    "cwbRate": {
+      "label": "Canada workers benefit rate on working income",
+      "value": "0.27",
+      "source": "Schedule 6, lines 19 and 32: 27%"
+    },
+    "cwbMaxSingle": {
+      "label": "Most basic Canada workers benefit, single",
+      "value": "1633",
+      "source": "Schedule 6, line 21: $1,633"
+    },
+    "cwbMaxFamily": {
+      "label": "Most basic Canada workers benefit, with an eligible spouse or dependant",
+      "value": "2813",
+      "source": "Schedule 6, line 21: $2,813"
+    },
+    "cwbIncomeBaseSingle": {
+      "label": "Adjusted family net income where the basic benefit starts to go down, single",
+      "value": "26855",
+      "source": "Schedule 6, line 24: $26,855"
+    },
+    "cwbIncomeBaseFamily": {
+      "label": "Adjusted family net income where the basic benefit starts to go down, with an eligible spouse or dependant",
+      "value": "30639",
+      "source": "Schedule 6, line 24: $30,639"
+    },
+    "cwbReductionRate": {
+      "label": "Canada workers benefit reduction rate",
+      "value": "0.15",
+      "source": "Schedule 6, lines 26 and 38: 15%"
+    },
+    "cwbReductionRateBothDisabled": {
+      "label": "Disability supplement reduction rate when both spouses are eligible for the disability tax credit",
+      "value": "0.075",
+      "source": "Schedule 6, line 38: 7.5%"
+    },
+    "cwbSecondaryEarnerMax": {
+      "label": "Most secondary earner exemption",
+      "value": "16386",
+      "source": "Schedule 6, line 14: maximum $16,386"
+    },
+    "cwbDisabilityWorkingBase": {
+      "label": "Working income where the disability supplement starts",
+      "value": "1150",
+      "source": "Schedule 6, line 30: $1,150"
+    },
+    "cwbDisabilityMax": {
+      "label": "Most Canada workers benefit disability supplement",
+      "value": "843",
+      "source": "Schedule 6, line 34: $843"
+    },
+    "cwbDisabilityIncomeBaseSingle": {
+      "label": "Adjusted family net income where the disability supplement starts to go down, single",
+      "value": "37740",
+      "source": "Schedule 6, line 36: $37,740"
+    },
+    "cwbDisabilityIncomeBaseFamily": {
+      "label": "Adjusted family net income where the disability supplement starts to go down, with an eligible spouse or dependant",
+      "value": "49389",
+      "source": "Schedule 6, line 36: $49,389"
+    },
+    "cwbFamilyLimit": {
+      "label": "Adjusted family net income from which a family gets no Canada workers benefit",
+      "value": "55009",
+      "source": "Schedule 6, the chart of limits: $49,393 for the basic benefit, $55,009 with the disability supplement"
+    },
+    "cwbStudentMonths": {
+      "label": "Months of full-time study a person can have and still get the Canada workers benefit",
+      "value": "3",
+      "source": "Schedule 6: not a full-time student for more than 13 weeks in the year, unless they had an eligible dependant"
+    },
+    "trainingCreditRate": {
+      "label": "Canada training credit, share of tuition",
+      "value": "0.5",
+      "source": "Schedule 11, line 2: 50%"
+    },
+    "renovationRate": {
+      "label": "Multigenerational home renovation tax credit rate",
+      "value": "0.145",
+      "source": "Schedule 12, line 9: 14.5%"
+    },
+    "renovationMax": {
+      "label": "Most qualifying renovation expenditures",
+      "value": "50000",
+      "source": "Schedule 12: up to $50,000"
+    },
+    "educatorRate": {
+      "label": "Eligible educator school supply tax credit rate",
+      "value": "0.25",
+      "source": "T1 line 46900: 25%"
+    },
+    "educatorMax": {
+      "label": "Most eligible school supplies expenses",
+      "value": "1000",
+      "source": "T1 line 46800: maximum $1,000"
+    },
     "onTaxBrackets": {
       "label": "Ontario tax brackets",
       "value": [
@@ -719,7 +940,8 @@
     },
     "AB428.42": {
       "label": "Amounts transferred from your spouse or common-law partner",
-      "formula": "if(line.HH.partner == 1 and household.partnerInYear, if(spouse.person.age >= 65 or spouse.line.AB428.34 > 0, unsupported(\"Transferring your spouse's unused Alberta age or pension amount (Schedule AB(S2)) isn't handled by this app yet\"), 0), 0)"
+      "formula": "if(line.HH.partner == 1 and household.partnerInYear, if(spouse.line.AB428.17 + spouse.line.AB428.34 == 0, 0, line.ABS2.11), 0)",
+      "source": "Schedule AB(S2): their unused Alberta age and pension income amounts"
     },
     "AB428.49": {
       "label": "Allowable medical expenses",
@@ -775,6 +997,21 @@
       "label": "Alberta tax",
       "formula": "max(0, line.AB428.70 - line.AB428.74)"
     },
+    "ABS2.5": {
+      "label": "Their taxable income, for the transfer",
+      "formula": "if(spouse.line.T1.26000 <= param.abFirstBracketTop, spouse.line.T1.26000, round(spouse.line.AB428.8 / param.abCreditRate, 2))",
+      "source": "AB(S2) line 5: line 26000 if it is $60,000 or less, else their Alberta tax on taxable income ÷ 8%"
+    },
+    "ABS2.10": {
+      "label": "Their adjusted taxable income",
+      "formula": "max(0, line.ABS2.5 - spouse.line.AB428.16 - spouse.line.AB428.32)",
+      "source": "AB(S2) lines 6 to 10: their basic personal amount and CPP and EI amounts"
+    },
+    "ABS2.11": {
+      "label": "Alberta amounts transferred from your spouse",
+      "formula": "max(0, spouse.line.AB428.17 + spouse.line.AB428.34 - line.ABS2.10)",
+      "source": "AB(S2) lines 1, 2, 4 and 11"
+    },
     "BC428.8": {
       "label": "British Columbia tax on taxable income",
       "formula": "round(bracket(param.bcTaxBrackets, line.T1.26000), 2)"
@@ -809,7 +1046,8 @@
     },
     "BC428.44": {
       "label": "Amounts transferred from your spouse or common-law partner",
-      "formula": "if(line.HH.partner == 1 and household.partnerInYear, if(spouse.person.age >= 65 or spouse.line.BC428.36 > 0, unsupported(\"Transferring your spouse's unused British Columbia age or pension amount (Schedule BC(S2)) isn't handled by this app yet\"), 0), 0)"
+      "formula": "if(line.HH.partner == 1 and household.partnerInYear, if(spouse.line.BC428.17 + spouse.line.BC428.36 == 0, 0, line.BCS2.12), 0)",
+      "source": "Schedule BC(S2): their unused British Columbia age and pension income amounts"
     },
     "BC428.51": {
       "label": "Allowable medical expenses",
@@ -865,6 +1103,21 @@
       "label": "British Columbia tax",
       "formula": "max(0, line.BC428.72 - line.BC428.79)"
     },
+    "BCS2.6": {
+      "label": "Their taxable income, for the transfer",
+      "formula": "if(spouse.line.T1.26000 <= param.bcFirstBracketTop, spouse.line.T1.26000, round(spouse.line.BC428.8 / param.bcCreditRate, 2))",
+      "source": "BC(S2) line 6: line 26000 if it is $49,279 or less, else their British Columbia tax on taxable income ÷ 5.06%"
+    },
+    "BCS2.11": {
+      "label": "Their adjusted taxable income",
+      "formula": "max(0, line.BCS2.6 - spouse.line.BC428.16 - spouse.line.BC428.33)",
+      "source": "BC(S2) lines 7 to 11: their basic personal amount and CPP and EI amounts"
+    },
+    "BCS2.12": {
+      "label": "British Columbia amounts transferred from your spouse",
+      "formula": "max(0, spouse.line.BC428.17 + spouse.line.BC428.36 - line.BCS2.11)",
+      "source": "BC(S2) lines 1, 2, 5 and 12"
+    },
     "HH.partner": {
       "label": "Spouse or common-law partner on December 31 (1 for yes)",
       "formula": "if(household.maritalStatus == \"married\" or household.maritalStatus == \"common_law\", 1, 0)"
@@ -882,6 +1135,10 @@
       "label": "Employment income",
       "formula": "sum(T4.box14)"
     },
+    "T1.10120": {
+      "label": "Commissions included on line 10100",
+      "formula": "sum(T4.box42)"
+    },
     "T1.10400": {
       "label": "Other employment income",
       "formula": "if(answer.hasForeignIncome, answer.foreignEmploymentIncome, 0)",
@@ -896,6 +1153,11 @@
       "label": "CPP or QPP benefits",
       "formula": "sum(T4AP.box20)",
       "source": "Box 20 of the T4A(P) slip"
+    },
+    "T1.11410": {
+      "label": "Disability benefits included on line 11400",
+      "formula": "sum(T4AP.box16)",
+      "source": "Box 16 of the T4A(P) slip"
     },
     "T1.11500": {
       "label": "Other pensions and superannuation",
@@ -922,6 +1184,11 @@
       "formula": "sum(T5.box13) + sum(T3.box25) + if(answer.hasForeignIncome, answer.foreignInvestmentIncome, 0)",
       "source": "Federal Worksheet, line 12100: box 13 of T5 slips, box 25 of T3 slips, and foreign interest and dividends"
     },
+    "T1.12500": {
+      "label": "Registered disability savings plan (RDSP) income",
+      "formula": "sum(T4A.box131)",
+      "source": "Box 131 of the T4A slip"
+    },
     "T1.12599": {
       "label": "Gross rental income",
       "formula": "if(answer.hasRentalIncome, answer.rentalGross, 0)",
@@ -937,10 +1204,29 @@
       "formula": "max(0, line.S3.19900)",
       "source": "Schedule 3. A net capital loss isn't entered here; it carries forward"
     },
+    "T1.12799": {
+      "label": "Support payments received",
+      "formula": "if(answer.hasSupportReceived, answer.supportReceived, 0)"
+    },
+    "T1.12800": {
+      "label": "Taxable support payments received",
+      "formula": "if(answer.hasSupportReceived, max(0, answer.supportReceived - answer.childSupportReceived), 0)",
+      "source": "canada.ca/taxes-support-payments: spousal support is taxable; child support under an order or agreement made after April 1997 isn't"
+    },
+    "T1.12900": {
+      "label": "RRSP income",
+      "formula": "sum(T4RSP.box16) + sum(T4RSP.box18) + sum(T4RSP.box20) + sum(T4RSP.box22) + sum(T4RSP.box26) + sum(T4RSP.box28) + sum(T4RSP.box34)",
+      "source": "T4RSP slips: every box of income. Home Buyers' Plan and Lifelong Learning Plan withdrawals (boxes 25 and 27) aren't income"
+    },
     "T1.13000": {
       "label": "Other income",
-      "formula": "sum(T3.box26) + if(person.age < 65, sum(T4A.box024) + sum(T4RIF.box16), 0)",
-      "source": "Box 26 of T3 slips; annuities and RRIF payments before 65"
+      "formula": "sum(T3.box26) + if(person.age < 65, sum(T4A.box024) + sum(T4RIF.box16), 0) + sum(T4A.box018) + sum(T4A.box028)",
+      "source": "Box 26 of T3 slips; annuities and RRIF payments before 65; lump-sum payments and other income on T4A slips"
+    },
+    "T1.13010": {
+      "label": "Taxable scholarships, fellowships, bursaries and artists' project grants",
+      "formula": "if(sum(T2202.box25) > 0, 0, if(sum(T2202.box24) > 0, max(0, sum(T4A.box105) - max(param.scholarshipExemption, sum(T2202.box26))), max(0, sum(T4A.box105) - param.scholarshipExemption)))",
+      "source": "canada.ca/line-13010: not taxable for a full-time student; for a part-time student, taxable above the tuition paid; otherwise above $500"
     },
     "SE.net": {
       "label": "Net self-employment income",
@@ -971,9 +1257,26 @@
       "label": "Net commission income",
       "formula": "if(answer.hasSelfEmployment, if(answer.selfEmploymentKind == \"commission\", line.SE.net, 0), 0)"
     },
+    "T1.14400": {
+      "label": "Workers' compensation benefits",
+      "formula": "sum(T5007.box10)"
+    },
+    "T1.14500": {
+      "label": "Social assistance payments",
+      "formula": "sum(T5007.box11)"
+    },
+    "T1.14600": {
+      "label": "Net federal supplements paid",
+      "formula": "sum(T4AOAS.box21)",
+      "source": "Box 21 of the T4A(OAS) slip: the guaranteed income supplement and allowances"
+    },
+    "T1.14700": {
+      "label": "Income that is deducted again on line 25000",
+      "formula": "line.T1.14400 + line.T1.14500 + line.T1.14600"
+    },
     "T1.15000": {
       "label": "Total income",
-      "formula": "line.T1.10100 + line.T1.10400 + line.T1.11300 + line.T1.11400 + line.T1.11500 + line.T1.11900 + line.T1.12000 + line.T1.12100 + line.T1.12600 + line.T1.12700 + line.T1.13000 + line.T1.13500 + line.T1.13700 + line.T1.13900 + line.SCOPE.income"
+      "formula": "line.T1.10100 + line.T1.10400 + line.T1.11300 + line.T1.11400 + line.T1.11500 + line.T1.11900 + line.T1.12000 + line.T1.12100 + line.T1.12500 + line.T1.12600 + line.T1.12700 + line.T1.12800 + line.T1.12900 + line.T1.13000 + line.T1.13010 + line.T1.13500 + line.T1.13700 + line.T1.13900 + line.T1.14700 + line.SCOPE.income"
     },
     "SCOPE.income": {
       "label": "Income this app doesn't handle",
@@ -1025,10 +1328,29 @@
       "formula": "if(answer.hasChildCare, if(line.HH.partner == 1 and line.CC.netIncome > line.CC.spouseNetIncome, unsupported(\"Only the spouse or partner with the lower net income claims child care expenses, except in the cases of Form T778, Part C. Enter them on the other return\"), min(line.CC.expenses, line.CC.limit, round(line.CC.earned * 2 / 3, 2))), 0)",
       "source": "Form T778, Part B, line 7: whichever is least, the basic limit, the expenses, or 2/3 of earned income"
     },
+    "T1.21500": {
+      "label": "Disability supports deduction",
+      "formula": "if(answer.hasDisabilitySupports, min(answer.disabilitySupportsExpenses, max(0, line.T1.10100 + line.T1.10400 + max(0, line.SE.net) + line.T1.13010)), 0)",
+      "source": "Form T929: the expenses, up to earned income (employment, self-employment and taxable scholarships)"
+    },
     "T1.21900": {
       "label": "Moving expenses",
       "formula": "if(answer.hasMovingExpenses, min(answer.movingExpenses, answer.movingIncome), 0)",
       "source": "Form T1-M, line 29: net moving expenses up to the net eligible income at the new location"
+    },
+    "T1.21999": {
+      "label": "Support payments made",
+      "formula": "if(answer.hasSupportPaid, answer.supportPaid, 0)"
+    },
+    "T1.22000": {
+      "label": "Deductible support payments made",
+      "formula": "if(answer.hasSupportPaid, max(0, answer.supportPaid - answer.childSupportPaid), 0)",
+      "source": "canada.ca/taxes-support-payments: spousal support is deductible; child support isn't"
+    },
+    "T1.22100": {
+      "label": "Carrying charges, interest expenses, and other expenses",
+      "formula": "answer.carryingCharges",
+      "source": "Federal Worksheet, line 22100"
     },
     "T1.22200": {
       "label": "Deduction for CPP contributions on self-employment income",
@@ -1053,7 +1375,7 @@
     },
     "DED.other": {
       "label": "Deductions other than child care",
-      "formula": "line.T1.20700 + line.T1.20800 + line.T1.20805 + line.T1.21200 + line.T1.21900 + line.T1.22200 + line.T1.22215 + line.T1.22900 + line.T1.23200"
+      "formula": "line.T1.20700 + line.T1.20800 + line.T1.20805 + line.T1.21200 + line.T1.21500 + line.T1.21900 + line.T1.22000 + line.T1.22100 + line.T1.22200 + line.T1.22215 + line.T1.22900 + line.T1.23200"
     },
     "T1.23300": {
       "label": "Total deductions",
@@ -1065,8 +1387,8 @@
     },
     "T1.23500": {
       "label": "Social benefits repayment",
-      "formula": "if(line.T1.11900 > 0 and sum(T4E.box15) > 0 and line.T1.23400 > param.eiRepaymentThreshold, unsupported(\"Repaying EI benefits (the chart on your T4E) isn't handled by this app yet\"), min(max(0, line.T1.11300 - sum(T4AOAS.box20)), round(max(0, line.T1.23400 - param.oasRecoveryThreshold) * param.oasRecoveryRate, 2)))",
-      "source": "Federal Worksheet, line 23500: 15% of net income over $93,454, up to the OAS received"
+      "formula": "if(line.T1.11900 > 0 and sum(T4E.box15) > 0 and line.T1.23400 > param.eiRepaymentThreshold, unsupported(\"Repaying EI benefits (the chart on your T4E) isn't handled by this app yet\"), min(max(0, line.T1.11300 + line.T1.14600 - sum(T4AOAS.box20)), round(max(0, line.T1.23400 - line.T1.12500 - param.oasRecoveryThreshold) * param.oasRecoveryRate, 2)))",
+      "source": "Federal Worksheet, line 23500: 15% of net income (less RDSP income) over $93,454, up to the OAS and net federal supplements received"
     },
     "T1.23600": {
       "label": "Net income",
@@ -1117,9 +1439,35 @@
       "formula": "round(line.CPP.secondEarnings * param.cppSelfEmployedSecondRate, 2)",
       "source": "Schedule 8, Part 5, line 45: 8%"
     },
+    "T1.24400": {
+      "label": "Canadian Armed Forces personnel and police deduction",
+      "formula": "sum(T4.box43)"
+    },
+    "T1.24900": {
+      "label": "Security options deductions",
+      "formula": "sum(T4.box39) + sum(T4.box41)"
+    },
+    "T1.25000": {
+      "label": "Other payments deduction",
+      "formula": "if(line.T1.14600 > 0 and max(0, line.T1.23400) - line.T1.12500 > param.oasRecoveryThreshold, unsupported(\"Net federal supplements with net income over $93,454 (line 25000) aren't handled by this app yet\"), line.T1.14700)",
+      "source": "Federal Worksheet, line 25000: the amount on line 14700"
+    },
+    "T1.25200": {
+      "label": "Non-capital losses of other years",
+      "formula": "answer.nonCapitalLosses"
+    },
+    "T1.25300": {
+      "label": "Net capital losses of other years",
+      "formula": "min(answer.netCapitalLosses, line.T1.12700)",
+      "source": "canada.ca/line-25300: up to the taxable capital gains of the year"
+    },
+    "T1.25700": {
+      "label": "Deductions from net income",
+      "formula": "line.T1.24400 + line.T1.24900 + line.T1.25000 + line.T1.25200 + line.T1.25300"
+    },
     "T1.26000": {
       "label": "Taxable income",
-      "formula": "line.T1.23600"
+      "formula": "max(0, line.T1.23600 - line.T1.25700)"
     },
     "T1.30000": {
       "label": "Basic personal amount",
@@ -1133,13 +1481,32 @@
     },
     "T1.30300": {
       "label": "Spouse or common-law partner amount",
-      "formula": "if(line.HH.partner == 1, max(0, line.T1.30000 - line.HH.spouseNetIncome), 0)",
-      "source": "Schedule 5 line 30300: your basic personal amount minus their net income"
+      "formula": "if(line.HH.partner == 1, max(0, line.T1.30000 + if(answer.spouseInfirm, param.caregiverChildAmount, 0) - line.HH.spouseNetIncome), 0)",
+      "source": "Schedule 5 line 30300: your basic personal amount (plus $2,687 for a spouse with an infirmity) minus their net income"
     },
     "T1.30400": {
       "label": "Amount for an eligible dependant",
       "formula": "if(line.HH.partner == 0 and household.childrenUnder18 > 0, line.T1.30000, 0)",
       "source": "Schedule 5 line 30400: for a single parent, one child under 18 who lived with you. The app assumes the child had no income"
+    },
+    "T1.30425": {
+      "label": "Canada caregiver amount for spouse or common-law partner",
+      "formula": "if(line.HH.partner == 1 and answer.spouseInfirm, max(0, min(param.caregiverMax, max(0, param.caregiverBase - line.HH.spouseNetIncome)) - line.T1.30300), 0)",
+      "source": "Schedule 5 line 30425: $28,798 less their net income (up to $8,601), less the spouse amount"
+    },
+    "T1.30450": {
+      "label": "Canada caregiver amount for other infirm dependants age 18 or older",
+      "formula": "if(answer.hasInfirmDependant, if(answer.infirmDependants > 1, unsupported(\"The Canada caregiver amount for more than one adult dependant isn't handled by this app yet\"), if(answer.infirmDependants == 0, 0, min(param.caregiverMax, max(0, param.caregiverBase - answer.infirmDependantIncome)))), 0)",
+      "source": "Schedule 5 line 30450: $28,798 less the dependant's net income, up to $8,601"
+    },
+    "T1.30500": {
+      "label": "Canada caregiver amount for infirm children under 18 years of age",
+      "formula": "if(answer.hasInfirmChildren, answer.infirmChildren * param.caregiverChildAmount, 0)",
+      "source": "T1 lines 30499 and 30500: $2,687 for each child"
+    },
+    "T1.T84": {
+      "label": "Credit amounts for you and your dependants (T1 line 84)",
+      "formula": "line.T1.30000 + line.T1.30100 + line.T1.30300 + line.T1.30400 + line.T1.30425 + line.T1.30450 + line.T1.30500"
     },
     "T1.30800": {
       "label": "Base CPP contributions through employment",
@@ -1162,18 +1529,62 @@
       "formula": "min(param.canadaEmploymentAmount, line.T1.10100 + line.T1.10400)",
       "module": "credits"
     },
+    "T1.31220": {
+      "label": "Volunteer firefighters' amount",
+      "formula": "if(answer.hasVolunteerService, if(answer.volunteerKind == \"firefighter\", param.volunteerAmount, 0), 0)"
+    },
+    "T1.31240": {
+      "label": "Search and rescue volunteers' amount",
+      "formula": "if(answer.hasVolunteerService, if(answer.volunteerKind == \"search_rescue\", param.volunteerAmount, 0), 0)",
+      "source": "T1 lines 31220 and 31240: one or the other"
+    },
+    "T1.31270": {
+      "label": "Home buyers' amount",
+      "formula": "if(household.partnerInYear and line.HH.partner == 1 and answer.homeBuyers + spouse.answer.homeBuyers > param.homeBuyersMax, unsupported(\"You and your spouse or partner can claim at most $10,000 together for the home buyers' amount. Lower one of the claims\"), min(answer.homeBuyers, param.homeBuyersMax))"
+    },
+    "T1.31285": {
+      "label": "Home accessibility expenses",
+      "formula": "min(answer.homeAccessibility, param.homeAccessibilityMax)"
+    },
+    "T1.31300": {
+      "label": "Adoption expenses",
+      "formula": "if(answer.hasAdoption, if(answer.adoptedChildren > 1 and answer.adoptionExpenses > param.adoptionMax, unsupported(\"Adoption expenses over $19,580 for more than one child are claimed child by child, which this app doesn't handle yet\"), min(answer.adoptionExpenses, param.adoptionMax)), 0)",
+      "source": "canada.ca/line-31300: up to $19,580 for each child"
+    },
+    "T1.T96": {
+      "label": "CPP, EI, volunteer, employment, home and adoption amounts (T1 line 96)",
+      "formula": "line.T1.30800 + line.T1.31000 + line.T1.31200 + line.T1.31220 + line.T1.31240 + line.T1.31260 + line.T1.31270 + line.T1.31285 + line.T1.31300"
+    },
     "T1.31400": {
       "label": "Pension income amount",
       "formula": "min(param.pensionIncomeAmountMax, line.T1.11500)",
       "source": "Federal Worksheet, line 31400: eligible pension income on line 11500, up to $2,000"
     },
+    "T1.31600": {
+      "label": "Disability amount for self",
+      "formula": "if(answer.hasDisability, param.disabilityAmount, 0)",
+      "source": "T1 line 31600: $10,138 at 18 or older, with an approved Form T2201"
+    },
+    "T1.31800": {
+      "label": "Disability amount transferred from a dependant",
+      "formula": "if(answer.hasDisabledDependant, if(answer.disabledChildren > 1 and answer.disabledChildCare > 0, unsupported(\"Child care for more than one child with a disability is worked out child by child, which this app doesn't handle yet\"), answer.disabledChildren * (param.disabilityAmount + param.disabilitySupplementMax) - min(answer.disabledChildren * param.disabilitySupplementMax, max(0, answer.disabledChildCare - param.disabilityCareThreshold)) + answer.disabledAdults * param.disabilityAmount), 0)",
+      "source": "Federal Worksheet, line 31800: $10,138, plus up to $5,914 for a child under 18, less care over $3,464. The app assumes the dependant had no income"
+    },
     "T1.T101": {
       "label": "Credit amounts before tuition (T1 line 101)",
-      "formula": "line.T1.30000 + line.T1.30100 + line.T1.30300 + line.T1.30400 + line.T1.30800 + line.T1.31000 + line.T1.31200 + line.T1.31260 + line.T1.31400"
+      "formula": "line.T1.T84 + line.T1.T96 + line.T1.31400 + line.T1.31600 + line.T1.31800"
+    },
+    "T1.31900": {
+      "label": "Interest paid on your student loans",
+      "formula": "answer.studentLoanInterest"
     },
     "T1.32300": {
       "label": "Federal tuition amount",
       "formula": "line.S11.17"
+    },
+    "T1.32400": {
+      "label": "Tuition amount transferred from a child or grandchild",
+      "formula": "answer.childTuitionTransfer"
     },
     "T1.32600": {
       "label": "Amounts transferred from your spouse or common-law partner",
@@ -1190,14 +1601,19 @@
       "formula": "answer.medicalExpenses + sum(MEDICAL.box1)",
       "source": "Medical expense receipts, and the amount entered that isn't on one"
     },
+    "T1.33199": {
+      "label": "Allowable amount of medical expenses for other dependants",
+      "formula": "if(answer.hasOtherDependantMedical, max(0, answer.otherDependantMedical - min(param.medicalThresholdMax, round(answer.otherDependantIncome * param.medicalThresholdRate, 2))), 0)",
+      "source": "Federal Worksheet, line 33199: their expenses over whichever is less, $2,834 or 3% of their net income"
+    },
     "T1.33200": {
       "label": "Allowable medical expenses",
-      "formula": "max(0, line.T1.33099 - min(param.medicalThresholdMax, round(line.T1.23600 * param.medicalThresholdRate, 2)))",
-      "source": "T1 lines 107 to 112: expenses over whichever is less, $2,834 or 3% of net income"
+      "formula": "max(0, line.T1.33099 - min(param.medicalThresholdMax, round(line.T1.23600 * param.medicalThresholdRate, 2))) + line.T1.33199",
+      "source": "T1 lines 107 to 112: expenses over whichever is less, $2,834 or 3% of net income, and those for other dependants"
     },
     "T1.33500": {
       "label": "Federal non-refundable credit amounts",
-      "formula": "line.T1.T101 + line.T1.32300 + line.T1.32600 + line.T1.33200"
+      "formula": "line.T1.T101 + line.T1.31900 + line.T1.32300 + line.T1.32400 + line.T1.32600 + line.T1.33200"
     },
     "T1.33800": {
       "label": "Credit amounts at the credit rate",
@@ -1258,9 +1674,26 @@
       "label": "Federal tax",
       "formula": "line.T1.42900 - line.T1.40500"
     },
+    "T1.40900": {
+      "label": "Total federal political contributions",
+      "formula": "answer.politicalContributions"
+    },
+    "T1.41000": {
+      "label": "Federal political contribution tax credit",
+      "formula": "if(line.T1.40900 >= param.politicalCreditMaxContributions, param.politicalCreditMax, round(bracket(param.politicalCreditRates, line.T1.40900), 2))",
+      "source": "Federal Worksheet, line 41000"
+    },
+    "T1.41600": {
+      "label": "Federal political contribution, investment and labour-sponsored funds credits",
+      "formula": "line.T1.41000"
+    },
+    "T1.41700": {
+      "label": "Federal tax after those credits",
+      "formula": "max(0, line.T1.40600 - line.T1.41600)"
+    },
     "T1.42000": {
       "label": "Net federal tax",
-      "formula": "line.T1.40600"
+      "formula": "line.T1.41700 + line.T1.41500"
     },
     "T1.42800": {
       "label": "Provincial tax",
@@ -1292,9 +1725,112 @@
       "label": "Employment insurance overpayment",
       "formula": "if(sum(T4.box18) > param.eiPremiumMax, unsupported(\"More EI was deducted than the 2025 maximum. The overpayment isn't handled by this app yet\"), 0)"
     },
+    "MED.earned": {
+      "label": "Earnings for the refundable medical expense supplement",
+      "formula": "max(0, line.T1.10100 + line.T1.10400 - line.T1.20700 - line.T1.21200 - line.T1.22900) + max(0, line.SE.net)",
+      "source": "Federal Worksheet, line 45200: employment income less lines 20700, 21200 and 22900, and net self-employment income"
+    },
+    "MED.familyIncome": {
+      "label": "Adjusted family net income for the refundable medical expense supplement",
+      "formula": "max(0, line.T1.23600 - line.T1.12500) + if(line.HH.partner == 1, if(household.partnerInYear, max(0, spouse.line.T1.23600 - spouse.line.T1.12500), line.HH.spouseNetIncome), 0)",
+      "source": "Federal Worksheet, line 45200, lines 1 to 6"
+    },
+    "T1.45200": {
+      "label": "Refundable medical expense supplement",
+      "formula": "if(person.age >= 18 and line.MED.earned >= param.medicalSupplementMinEarnings, max(0, min(round((line.T1.21500 + line.T1.33200) * param.medicalSupplementRate, 2), param.medicalSupplementMax) - round(max(0, line.MED.familyIncome - param.medicalSupplementThreshold) * param.medicalSupplementReductionRate, 2)), 0)",
+      "source": "Federal Worksheet, line 45200: 25% of lines 21500 and 33200, up to $1,504, less 5% of family net income over $33,294"
+    },
+    "CWB.working": {
+      "label": "Working income",
+      "formula": "line.T1.10100 + line.T1.10400 + line.T1.13010 + max(0, line.SE.net)",
+      "source": "Schedule 6, Part A, lines 1 to 5"
+    },
+    "CWB.netIncome": {
+      "label": "Net income for the Canada workers benefit",
+      "formula": "max(0, line.T1.23600 - line.T1.12500)",
+      "source": "Schedule 6, Part B, lines 7 to 12"
+    },
+    "CWB.dependant": {
+      "label": "An eligible dependant (1 for yes)",
+      "formula": "if(household.childrenUnder19 > 0, 1, 0)",
+      "source": "Schedule 6: a child under 19 who lived with you on December 31"
+    },
+    "CWB.student": {
+      "label": "A full-time student for more than 13 weeks without an eligible dependant (1 for yes)",
+      "formula": "if(sum(T2202.box25) > param.cwbStudentMonths and line.CWB.dependant == 0, 1, 0)"
+    },
+    "CWB.spouse": {
+      "label": "An eligible spouse (1 for yes)",
+      "formula": "if(line.HH.partner == 1, if(household.partnerInYear, if(spouse.line.CWB.student == 1, 0, 1), 1), 0)"
+    },
+    "CWB.eligible": {
+      "label": "Eligible for the Canada workers benefit (1 for yes)",
+      "formula": "if(line.CWB.student == 0 and (person.age >= 19 or line.CWB.spouse == 1 or line.CWB.dependant == 1), 1, 0)",
+      "source": "Schedule 6: 19 or older (or with a spouse or a child) and not a full-time student for more than 13 weeks"
+    },
+    "CWB.familyWorking": {
+      "label": "Family working income",
+      "formula": "line.CWB.working + if(line.CWB.spouse == 1 and household.partnerInYear, spouse.line.CWB.working, 0)",
+      "source": "Schedule 6, line 6"
+    },
+    "CWB.familyIncome": {
+      "label": "Adjusted family net income",
+      "formula": "if(line.CWB.spouse == 1, if(household.partnerInYear, line.CWB.netIncome + spouse.line.CWB.netIncome - min(param.cwbSecondaryEarnerMax, if(line.CWB.working < spouse.line.CWB.working, min(line.CWB.working, line.CWB.netIncome), min(spouse.line.CWB.working, spouse.line.CWB.netIncome))), if(line.CWB.netIncome + line.HH.spouseNetIncome - min(param.cwbSecondaryEarnerMax, line.CWB.netIncome, line.HH.spouseNetIncome) < param.cwbFamilyLimit and line.CWB.working > 0, unsupported(\"The Canada workers benefit for a couple needs your spouse's or partner's working income: prepare their return here too\"), param.cwbFamilyLimit)), line.CWB.netIncome)",
+      "source": "Schedule 6, lines 13 to 15: with the secondary earner exemption (up to $16,386). With a spouse whose return isn't prepared here, a family that might get the benefit is asked to prepare it; one that can't is put at the limit"
+    },
+    "CWB.claimsBasic": {
+      "label": "This return claims the couple's basic benefit (1 for yes)",
+      "formula": "if(line.CWB.eligible == 0, 0, if(line.CWB.spouse == 0 or not household.partnerInYear, 1, if(spouse.line.CWB.eligible == 0 or line.CWB.working > spouse.line.CWB.working or (line.CWB.working == spouse.line.CWB.working and person.role == \"self\"), 1, 0)))"
+    },
+    "CWB.basic": {
+      "label": "Basic Canada workers benefit",
+      "formula": "if(line.CWB.claimsBasic == 1, max(0, min(round(max(0, line.CWB.familyWorking - param.cwbWorkingIncomeBase) * param.cwbRate, 2), if(line.CWB.spouse == 1 or line.CWB.dependant == 1, param.cwbMaxFamily, param.cwbMaxSingle)) - round(max(0, line.CWB.familyIncome - if(line.CWB.spouse == 1 or line.CWB.dependant == 1, param.cwbIncomeBaseFamily, param.cwbIncomeBaseSingle)) * param.cwbReductionRate, 2)), 0)",
+      "source": "Schedule 6, Step 2: 27% of family working income over $3,000, up to the maximum, less 15% of adjusted family net income over the base"
+    },
+    "CWB.disability": {
+      "label": "Canada workers benefit disability supplement",
+      "formula": "if(line.CWB.eligible == 1 and answer.hasDisability, max(0, min(round(max(0, line.CWB.working - param.cwbDisabilityWorkingBase) * param.cwbRate, 2), param.cwbDisabilityMax) - round(max(0, line.CWB.familyIncome - if(line.CWB.spouse == 1 or line.CWB.dependant == 1, param.cwbDisabilityIncomeBaseFamily, param.cwbDisabilityIncomeBaseSingle)) * if(line.CWB.spouse == 1 and household.partnerInYear and spouse.answer.hasDisability, param.cwbReductionRateBothDisabled, param.cwbReductionRate), 2)), 0)",
+      "source": "Schedule 6, Step 3: 27% of working income over $1,150, up to $843, less 15% (7.5% when both spouses have the disability tax credit) of adjusted family net income over the base"
+    },
+    "T1.45300": {
+      "label": "Canada workers benefit",
+      "formula": "line.CWB.basic + line.CWB.disability",
+      "source": "Schedule 6, line 42"
+    },
+    "T1.41500": {
+      "label": "Advanced Canada workers benefit",
+      "formula": "min(max(line.CWB.basic, line.T1.45300), if(line.CWB.claimsBasic == 1, sum(RC210.box10) + if(household.partnerInYear and line.HH.partner == 1, sum(spouse.RC210.box10), 0), 0) + sum(RC210.box11))",
+      "source": "Schedule 6, Step 4: the advance payments (RC210 box 10 of both spouses, on the return claiming the basic benefit, and box 11), up to the benefit"
+    },
+    "T1.45350": {
+      "label": "Canada training credit",
+      "formula": "min(round(sum(T2202.box26) * param.trainingCreditRate, 2), answer.trainingCreditLimit)",
+      "source": "Schedule 11, lines 1 to 5"
+    },
+    "T1.45355": {
+      "label": "Multigenerational home renovation tax credit",
+      "formula": "round(min(answer.multigenerationalRenovation, param.renovationMax) * param.renovationRate, 2)",
+      "source": "Schedule 12: 14.5% of qualifying expenditures, up to $50,000"
+    },
+    "T1.45600": {
+      "label": "Part XII.2 tax credit",
+      "formula": "sum(T3.box38)"
+    },
+    "T1.46800": {
+      "label": "Eligible school supplies expenses",
+      "formula": "min(answer.teacherSupplies, param.educatorMax)"
+    },
+    "T1.46900": {
+      "label": "Eligible educator school supply tax credit",
+      "formula": "round(line.T1.46800 * param.educatorRate, 2)"
+    },
+    "T1.47600": {
+      "label": "Tax paid by instalments",
+      "formula": "answer.instalmentsPaid"
+    },
     "T1.48200": {
       "label": "Total credits",
-      "formula": "line.T1.43700 + line.T1.44800 + line.T1.45000"
+      "formula": "line.T1.43700 + line.T1.44800 + line.T1.45000 + line.T1.45200 + line.T1.45300 + line.T1.45350 + line.T1.45355 + line.T1.45600 + line.T1.46900 + line.T1.47600"
     },
     "T1.48400": {
       "label": "Refund",
@@ -1306,8 +1842,8 @@
     },
     "S2.6": {
       "label": "Their age amount, pension income amount, and the tuition they designate to you",
-      "formula": "spouse.line.T1.30100 + spouse.line.T1.31400 + spouse.line.S11.24",
-      "source": "Schedule 2 lines 1, 3 and 5"
+      "formula": "spouse.line.T1.30100 + spouse.line.T1.30500 + spouse.line.T1.31400 + spouse.line.T1.31600 + spouse.line.S11.24",
+      "source": "Schedule 2 lines 1 to 5"
     },
     "S2.7": {
       "label": "Their taxable income, for the transfer",
@@ -1316,7 +1852,7 @@
     },
     "S2.11": {
       "label": "Their basic personal amount, CPP, EI and employment amounts, and tuition",
-      "formula": "spouse.line.T1.30000 + spouse.line.T1.30800 + spouse.line.T1.31000 + spouse.line.T1.31200 + spouse.line.T1.31260 + spouse.line.T1.32300",
+      "formula": "spouse.line.T1.30000 + spouse.line.T1.T96 + spouse.line.T1.32300",
       "source": "Schedule 2 lines 8 to 11: their lines 30000, 96 and 32300"
     },
     "S2.12": {
@@ -1411,8 +1947,8 @@
     },
     "S11.8": {
       "label": "Tuition fees for 2025",
-      "formula": "sum(T2202.box26)",
-      "source": "Schedule 11 lines 1 to 8: eligible fees from T2202 box 26. The Canada training credit isn't claimed"
+      "formula": "sum(T2202.box26) - line.T1.45350",
+      "source": "Schedule 11 lines 1 to 8: eligible fees from T2202 box 26, less the Canada training credit claimed"
     },
     "S11.9": {
       "label": "Unused federal tuition from your 2024 notice of assessment",
@@ -1457,6 +1993,11 @@
       "label": "RRSP contributions you can deduct for 2025",
       "formula": "if(sum(NOA.box1) > 0, min(sum(RRSP.box1) + sum(RRSP.box2) + sum(NOA.box2), sum(NOA.box1)), sum(RRSP.box1) + sum(RRSP.box2) + sum(NOA.box2))",
       "source": "RRSP receipts, and the unused contributions and deduction limit on your 2024 notice of assessment"
+    },
+    "SUGGEST.trainingCreditLimit": {
+      "label": "Canada training credit limit",
+      "formula": "sum(NOA.box4)",
+      "source": "Your 2024 notice of assessment"
     },
     "SUGGEST.unusedTuition": {
       "label": "Unused federal tuition carried forward",
@@ -1506,8 +2047,8 @@
     },
     "ON428.34": {
       "label": "Ontario amounts transferred from your spouse or common-law partner",
-      "formula": "if(line.HH.partner == 1 and household.partnerInYear, if(spouse.line.ON428.10 + spouse.line.ON428.27 == 0, 0, if(spouse.person.province == \"ON\", line.ONS2.11, unsupported(\"Your spouse lives in another province: transferring their Ontario age or pension amount isn't handled by this app\"))), 0)",
-      "source": "Schedule ON(S2): their unused Ontario age and pension income amounts"
+      "formula": "if(line.HH.partner == 1 and household.partnerInYear, if(spouse.line.ON428.10 + spouse.line.ON428.27 == 0, 0, line.ONS2.11), 0)",
+      "source": "Schedule ON(S2): their unused Ontario age and pension income amounts. A spouse living in another province is read as if they lived in Ontario, as the schedule asks: the engine works out Ontario's lines for anyone"
     },
     "ON428.44": {
       "label": "Ontario credit amounts",
@@ -1684,9 +2225,9 @@
     },
     "hasPensionIncome": {
       "type": "boolean",
-      "ask": "A workplace pension or an annuity",
+      "ask": "A pension, annuity, scholarship or other T4A income",
       "module": "income",
-      "help": "A T4A from each pension plan or payer.",
+      "help": "A T4A from each pension plan, school or other payer.",
       "slip": "T4A"
     },
     "hasRrifIncome": {
@@ -1846,6 +2387,40 @@
       "help": "Real estate commission, legal fees and other costs of selling.",
       "parent": "soldProperty"
     },
+    "hasRrspIncome": {
+      "type": "boolean",
+      "ask": "RRSP withdrawals",
+      "module": "income",
+      "help": "A T4RSP from each plan you took money out of in 2025.",
+      "slip": "T4RSP"
+    },
+    "hasBenefitsStatement": {
+      "type": "boolean",
+      "ask": "Workers' compensation or social assistance",
+      "module": "income",
+      "help": "A T5007 from the board or the government that paid you.",
+      "slip": "T5007"
+    },
+    "hasSupportReceived": {
+      "type": "boolean",
+      "ask": "Support payments received",
+      "module": "income",
+      "help": "Payments from a former spouse or partner under a court order or written agreement.",
+      "default": false
+    },
+    "supportReceived": {
+      "type": "money",
+      "ask": "Total support received in 2025",
+      "module": "income",
+      "parent": "hasSupportReceived"
+    },
+    "childSupportReceived": {
+      "type": "money",
+      "ask": "The part that is child support",
+      "module": "income",
+      "help": "Child support under an order or agreement made after April 1997 isn't taxable.",
+      "parent": "hasSupportReceived"
+    },
     "rrspDeduction": {
       "type": "money",
       "ask": "RRSP contributions to deduct for 2025",
@@ -1918,6 +2493,266 @@
       "help": "Employment or self-employment income from the new job or business in 2025, less its deductions (union dues, CPP).",
       "parent": "hasMovingExpenses"
     },
+    "hasSupportPaid": {
+      "type": "boolean",
+      "ask": "Support payments made",
+      "module": "deductions",
+      "help": "Payments to a former spouse or partner under a court order or written agreement.",
+      "default": false
+    },
+    "supportPaid": {
+      "type": "money",
+      "ask": "Total support paid in 2025",
+      "module": "deductions",
+      "parent": "hasSupportPaid"
+    },
+    "childSupportPaid": {
+      "type": "money",
+      "ask": "The part that is child support",
+      "module": "deductions",
+      "help": "Child support under an order or agreement made after April 1997 isn't deductible.",
+      "parent": "hasSupportPaid"
+    },
+    "carryingCharges": {
+      "type": "money",
+      "ask": "Interest and fees to earn investment income",
+      "module": "deductions",
+      "help": "Interest on money borrowed to invest (outside an RRSP or TFSA) and investment counsel fees.",
+      "default": "0"
+    },
+    "hasDisabilitySupports": {
+      "type": "boolean",
+      "ask": "Disability supports",
+      "module": "deductions",
+      "help": "Attendant care, sign-language interpretation, devices and other supports paid so you could work or go to school (Form T929).",
+      "default": false
+    },
+    "disabilitySupportsExpenses": {
+      "type": "money",
+      "ask": "Disability supports paid",
+      "module": "deductions",
+      "help": "Less what was paid back to you.",
+      "parent": "hasDisabilitySupports"
+    },
+    "nonCapitalLosses": {
+      "type": "money",
+      "ask": "Non-capital losses of earlier years to apply",
+      "module": "deductions",
+      "help": "Losses from a business or employment in earlier years that you haven't used yet.",
+      "default": "0"
+    },
+    "netCapitalLosses": {
+      "type": "money",
+      "ask": "Net capital losses of earlier years to apply",
+      "module": "deductions",
+      "help": "From your notice of assessment. They can only reduce this year's taxable capital gains.",
+      "default": "0"
+    },
+    "hasDisability": {
+      "type": "boolean",
+      "ask": "Disability tax credit",
+      "module": "credits",
+      "help": "The CRA approved your Form T2201, Disability Tax Credit Certificate.",
+      "default": false
+    },
+    "spouseInfirm": {
+      "type": "boolean",
+      "ask": "Your spouse or partner depends on you because of an impairment",
+      "module": "credits",
+      "help": "An impairment in physical or mental functions that makes them dependent on others for personal needs (Canada caregiver amount).",
+      "default": false
+    },
+    "hasInfirmChildren": {
+      "type": "boolean",
+      "ask": "A child under 18 with an impairment",
+      "module": "credits",
+      "help": "A child who, because of an impairment, depends on others for personal needs much more than children of the same age.",
+      "default": false
+    },
+    "infirmChildren": {
+      "type": "count",
+      "ask": "Number of children",
+      "module": "credits",
+      "parent": "hasInfirmChildren"
+    },
+    "hasInfirmDependant": {
+      "type": "boolean",
+      "ask": "An adult relative with an impairment depends on you",
+      "module": "credits",
+      "help": "A parent, grandparent, adult child, brother, sister, aunt, uncle, niece or nephew, 18 or older, with a net income under $28,798.",
+      "default": false
+    },
+    "infirmDependants": {
+      "type": "count",
+      "ask": "Number of dependants",
+      "module": "credits",
+      "parent": "hasInfirmDependant"
+    },
+    "infirmDependantIncome": {
+      "type": "money",
+      "ask": "Their net income",
+      "module": "credits",
+      "help": "Line 23600 of their return, or what it would be.",
+      "parent": "hasInfirmDependant"
+    },
+    "hasDisabledDependant": {
+      "type": "boolean",
+      "ask": "A dependant with the disability tax credit",
+      "module": "credits",
+      "help": "A child or another relative who depends on you, has no income and has an approved Form T2201.",
+      "default": false
+    },
+    "disabledChildren": {
+      "type": "count",
+      "ask": "Children under 18",
+      "module": "credits",
+      "parent": "hasDisabledDependant"
+    },
+    "disabledChildCare": {
+      "type": "money",
+      "ask": "Child care and attendant care claimed for them",
+      "module": "credits",
+      "help": "By you or anyone else, as child care or medical expenses.",
+      "parent": "hasDisabledDependant"
+    },
+    "disabledAdults": {
+      "type": "count",
+      "ask": "Dependants 18 or older",
+      "module": "credits",
+      "parent": "hasDisabledDependant"
+    },
+    "hasVolunteerService": {
+      "type": "boolean",
+      "ask": "Volunteer firefighter or search and rescue",
+      "module": "credits",
+      "help": "At least 200 hours of eligible volunteer service in 2025.",
+      "default": false
+    },
+    "volunteerKind": {
+      "type": "choice",
+      "ask": "Service",
+      "module": "credits",
+      "parent": "hasVolunteerService",
+      "optionLabels": {
+        "firefighter": "Volunteer firefighter",
+        "search_rescue": "Search and rescue volunteer"
+      },
+      "options": [
+        "firefighter",
+        "search_rescue"
+      ]
+    },
+    "homeBuyers": {
+      "type": "money",
+      "ask": "Home buyers' amount",
+      "module": "credits",
+      "help": "Up to $10,000 when you or your spouse bought a first home in 2025, or a home for a person with a disability. A couple shares the $10,000.",
+      "default": "0"
+    },
+    "homeAccessibility": {
+      "type": "money",
+      "ask": "Home accessibility renovations",
+      "module": "credits",
+      "help": "Up to $20,000 to make a home safer or easier to use for someone 65 or older or with the disability tax credit.",
+      "default": "0"
+    },
+    "hasAdoption": {
+      "type": "boolean",
+      "ask": "Adoption expenses",
+      "module": "credits",
+      "help": "For an adoption completed in 2025.",
+      "default": false
+    },
+    "adoptionExpenses": {
+      "type": "money",
+      "ask": "Eligible adoption expenses",
+      "module": "credits",
+      "help": "Less any reimbursement or assistance.",
+      "parent": "hasAdoption"
+    },
+    "adoptedChildren": {
+      "type": "count",
+      "ask": "Children adopted",
+      "module": "credits",
+      "parent": "hasAdoption"
+    },
+    "studentLoanInterest": {
+      "type": "money",
+      "ask": "Interest paid on student loans",
+      "module": "credits",
+      "help": "On loans under the Canada Student Loans Act or a provincial student loan program, for 2025 and up to five earlier years not claimed.",
+      "default": "0"
+    },
+    "childTuitionTransfer": {
+      "type": "money",
+      "ask": "Tuition transferred from a child or grandchild",
+      "module": "credits",
+      "help": "The amount they designated to you on their T2202, up to $5,000 each.",
+      "default": "0"
+    },
+    "hasOtherDependantMedical": {
+      "type": "boolean",
+      "ask": "Medical expenses for another dependant",
+      "module": "credits",
+      "help": "An adult child or grandchild, a parent, grandparent, brother, sister, aunt, uncle, niece or nephew who depended on you.",
+      "default": false
+    },
+    "otherDependantMedical": {
+      "type": "money",
+      "ask": "Their medical expenses you paid",
+      "module": "credits",
+      "parent": "hasOtherDependantMedical"
+    },
+    "otherDependantIncome": {
+      "type": "money",
+      "ask": "Their net income",
+      "module": "credits",
+      "parent": "hasOtherDependantMedical"
+    },
+    "politicalContributions": {
+      "type": "money",
+      "ask": "Federal political contributions",
+      "module": "credits",
+      "help": "To a registered federal party, association or candidate, on official receipts.",
+      "default": "0"
+    },
+    "teacherSupplies": {
+      "type": "money",
+      "ask": "School supplies you paid as a teacher or early childhood educator",
+      "module": "credits",
+      "help": "Up to $1,000 of supplies for your teaching, not paid back to you.",
+      "default": "0"
+    },
+    "multigenerationalRenovation": {
+      "type": "money",
+      "ask": "Multigenerational home renovation",
+      "module": "credits",
+      "help": "Up to $50,000 to build a secondary unit for a senior or an adult with a disability to live with a relative (Schedule 12).",
+      "default": "0"
+    },
+    "hasCwbAdvance": {
+      "type": "boolean",
+      "ask": "Canada workers benefit paid in advance",
+      "module": "credits",
+      "help": "An RC210 from the CRA.",
+      "slip": "RC210"
+    },
+    "trainingCreditLimit": {
+      "type": "money",
+      "ask": "Canada training credit limit from your 2024 notice of assessment",
+      "module": "credits",
+      "help": "Half your 2025 tuition is refunded, up to this limit.",
+      "receipts": "NOA",
+      "suggest": "SUGGEST.trainingCreditLimit",
+      "default": "0"
+    },
+    "instalmentsPaid": {
+      "type": "money",
+      "ask": "Tax paid by instalments",
+      "module": "credits",
+      "help": "Instalments you paid to the CRA for 2025.",
+      "default": "0"
+    },
     "hasTuition": {
       "type": "boolean",
       "ask": "Tuition at a college or university",
@@ -1987,6 +2822,10 @@
         "22": "Income tax deducted",
         "24": "EI insurable earnings",
         "26": "CPP pensionable earnings",
+        "39": "Security options deduction under 110(1)(d)",
+        "41": "Security options deduction under 110(1)(d.1)",
+        "42": "Employment commissions",
+        "43": "Canadian Armed Forces personnel and police deduction",
         "44": "Union dues",
         "46": "Charitable donations",
         "52": "Pension adjustment",
@@ -2035,6 +2874,7 @@
         "25": "Foreign non-business income",
         "26": "Other income",
         "32": "Taxable amount of dividends other than eligible dividends",
+        "38": "Part XII.2 tax credit",
         "39": "Dividend tax credit for dividends other than eligible dividends",
         "49": "Actual amount of eligible dividends",
         "50": "Taxable amount of eligible dividends",
@@ -2133,9 +2973,10 @@
     },
     "T4A": {
       "title": "T4A Statement of Pension, Retirement, Annuity, and Other Income",
-      "about": "A workplace pension, an annuity or other income from a pension plan or payer, and the tax deducted from it",
+      "about": "A workplace pension, an annuity, a scholarship or bursary, an RDSP payment or other income from a payer, and the tax deducted from it",
       "boxes": {
         "105": "Scholarships, bursaries, fellowships, artists' project grants and prizes",
+        "131": "Registered disability savings plan",
         "016": "Pension or superannuation",
         "018": "Lump-sum payments",
         "020": "Self-employed commissions",
@@ -2158,6 +2999,59 @@
         "18": "Amounts deemed received on death",
         "24": "Excess amount",
         "28": "Income tax deducted"
+      },
+      "informational": [],
+      "counts": [],
+      "receipt": false,
+      "printedYears": [
+        0
+      ]
+    },
+    "T4RSP": {
+      "title": "T4RSP Statement of RRSP Income",
+      "about": "Withdrawals and other income from a registered retirement savings plan (RRSP), and the tax deducted from them",
+      "boxes": {
+        "16": "Annuity payments",
+        "18": "Refund of premiums",
+        "20": "Refund of excess contributions",
+        "22": "Withdrawal and commutation payments",
+        "25": "Lifelong Learning Plan withdrawal",
+        "26": "Amounts deemed received on deregistration",
+        "27": "Home Buyers' Plan withdrawal",
+        "28": "Other income or deductions",
+        "30": "Income tax deducted",
+        "34": "Amounts deemed received on death"
+      },
+      "informational": [
+        "25",
+        "27"
+      ],
+      "counts": [],
+      "receipt": false,
+      "printedYears": [
+        0
+      ]
+    },
+    "T5007": {
+      "title": "T5007 Statement of Benefits",
+      "about": "Workers' compensation benefits or social assistance payments received in the year",
+      "boxes": {
+        "10": "Workers' compensation benefits",
+        "11": "Social assistance payments"
+      },
+      "informational": [],
+      "counts": [],
+      "receipt": false,
+      "printedYears": [
+        0
+      ]
+    },
+    "RC210": {
+      "title": "RC210 Advanced Canada Workers Benefit Statement",
+      "about": "The Canada workers benefit paid in advance during the year, by the CRA",
+      "boxes": {
+        "10": "Basic advanced Canada workers benefit",
+        "11": "Advanced Canada workers benefit disability supplement"
       },
       "informational": [],
       "counts": [],
@@ -2246,7 +3140,8 @@
       "boxes": {
         "1": "RRSP deduction limit for 2025",
         "2": "Unused RRSP contributions available to deduct for 2025",
-        "3": "Unused federal tuition, education and textbook amounts available for 2025"
+        "3": "Unused federal tuition, education and textbook amounts available for 2025",
+        "4": "Canada training credit limit for 2025"
       },
       "receipt": true,
       "printedYears": [
@@ -2384,6 +3279,13 @@
           "value": "line.T1.12100"
         },
         {
+          "key": "12",
+          "page": 3,
+          "x": 552,
+          "y": 401.3,
+          "value": "line.T1.12500"
+        },
+        {
           "key": "13",
           "page": 3,
           "x": 552,
@@ -2398,6 +3300,20 @@
           "value": "line.T1.12700"
         },
         {
+          "key": "15",
+          "page": 3,
+          "x": 552,
+          "y": 348.5,
+          "value": "line.T1.12800"
+        },
+        {
+          "key": "16",
+          "page": 3,
+          "x": 552,
+          "y": 334.3,
+          "value": "line.T1.12900"
+        },
+        {
           "key": "19",
           "page": 3,
           "x": 552,
@@ -2405,11 +3321,18 @@
           "value": "line.T1.13000"
         },
         {
+          "key": "20",
+          "page": 3,
+          "x": 552,
+          "y": 280.3,
+          "value": "line.T1.13010"
+        },
+        {
           "key": "21",
           "page": 3,
           "x": 552,
           "y": 266.8,
-          "value": "line.T1.15000 - line.T1.13500 - line.T1.13700 - line.T1.13900"
+          "value": "line.T1.15000 - line.T1.13500 - line.T1.13700 - line.T1.13900 - line.T1.14700"
         },
         {
           "key": "22",
@@ -2444,7 +3367,35 @@
           "page": 3,
           "x": 552,
           "y": 158.8,
-          "value": "line.T1.15000"
+          "value": "line.T1.15000 - line.T1.14700"
+        },
+        {
+          "key": "29",
+          "page": 3,
+          "x": 444,
+          "y": 145.3,
+          "value": "line.T1.14400"
+        },
+        {
+          "key": "30",
+          "page": 3,
+          "x": 444,
+          "y": 131.8,
+          "value": "line.T1.14500"
+        },
+        {
+          "key": "31",
+          "page": 3,
+          "x": 444,
+          "y": 118.3,
+          "value": "line.T1.14600"
+        },
+        {
+          "key": "32",
+          "page": 3,
+          "x": 552,
+          "y": 104.8,
+          "value": "line.T1.14700"
         },
         {
           "key": "33",
@@ -2496,11 +3447,32 @@
           "value": "line.T1.21400"
         },
         {
+          "key": "42",
+          "page": 4,
+          "x": 444,
+          "y": 560.3,
+          "value": "line.T1.21500"
+        },
+        {
           "key": "44",
           "page": 4,
           "x": 444,
           "y": 520.3,
           "value": "line.T1.21900"
+        },
+        {
+          "key": "45",
+          "page": 4,
+          "x": 444,
+          "y": 494.8,
+          "value": "line.T1.22000"
+        },
+        {
+          "key": "46",
+          "page": 4,
+          "x": 444,
+          "y": 469.3,
+          "value": "line.T1.22100"
         },
         {
           "key": "47",
@@ -2566,6 +3538,48 @@
           "value": "line.T1.23600"
         },
         {
+          "key": "58",
+          "page": 5,
+          "x": 444,
+          "y": 717.8,
+          "value": "line.T1.24400"
+        },
+        {
+          "key": "59",
+          "page": 5,
+          "x": 444,
+          "y": 692.5,
+          "value": "line.T1.24900"
+        },
+        {
+          "key": "60",
+          "page": 5,
+          "x": 444,
+          "y": 666.8,
+          "value": "line.T1.25000"
+        },
+        {
+          "key": "62",
+          "page": 5,
+          "x": 444,
+          "y": 639.8,
+          "value": "line.T1.25200"
+        },
+        {
+          "key": "63",
+          "page": 5,
+          "x": 444,
+          "y": 626.3,
+          "value": "line.T1.25300"
+        },
+        {
+          "key": "68",
+          "page": 5,
+          "x": 552,
+          "y": 546.8,
+          "value": "line.T1.25700"
+        },
+        {
           "key": "69",
           "page": 5,
           "x": 552,
@@ -2601,18 +3615,39 @@
           "value": "line.T1.30400"
         },
         {
+          "key": "81",
+          "page": 5,
+          "x": 552,
+          "y": 159.3,
+          "value": "line.T1.30425"
+        },
+        {
+          "key": "82",
+          "page": 5,
+          "x": 552,
+          "y": 145.8,
+          "value": "line.T1.30450"
+        },
+        {
+          "key": "83",
+          "page": 5,
+          "x": 552,
+          "y": 120.3,
+          "value": "line.T1.30500"
+        },
+        {
           "key": "84",
           "page": 5,
           "x": 552,
           "y": 106.8,
-          "value": "line.T1.30000 + line.T1.30100 + line.T1.30300 + line.T1.30400"
+          "value": "line.T1.T84"
         },
         {
           "key": "85",
           "page": 6,
           "x": 552,
           "y": 734.3,
-          "value": "line.T1.30000 + line.T1.30100 + line.T1.30300 + line.T1.30400"
+          "value": "line.T1.T84"
         },
         {
           "key": "86",
@@ -2636,6 +3671,20 @@
           "value": "line.T1.31200"
         },
         {
+          "key": "90",
+          "page": 6,
+          "x": 444,
+          "y": 642.8,
+          "value": "line.T1.31220"
+        },
+        {
+          "key": "91",
+          "page": 6,
+          "x": 444,
+          "y": 629.3,
+          "value": "line.T1.31240"
+        },
+        {
           "key": "92",
           "page": 6,
           "x": 444,
@@ -2643,11 +3692,32 @@
           "value": "line.T1.31260"
         },
         {
+          "key": "93",
+          "page": 6,
+          "x": 444,
+          "y": 590.3,
+          "value": "line.T1.31270"
+        },
+        {
+          "key": "94",
+          "page": 6,
+          "x": 444,
+          "y": 576.8,
+          "value": "line.T1.31285"
+        },
+        {
+          "key": "95",
+          "page": 6,
+          "x": 444,
+          "y": 563.3,
+          "value": "line.T1.31300"
+        },
+        {
           "key": "96",
           "page": 6,
           "x": 552,
           "y": 549.5,
-          "value": "line.T1.30800 + line.T1.31000 + line.T1.31200 + line.T1.31260"
+          "value": "line.T1.T96"
         },
         {
           "key": "97",
@@ -2661,7 +3731,21 @@
           "page": 6,
           "x": 552,
           "y": 522.5,
-          "value": "line.T1.T101"
+          "value": "line.T1.T84 + line.T1.T96 + line.T1.31400"
+        },
+        {
+          "key": "99",
+          "page": 6,
+          "x": 552,
+          "y": 497,
+          "value": "line.T1.31600"
+        },
+        {
+          "key": "100",
+          "page": 6,
+          "x": 552,
+          "y": 483.5,
+          "value": "line.T1.31800"
         },
         {
           "key": "101",
@@ -2671,11 +3755,25 @@
           "value": "line.T1.T101"
         },
         {
+          "key": "102",
+          "page": 6,
+          "x": 552,
+          "y": 456.5,
+          "value": "line.T1.31900"
+        },
+        {
           "key": "103",
           "page": 6,
           "x": 552,
           "y": 443,
           "value": "line.T1.32300"
+        },
+        {
+          "key": "104",
+          "page": 6,
+          "x": 552,
+          "y": 429.5,
+          "value": "line.T1.32400"
         },
         {
           "key": "105",
@@ -2689,7 +3787,7 @@
           "page": 6,
           "x": 552,
           "y": 402.5,
-          "value": "line.T1.T101 + line.T1.32300 + line.T1.32600"
+          "value": "line.T1.T101 + line.T1.31900 + line.T1.32300 + line.T1.32400 + line.T1.32600"
         },
         {
           "key": "107",
@@ -2717,7 +3815,14 @@
           "page": 6,
           "x": 444,
           "y": 336.5,
-          "value": "line.T1.33200"
+          "value": "line.T1.33200 - line.T1.33199"
+        },
+        {
+          "key": "111",
+          "page": 6,
+          "x": 444,
+          "y": 311,
+          "value": "line.T1.33199"
         },
         {
           "key": "112",
@@ -2839,11 +3944,32 @@
           "value": "line.T1.40600"
         },
         {
+          "key": "135",
+          "page": 7,
+          "x": 444,
+          "y": 494.3,
+          "value": "line.T1.41000"
+        },
+        {
+          "key": "138",
+          "page": 7,
+          "x": 552,
+          "y": 429.8,
+          "value": "line.T1.41600"
+        },
+        {
           "key": "139",
           "page": 7,
           "x": 552,
           "y": 416.3,
-          "value": "line.T1.40600"
+          "value": "line.T1.41700"
+        },
+        {
+          "key": "140",
+          "page": 7,
+          "x": 552,
+          "y": 402.8,
+          "value": "line.T1.41500"
         },
         {
           "key": "142",
@@ -2916,6 +4042,55 @@
           "value": "line.T1.45000"
         },
         {
+          "key": "154",
+          "page": 8,
+          "x": 444,
+          "y": 663.8,
+          "value": "line.T1.45200"
+        },
+        {
+          "key": "155",
+          "page": 8,
+          "x": 444,
+          "y": 650.3,
+          "value": "line.T1.45300"
+        },
+        {
+          "key": "156",
+          "page": 8,
+          "x": 444,
+          "y": 636.8,
+          "value": "line.T1.45350"
+        },
+        {
+          "key": "157",
+          "page": 8,
+          "x": 444,
+          "y": 611.3,
+          "value": "line.T1.45355"
+        },
+        {
+          "key": "159",
+          "page": 8,
+          "x": 444,
+          "y": 584.3,
+          "value": "line.T1.45600"
+        },
+        {
+          "key": "161",
+          "page": 8,
+          "x": 444,
+          "y": 545.3,
+          "value": "line.T1.46900"
+        },
+        {
+          "key": "164",
+          "page": 8,
+          "x": 444,
+          "y": 504.8,
+          "value": "line.T1.47600"
+        },
+        {
           "key": "166",
           "page": 8,
           "x": 552,
@@ -2930,6 +4105,20 @@
           "value": "line.T1.43500 - line.T1.48200"
         },
         {
+          "key": "10120",
+          "page": 3,
+          "x": 444.1,
+          "y": 641.3,
+          "value": "line.T1.10120"
+        },
+        {
+          "key": "11410",
+          "page": 3,
+          "x": 444.1,
+          "y": 573.8,
+          "value": "line.T1.11410"
+        },
+        {
           "key": "12010",
           "page": 3,
           "x": 444.1,
@@ -2942,6 +4131,13 @@
           "x": 336.1,
           "y": 387.8,
           "value": "line.T1.12599"
+        },
+        {
+          "key": "12799",
+          "page": 3,
+          "x": 336.1,
+          "y": 348.5,
+          "value": "line.T1.12799"
         },
         {
           "key": "13499",
@@ -2963,6 +4159,27 @@
           "x": 279.1,
           "y": 212.8,
           "value": "line.T1.13899"
+        },
+        {
+          "key": "21999",
+          "page": 4,
+          "x": 228.1,
+          "y": 495,
+          "value": "line.T1.21999"
+        },
+        {
+          "key": "40900",
+          "page": 7,
+          "x": 228.1,
+          "y": 494.3,
+          "value": "line.T1.40900"
+        },
+        {
+          "key": "46800",
+          "page": 8,
+          "x": 300.1,
+          "y": 545.3,
+          "value": "line.T1.46800"
         },
         {
           "key": "48400",
@@ -4225,5 +5442,5 @@
     }
   },
   "outcome": "RESULT.net",
-  "version": "d31f06d20b38189a"
+  "version": "64c3c899f79613db"
 }

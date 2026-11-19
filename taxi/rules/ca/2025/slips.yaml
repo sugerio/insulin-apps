@@ -14,6 +14,10 @@ slips:
       22: Income tax deducted
       24: EI insurable earnings
       26: CPP pensionable earnings
+      39: Security options deduction under 110(1)(d)
+      41: Security options deduction under 110(1)(d.1)
+      42: Employment commissions
+      43: Canadian Armed Forces personnel and police deduction
       44: Union dues
       46: Charitable donations
       52: Pension adjustment
@@ -42,6 +46,7 @@ slips:
       25: Foreign non-business income
       26: Other income
       32: Taxable amount of dividends other than eligible dividends
+      38: Part XII.2 tax credit
       39: Dividend tax credit for dividends other than eligible dividends
       49: Actual amount of eligible dividends
       50: Taxable amount of eligible dividends
@@ -92,7 +97,7 @@ slips:
     informational: [14, 15, 16, 17, 18]   # parts of box 20, which holds the taxable total
   T4A:
     title: T4A Statement of Pension, Retirement, Annuity, and Other Income
-    about: A workplace pension, an annuity or other income from a pension plan or payer, and the tax deducted from it
+    about: A workplace pension, an annuity, a scholarship or bursary, an RDSP payment or other income from a payer, and the tax deducted from it
     boxes:
       "016": Pension or superannuation
       "018": Lump-sum payments
@@ -101,6 +106,7 @@ slips:
       "024": Annuities
       "028": Other income
       "105": Scholarships, bursaries, fellowships, artists' project grants and prizes
+      "131": Registered disability savings plan
   T4RIF:
     title: T4RIF Statement of Income from a Registered Retirement Income Fund
     about: Payments from a registered retirement income fund (RRIF), and the tax deducted from them
@@ -109,6 +115,33 @@ slips:
       18: Amounts deemed received on death
       24: Excess amount
       28: Income tax deducted
+  T4RSP:
+    title: T4RSP Statement of RRSP Income
+    about: Withdrawals and other income from a registered retirement savings plan (RRSP), and the tax deducted from them
+    boxes:
+      16: Annuity payments
+      18: Refund of premiums
+      20: Refund of excess contributions
+      22: Withdrawal and commutation payments
+      25: Lifelong Learning Plan withdrawal
+      26: Amounts deemed received on deregistration
+      27: Home Buyers' Plan withdrawal
+      28: Other income or deductions
+      30: Income tax deducted
+      34: Amounts deemed received on death
+    informational: [25, 27]   # withdrawals under the two plans aren't income; repaying them isn't handled yet
+  T5007:
+    title: T5007 Statement of Benefits
+    about: Workers' compensation benefits or social assistance payments received in the year
+    boxes:
+      10: Workers' compensation benefits
+      11: Social assistance payments
+  RC210:
+    title: RC210 Advanced Canada Workers Benefit Statement
+    about: The Canada workers benefit paid in advance during the year, by the CRA
+    boxes:
+      10: Basic advanced Canada workers benefit
+      11: Advanced Canada workers benefit disability supplement
   T4E:
     title: T4E Statement of Employment Insurance and Other Benefits
     about: Employment insurance benefits paid in the year, and the tax deducted from them
@@ -157,3 +190,4 @@ slips:
       1: RRSP deduction limit for 2025
       2: Unused RRSP contributions available to deduct for 2025
       3: Unused federal tuition, education and textbook amounts available for 2025
+      4: Canada training credit limit for 2025

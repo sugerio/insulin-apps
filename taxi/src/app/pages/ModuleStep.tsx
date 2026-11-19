@@ -302,7 +302,7 @@ function ModuleForm({
                       key={part.id}
                       label={part.ask}
                       help={part.help}
-                      unit={part.type === "percent" ? "%" : "$"}
+                      unit={part.type === "percent" ? "%" : part.type === "count" ? "" : "$"}
                       value={amounts[part.id] ?? ""}
                       disabled={!editable}
                       issue={issues.find((issue) => issue.path === `answers.${part.id}`)?.message}

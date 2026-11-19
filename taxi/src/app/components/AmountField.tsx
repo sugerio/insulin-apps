@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils.ts";
 export const cleanAmount = (value: string) => value.replace(/[$,%\s]/g, "");
 
 /**
- * An amount to enter, in dollars or as a percent. `labelHidden` keeps the label for screen readers only, where the card
+ * An amount to enter, in dollars, as a percent, or a count (no unit). `labelHidden` keeps the label for screen readers only, where the card
  * around it names it.
  */
 export function AmountField({
@@ -27,7 +27,7 @@ export function AmountField({
   onChange: (value: string) => void;
   disabled: boolean;
   issue?: string;
-  unit?: "$" | "%";
+  unit?: "$" | "%" | "";
 }) {
   const id = useId();
   return (
@@ -37,11 +37,13 @@ export function AmountField({
       </Label>
       {help ? <p className="text-xs text-muted-foreground">{help}</p> : null}
       <div className="relative w-48">
-        <span className={cn("pointer-events-none absolute top-1/2 -translate-y-1/2 text-sm text-muted-foreground", unit === "$" ? "left-2.5" : "right-2.5")}>{unit}</span>
+        {unit ? (
+          <span className={cn("pointer-events-none absolute top-1/2 -translate-y-1/2 text-sm text-muted-foreground", unit === "$" ? "left-2.5" : "right-2.5")}>{unit}</span>
+        ) : null}
         <Input
           id={id}
-          inputMode="decimal"
-          className={cn("text-right tabular-nums", unit === "$" ? "pl-6" : "pr-7")}
+          inputMode={unit ? "decimal" : "numeric"}
+          className={cn("text-right tabular-nums", unit === "$" ? "pl-6" : unit === "%" ? "pr-7" : undefined)}
           placeholder="0"
           value={value}
           disabled={disabled}

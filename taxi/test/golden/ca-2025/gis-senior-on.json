@@ -1,0 +1,134 @@
+{
+  "about": "A single senior in Ontario with OAS and the guaranteed income supplement (net federal supplements, deducted again on line 25000), a CPP pension, support paid to a former spouse, tuition transferred from a grandchild, and an adult relative with an impairment. Synthetic data.",
+  "input": {
+    "year": 2025,
+    "people": [
+      {
+        "id": "p1",
+        "name": "Dana Whitlow",
+        "role": "self",
+        "birthDate": "1954-08-30",
+        "province": "ON"
+      }
+    ],
+    "household": {
+      "maritalStatus": "divorced",
+      "dependants": []
+    },
+    "answers": {
+      "p1": {
+        "hasSupportPaid": true,
+        "supportPaid": "2400",
+        "childSupportPaid": "0",
+        "hasInfirmDependant": true,
+        "infirmDependants": "1",
+        "infirmDependantIncome": "21000",
+        "hasSelfEmployment": false,
+        "hasRentalIncome": false,
+        "hasForeignIncome": false,
+        "hasForeignProperty": false,
+        "soldProperty": false,
+        "hasSupportReceived": false,
+        "rrspDeduction": "0",
+        "fhsaDeduction": "0",
+        "hasWorkFromHome": false,
+        "hasChildCare": false,
+        "hasMovingExpenses": false,
+        "carryingCharges": "0",
+        "hasDisabilitySupports": false,
+        "nonCapitalLosses": "0",
+        "netCapitalLosses": "0",
+        "hasDisability": false,
+        "spouseInfirm": false,
+        "hasInfirmChildren": false,
+        "hasDisabledDependant": false,
+        "hasVolunteerService": false,
+        "homeBuyers": "0",
+        "homeAccessibility": "0",
+        "hasAdoption": false,
+        "studentLoanInterest": "0",
+        "childTuitionTransfer": "3000",
+        "hasOtherDependantMedical": false,
+        "politicalContributions": "0",
+        "teacherSupplies": "0",
+        "multigenerationalRenovation": "0",
+        "trainingCreditLimit": "0",
+        "instalmentsPaid": "0",
+        "unusedTuition": "0",
+        "tuitionTransfer": "0",
+        "medicalExpenses": "0",
+        "donations": "0"
+      }
+    },
+    "slips": [
+      {
+        "id": "s1",
+        "person": "p1",
+        "type": "T4AOAS",
+        "issuer": "Service Canada",
+        "boxes": {
+          "18": "8700",
+          "19": "8700",
+          "21": "6200"
+        }
+      },
+      {
+        "id": "s2",
+        "person": "p1",
+        "type": "T4AP",
+        "issuer": "Service Canada",
+        "boxes": {
+          "14": "7400",
+          "20": "7400"
+        }
+      }
+    ]
+  },
+  "expected": {
+    "p1": {
+      "T1.11300": "8700",
+      "T1.11400": "7400",
+      "T1.14600": "6200",
+      "T1.14700": "6200",
+      "T1.15000": "22300",
+      "T1.22000": "2400",
+      "DED.other": "2400",
+      "T1.23300": "2400",
+      "T1.23400": "19900",
+      "T1.23600": "19900",
+      "CPP.exemptionLeft": "3500",
+      "T1.25000": "6200",
+      "T1.25700": "6200",
+      "T1.26000": "13700",
+      "T1.30000": "16129",
+      "T1.30100": "9028",
+      "T1.30450": "7798",
+      "T1.T84": "32955",
+      "T1.T101": "32955",
+      "T1.32400": "3000",
+      "T1.33500": "35955",
+      "T1.33800": "5213.48",
+      "T1.35000": "5213.48",
+      "T1.40400": "1986.5",
+      "T1.42000": "0",
+      "T1.42800": "0",
+      "T1.43500": "0",
+      "T1.43700": "0",
+      "CWB.netIncome": "19900",
+      "CWB.eligible": "1",
+      "CWB.familyIncome": "19900",
+      "CWB.claimsBasic": "1",
+      "T1.48200": "0",
+      "T1.48400": "0",
+      "T1.48500": "0",
+      "S11.11": "13700",
+      "ON428.8": "691.85",
+      "ON428.9": "12747",
+      "ON428.10": "6223",
+      "ON428.44": "18970",
+      "ON428.46": "957.99",
+      "ON428.50": "957.99",
+      "ON428A.13": "19900"
+    }
+  }
+}

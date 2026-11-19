@@ -31,7 +31,31 @@
         "soldProperty": false,
         "hasChildCare": false,
         "hasWorkFromHome": false,
-        "hasMovingExpenses": false
+        "hasMovingExpenses": false,
+        "hasForeignProperty": false,
+        "hasSupportReceived": false,
+        "hasSupportPaid": false,
+        "carryingCharges": "0",
+        "hasDisabilitySupports": false,
+        "nonCapitalLosses": "0",
+        "netCapitalLosses": "0",
+        "hasDisability": false,
+        "spouseInfirm": false,
+        "hasInfirmChildren": false,
+        "hasInfirmDependant": false,
+        "hasDisabledDependant": false,
+        "hasVolunteerService": false,
+        "homeBuyers": "0",
+        "homeAccessibility": "0",
+        "hasAdoption": false,
+        "studentLoanInterest": "0",
+        "childTuitionTransfer": "0",
+        "hasOtherDependantMedical": false,
+        "politicalContributions": "0",
+        "teacherSupplies": "0",
+        "multigenerationalRenovation": "0",
+        "trainingCreditLimit": "0",
+        "instalmentsPaid": "0"
       }
     },
     "slips": [
@@ -137,7 +161,7 @@
       "T1.42800": "766.25",
       "T1.43500": "1753.02",
       "T1.43700": "5200",
-      "T1.48400": "3446.98",
+      "T1.48400": "3744.67",
       "T1.48500": "0"
     }
   }

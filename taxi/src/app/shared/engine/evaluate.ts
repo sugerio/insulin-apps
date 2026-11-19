@@ -2,7 +2,7 @@ import { z } from "zod";
 import { Dec } from "./decimal.ts";
 import { EngineError } from "./errors.ts";
 import type { BinaryOperator, Formula } from "./formula.ts";
-import type { BracketRow, RuleSet, Status } from "./rules.ts";
+import { isNumberQuestion, type BracketRow, type RuleSet, type Status } from "./rules.ts";
 
 // Evaluates a household's returns for one year. The input is one JSON document per household and year (the people,
 // their answers and their slips); the screens, AI reading and API clients all produce it. Evaluation is lazy and
@@ -130,7 +130,7 @@ export class Evaluation {
         const question = rules.questions.get(id);
         if (!question) continue; // reported as unhandled
         const ok =
-          question.type === "money" || question.type === "percent"
+          isNumberQuestion(question.type)
             ? typeof answer === "string" && /^-?\d+(\.\d+)?$/.test(answer)
             : question.type === "boolean"
               ? typeof answer === "boolean"
@@ -294,7 +294,7 @@ export class Evaluation {
         const given = answer ?? question.default;
         // A decision's default is the app's choice, not a guess at what the person would say.
         const status: Status = answer !== undefined || question.decision ? "complete" : question.default !== undefined ? "estimate" : "missing";
-        const value = given === undefined ? null : question.type === "money" || question.type === "percent" ? Dec.from(given as string) : given;
+        const value = given === undefined ? null : isNumberQuestion(question.type) ? Dec.from(given as string) : given;
         return { value, status, label: question.ask, reads: [] };
       }
       case "person":
@@ -302,6 +302,7 @@ export class Evaluation {
           // Age on December 31 of the year: the birthday has always passed by then.
           return { value: Dec.of(this.input.year - Number(person.birthDate.slice(0, 4))), status: "complete", label: "Age on December 31", reads: [] };
         }
+        if (rest[0] === "role") return { value: person.role, status: "complete", label: "The person preparing, or their spouse", reads: [] };
         return { value: person.province, status: person.province === null ? "missing" : "complete", label: "Province on December 31", reads: [] };
       default: {
         const slip = this.rules.slips.get(head!)!;

@@ -11,23 +11,10 @@ import { rulesFor } from "../../src/app/shared/rules/index.ts";
 
 const rules = rulesFor(2025)!;
 
-const NONE = {
-  rrspDeduction: "0",
-  fhsaDeduction: "0",
-  medicalExpenses: "0",
-  donations: "0",
-  unusedTuition: "0",
-  tuitionTransfer: "0",
-  hasSelfEmployment: false,
-  hasRentalIncome: false,
-  hasPensionIncome: false,
-  hasEiBenefits: false,
-  hasForeignIncome: false,
-  soldProperty: false,
-  hasChildCare: false,
-  hasWorkFromHome: false,
-  hasMovingExpenses: false,
-};
+/** Every question that has a default, answered with it: a return with nothing else to say. */
+const NONE = Object.fromEntries(
+  [...rules.questions.values()].flatMap((question) => (question.default !== undefined && !question.decision ? [[question.id, question.default]] : [])),
+) as Record<string, string | boolean>;
 
 function couple(
   incomes: [number, number],

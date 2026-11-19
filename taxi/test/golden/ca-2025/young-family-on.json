@@ -61,7 +61,30 @@
         "foreignInvestmentIncome": "3000",
         "foreignInvestmentTax": "450",
         "foreignEmploymentIncome": "0",
-        "foreignEmploymentTax": "0"
+        "foreignEmploymentTax": "0",
+        "hasSupportReceived": false,
+        "hasSupportPaid": false,
+        "carryingCharges": "0",
+        "hasDisabilitySupports": false,
+        "nonCapitalLosses": "0",
+        "netCapitalLosses": "0",
+        "hasDisability": false,
+        "spouseInfirm": false,
+        "hasInfirmChildren": false,
+        "hasInfirmDependant": false,
+        "hasDisabledDependant": false,
+        "hasVolunteerService": false,
+        "homeBuyers": "0",
+        "homeAccessibility": "0",
+        "hasAdoption": false,
+        "studentLoanInterest": "0",
+        "childTuitionTransfer": "0",
+        "hasOtherDependantMedical": false,
+        "politicalContributions": "0",
+        "teacherSupplies": "0",
+        "multigenerationalRenovation": "0",
+        "trainingCreditLimit": "0",
+        "instalmentsPaid": "0"
       },
       "p2": {
         "rrspDeduction": "0",
@@ -83,7 +106,30 @@
         "hasCppBenefits": false,
         "hasRrifIncome": false,
         "hasForeignProperty": false,
-        "childCareExpenses": "9000"
+        "childCareExpenses": "9000",
+        "hasSupportReceived": false,
+        "hasSupportPaid": false,
+        "carryingCharges": "0",
+        "hasDisabilitySupports": false,
+        "nonCapitalLosses": "0",
+        "netCapitalLosses": "0",
+        "hasDisability": false,
+        "spouseInfirm": false,
+        "hasInfirmChildren": false,
+        "hasInfirmDependant": false,
+        "hasDisabledDependant": false,
+        "hasVolunteerService": false,
+        "homeBuyers": "0",
+        "homeAccessibility": "0",
+        "hasAdoption": false,
+        "studentLoanInterest": "0",
+        "childTuitionTransfer": "0",
+        "hasOtherDependantMedical": false,
+        "politicalContributions": "0",
+        "teacherSupplies": "0",
+        "multigenerationalRenovation": "0",
+        "trainingCreditLimit": "0",
+        "instalmentsPaid": "0"
       }
     },
     "slips": [
@@ -95,11 +141,11 @@
         "boxes": {
           "14": "95000",
           "16": "4034.10",
-          "16A": "396",
           "18": "1077.48",
           "22": "18000",
           "24": "65700",
-          "26": "71300"
+          "26": "71300",
+          "16A": "396"
         }
       },
       {

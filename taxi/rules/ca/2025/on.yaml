@@ -151,8 +151,8 @@ lines:
     source: "ON428 lines 36 to 41: expenses over whichever is less, $2,885 or 3% of net income"
   ON428.34:
     label: Ontario amounts transferred from your spouse or common-law partner
-    formula: 'if(line.HH.partner == 1 and household.partnerInYear, if(spouse.line.ON428.10 + spouse.line.ON428.27 == 0, 0, if(spouse.person.province == "ON", line.ONS2.11, unsupported("Your spouse lives in another province: transferring their Ontario age or pension amount isn''t handled by this app"))), 0)'
-    source: "Schedule ON(S2): their unused Ontario age and pension income amounts"
+    formula: "if(line.HH.partner == 1 and household.partnerInYear, if(spouse.line.ON428.10 + spouse.line.ON428.27 == 0, 0, line.ONS2.11), 0)"
+    source: "Schedule ON(S2): their unused Ontario age and pension income amounts. A spouse living in another province is read as if they lived in Ontario, as the schedule asks: the engine works out Ontario's lines for anyone"
   ON428.44:
     label: Ontario credit amounts
     formula: "line.ON428.9 + line.ON428.10 + line.ON428.13 + line.ON428.16 + line.ON428.24 + line.ON428.27 + line.ON428.34 + line.ON428.41"

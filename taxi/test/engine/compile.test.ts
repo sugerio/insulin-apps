@@ -96,7 +96,7 @@ describe("compiling rule files", () => {
     const group = { hasBusiness: { type: "boolean", module: "income", ask: "Business", default: false } };
     expect(() => compileRules(withQuestions({ ...group, share: { type: "percent", module: "income", parent: "hasBusiness", ask: "Share" } }), hash)).not.toThrow();
     expect(compileError(withQuestions({ ...group, share: { type: "percent", module: "deductions", parent: "hasBusiness", ask: "Share" } }))).toContain("in the same module");
-    expect(compileError(withQuestions({ ...group, flag: { type: "boolean", module: "income", parent: "hasBusiness", ask: "Flag" } }))).toContain("an amount, a percent or a choice");
+    expect(compileError(withQuestions({ ...group, flag: { type: "boolean", module: "income", parent: "hasBusiness", ask: "Flag" } }))).toContain("an amount, a percent, a count or a choice");
     expect(compileError(withQuestions({ share: { type: "money", module: "income", parent: "status", ask: "Share" } }))).toContain("parent must be a yes/no question");
     expect(compileError(withQuestions({ kind: { type: "choice", ask: "Kind", options: ["a"], optionLabels: { b: "B" } } }))).toContain("optionLabels name the options");
     expect(compileError(withQuestions({ amount: { type: "money", ask: "Amount", note: "File a form" } }))).toContain("Only a yes/no question has a note");

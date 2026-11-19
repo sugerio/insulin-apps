@@ -26,7 +26,7 @@ describe("the estimate above a step", () => {
     expect(within(card).getByText(/^\d+ answers assumed$/)).toBeTruthy();
     expect(within(card).getByText("RRSP contributions to deduct for 2025: $0.00")).toBeTruthy();
     fireEvent.click(line);
-    expect(within(card).getByText("= line.T1.40600")).toBeTruthy();
+    expect(within(card).getByText("= line.T1.41700 + line.T1.41500")).toBeTruthy();
     expect(within(card).getByRole("button", { name: /Federal tax/ })).toBeTruthy();
   });
 });

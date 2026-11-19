@@ -31,7 +31,31 @@
         "soldProperty": false,
         "hasChildCare": false,
         "hasWorkFromHome": false,
-        "hasMovingExpenses": false
+        "hasMovingExpenses": false,
+        "hasForeignProperty": false,
+        "hasSupportReceived": false,
+        "hasSupportPaid": false,
+        "carryingCharges": "0",
+        "hasDisabilitySupports": false,
+        "nonCapitalLosses": "0",
+        "netCapitalLosses": "0",
+        "hasDisability": false,
+        "spouseInfirm": false,
+        "hasInfirmChildren": false,
+        "hasInfirmDependant": false,
+        "hasDisabledDependant": false,
+        "hasVolunteerService": false,
+        "homeBuyers": "0",
+        "homeAccessibility": "0",
+        "hasAdoption": false,
+        "studentLoanInterest": "0",
+        "childTuitionTransfer": "0",
+        "hasOtherDependantMedical": false,
+        "politicalContributions": "0",
+        "teacherSupplies": "0",
+        "multigenerationalRenovation": "0",
+        "trainingCreditLimit": "0",
+        "instalmentsPaid": "0"
       }
     },
     "slips": [
@@ -44,13 +68,13 @@
           "14": "95000.00",
           "16": "4034.10",
           "18": "1077.48",
+          "20": "5700.00",
           "22": "21000.00",
           "24": "65700.00",
           "26": "71300.00",
-          "16A": "396.00",
-          "20": "5700.00",
           "44": "600.00",
-          "52": "11400.00"
+          "52": "11400.00",
+          "16A": "396.00"
         }
       },
       {

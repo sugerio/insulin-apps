@@ -12,7 +12,8 @@ import { parseFormula, references, type Formula } from "./formula.ts";
 //   line.<form>.<line>            another line of the same person's return
 //   answer.<question>             the person's answer; the question's default when there is none (an estimate)
 //   <SLIP>.box<key>               that box of every one of the person's slips of that type (a list: sum, count, max)
-//   person.age, person.province   the person's age on December 31 and province on December 31
+//   person.age, person.province, person.role   the person's age and province on December 31, and "self" for the
+//                                 person preparing or "spouse"
 //   household.maritalStatus, household.partnerInYear, household.childrenUnder18, household.childrenUnder19
 //                                 the year's marital status, whether the spouse's return is prepared too, and the
 //                                 number of dependants under 18 (or 19) at the end of the year
@@ -58,7 +59,9 @@ export interface Line {
   /** A line worked out from slips, shown in this module so people see what their slips already claim. */
   module?: Module;
 }
-export type QuestionType = "money" | "percent" | "boolean" | "choice";
+export type QuestionType = "money" | "percent" | "count" | "boolean" | "choice";
+/** A question whose answer is a number: an amount, a percent or a count. */
+export const isNumberQuestion = (type: QuestionType) => type === "money" || type === "percent" || type === "count";
 export interface Question {
   id: string;
   type: QuestionType;
@@ -215,7 +218,7 @@ export const compiledRulesSchema = z.strictObject({
   questions: z.record(
     z.string(),
     z.strictObject({
-      type: z.enum(["money", "percent", "boolean", "choice"]),
+      type: z.enum(["money", "percent", "count", "boolean", "choice"]),
       ask: z.string(),
       module: z.enum(MODULES).optional(),
       help: z.string().optional(),
@@ -484,7 +487,7 @@ function checkRuleSet(ruleSet: RuleSet, fail: (entry: string, message: string, c
     }
     if (question.default !== undefined) {
       const ok =
-        question.type === "money" || question.type === "percent"
+        isNumberQuestion(question.type)
           ? typeof question.default === "string" && /^-?\d+(\.\d+)?$/.test(question.default)
           : question.type === "boolean"
             ? typeof question.default === "boolean"
@@ -496,7 +499,10 @@ function checkRuleSet(ruleSet: RuleSet, fail: (entry: string, message: string, c
       const parent = ruleSet.questions.get(question.parent);
       if (!parent || parent.type !== "boolean" || parent.slip || parent.parent) fail(entry, "A question's parent must be a yes/no question without a slip, not itself a part");
       if (parent!.module !== question.module) fail(entry, "A question and its parent are asked in the same module");
-      if (question.type === "boolean") fail(entry, "A part of a group is an amount, a percent or a choice");
+      if (question.type === "boolean") fail(entry, "A part of a group is an amount, a percent, a count or a choice");
+    }
+    if (question.type === "count" && question.parent === undefined) {
+      fail(entry, "A count is asked as a part of a group");
     }
     if (question.optionLabels && (question.type !== "choice" || Object.keys(question.optionLabels).some((option) => !question.options!.includes(option)))) {
       fail(entry, "optionLabels name the options of a choice");
@@ -524,7 +530,7 @@ function checkRuleSet(ruleSet: RuleSet, fail: (entry: string, message: string, c
     for (const change of hint.change) {
       const question = ruleSet.questions.get(change.question);
       if (!question) return fail(entry, `No question ${change.question}`);
-      const want = question.type === "money" || question.type === "percent" ? "number" : question.type === "boolean" ? "boolean" : "string";
+      const want = isNumberQuestion(question.type) ? "number" : question.type === "boolean" ? "boolean" : "string";
       if (formulaType(ruleSet, change.formula, at, reads) !== want) fail(entry, `The change to ${change.question} must be a ${want === "boolean" ? "yes/no value" : want}`);
     }
     if (hint.kind === "saving" && hint.change.length === 0) fail(entry, "A saving hint changes at least one answer");
@@ -657,7 +663,7 @@ function refType(ruleSet: RuleSet, path: string[], fail: (message: string) => ne
     case "answer": {
       const question = rest.length === 1 ? ruleSet.questions.get(rest[0]!) : undefined;
       if (!question) return fail(`No question ${rest.join(".")}`);
-      return question.type === "money" || question.type === "percent" ? "number" : question.type === "boolean" ? "boolean" : "string";
+      return isNumberQuestion(question.type) ? "number" : question.type === "boolean" ? "boolean" : "string";
     }
     case "household":
       if (spouse) return fail(`${name}: the household is the same for both spouses; write household.${rest.join(".")}`);
@@ -667,8 +673,8 @@ function refType(ruleSet: RuleSet, path: string[], fail: (message: string) => ne
       return fail(`${name}: the household has maritalStatus, partnerInYear, childrenUnder7, childrenUnder17, childrenUnder18 and childrenUnder19`);
     case "person":
       if (rest.length === 1 && rest[0] === "age") return "number";
-      if (rest.length === 1 && rest[0] === "province") return "string";
-      return fail(`${name}: a person has age and province`);
+      if (rest.length === 1 && (rest[0] === "province" || rest[0] === "role")) return "string";
+      return fail(`${name}: a person has age, province and role`);
     default: {
       const slip = ruleSet.slips.get(head ?? "");
       if (!slip) return fail(`Unknown name ${name}`);

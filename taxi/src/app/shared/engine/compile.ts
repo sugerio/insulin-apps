@@ -37,7 +37,7 @@ const sourceParam = z.strictObject({
 });
 const sourceLine = z.strictObject({ label: z.string().min(1), formula: z.string().min(1), source: z.string().min(1).optional(), module: z.enum(MODULES).optional() });
 const sourceQuestion = z.strictObject({
-  type: z.enum(["money", "percent", "boolean", "choice"]),
+  type: z.enum(["money", "percent", "count", "boolean", "choice"]),
   ask: z.string().min(1),
   module: z.enum(MODULES).optional(),
   help: z.string().min(1).optional(),

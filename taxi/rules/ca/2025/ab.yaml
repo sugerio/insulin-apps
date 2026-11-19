@@ -1,6 +1,6 @@
-# Alberta tax: Form AB428. Line ids are the line numbers in the form's right margin. Every number below was checked
-# against the 2025 AB428 (5009-C) and Worksheet AB428 (5009-D). For 2025 Alberta added an 8% bracket and a
-# supplemental tax credit that keeps credit amounts above $60,000 at 10%.
+# Alberta tax: Form AB428 and Schedule AB(S2). Line ids are the line numbers in the form's right margin. Every number
+# below was checked against the 2025 AB428 (5009-C), Worksheet AB428 (5009-D) and AB(S2) (5009-S2). For 2025 Alberta
+# added an 8% bracket and a supplemental tax credit that keeps credit amounts above $60,000 at 10%.
 
 params:
   abTaxBrackets:
@@ -65,6 +65,10 @@ params:
     label: Alberta supplemental tax credit rate
     source: "Worksheet AB428, line 61545, line 8: 25%"
     value: 25%
+  abFirstBracketTop:
+    label: Top of the lowest Alberta tax bracket
+    source: "AB(S2) line 5: $60,000"
+    value: 60000
   abPensionAmountMax:
     label: Most Alberta pension income amount
     source: "AB428 line 34 (58360): maximum $1,719"
@@ -101,7 +105,8 @@ lines:
     source: "AB428 line 34 (58360): eligible pension income, up to $1,719"
   AB428.42:
     label: Amounts transferred from your spouse or common-law partner
-    formula: 'if(line.HH.partner == 1 and household.partnerInYear, if(spouse.person.age >= 65 or spouse.line.AB428.34 > 0, unsupported("Transferring your spouse''s unused Alberta age or pension amount (Schedule AB(S2)) isn''t handled by this app yet"), 0), 0)'
+    formula: "if(line.HH.partner == 1 and household.partnerInYear, if(spouse.line.AB428.17 + spouse.line.AB428.34 == 0, 0, line.ABS2.11), 0)"
+    source: "Schedule AB(S2): their unused Alberta age and pension income amounts"
   AB428.49:
     label: Allowable medical expenses
     formula: "max(0, line.T1.33099 - min(param.abMedicalThresholdMax, round(line.T1.23600 * param.medicalThresholdRate, 2)))"
@@ -150,3 +155,19 @@ lines:
   AB428.75:
     label: Alberta tax
     formula: "max(0, line.AB428.70 - line.AB428.74)"
+
+  # Schedule AB(S2) – Alberta amounts transferred from your spouse (read from their AB428). A spouse living in another
+  # province is read as if they lived in Alberta, as the schedule asks. Unused provincial tuition (line 8) isn't carried
+  # here.
+  ABS2.5:
+    label: Their taxable income, for the transfer
+    formula: "if(spouse.line.T1.26000 <= param.abFirstBracketTop, spouse.line.T1.26000, round(spouse.line.AB428.8 / param.abCreditRate, 2))"
+    source: "AB(S2) line 5: line 26000 if it is $60,000 or less, else their Alberta tax on taxable income ÷ 8%"
+  ABS2.10:
+    label: Their adjusted taxable income
+    formula: "max(0, line.ABS2.5 - spouse.line.AB428.16 - spouse.line.AB428.32)"
+    source: "AB(S2) lines 6 to 10: their basic personal amount and CPP and EI amounts"
+  ABS2.11:
+    label: Alberta amounts transferred from your spouse
+    formula: "max(0, spouse.line.AB428.17 + spouse.line.AB428.34 - line.ABS2.10)"
+    source: "AB(S2) lines 1, 2, 4 and 11"

@@ -52,8 +52,8 @@ questions:
     type: boolean
     module: income
     slip: T4A
-    ask: A workplace pension or an annuity
-    help: A T4A from each pension plan or payer.
+    ask: A pension, annuity, scholarship or other T4A income
+    help: A T4A from each pension plan, school or other payer.
   hasRrifIncome:
     type: boolean
     module: income
@@ -180,6 +180,36 @@ questions:
     ask: Selling costs
     help: Real estate commission, legal fees and other costs of selling.
 
+  hasRrspIncome:
+    type: boolean
+    module: income
+    slip: T4RSP
+    ask: RRSP withdrawals
+    help: A T4RSP from each plan you took money out of in 2025.
+  hasBenefitsStatement:
+    type: boolean
+    module: income
+    slip: T5007
+    ask: Workers' compensation or social assistance
+    help: A T5007 from the board or the government that paid you.
+  hasSupportReceived:
+    type: boolean
+    module: income
+    ask: Support payments received
+    help: Payments from a former spouse or partner under a court order or written agreement.
+    default: false
+  supportReceived:
+    type: money
+    module: income
+    parent: hasSupportReceived
+    ask: Total support received in 2025
+  childSupportReceived:
+    type: money
+    module: income
+    parent: hasSupportReceived
+    ask: The part that is child support
+    help: Child support under an order or agreement made after April 1997 isn't taxable.
+
   # Deductions
   rrspDeduction:
     type: money
@@ -244,7 +274,227 @@ questions:
     ask: Income earned at the new location
     help: Employment or self-employment income from the new job or business in 2025, less its deductions (union dues, CPP).
 
+  hasSupportPaid:
+    type: boolean
+    module: deductions
+    ask: Support payments made
+    help: Payments to a former spouse or partner under a court order or written agreement.
+    default: false
+  supportPaid:
+    type: money
+    module: deductions
+    parent: hasSupportPaid
+    ask: Total support paid in 2025
+  childSupportPaid:
+    type: money
+    module: deductions
+    parent: hasSupportPaid
+    ask: The part that is child support
+    help: Child support under an order or agreement made after April 1997 isn't deductible.
+  carryingCharges:
+    type: money
+    module: deductions
+    ask: Interest and fees to earn investment income
+    help: Interest on money borrowed to invest (outside an RRSP or TFSA) and investment counsel fees.
+    default: 0
+  hasDisabilitySupports:
+    type: boolean
+    module: deductions
+    ask: Disability supports
+    help: Attendant care, sign-language interpretation, devices and other supports paid so you could work or go to school (Form T929).
+    default: false
+  disabilitySupportsExpenses:
+    type: money
+    module: deductions
+    parent: hasDisabilitySupports
+    ask: Disability supports paid
+    help: Less what was paid back to you.
+  nonCapitalLosses:
+    type: money
+    module: deductions
+    ask: Non-capital losses of earlier years to apply
+    help: Losses from a business or employment in earlier years that you haven't used yet.
+    default: 0
+  netCapitalLosses:
+    type: money
+    module: deductions
+    ask: Net capital losses of earlier years to apply
+    help: From your notice of assessment. They can only reduce this year's taxable capital gains.
+    default: 0
+
   # Credits
+  hasDisability:
+    type: boolean
+    module: credits
+    ask: Disability tax credit
+    help: The CRA approved your Form T2201, Disability Tax Credit Certificate.
+    default: false
+  spouseInfirm:
+    type: boolean
+    module: credits
+    ask: Your spouse or partner depends on you because of an impairment
+    help: An impairment in physical or mental functions that makes them dependent on others for personal needs (Canada caregiver amount).
+    default: false
+  hasInfirmChildren:
+    type: boolean
+    module: credits
+    ask: A child under 18 with an impairment
+    help: A child who, because of an impairment, depends on others for personal needs much more than children of the same age.
+    default: false
+  infirmChildren:
+    type: count
+    module: credits
+    parent: hasInfirmChildren
+    ask: Number of children
+  hasInfirmDependant:
+    type: boolean
+    module: credits
+    ask: An adult relative with an impairment depends on you
+    help: A parent, grandparent, adult child, brother, sister, aunt, uncle, niece or nephew, 18 or older, with a net income under $28,798.
+    default: false
+  infirmDependants:
+    type: count
+    module: credits
+    parent: hasInfirmDependant
+    ask: Number of dependants
+  infirmDependantIncome:
+    type: money
+    module: credits
+    parent: hasInfirmDependant
+    ask: Their net income
+    help: Line 23600 of their return, or what it would be.
+  hasDisabledDependant:
+    type: boolean
+    module: credits
+    ask: A dependant with the disability tax credit
+    help: A child or another relative who depends on you, has no income and has an approved Form T2201.
+    default: false
+  disabledChildren:
+    type: count
+    module: credits
+    parent: hasDisabledDependant
+    ask: Children under 18
+  disabledChildCare:
+    type: money
+    module: credits
+    parent: hasDisabledDependant
+    ask: Child care and attendant care claimed for them
+    help: By you or anyone else, as child care or medical expenses.
+  disabledAdults:
+    type: count
+    module: credits
+    parent: hasDisabledDependant
+    ask: Dependants 18 or older
+  hasVolunteerService:
+    type: boolean
+    module: credits
+    ask: Volunteer firefighter or search and rescue
+    help: At least 200 hours of eligible volunteer service in 2025.
+    default: false
+  volunteerKind:
+    type: choice
+    module: credits
+    parent: hasVolunteerService
+    ask: Service
+    options: [firefighter, search_rescue]
+    optionLabels:
+      firefighter: Volunteer firefighter
+      search_rescue: Search and rescue volunteer
+  homeBuyers:
+    type: money
+    module: credits
+    ask: Home buyers' amount
+    help: Up to $10,000 when you or your spouse bought a first home in 2025, or a home for a person with a disability. A couple shares the $10,000.
+    default: 0
+  homeAccessibility:
+    type: money
+    module: credits
+    ask: Home accessibility renovations
+    help: Up to $20,000 to make a home safer or easier to use for someone 65 or older or with the disability tax credit.
+    default: 0
+  hasAdoption:
+    type: boolean
+    module: credits
+    ask: Adoption expenses
+    help: For an adoption completed in 2025.
+    default: false
+  adoptionExpenses:
+    type: money
+    module: credits
+    parent: hasAdoption
+    ask: Eligible adoption expenses
+    help: Less any reimbursement or assistance.
+  adoptedChildren:
+    type: count
+    module: credits
+    parent: hasAdoption
+    ask: Children adopted
+  studentLoanInterest:
+    type: money
+    module: credits
+    ask: Interest paid on student loans
+    help: On loans under the Canada Student Loans Act or a provincial student loan program, for 2025 and up to five earlier years not claimed.
+    default: 0
+  childTuitionTransfer:
+    type: money
+    module: credits
+    ask: Tuition transferred from a child or grandchild
+    help: The amount they designated to you on their T2202, up to $5,000 each.
+    default: 0
+  hasOtherDependantMedical:
+    type: boolean
+    module: credits
+    ask: Medical expenses for another dependant
+    help: An adult child or grandchild, a parent, grandparent, brother, sister, aunt, uncle, niece or nephew who depended on you.
+    default: false
+  otherDependantMedical:
+    type: money
+    module: credits
+    parent: hasOtherDependantMedical
+    ask: Their medical expenses you paid
+  otherDependantIncome:
+    type: money
+    module: credits
+    parent: hasOtherDependantMedical
+    ask: Their net income
+  politicalContributions:
+    type: money
+    module: credits
+    ask: Federal political contributions
+    help: To a registered federal party, association or candidate, on official receipts.
+    default: 0
+  teacherSupplies:
+    type: money
+    module: credits
+    ask: School supplies you paid as a teacher or early childhood educator
+    help: Up to $1,000 of supplies for your teaching, not paid back to you.
+    default: 0
+  multigenerationalRenovation:
+    type: money
+    module: credits
+    ask: Multigenerational home renovation
+    help: Up to $50,000 to build a secondary unit for a senior or an adult with a disability to live with a relative (Schedule 12).
+    default: 0
+  hasCwbAdvance:
+    type: boolean
+    module: credits
+    slip: RC210
+    ask: Canada workers benefit paid in advance
+    help: An RC210 from the CRA.
+  trainingCreditLimit:
+    type: money
+    module: credits
+    receipts: NOA
+    suggest: SUGGEST.trainingCreditLimit
+    ask: Canada training credit limit from your 2024 notice of assessment
+    help: Half your 2025 tuition is refunded, up to this limit.
+    default: 0
+  instalmentsPaid:
+    type: money
+    module: credits
+    ask: Tax paid by instalments
+    help: Instalments you paid to the CRA for 2025.
+    default: 0
   hasTuition:
     type: boolean
     module: credits

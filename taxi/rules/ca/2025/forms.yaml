@@ -17,19 +17,26 @@ forms:
     fields:
       # Step 2 – Total income
       "1": line.T1.10100
+      "10120": line.T1.10120
       "2": line.T1.10400
       "3": line.T1.11300
       "4": line.T1.11400
+      "11410": line.T1.11410
       "5": line.T1.11500
       "8": line.T1.11900
       "9": line.T1.12000
       "12010": line.T1.12010
       "10": line.T1.12100
+      "12": line.T1.12500
       "12599": line.T1.12599
       "13": line.T1.12600
       "14": line.T1.12700
+      "12799": line.T1.12799
+      "15": line.T1.12800
+      "16": line.T1.12900
       "19": line.T1.13000
-      "21": line.T1.15000 - line.T1.13500 - line.T1.13700 - line.T1.13900
+      "20": line.T1.13010
+      "21": line.T1.15000 - line.T1.13500 - line.T1.13700 - line.T1.13900 - line.T1.14700
       "13499": line.T1.13499
       "22": line.T1.13500
       "13699": line.T1.13699
@@ -37,7 +44,11 @@ forms:
       "13899": line.T1.13899
       "24": line.T1.13900
       "27": line.T1.13500 + line.T1.13700 + line.T1.13900
-      "28": line.T1.15000
+      "28": line.T1.15000 - line.T1.14700
+      "29": line.T1.14400
+      "30": line.T1.14500
+      "31": line.T1.14600
+      "32": line.T1.14700
       "33": line.T1.15000
       # Step 3 – Net income
       "34": line.T1.15000
@@ -46,7 +57,11 @@ forms:
       "37": line.T1.20805
       "39": line.T1.21200
       "41": line.T1.21400
+      "42": line.T1.21500
       "44": line.T1.21900
+      "21999": line.T1.21999
+      "45": line.T1.22000
+      "46": line.T1.22100
       "47": line.T1.22200
       "48": line.T1.22215
       "50": line.T1.22900
@@ -57,29 +72,48 @@ forms:
       "56": line.T1.23600
       # Step 4 – Taxable income
       "57": line.T1.23600
+      "58": line.T1.24400
+      "59": line.T1.24900
+      "60": line.T1.25000
+      "62": line.T1.25200
+      "63": line.T1.25300
+      "68": line.T1.25700
       "69": line.T1.26000
       # Step 5 – Federal tax: Part B, non-refundable tax credits
       "77": line.T1.30000
       "78": line.T1.30100
       "79": line.T1.30300
       "80": line.T1.30400
-      "84": line.T1.30000 + line.T1.30100 + line.T1.30300 + line.T1.30400
-      "85": line.T1.30000 + line.T1.30100 + line.T1.30300 + line.T1.30400
+      "81": line.T1.30425
+      "82": line.T1.30450
+      "83": line.T1.30500
+      "84": line.T1.T84
+      "85": line.T1.T84
       "86": line.T1.30800
       "87": line.T1.31000
       "88": line.T1.31200
+      "90": line.T1.31220
+      "91": line.T1.31240
       "92": line.T1.31260
-      "96": line.T1.30800 + line.T1.31000 + line.T1.31200 + line.T1.31260
+      "93": line.T1.31270
+      "94": line.T1.31285
+      "95": line.T1.31300
+      "96": line.T1.T96
       "97": line.T1.31400
-      "98": line.T1.T101
+      "98": line.T1.T84 + line.T1.T96 + line.T1.31400
+      "99": line.T1.31600
+      "100": line.T1.31800
       "101": line.T1.T101
+      "102": line.T1.31900
       "103": line.T1.32300
+      "104": line.T1.32400
       "105": line.T1.32600
-      "106": line.T1.T101 + line.T1.32300 + line.T1.32600
+      "106": line.T1.T101 + line.T1.31900 + line.T1.32300 + line.T1.32400 + line.T1.32600
       "107": line.T1.33099
       "108": round(line.T1.23600 * param.medicalThresholdRate, 2)
       "109": min(param.medicalThresholdMax, round(line.T1.23600 * param.medicalThresholdRate, 2))
-      "110": line.T1.33200
+      "110": line.T1.33200 - line.T1.33199
+      "111": line.T1.33199
       "112": line.T1.33200
       "113": line.T1.33500
       "115": line.T1.33800
@@ -98,7 +132,11 @@ forms:
       "130": line.T1.40600
       "132": line.T1.40600
       "134": line.T1.40600
-      "139": line.T1.40600
+      "40900": line.T1.40900
+      "135": line.T1.41000
+      "138": line.T1.41600
+      "139": line.T1.41700
+      "140": line.T1.41500
       "142": line.T1.42000
       # Step 6 – Refund or balance owing
       "143": line.T1.42000
@@ -110,6 +148,14 @@ forms:
       "150": line.T1.43700
       "152": line.T1.44800
       "153": line.T1.45000
+      "154": line.T1.45200
+      "155": line.T1.45300
+      "156": line.T1.45350
+      "157": line.T1.45355
+      "159": line.T1.45600
+      "46800": line.T1.46800
+      "161": line.T1.46900
+      "164": line.T1.47600
       "166": line.T1.48200
       "167": line.T1.43500 - line.T1.48200
       "48400": line.T1.48400

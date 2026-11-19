@@ -99,7 +99,7 @@ describe("Income", () => {
     const add = screen.getByRole("region", { name: "Add to your return" });
     expect(within(add).getByRole("button", { name: "Add Interest or dividends" })).toBeTruthy();
     expect(within(add).queryByRole("button", { name: "Add Employment income" })).toBeNull();
-    expect(within(add).queryByRole("button", { name: /Add RRSP/ })).toBeNull();
+    expect(within(add).queryByRole("button", { name: /Add RRSP contributions/ })).toBeNull();
     const row = within(onReturn).getByRole("button", { name: /T4 from Maple Corp/ });
     expect(row.getAttribute("aria-expanded")).toBe("false");
     fireEvent.click(row);
@@ -373,6 +373,6 @@ describe("Finish", () => {
     expect(screen.getByText("1 slip is not confirmed yet.")).toBeTruthy();
     expect(screen.getByText(/^Not answered yet: RRSP contributions/)).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: /Net federal tax/ }));
-    expect(screen.getByText("= line.T1.40600")).toBeTruthy();
+    expect(screen.getByText("= line.T1.41700 + line.T1.41500")).toBeTruthy();
   });
 });

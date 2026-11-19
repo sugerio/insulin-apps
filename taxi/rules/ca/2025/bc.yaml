@@ -1,5 +1,5 @@
-# British Columbia tax: Form BC428. Line ids are the line numbers in the form's right margin. Every number below was
-# checked against the 2025 BC428 (5010-C) and Worksheet BC428 (5010-D).
+# British Columbia tax: Form BC428 and Schedule BC(S2). Line ids are the line numbers in the form's right margin.
+# Every number below was checked against the 2025 BC428 (5010-C), Worksheet BC428 (5010-D) and BC(S2) (5010-S2).
 
 params:
   bcTaxBrackets:
@@ -85,6 +85,10 @@ params:
     label: Net income from which there is no British Columbia tax reduction
     source: "BC428: no reduction when net income is $40,807 or more"
     value: 40807
+  bcFirstBracketTop:
+    label: Top of the lowest British Columbia tax bracket
+    source: "BC(S2) line 6: $49,279"
+    value: 49279
   bcPensionAmountMax:
     label: Most British Columbia pension income amount
     source: "BC428 line 36 (58360): maximum $1,000"
@@ -121,7 +125,8 @@ lines:
     source: "BC428 line 36 (58360): eligible pension income, up to $1,000"
   BC428.44:
     label: Amounts transferred from your spouse or common-law partner
-    formula: 'if(line.HH.partner == 1 and household.partnerInYear, if(spouse.person.age >= 65 or spouse.line.BC428.36 > 0, unsupported("Transferring your spouse''s unused British Columbia age or pension amount (Schedule BC(S2)) isn''t handled by this app yet"), 0), 0)'
+    formula: "if(line.HH.partner == 1 and household.partnerInYear, if(spouse.line.BC428.17 + spouse.line.BC428.36 == 0, 0, line.BCS2.12), 0)"
+    source: "Schedule BC(S2): their unused British Columbia age and pension income amounts"
   BC428.51:
     label: Allowable medical expenses
     formula: "max(0, line.T1.33099 - min(param.bcMedicalThresholdMax, round(line.T1.23600 * param.medicalThresholdRate, 2)))"
@@ -173,3 +178,19 @@ lines:
   BC428.91:
     label: British Columbia tax
     formula: "max(0, line.BC428.72 - line.BC428.79)"
+
+  # Schedule BC(S2) – British Columbia amounts transferred from your spouse (read from their BC428). A spouse living in
+  # another province is read as if they lived in British Columbia, as the schedule asks. British Columbia has no tuition
+  # credit for 2025, so nothing is designated on line 4, and unused provincial tuition (line 9) isn't carried here.
+  BCS2.6:
+    label: Their taxable income, for the transfer
+    formula: "if(spouse.line.T1.26000 <= param.bcFirstBracketTop, spouse.line.T1.26000, round(spouse.line.BC428.8 / param.bcCreditRate, 2))"
+    source: "BC(S2) line 6: line 26000 if it is $49,279 or less, else their British Columbia tax on taxable income ÷ 5.06%"
+  BCS2.11:
+    label: Their adjusted taxable income
+    formula: "max(0, line.BCS2.6 - spouse.line.BC428.16 - spouse.line.BC428.33)"
+    source: "BC(S2) lines 7 to 11: their basic personal amount and CPP and EI amounts"
+  BCS2.12:
+    label: British Columbia amounts transferred from your spouse
+    formula: "max(0, spouse.line.BC428.17 + spouse.line.BC428.36 - line.BCS2.11)"
+    source: "BC(S2) lines 1, 2, 5 and 12"

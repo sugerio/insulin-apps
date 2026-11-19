@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { Estimate, Person, SlipList, TaxYear } from "#shared";
+import { rulesFor } from "../../src/app/shared/rules/index.ts";
 import { VIEWER, startServer, type TestServer } from "../support/server.ts";
 
 let server: TestServer;
@@ -138,27 +139,21 @@ describe("slips", () => {
   });
 });
 
+/** A module's questions answered as for a return with none of it: each yes/no question no, each amount its default. */
+function noneOf(module: string, except: string[] = []): Record<string, string | boolean> {
+  return Object.fromEntries(
+    [...rulesFor(2025)!.questions.values()]
+      .filter((question) => question.module === module && !question.parent && !except.includes(question.id))
+      .flatMap((question) => (question.type === "boolean" ? [[question.id, false]] : question.default !== undefined ? [[question.id, question.default]] : [])),
+  );
+}
+
 describe("the steps", () => {
   it("are done once their questions are answered and the slips confirmed", async () => {
     const { alex, revision } = await year();
     const put = (current: number, answers: Record<string, string | boolean | null>) =>
       json<TaxYear>(server.call("PUT", "/api/years/2025/answers", { body: { revision: current, personId: alex.id, answers } }));
-    const income = {
-      hasEmploymentIncome: false,
-      hasInvestmentIncome: false,
-      hasTrustIncome: false,
-      hasSoldInvestments: false,
-      hasSelfEmployment: false,
-      hasRentalIncome: false,
-      hasOasPension: false,
-      hasCppBenefits: false,
-      hasPensionIncome: false,
-      hasRrifIncome: false,
-      hasEiBenefits: false,
-      hasForeignIncome: false,
-      hasForeignProperty: false,
-      soldProperty: false,
-    };
+    const income = noneOf("income");
     let current = await put(revision, income);
     // Alex is married and Sam's return isn't prepared here: Sam's net income is asked on Personal info.
     expect(current.returns[0]!.steps).toEqual({
@@ -170,12 +165,12 @@ describe("the steps", () => {
       confirm: "todo",
       finish: "todo",
     });
-    current = await put(current.revision, { rrspDeduction: "0", fhsaDeduction: "0", hasWorkFromHome: false, hasChildCare: false });
+    current = await put(current.revision, noneOf("deductions", ["hasMovingExpenses"]));
     // Moving expenses not answered yet.
     expect(current.returns[0]!.steps.deductions).toBe("todo");
     current = await put(current.revision, { hasMovingExpenses: false });
     expect(current.returns[0]!.steps.deductions).toBe("done");
-    current = await put(current.revision, { hasTuition: false, medicalExpenses: "0", donations: "0", unusedTuition: "0" });
+    current = await put(current.revision, noneOf("credits"));
     expect(current.returns[0]!.steps.credits).toBe("done");
     current = await put(current.revision, { spouseNetIncome: "12000" });
     expect(current.returns[0]!.steps.household).toBe("done");
@@ -183,18 +178,7 @@ describe("the steps", () => {
 
   it("count a slip found as the answer to its question, and a yes without the slip as missing", async () => {
     const { alex, revision } = await year();
-    const notHandled = {
-      hasSelfEmployment: false,
-      hasRentalIncome: false,
-      hasOasPension: false,
-      hasCppBenefits: false,
-      hasPensionIncome: false,
-      hasRrifIncome: false,
-      hasEiBenefits: false,
-      hasForeignIncome: false,
-      hasForeignProperty: false,
-      soldProperty: false,
-    };
+    const notHandled = noneOf("income", ["hasEmploymentIncome", "hasInvestmentIncome", "hasTrustIncome", "hasSoldInvestments"]);
     let current = await json<TaxYear>(
       server.call("PUT", "/api/years/2025/answers", {
         body: { revision, personId: alex.id, answers: { ...notHandled, hasInvestmentIncome: false, hasTrustIncome: false, hasSoldInvestments: false, hasEmploymentIncome: true } },

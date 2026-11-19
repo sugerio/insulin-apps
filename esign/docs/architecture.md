@@ -367,7 +367,7 @@ tables:
 | `otp_challenges` | One row per task: the hashed emailed code, its expiry and use, and the send and entry budget |
 | `signatures` | One row per accepted signature (below) |
 | `seals` | One per completed envelope: `mode` (`LOCAL_TEST` or `KEY_TSA`), the seal's object key and hash, and for `KEY_TSA` the key's fingerprint (`key_id`) and timestamp time |
-| `editor_sessions` | One editing session: tenant, parent origin, source template and its hash or staged PDF and its hash, preset roles, the name and metadata for the template it saves, the saved template; who opened it (its owner) and the shares and tags it gets, since the save carries no identity; whether it saves a new version that replaces its source (`replaces_source`: the source's owner, shares and tags carry over, and the source is archived like a deleted one) |
+| `editor_sessions` | One editing session: tenant, parent origin, its source (a source template, a staged PDF and its hash, or an upload draft, `envelope_id`) and `source_sha256`: the source template's hash or, for an upload draft, the hash of the draft's document the session opened on (a save after that document was replaced answers 409 `source_changed`); preset roles, the name and metadata for the template it saves, the saved template; who opened it (its owner) and the shares and tags it gets, since the save carries no identity; whether it saves a new version that replaces its source (`replaces_source`: the source's owner, shares and tags carry over, and the source is archived like a deleted one) |
 | `audit_events` | Append-only (triggers refuse updates and deletes): type, time, task, IP, user agent, detail |
 | `copy_deliveries` | One per signer of a completed envelope: when its completion notice was reserved and sent |
 | `signed_copy_links` | The link in each completion notice: the SHA-256 of its token, its expiry and when it was used |
@@ -432,7 +432,7 @@ only the current state.
 | --- | --- | --- |
 | Envelope creation | D0 in the object store | One D1 batch: the envelope, its tasks, the D0 row and its signers' contacts, all or none |
 | Code exchange (both pages) | The `access_sessions` row | Marking the code used (`used_at IS NULL`, scope and validity); the token is returned only then |
-| Editor session start | The `editor_sessions` row | Inserting its `editor` code, which requires the session and an allowed parent |
+| Editor session start | The `editor_sessions` row | Inserting its `editor` code, which requires the session, for the parent origin the host named for it (a bare https origin, or http on a loopback host outside prod) |
 | Editor save | The source object and the template row | Recording the template as the session's result, while unsaved and while this request's token is live |
 | OTP send | — | One `INSERT ... ON CONFLICT DO UPDATE ... WHERE` holding the budget; the mail goes out only if it changed one row |
 | OTP entry | — | One batch: count the entry and mark the code used; mark this session verified only if that just happened; clear the mark from the task's other sessions |

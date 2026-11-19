@@ -3,9 +3,15 @@ import type {Share} from './ownership.ts';
 import type {PrefillCatalogEntry} from './fields.ts';
 
 const HEX64=/^[a-f0-9]{64}$/;
-/** What an editing session starts from: an existing template of the tenant (pinned by hash) and preset roles. */
 /** The session's source, preset roles, and the name and metadata (metadata.ts) the saved template gets. */
-export type EditorSource={sourceTemplateId?:string|null;sourceSha256?:string|null;roles?:string[];templateName?:string|null;templateMetadata?:Record<string,string>|null;
+export type EditorSource={
+  /**
+   * `sourceTemplateId`: an existing template of the tenant, and `sourceSha256` its PDF's SHA-256, pinned when the session
+   * starts (its preview and save check it). For an envelope draft's session (`envelopeId`), `sourceSha256` is instead
+   * the SHA-256 of the draft's document the session opened on: a save after that document was replaced answers
+   * 409 `source_changed` (editor-routes.ts).
+   */
+  sourceTemplateId?:string|null;sourceSha256?:string|null;roles?:string[];templateName?:string|null;templateMetadata?:Record<string,string>|null;
   /** Who opened it (the saved template's owner), and the shares and the owner's tags the saved template gets (ownership.ts, tags.ts). */
   ownerUserId?:string;shares?:Share[];tags?:string[];
   /** The saved template is a new version of the source, replacing it (editor-routes.ts). */
@@ -51,6 +57,7 @@ export async function exchangeEditorPage(db:D1Database,pageId:string,code:string
   return exchangeAccessCode(db,{scope:'editor',code,subjectId:pageId,now});
 }
 
+/** An editing session, as its editor token opens it. `sourceSha256`: the source template's or the envelope draft's document's, as in `EditorSource`. */
 export type EditorContext={pageId:string;tenantId:string;parentOrigin:string;tokenHash:string;sourceTemplateId:string|null;sourceSha256:string|null;stagedObjectKey:string|null;stagedSha256:string|null;roles:string[];resultTemplateId:string|null;envelopeId:string|null;templateName:string|null;templateMetadataJson:string|null;ownerUserId:string;shares:Share[];tags:string[];replacesSource:boolean;prefillCatalog:PrefillCatalogEntry[]|null};
 
 /** The editing session a live editor token opens. */

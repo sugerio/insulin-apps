@@ -211,6 +211,11 @@ export const editorSessions = sqliteTable('editor_sessions', {
   tenant_id: text('tenant_id').notNull(),
   parent_origin: text('parent_origin').notNull(),
   source_template_id: text('source_template_id').references(() => templates.id),
+  /**
+   * The source template's SHA-256, pinned when the session starts (its preview and save check it); or, for an envelope
+   * draft's session (`envelope_id`), the SHA-256 of the draft's document the session opened on: a save after that
+   * document was replaced answers 409 `source_changed` (editor-routes.ts).
+   */
   source_sha256: text('source_sha256'),
   preset_roles_json: text('preset_roles_json').notNull().default('[]'),
   staged_object_key: text('staged_object_key'),

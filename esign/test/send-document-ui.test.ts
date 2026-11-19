@@ -93,6 +93,41 @@ test('upload and send: the document and signers, the fields in the editor, the r
   } finally { await app.unmount(); }
 });
 
+test('a signer\'s contact suggestions open only while the field has the focus: an answer after the focus moved on, or after Escape, leaves them closed', async () => {
+  // The contacts answer when the test says, as a slow network would.
+  const waiting: ((response: Response) => void)[] = [];
+  const CONTACT = { id: 'c1', name: 'Signer One', email: 'signer1@partner.example', title: '', company: '' };
+  const app = await renderMember('/envelopes/send', (c) => {
+    if (c.path === '/api/me') return json(EDITOR);
+    if (c.path.startsWith('/api/contacts?')) return new Promise<Response>((resolve) => waiting.push(resolve)) as unknown as Response;
+    if (c.path.startsWith('/api/tags?')) return json({ tags: [] });
+  });
+  const answer = async () => { for (const resolve of waiting.splice(0)) resolve(json({ contacts: [CONTACT] })); await app.settle(); };
+  const name = () => app.byId('send-0-name');
+  const shown = () => [name().props['aria-expanded'], Boolean(app.byLabel('Contacts matching name'))];
+  try {
+    // Answered while the field still has the focus: the suggestions open.
+    await app.type(name(), 'Si'); await answer();
+    assert.deepEqual(shown(), [true, true], 'open while typing');
+    // Typed on, then the focus moves to Email before the answer comes: the list stays closed (it would cover the form).
+    await app.type(name(), 'Sig');
+    await app.act(async () => { name().props.onBlur(); });
+    assert.deepEqual(shown(), [false, false], 'closed on leaving the field');
+    await answer();
+    assert.deepEqual(shown(), [false, false], 'and an answer after the focus moved on leaves it closed');
+    // Escape before the answer comes: closed too, and Escape is left to the page (nothing open to close).
+    await app.type(name(), 'Sign');
+    let prevented = false;
+    await app.act(async () => { name().props.onKeyDown({ key: 'Escape', preventDefault() { prevented = true; } }); });
+    await answer();
+    assert.deepEqual(shown(), [false, false], 'an answer after Escape leaves it closed');
+    assert.equal(prevented, false);
+    // Typing again asks again, and opens them.
+    await app.type(name(), 'Signe'); await answer();
+    assert.deepEqual(shown(), [true, true], 'open again on typing');
+  } finally { await app.unmount(); }
+});
+
 test('a draft opens again where it was; the Envelopes page leads to Upload and send, and a draft of one to it', async () => {
   const draft = { recipients: [{ role: 'partner', name: 'Pat Partner', email: 'pat@partner.example', delivery: 'email' }], documentName: 'Reseller agreement', message: { subject: 'Please sign' } };
   const app = await renderMember(`/envelopes/send?draft=${ID}`, (c) => {

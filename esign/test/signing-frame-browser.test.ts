@@ -1,8 +1,9 @@
 // The signing page in a host's frame, in Chrome, served as the platform serves it: the built page, with the headers
 // page-headers.ts gives it behind the gateway (its frame-ancestors from the link's ?host=). Reloaded in its frame after
 // its code was used, the page is still allowed there and says so itself; "Confirm it's you" fits a phone, framed 280 to
-// 320 px wide or on its own, light and dark, without scrolling sideways; and the emailed code can be typed into its six
-// boxes one key at a time, with Chrome's own key events. Synthetic data only.
+// 320 px wide or on its own, light and dark, without scrolling sideways; the emailed code can be typed into its six
+// boxes one key at a time, with Chrome's own key events; and declining asks for no signature preview. Synthetic data
+// only.
 import {after,test} from 'node:test';
 import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
@@ -43,10 +44,13 @@ async function start(){
   const post=(body:unknown,headers:Record<string,string>)=>({method:'POST',headers:{...headers,'content-type':'application/json'},body:JSON.stringify(body)});
   const pdf=await PDFDocument.create();pdf.addPage([612,792]);const form=new FormData();form.set('file',new File([await pdf.save()],'synthetic.pdf',{type:'application/pdf'}));form.set('roles','["ana"]');
   const template=await (await req('/api/templates',{method:'POST',headers:mgmt,body:form})).json() as {id:string};
+  // The same document with the signer's Signature and Date signed fields, whose previews the Sign step asks for.
+  const signed=await (await req('/api/templates',{method:'POST',headers:mgmt,body:form})).json() as {id:string};
+  await db.prepare('UPDATE templates SET fields_json=? WHERE id=?').bind(JSON.stringify([{id:'sig',type:'Signature',role:'ana',page:1,required:true,rect:{x:.1,y:.8,width:.35,height:.08}},{id:'date',type:'Date signed',role:'ana',page:1,required:true,rect:{x:.55,y:.8,width:.3,height:.08}}]),signed.id).run();
   /** A code for a new envelope's signer (each with a code of their own to send), and the link to the signing page. */
   let envelopes=0;
-  const view=async(body:Record<string,unknown>)=>{
-   const created=await req('/api/envelopes',post({templateId:template.id,recipients:[{role:'ana',name:'Ana Example',email:'ana@example.com'}]},{...mgmt,'idempotency-key':`signing-frame-${++envelopes}`}));assert.equal(created.status,201,await created.clone().text());
+  const view=async(body:Record<string,unknown>,{fields=false}={})=>{
+   const created=await req('/api/envelopes',post({templateId:fields?signed.id:template.id,recipients:[{role:'ana',name:'Ana Example',email:'ana@example.com'}]},{...mgmt,'idempotency-key':`signing-frame-${++envelopes}`}));assert.equal(created.status,201,await created.clone().text());
    const envelope=(await created.json() as {id:string}).id,task=(await (await req(`/api/envelopes/${envelope}`,{headers:mgmt})).json() as {tasks:{id:string}[]}).tasks[0]!.id;
    const r=await req(`/api/envelopes/${envelope}/tasks/${task}/recipient-view`,post({signedInEmail:'ana@example.com',...body},mgmt));assert.equal(r.status,201,await r.clone().text());
    return await r.json() as {code:string;url:string};
@@ -56,7 +60,10 @@ async function start(){
   const pages:{path:string;search:string;csp:string}[]=[],counts={exchanges:0};
   // While `codeFirst` is set, the document is refused (401) to a page session until its code is verified, as by a server
   // that shows the document only after the code: the page then asks for the code before Review.
-  const gate={codeFirst:false,verified:new Set<string>()};
+  // `declineMs` holds every decline that long (a slow network), and while `holdPreviews` is set a signature preview waits
+  // for release() (one in flight); `api` records every API call the page made, in order.
+  const gate={codeFirst:false,verified:new Set<string>(),declineMs:0,holdPreviews:false,held:0,waiting:[] as (()=>void)[],release(){for(const go of this.waiting.splice(0))go();}};
+  const api:{method:string;path:string;status:number}[]=[];
   const asset=async(path:string)=>{try{const data=await readFile(join(output,path));return new Response(data,{headers:{'content-type':path.endsWith('.html')?'text/html; charset=utf-8':path.endsWith('.css')?'text/css':path.endsWith('.js')||path.endsWith('.mjs')?'text/javascript':'application/octet-stream'}});}catch{return new Response(null,{status:404});}};
   const proxy=createServer(async(rq,rs)=>{try{
    const url=new URL(rq.url!);let response:Response;
@@ -69,11 +76,14 @@ async function start(){
     const headers=new Headers();for(const [k,v] of Object.entries(rq.headers))if(v!==undefined&&k!=='host'&&k!=='connection')headers.set(k,Array.isArray(v)?v.join(','):v);
     if(url.pathname==='/api/public/page-sessions/exchange')counts.exchanges++;
     const session=headers.get('x-esign-session')??'';
+    if(gate.holdPreviews&&url.pathname==='/api/public/signing/preview'){gate.held++;await new Promise<void>(r=>gate.waiting.push(r));}
+    if(gate.declineMs&&url.pathname==='/api/public/signing/decline')await sleep(gate.declineMs);
     if(gate.codeFirst&&url.pathname==='/api/public/signing/current'&&!gate.verified.has(session))response=Response.json({error:'unavailable'},{status:401});
     else response=await app.fetch(new Request(url,{method:rq.method,headers,...(body.length?{body}:{})}),env);
     if(url.pathname==='/api/public/signing/otp/verify'&&response.ok)gate.verified.add(session);
     // The code the page asks for, shown on the page as in the local preview (helpers/local-otp-display.ts).
     if(url.pathname==='/api/public/signing/otp'&&rq.method==='POST')response=await withLocalTestOtp(response,env.TEST_MAIL);
+    api.push({method:rq.method!,path:url.pathname,status:response.status});
    }else if(url.origin===APP){
     // The built pages as the platform serves them (index.html for every page path), with the headers the app's page
     // middleware adds behind the gateway: the signing page's frame-ancestors comes from its address's ?host=.
@@ -92,7 +102,9 @@ async function start(){
   const target=await (await fetch(`http://127.0.0.1:${debug}/json/new?about:blank`,{method:'PUT'})).json() as {webSocketDebuggerUrl:string};
   const ws=new WebSocket(target.webSocketDebuggerUrl);await new Promise<void>((r,j)=>{ws.onopen=()=>r();ws.onerror=()=>j(new Error('CDP unavailable'));});stops.push(async()=>ws.close());
   let seq=0;const pending=new Map<number,{resolve:(v:any)=>void;reject:(e:Error)=>void}>();
-  ws.onmessage=e=>{const m=JSON.parse(String(e.data));if(m.id&&pending.has(m.id)){const p=pending.get(m.id)!;pending.delete(m.id);m.error?p.reject(new Error(m.error.message)):p.resolve(m.result);}};
+  // Chrome's console (Log.entryAdded: a failed request's "Failed to load resource" among them), kept in order.
+  const logged:{level:string;text:string}[]=[];
+  ws.onmessage=e=>{const m=JSON.parse(String(e.data));if(m.method==='Log.entryAdded')logged.push({level:m.params.entry.level,text:m.params.entry.text});if(m.id&&pending.has(m.id)){const p=pending.get(m.id)!;pending.delete(m.id);m.error?p.reject(new Error(m.error.message)):p.resolve(m.result);}};
   const call=(method:string,params:Record<string,unknown>={})=>new Promise<any>((resolve,reject)=>{const id=++seq;pending.set(id,{resolve,reject});ws.send(JSON.stringify({id,method,params}));});
   const evaluate=async(expression:string,contextId?:number)=>{const r=await call('Runtime.evaluate',{expression,returnByValue:true,awaitPromise:true,...(contextId?{contextId}:{})});if(r.exceptionDetails)throw new Error(JSON.stringify(r.exceptionDetails));return r.result.value;};
   // The signing page's frame (same site as the host, so in the host's process), and a world to read and click in it.
@@ -101,7 +113,8 @@ async function start(){
   const waitFor=async(read:()=>Promise<any>,label:string,ms=30000)=>{const end=Date.now()+ms;let last:unknown;while(Date.now()<end){try{last=await read();if(last)return last;}catch(error){last=String(error);}await sleep(100);}throw new Error(`Timed out: ${label} (${JSON.stringify(last)})`);};
   /** Opens a link in the host's frame `width` px wide, on a fresh page. */
   const openFramed=async(url:string,width:number)=>{await call('Page.navigate',{url:'about:blank'});await call('Page.navigate',{url:`${HOST}/host.html?w=${width}&src=${encodeURIComponent(url)}`});await waitFor(()=>inFrame(`Boolean(${button('Continue')})`),'the framed page opens');};
-  return {view,pages,counts,gate,call,evaluate,signingFrame,inFrame,waitFor,openFramed,stop};
+  await call('Log.enable');
+  return {view,pages,counts,gate,api,logged,call,evaluate,signingFrame,inFrame,waitFor,openFramed,stop};
  }catch(error){await stop();throw error;}
 }
 let shared:ReturnType<typeof start>|undefined;
@@ -253,4 +266,46 @@ test('the code is typed one key at a time: each box in turn, Backspace and the a
   await press('Enter');
   await s.waitFor(()=>s.evaluate(`Boolean(${button('Continue')})`),'the document opens once the code is verified');
  }finally{s.gate.codeFirst=false;}
+});
+
+test('declining after the code asks for no signature preview, and a preview in flight when the decline starts is cancelled',{skip:!chrome,timeout:180000},async()=>{
+ const s=await stack();
+ await s.call('Emulation.clearDeviceMetricsOverride');
+ const text=()=>s.evaluate('document.body.innerText') as Promise<string>;
+ const click=(name:string)=>s.waitFor(()=>s.evaluate(`Boolean(${button(name)})`),name).then(()=>s.evaluate(`${button(name)}.click()`));
+ const fill=(selector:string,value:string)=>s.evaluate(`(()=>{const x=document.querySelector(${JSON.stringify(selector)}),proto=x instanceof HTMLTextAreaElement?HTMLTextAreaElement.prototype:HTMLInputElement.prototype;Object.getOwnPropertyDescriptor(proto,'value').set.call(x,${JSON.stringify(value)});x.dispatchEvent(new Event('input',{bubbles:true}));})()`);
+ const enterCode=async()=>{
+  const code=await s.waitFor(()=>s.evaluate(`document.body.innerText.match(/Local test verification code: (\\d{6})/)?.[1]`),'the code is sent') as string;
+  await s.evaluate(`document.querySelector('.esign-code-boxes input').focus()`);await s.call('Input.insertText',{text:code});
+ };
+ const declineWithReason=async()=>{await click('Decline to sign');await fill('textarea[aria-label="Reason for declining"]','Synthetic reason');await click('Decline');};
+ const declined=()=>s.waitFor(async()=>/You declined to sign\. The sender has been told\./.test(await text()),'the decline is confirmed');
+ const previews=(from:number)=>s.api.slice(from).filter(c=>c.path==='/api/public/signing/preview');
+ const failed=(from:number)=>s.logged.slice(from).filter(e=>e.level==='error');
+ s.gate.declineMs=300;
+ try{
+  // Declining first, then the code: Verify code sends the decline and nothing else, however long it takes.
+  let api=s.api.length,log=s.logged.length;
+  await s.call('Page.navigate',{url:'about:blank'});await s.call('Page.navigate',{url:(await s.view({},{fields:true})).url});
+  await declineWithReason();
+  assert.match(await text(),/Confirm it's you to decline\./);
+  await enterCode();await click('Verify code');await declined();await sleep(500);
+  assert.deepEqual(s.api.slice(api).filter(c=>c.path.startsWith('/api/public/signing/')&&c.path!=='/api/public/signing/pdf').map(c=>`${c.path.slice('/api/public/signing/'.length)} ${c.status}`),['current 200','otp 202','otp/verify 204','decline 200'],'the code and the decline only');
+  assert.deepEqual(previews(api),[],'no signature preview');
+  assert.deepEqual(failed(log),[],'no failed request in the console');
+
+  // The code first, on to Sign (the previews of the signer's name and the date are asked for there); a new name's
+  // preview is still on its way when the signer goes back and declines: it is cancelled, never answered "declined".
+  api=s.api.length;
+  await s.call('Page.navigate',{url:'about:blank'});await s.call('Page.navigate',{url:(await s.view({},{fields:true})).url});
+  await click('Continue');await enterCode();await click('Verify code');
+  await s.waitFor(()=>s.evaluate(`Boolean(document.querySelector('input[aria-label="Full name"]'))`),'the Sign step');
+  await s.waitFor(async()=>previews(api).length>=2&&previews(api).every(c=>c.status===200),'the Sign step\'s previews');
+  s.gate.holdPreviews=true;const held=s.gate.held;log=s.logged.length;
+  await fill('input[aria-label="Full name"]','Ana Examples');
+  await s.waitFor(async()=>s.gate.held>held,'a new name\'s preview on its way');
+  await click('Back');await declineWithReason();await declined();
+  s.gate.holdPreviews=false;s.gate.release();await sleep(500);
+  assert.deepEqual(failed(log),[],'the preview on its way is cancelled: no 422 in the console');
+ }finally{s.gate.declineMs=0;s.gate.holdPreviews=false;s.gate.release();}
 });

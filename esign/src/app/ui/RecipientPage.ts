@@ -320,7 +320,8 @@ export function RecipientPage({renderDocument=defaultRender}:{renderDocument?:Re
     return;}
     // A host that needed the code first shows the document now.
     if(docNeedsCode||!artifact){await loadDocument();setStep(1);return;}
-    if(pendingDecline){setPendingDecline(false);setStep(1);await decline();return;}
+    // Verified to decline: the decline goes, and nothing for signing (no preview) is asked for meanwhile.
+    if(pendingDecline){setStep(1);await decline();setPendingDecline(false);return;}
     setStep(3);}
   const fields=artifact?.fields??[];
   // The fields the signer signs by selecting them (Date signed fills itself), and the required ones not signed yet.
@@ -399,7 +400,7 @@ export function RecipientPage({renderDocument=defaultRender}:{renderDocument?:Re
   const previewProps=(field:SignatureField)=>({key:field.id,field,token,
     onReady:(value:string,url:string,receipt?:string)=>{setPreviews(old=>({...old,[field.id]:value}));setImageUrls(old=>({...old,[field.id]:url}));if(receipt&&field.type==='Title')setTextReceipts(old=>({...old,[field.id]:receipt}));},
     onError:(error:string)=>setFieldErrors(old=>old[field.id]===error?old:{...old,[field.id]:error})});
-  const signaturePreview=(field:SignatureField)=>async(text:string)=>{const response=await request('/api/public/signing/preview',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({fieldId:field.id,text})});const receipt=response.headers.get('X-Signature-Preview')??'',width=Number(response.headers.get('X-Signature-Width')),height=Number(response.headers.get('X-Signature-Height'));if(!/^[a-f0-9]{64}$/.test(receipt))throw new Error('Invalid preview receipt');if(!Number.isFinite(width)||!Number.isFinite(height)||width<=0||height<=0)throw new Error('Invalid preview geometry');return {blob:await response.blob(),width,height,receipt};};
+  const signaturePreview=(field:SignatureField)=>async(text:string,signal:AbortSignal)=>{const response=await request('/api/public/signing/preview',{method:'POST',signal,headers:{'content-type':'application/json'},body:JSON.stringify({fieldId:field.id,text})});const receipt=response.headers.get('X-Signature-Preview')??'',width=Number(response.headers.get('X-Signature-Width')),height=Number(response.headers.get('X-Signature-Height'));if(!/^[a-f0-9]{64}$/.test(receipt))throw new Error('Invalid preview receipt');if(!Number.isFinite(width)||!Number.isFinite(height)||width<=0||height<=0)throw new Error('Invalid preview geometry');return {blob:await response.blob(),width,height,receipt};};
   const fieldPreviews=[
    firstSignature&&h(SignaturePreview,{key:'adopt',field:firstSignature,token,value:fullName,preview:signaturePreview(firstSignature),onSize:()=>{},onReady:(_value:string,url:string)=>setAdoptUrl(url),onError:setAdoptError}),
    ...fields.map(field=>field.type==='Signature'
@@ -407,7 +408,7 @@ export function RecipientPage({renderDocument=defaultRender}:{renderDocument?:Re
       onSize:(size:{width:number;height:number;receipt:string})=>{setSignatureSizes(old=>({...old,[field.id]:size}));setSignatureReceipts(old=>({...old,[field.id]:size.receipt}));}})
     :h(TextPreview,{...previewProps(field),value:field.type==='Title'?signatures[field.id]??'':'',version:datePreviewVersion,
       onSize:(size:{width:number;height:number;top:number})=>setSignatureSizes(old=>({...old,[field.id]:size})),
-      preview:async(text:string)=>{const response=await request('/api/public/signing/preview',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({fieldId:field.id,...(field.type==='Title'?{text}:{})})});const width=Number(response.headers.get('X-Text-Width')),height=Number(response.headers.get('X-Text-Height')),top=Number(response.headers.get('X-Text-Top')??0);if(!Number.isFinite(width)||!Number.isFinite(height)||!Number.isFinite(top)||width<=0||height<=0||top<0||top+height>1+1e-9)throw new Error('Invalid preview geometry');return {blob:await response.blob(),previewId:response.headers.get(field.type==='Title'?'X-Text-Preview':'X-Preview-Text'),width,height,top};}}))];
+      preview:async(text:string,signal:AbortSignal)=>{const response=await request('/api/public/signing/preview',{method:'POST',signal,headers:{'content-type':'application/json'},body:JSON.stringify({fieldId:field.id,...(field.type==='Title'?{text}:{})})});const width=Number(response.headers.get('X-Text-Width')),height=Number(response.headers.get('X-Text-Height')),top=Number(response.headers.get('X-Text-Top')??0);if(!Number.isFinite(width)||!Number.isFinite(height)||!Number.isFinite(top)||width<=0||height<=0||top<0||top+height>1+1e-9)throw new Error('Invalid preview geometry');return {blob:await response.blob(),previewId:response.headers.get(field.type==='Title'?'X-Text-Preview':'X-Preview-Text'),width,height,top};}}))];
 
   const ready=!!artifact&&rendered;
   const fieldKind=(field:SignatureField)=>field.type==='Title'?'title':field.type==='Date signed'?'date signed':'signature';
@@ -507,28 +508,32 @@ export function RecipientPage({renderDocument=defaultRender}:{renderDocument?:Re
         field.type==='Title'?'Title':'Sign',field.required?h('span',{className:'esign-required','aria-hidden':true},'*'):h('span',{className:'esign-optional'},'Optional')),
       imageUrls[field.id]&&(field.type==='Date signed'||applied[field.id])&&h('img',{src:imageUrls[field.id],alt:'',style:{position:'absolute',inset:0,top:`${(signatureSizes[field.id]?.top??0)*100}%`,width:`${(signatureSizes[field.id]?.width??0)*100}%`,height:`${(signatureSizes[field.id]?.height??0)*100}%`,maxWidth:'none',objectFit:'contain',objectPosition:'left top'}})),pageHosts[field.page-1],field.id)),
     // The previews' fetchers stay mounted once the code is verified, not only on Sign: each revokes its image's URL when it
-    // unmounts, and Back then Continue would otherwise show the Sign step's preview from a URL already revoked.
-    ready&&verified&&!finished&&h(React.Fragment,null,...fieldPreviews));
+    // unmounts, and Back then Continue would otherwise show the Sign step's preview from a URL already revoked. Not while
+    // the signer declines (the code verified to decline, or a decline on its way): unmounting cancels a preview in flight,
+    // which the declined task would refuse.
+    ready&&verified&&!finished&&!pendingDecline&&!declineBusy&&h(React.Fragment,null,...fieldPreviews));
 }
 
 type PreviewProps = {field:SignatureField;value:string;token:string;onReady:(value:string,url:string,receipt?:string)=>void;onError:(error:string)=>void};
 
-/** Asks the server for one Signature field's image of the adopted name; renders nothing itself. */
-function SignaturePreview({field,value,token,preview,onReady,onSize,onError}:PreviewProps&{preview:(text:string)=>Promise<{blob:Blob;width:number;height:number;receipt:string}>;onSize:(size:{width:number;height:number;receipt:string})=>void}) {
- useEffect(()=>{let active=true,objectUrl='';onError('');
-  if(SIGNATURE_NAME.test(value)&&value.length<=64)preview(value).then(({blob,width,height,receipt})=>{if(!active)return;objectUrl=URL.createObjectURL(blob);onSize({width,height,receipt});onReady(value,objectUrl);}).catch(()=>{if(active)onError('Your name does not fit the signature field. Shorten it, or ask the sender to move the field.');});
-  return ()=>{active=false;if(objectUrl)URL.revokeObjectURL(objectUrl);};
+/** Asks the server for one Signature field's image of the adopted name; renders nothing itself. A request still on its way
+ * when the name changes or the preview unmounts (the signer declines) is cancelled. */
+function SignaturePreview({field,value,token,preview,onReady,onSize,onError}:PreviewProps&{preview:(text:string,signal:AbortSignal)=>Promise<{blob:Blob;width:number;height:number;receipt:string}>;onSize:(size:{width:number;height:number;receipt:string})=>void}) {
+ useEffect(()=>{let active=true,objectUrl='';const controller=new AbortController();onError('');
+  if(SIGNATURE_NAME.test(value)&&value.length<=64)preview(value,controller.signal).then(({blob,width,height,receipt})=>{if(!active)return;objectUrl=URL.createObjectURL(blob);onSize({width,height,receipt});onReady(value,objectUrl);}).catch(()=>{if(active)onError('Your name does not fit the signature field. Shorten it, or ask the sender to move the field.');});
+  return ()=>{active=false;controller.abort();if(objectUrl)URL.revokeObjectURL(objectUrl);};
  },[value,token,field.id]);
  return null;
 }
 
-/** Asks the server for a Title field's image of the signer's title, or a Date signed field's date; renders nothing itself. */
-function TextPreview({field,value,token,version,preview,onReady,onSize,onError}:PreviewProps&{version:number;preview:(text:string)=>Promise<{blob:Blob;previewId:string|null;width:number;height:number;top:number}>;onSize:(size:{width:number;height:number;top:number})=>void}) {
+/** Asks the server for a Title field's image of the signer's title, or a Date signed field's date; renders nothing itself.
+ * A request still on its way when the title changes or the preview unmounts is cancelled, as SignaturePreview's. */
+function TextPreview({field,value,token,version,preview,onReady,onSize,onError}:PreviewProps&{version:number;preview:(text:string,signal:AbortSignal)=>Promise<{blob:Blob;previewId:string|null;width:number;height:number;top:number}>;onSize:(size:{width:number;height:number;top:number})=>void}) {
  const date=field.type==='Date signed';
- useEffect(()=>{let active=true,objectUrl='';onError('');
-  if(date||(value.length>0&&value.length<=128&&value.trim()===value&&/^[\x20-\x7e]+$/.test(value)))preview(value).then(async({blob,previewId,width,height,top})=>{if(!active||!previewId||(date?!/^\d{4}-\d{2}-\d{2}$/.test(previewId):!/^[a-f0-9]{64}$/.test(previewId)))return;objectUrl=URL.createObjectURL(blob);const image=new Image();image.src=objectUrl;await image.decode();if(!active)return;onSize({width,height,top});onReady(date?previewId!:value,objectUrl,previewId!);}).catch(error=>{if(active)onError(error instanceof RequestFailed&&error.code==='title_does_not_fit'?'Your title does not fit the title field. Shorten it.':error instanceof RequestFailed&&error.code==='title_field_too_small'?'The title field is too small. Ask the sender to resize it.':date?'The date could not be shown. Go back and try again.':'Your title could not be shown. Change it or try again.');});
+ useEffect(()=>{let active=true,objectUrl='';const controller=new AbortController();onError('');
+  if(date||(value.length>0&&value.length<=128&&value.trim()===value&&/^[\x20-\x7e]+$/.test(value)))preview(value,controller.signal).then(async({blob,previewId,width,height,top})=>{if(!active||!previewId||(date?!/^\d{4}-\d{2}-\d{2}$/.test(previewId):!/^[a-f0-9]{64}$/.test(previewId)))return;objectUrl=URL.createObjectURL(blob);const image=new Image();image.src=objectUrl;await image.decode();if(!active)return;onSize({width,height,top});onReady(date?previewId!:value,objectUrl,previewId!);}).catch(error=>{if(active)onError(error instanceof RequestFailed&&error.code==='title_does_not_fit'?'Your title does not fit the title field. Shorten it.':error instanceof RequestFailed&&error.code==='title_field_too_small'?'The title field is too small. Ask the sender to resize it.':date?'The date could not be shown. Go back and try again.':'Your title could not be shown. Change it or try again.');});
   else if(!date&&value)onError('Use English letters, digits and common punctuation in your title.');
-  return ()=>{active=false;if(objectUrl)URL.revokeObjectURL(objectUrl);};
+  return ()=>{active=false;controller.abort();if(objectUrl)URL.revokeObjectURL(objectUrl);};
  },[value,token,field.id,version]);
  return null;
 }

@@ -580,6 +580,7 @@ async function main() {
         'This image is a placeholder. A completed envelope can\'t be captured on a local run: Esign seals a finished envelope with its seal key and an RFC 3161 timestamp from an outside service, so locally it stays Finishing.',
         'When an envelope is completed, its page shows the status Completed and two downloads: Signed PDF with certificate, and Certificate of completion.',
       ])
+      await holder.close()
     }
 
     // Knowledge, with its own colleagues and collections (knowledge-screenshots.mjs).
@@ -608,7 +609,6 @@ async function main() {
       await page.fill('input[name="name"]', 'Northwind Europe')
       await page.fill('#field-reason', 'A separate workspace for our European subsidiary, with its own cap table and its own people.')
       await shot(page, 'platform-request-organizations')
-      await holder.close()
     }
     await owner.close()
     log(`${saved} screenshot(s) in ${OUT}. Now run \`npm run build:docs\` in .github/hosting/gateway.`)

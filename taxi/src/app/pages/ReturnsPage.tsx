@@ -90,7 +90,7 @@ function Years({ data, reload }: { data: YearList; reload: () => void }) {
             </CardTitle>
           </CardHeader>
           <CardContent className="flex flex-col gap-2 text-sm text-muted-foreground">
-            <p>Residents of Ontario, British Columbia and Alberta with employment income, investment slips, RRSP, donations and medical expenses.</p>
+            <p>Residents of every province and territory, with income from work, pensions, benefits, investments, a business or rent.</p>
             <p>Quebec residents get both returns: the federal T1 and Revenu Québec's TP-1, worked out from their RL slips.</p>
             <p>Nothing is sent to the CRA. You get the CRA's own forms, filled in, to sign and mail.</p>
           </CardContent>

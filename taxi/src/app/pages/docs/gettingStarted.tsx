@@ -22,9 +22,9 @@ export const gettingStarted: DocTopic = {
             copy the numbers into certified tax software.
           </p>
           <p>
-            <b>Who it is for:</b> residents of Ontario, British Columbia and Alberta who lived in Canada all year, with income from work,
-            pensions, EI, investments, self-employment (a business, a profession, farming or fishing), rent or abroad. For a Quebec resident it
-            also works out the Quebec return (TP-1) from the RL slips; printing it on Revenu Québec's forms comes later.
+            <b>Who it is for:</b> residents of every province and territory, also in the year they moved to or from Canada, with income from
+            work, pensions, EI, investments, self-employment (a business, a profession, farming or fishing), rent or abroad. For a Quebec resident
+            it also prepares the Quebec return (TP-1) from the RL slips.
           </p>
         </>
       ),
@@ -99,7 +99,7 @@ export const gettingStarted: DocTopic = {
         <>
           <p>
             Above each step but Finish, <b>Estimate</b> shows the refund or balance owing; <b>Details</b> opens the return's key lines: total income, net income, taxable income, net
-            federal tax, provincial tax (Ontario, British Columbia or Alberta), the total payable, the tax already deducted, and the refund or
+            federal tax, provincial or territorial tax (for a Quebec resident, the Quebec refund or balance instead), the total payable, the tax already deducted, and the refund or
             balance owing. When both returns are prepared together, each uses the other's numbers, such as the spouse amount; the line's
             "why" shows them.
           </p>

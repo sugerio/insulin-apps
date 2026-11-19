@@ -86,8 +86,9 @@ export const household: DocTopic = {
         <>
           <p>On each return, choose the province the person lived in on December 31, and say whether they lived in Canada all year.</p>
           <p>
-            The app prepares returns for <b>Ontario</b>, <b>British Columbia</b> and <b>Alberta</b>, for people who lived in Canada all year. For any
-            other province, or for someone who moved to or from Canada during the year, the page says the return needs other software.
+            The app prepares returns for every province and territory. A resident of Quebec gets two returns: the federal one and Revenu Québec's
+            TP-1. If the person moved to or from Canada during the year, answer No: Personal info then asks for the days they lived in Canada and
+            their income for the rest of the year, and the personal amounts are reduced by the days in Canada.
           </p>
         </>
       ),

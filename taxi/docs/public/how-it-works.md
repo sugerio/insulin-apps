@@ -125,26 +125,20 @@ a name, a birth date, an amount or a document.
 
 ## Limits today
 
-- The forms leave the social insurance number, address, signature and the other Step 1 answers to fill in by hand, and
-  Schedule 7 (RRSP contributions), Form T1135 and the provincial forms Taxi doesn't print (such as ON428-A).
-- The 2025 rules cover the T1 and the Ontario, British Columbia and Alberta forms for one or two adults:
-  - income: employment, OAS, CPP, workplace pensions, annuities and RRIFs (T4A, T4A(P), T4A(OAS), T4RIF), EI
-    benefits (T4E), interest, dividends, trust income, capital gains, self-employment (Forms T2125, T2042 for farming and
-    T2121 for fishing, with CPP on it from Schedule 8), rental income (Form T776), capital cost allowance for one class
-    of each, income earned abroad, the sale of real estate (Schedule 3), a home that was your residence only some of
-    the years (Form T2091(IND)) and a flipped property (business income);
-  - deductions: RRSP, FHSA, pension plan, union dues, child care (Form T778), moving (Form T1-M), home office as an
-    employee (Form T777), and the EI and OAS repayments (line 23500);
-  - credits: the basic, age, CPP, EI, employment, pension, tuition, medical and donation amounts, the spouse and
-    eligible dependant amounts, a spouse's unused age, pension and tuition amounts, and the federal and provincial
-    foreign tax credits (Forms T2209 and T2036);
-  - refunds: CPP and EI deducted over what was required (Schedule 8 and Form T2204), with CPP for the part of the year
-    after you turned 18 or up to the month you turned 70.
-- Not handled, and said so when it applies: capital cost allowance, farming and fishing income, pension income
-  splitting (Form T1032), a home that was your residence only some of the years, a disabled child's child care limit,
-  and moving a spouse's age or pension amount in British Columbia or Alberta. Not handled and not asked: electing to
-  stop CPP contributions (Form CPT30) and a CPP disability pension, which change the months of CPP.
-- When the rules meet a case they don't handle, such as T4 slips where only some show box 26, the number is shown as
-  missing with the reason, never guessed.
+- The forms leave the social insurance number, address, signature and the other Step 1 answers to fill in by hand.
+  Taxi doesn't print Schedule 7 (RRSP contributions), Form T1135 and a few worksheets (such as ON428-A).
+- The 2025 rules cover one or two adults in every province and territory:
+  - the T1, or the 5005-R for a resident of Quebec, with Schedules 2, 3, 5, 6, 8, 9, 11 and 12 and Forms T2125, T2042,
+    T2121, T776, T777, T778, T1-M, T1032, T2091(IND), T2204, T2209, T2036 and T2222;
+  - the Form 428 of each province and territory, with its S2 and S11 schedules and its Form 479 credits;
+  - for a resident of Quebec, Revenu Québec's TP-1 with Schedules B, C, D, F, J, K, P, Q, R, T and U, from the RL
+    slips;
+  - people who moved to or from Canada during the year: the personal amounts are reduced by the days in Canada, unless
+    at least 90% of their income for the rest of the year came from Canada.
+- Not handled, and said so when it applies: property treated as sold when you leave Canada (Forms T1243 and T1161), a
+  T4 with both CPP and QPP (Form RC381), capital cost allowance for more than one class, a farming loss, and on the
+  TP-1 employment outside Quebec, rental and foreign income and moving expenses.
+- Not handled and not asked: electing to stop CPP contributions (Form CPT30), a CPP disability pension (which changes
+  the months of CPP), and business, investment, mining and similar tax credits.
+- When the rules meet a case they don't handle, the number is shown as missing with the reason, never guessed.
 - Only the 2025 tax year.
-- Ontario, British Columbia and Alberta residents who lived in Canada all year.

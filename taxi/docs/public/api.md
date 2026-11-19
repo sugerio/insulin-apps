@@ -69,7 +69,7 @@ has a spouse, and `single`, `widowed`, `divorced` or `separated` when it has non
 `province` is a two-letter code.
 
 A year's answer lists `issues`. Those of kind `blocking` keep the step from being done; those of kind `unsupported` say
-what the app can't prepare, such as a province other than Ontario, British Columbia or Alberta.
+what the app can't prepare. Every province and territory is prepared, so today no issue is of that kind.
 
 ## A year's estimate
 

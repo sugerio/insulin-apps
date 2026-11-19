@@ -48,9 +48,12 @@ prepare the return for the year of a separation yet.
 ## Province and residency
 
 On each return, choose the province the person lived in on December 31, and say whether they lived in Canada all
-year. Taxi prepares returns for Ontario, British Columbia and Alberta, for people who lived
-in Canada all year. For any other province, or for someone who moved to or from Canada during the year, the page says
-the return needs other software.
+year. Taxi prepares returns for every province and territory. A resident of Quebec gets two returns: the federal one
+and Revenu Québec's TP-1.
+
+If the person moved to or from Canada during the year, answer No. Personal info then asks for the days they lived in
+Canada and their income for the rest of the year. Taxi reduces the personal amounts (such as the basic personal amount)
+by the days in Canada, unless at least 90% of that other income came from Canada.
 
 ## Save the step
 

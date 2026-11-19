@@ -45,12 +45,22 @@ income, what you earned and your expenses.
 
 ## Who it is for
 
-Residents of Ontario, British Columbia and Alberta who lived in Canada all year. The returns it prepares cover
-employment income, pensions (OAS, CPP, workplace pensions and annuities, RRIFs), EI benefits, investment slips, self-employment (including farming and fishing) and rental income with capital cost allowance, income earned abroad with its foreign tax credit, and the sale of real estate; RRSP and FHSA contributions, child care, moving and home-office expenses; tuition, donations and
-medical expenses.
+Residents of every Canadian province and territory, including people who moved to or from Canada during the year. For a
+resident of Quebec, Taxi prepares both returns: the federal return and Revenu Québec's TP-1.
 
-It doesn't handle Quebec returns or pension income splitting. The
-app says so when a case it doesn't handle applies.
+The returns cover:
+
+- Income: employment, pensions (OAS, CPP or QPP, workplace pensions, annuities, RRIFs and RRSP withdrawals), EI and
+  parental benefits, investments, self-employment (including farming and fishing), rental income with capital cost
+  allowance, income earned abroad, support payments, scholarships and the sale of real estate.
+- Deductions: RRSP and FHSA contributions, pension income splitting, child care, moving and home-office expenses,
+  support payments, carrying charges, disability supports and losses of other years.
+- Credits: tuition, donations, medical expenses, the disability and caregiver amounts, the home buyers' and home
+  accessibility amounts, adoption, student loan interest, the Canada workers benefit, and the credits of each
+  province and territory.
+
+Taxi doesn't handle a few rare cases, such as property that is treated as sold when you leave Canada, and business and
+investment tax credits. The app says so when a case it doesn't handle applies.
 
 ## What it stores
 

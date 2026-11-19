@@ -6,8 +6,8 @@ and the repository's root `AGENTS.md`, before changing code.
 ## The app in brief
 
 Taxi prepares Canadian T1 returns for one household per organization: the person preparing and, together, their
-spouse or common-law partner, in Ontario, British Columbia or Alberta. It never files with the CRA: it fills in the
-CRA's own forms for the person to sign and mail. It runs on the Insulin app template: one npm package, Vite + React +
+spouse or common-law partner, in any province or territory; a resident of Quebec also gets Revenu Québec's TP-1. It
+never files with the CRA: it fills in the CRA's (and Revenu Québec's) own forms for the person to sign and mail. It runs on the Insulin app template: one npm package, Vite + React +
 Nitro, deployed as a Cloudflare Worker with one D1 database. Users, roles and permissions come from the Insulin
 platform; the organization is the tenant.
 

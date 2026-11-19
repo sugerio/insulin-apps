@@ -19,15 +19,13 @@ uploaded slips read by AI (or typed in), income, deductions, credits, the result
   their birth dates, on the Household page. Starting a year asks who is in it (only you, to begin with; change it later on
   the Tax years page): your spouse in it means both returns are
   prepared together. Each year then records your marital status on December 31, and each adult's province and whether
-  they lived in Canada all year. The app says what is still missing, and what it
-  can't prepare (another province, or someone who moved to or from Canada during the year).
+  they lived in Canada all year (for someone who moved, the days in Canada). The app says what is still missing.
 - **The tax engine.** All tax rules are YAML files under `rules/`, one folder per year, each number with its source.
   The engine computes every return of the year from them, marks each number complete, estimated (a default stood in
   for an answer) or missing, and explains any number down to the slip boxes. The 2025 rules cover the T1 for
   employment, interest, dividends, trust income and capital gains (T4, T5, T3, T5008), RRSP, FHSA, RPP and union dues,
-  the basic, age, CPP, EI, employment, tuition (T2202), medical and donation credits, the spouse and eligible
-  dependant amounts, transfers between spouses (Schedule 2), and provincial tax: ON428 (surtax, tax reduction, LIFT
-  credit, health premium), BC428 (BC tax reduction) and AB428 (supplemental credit). Above each step but
+  the federal credits, transfers between spouses (Schedule 2), the Form 428 and 479 of every province and territory,
+  and, for a resident of Quebec, the 5005-R and the TP-1 (`qc.yaml`, `qc-credits.yaml`). Above each step but
   Finish, the estimate shows the refund or balance owing; Details opens each result line, and selecting a line shows why.
 - **Step 2, AI reading.** Upload a folder or files into a return; Claude reads each one into slips, receipts (RRSP, donation,
   medical) and last year's notice of assessment (a document with the other person's name goes to their return), using
@@ -37,8 +35,8 @@ uploaded slips read by AI (or typed in), income, deductions, credits, the result
   that couldn't be read can be read again.
 - **Steps 3 to 7.** Income, Deductions and Credits, each a part of the return: what is on it (the slips found, each
   opening into its boxes to change; amounts; groups such as self-employment or working from home, whose parts are
-  asked in their card), what can be added, and what the slips already claim. A case the app doesn't handle (a home
-  that was your residence only some years, CPP for part of a year) is named, never ignored. Then Confirm (each slip entered box
+  asked in their card), what can be added, and what the slips already claim. A case the app doesn't handle (property treated as sold
+  when you leave Canada, a T4 with both CPP and QPP) is named, never ignored. Then Confirm (each slip entered box
   by box, then confirmed, or moved to the other return) and Finish (the refund or balance owing, the key lines with why,
   what to check before filing, hints, and the forms).
 - **Hints.** Finish checks each return, like a tax program's "check and optimize": claiming both spouses' donations on
@@ -58,9 +56,13 @@ uploaded slips read by AI (or typed in), income, deductions, credits, the result
 
 ## Who it's for
 
-Residents of Ontario, British Columbia and Alberta who lived in Canada all year, with employment income, pensions (OAS, CPP, workplace pensions and annuities, RRIFs), EI benefits, investment slips, self-employment and rental income, income earned abroad with its foreign tax credit, and the sale of real estate; RRSP and
-FHSA contributions, child care, moving and home-office expenses; tuition, donations and medical expenses. Not yet:
-Quebec, farming and fishing income, capital cost allowance, and pension income splitting.
+Residents of every Canadian province and territory, for the 2025 tax year, including people who moved to or from Canada
+during the year. A resident of Quebec gets both returns: the federal return (5005-R) and Revenu Québec's TP-1, from
+the RL slips. The returns cover employment, pension, benefit, investment, self-employment (with farming and fishing),
+rental and foreign income, the sale of real estate, the usual deductions (RRSP, FHSA, pension splitting, child care,
+moving, home office, support) and the federal, provincial and territorial credits a household claims. Not handled, and
+said so when it applies: property treated as sold when you leave Canada, business and investment tax credits, and a
+few Quebec cases (employment outside Quebec, rental and foreign income on the TP-1).
 
 ## Good to know
 

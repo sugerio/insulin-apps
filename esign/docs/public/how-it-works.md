@@ -148,8 +148,8 @@ Everything is in Esign's one database, scoped to your organization:
 
 - templates (the PDF, roles and placed fields), envelopes, signer tasks and each envelope's initial document; for a PDF
   Esign changed on upload, the SHA-256 of the file as uploaded and what was changed, never the file itself. A refused
-  upload isn't stored: its reason, size, SHA-256, PDF version and the producing software's name are logged, never its
-  content or file name;
+  upload isn't stored: its reason, size, SHA-256, PDF version and the kind of software that made it (from a fixed list) are
+  logged, never its content, its file name or the text of its metadata;
 - one record per signature, the drawn images and each signer's output PDF;
 - the seal and the delivery PDF of each completed envelope;
 - the audit trail;

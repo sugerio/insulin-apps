@@ -260,19 +260,34 @@ keeping how PDF.js shows each page:
   its `Rect`, with its `CA` opacity; hidden ones (`F` Hidden or NoView) and pop-ups are dropped;
   links without an appearance, and widgets without one whose field holds no value, are dropped. Then every page's `/Annots` and the catalog's
   `/AcroForm` are removed;
+- a page gets a content array of its own just before it is changed (pages may share an indirect
+  one), so nothing added to or wrapped around one page reaches another; at most 100,000 entries are
+  copied in all; an annotation with `/OC` is drawn inside
+  `/OC /<name> BDC … EMC`, its condition named in the page's `/Properties`. Names are Esign's
+  own (`freshName`: the next free number per dictionary, one name per appearance, opacity or
+  condition on a page), and a normalized page keeps naming its shared `/Resources`, and the
+  `/Font`, `/XObject` and `/ExtGState` lists in it, by reference (`normalizePage`), so each is
+  saved once, not once per page;
 - a rotated, cropped or offset page has its content wrapped in `q <turn> cm <-origin> cm <crop> re W n
   … Q`, and gets a media box and crop box of the visible size at the origin, `/Rotate 0`, and no
   bleed, trim or art box. The editor's normalized coordinates are measured on the displayed page,
   which is this page, so fields placed on the original land in the same place.
 
-A PDF that needs no change is stored byte for byte. A changed one is saved, read back and checked
-with `validateFieldsPdf`. It is refused (`PdfUploadRefused`, `422` with the route's own `error`, a
+Pages that still share one indirect content list after that each get their own copy (the same
+`ownContents`): signing draws on a page by adding to its list. A PDF that needs no change is
+stored byte for byte. A changed one is refused when it would be over
+5 MiB (`pdf_too_large`: saving writes compressed object streams out in full), from the size
+pdf-lib's writer computes before it builds the output, then saved, read back and checked
+with `validateFieldsPdf`. `POST /api/templates` passes `keepUnprepared`: a PDF refused only for
+placed fields is kept as uploaded there (logged), since that template is signed on an added page. It is refused (`PdfUploadRefused`, `422` with the route's own `error`, a
 `reason` and maybe a `page`) when encrypted, unreadable, outside 1–100 pages, an XFA form, a form
-with `NeedAppearances`, a visible annotation with no appearance, a page with `UserUnit` other than 1,
+with `NeedAppearances` and a value, more than 10,000 annotations (counted where named: repeats and
+shared lists count again), a visible annotation with no appearance, a page with `UserUnit` other than 1,
 a visible area that is empty or over 14,400 points a side, or a rotation that isn't a multiple of 90.
 Every refusal is logged (`console.warn`) and every rewrite (`console.info`) with the route, tenant,
-subject, size, SHA-256, PDF version, producer and creator (printable ASCII, truncated) and the
-reason's facts (page, subtype): never the content, a title or the file name.
+subject, size, SHA-256, PDF version, the producing and creating software as one of a fixed list of
+names (`softwareName`; else `other`: the file's own /Producer and /Creator strings are never
+logged) and the reason's facts (page, subtype): never the content, a title or the file name.
 
 What changed is kept beside the stored PDF, never the uploaded file: `uploaded_sha256` and
 `upload_changes_json` (`{formFields, annotations, links, pages}`) on `artifacts`, `templates` and

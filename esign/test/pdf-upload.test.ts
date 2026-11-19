@@ -1,11 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { degrees, PDFArray, PDFDict, PDFDocument, PDFName, PDFString, StandardFonts } from 'pdf-lib';
+import { degrees, PDFArray, PDFDict, PDFDocument, PDFName, PDFRawStream, PDFString, StandardFonts } from 'pdf-lib';
 import { getDocument } from 'pdfjs-dist/legacy/build/pdf.mjs';
 import { strictPdfOptions } from '../src/app/ui/pdf.ts';
 import { validateFieldsPdf } from '../src/app/server/esign/fields.ts';
 import { preparePdfUpload, PdfUploadRefused, type PdfUploadSource } from '../src/app/server/esign/pdf-upload.ts';
-import { describeUploadChanges } from '../src/app/lib/upload-changes.ts';
+import { describePdfRefusal, describeUploadChanges } from '../src/app/lib/upload-changes.ts';
 
 const source: PdfUploadSource = { route: 'envelope-document', tenantId: 'org-test', subjectId: 'env-test' };
 
@@ -227,7 +227,9 @@ test('refusals name the reason, and are logged with what was found but never the
     ['pdf_form_without_appearance', async () => {
       const pdf = await PDFDocument.create();
       const page = await markedPage(pdf);
-      pdf.getForm().createTextField('secret').addToPage(page, { x: 50, y: 50, width: 100, height: 20 });
+      const field = pdf.getForm().createTextField('secret');
+      field.setText('Confidential value');
+      field.addToPage(page, { x: 50, y: 50, width: 100, height: 20 });
       pdf.getForm().acroForm.dict.set(PDFName.of('NeedAppearances'), pdf.context.obj(true));
       return pdf.save();
     }],
@@ -304,7 +306,7 @@ test('a page whose only annotation is a pop-up is still rewritten: what is store
   const stored = await PDFDocument.load(prepared.bytes);
   assert.equal(stored.getPage(0).node.get(PDFName.of('Annots')), undefined);
   validateFieldsPdf(stored);
-  assert.deepEqual(describeUploadChanges(prepared.changes), ['only parts that don\'t show on any page were removed, such as an empty form or a comment\'s pop-up window']);
+  assert.deepEqual(describeUploadChanges(prepared.changes), ['nothing that shows changed, only how the file is put together (such as an empty form, a comment\'s pop-up window, or pages that shared their content)']);
   assert.deepEqual(describeUploadChanges(null), []);
 });
 
@@ -324,4 +326,334 @@ test('a blank form field with no look of its own is removed; one holding a value
   }
   const refused = await refusal(await make('Jordan Example'));
   assert.deepEqual([refused.code, refused.facts], ['pdf_form_without_appearance', { page: 1, subtype: 'Widget' }]);
+});
+
+test('pages that share one content array are each rewritten on their own: turning or flattening one never moves another', async () => {
+  for (const rotated of [[90, 0], [90, 90]]) {
+    const pdf = await PDFDocument.create(), font = await pdf.embedFont(StandardFonts.Helvetica);
+    const first = pdf.addPage([612, 792]), second = pdf.addPage([612, 792]);
+    first.drawText('Shared', { x: 100, y: 600, size: 12, font });
+    // One indirect array of content streams, which both pages name.
+    const shared = pdf.context.register(pdf.context.obj(first.node.normalizedEntries().Contents.asArray()));
+    first.node.set(PDFName.of('Contents'), shared);
+    second.node.set(PDFName.of('Contents'), shared);
+    second.node.set(PDFName.of('Resources'), first.node.get(PDFName.of('Resources'))!);
+    first.setRotation(degrees(rotated[0]!));
+    second.setRotation(degrees(rotated[1]!));
+    // A stamp on the first page only.
+    const look = pdf.context.register(pdf.context.stream('BT /F1 10 Tf 2 2 Td (STAMP) Tj ET', { Type: 'XObject', Subtype: 'Form', BBox: [0, 0, 60, 20], Resources: { Font: { F1: font.ref } } }));
+    first.node.set(PDFName.of('Annots'), pdf.context.obj([pdf.context.obj({ Type: 'Annot', Subtype: 'Stamp', Rect: [300, 300, 360, 320], AP: { N: look } })]));
+    const bytes = await pdf.save();
+    const prepared = await prepare(bytes);
+    const before = await shownText(bytes), after = await shownText(prepared.bytes);
+    assert.deepEqual(after[1], before[1], `${rotated}: the second page is as it was`);
+    assert.deepEqual(after[0]!.filter((item) => item.text === 'Shared'), before[0], `${rotated}: the first page's own text where it was shown`);
+    assert.equal(after[0]!.filter((item) => item.text === 'STAMP').length, 1, 'the stamp is drawn on its own page');
+  }
+});
+
+test('an annotation in optional content keeps its condition: drawn only where the layer is shown', async () => {
+  const pdf = await PDFDocument.create();
+  const page = await markedPage(pdf);
+  const layer = pdf.context.register(pdf.context.obj({ Type: 'OCG', Name: PDFString.of('Draft marks') }));
+  pdf.catalog.set(PDFName.of('OCProperties'), pdf.context.obj({ OCGs: [layer], D: { OFF: [layer] } }));
+  const look = pdf.context.register(pdf.context.stream('1 0 0 rg 0 0 40 20 re f', { Type: 'XObject', Subtype: 'Form', BBox: [0, 0, 40, 20] }));
+  page.node.set(PDFName.of('Annots'), pdf.context.obj([pdf.context.obj({ Type: 'Annot', Subtype: 'Square', Rect: [100, 100, 140, 120], OC: layer, AP: { N: look } })]));
+  const prepared = await prepare(await pdf.save());
+  assert.equal(prepared.changes?.annotations, 1);
+  // PDF.js marks the appearance as optional content of that layer, which its default configuration hides.
+  const doc = await getDocument(strictPdfOptions(Uint8Array.from(prepared.bytes))).promise;
+  try {
+    const { OPS } = await import('pdfjs-dist/legacy/build/pdf.mjs');
+    const ops = await (await doc.getPage(1)).getOperatorList();
+    const begin = ops.fnArray.findIndex((fn: number, i: number) => fn === OPS.beginMarkedContentProps && ops.argsArray[i]?.[0] === 'OC');
+    const paint = ops.fnArray.indexOf(OPS.paintFormXObjectBegin);
+    const end = ops.fnArray.indexOf(OPS.endMarkedContent, begin);
+    assert.ok(begin >= 0 && begin < paint && paint < end, `the appearance is inside the layer's marked content (${begin}, ${paint}, ${end})`);
+    const config = await doc.getOptionalContentConfig();
+    assert.equal(config.isVisible(ops.argsArray[begin][1]), false, 'and that layer is hidden');
+  } finally { await doc.destroy(); }
+});
+
+test('a PDF that would be over 5 MiB once rewritten is refused, not stored for every reader to reject', async () => {
+  const pdf = await PDFDocument.create();
+  (await markedPage(pdf)).setRotation(degrees(90));
+  // About 6 MiB of numbers that compress to almost nothing in an object stream, and are written out in full when rewritten.
+  pdf.context.register(pdf.context.obj(Array.from({ length: 3_000_000 }, () => 0)));
+  const bytes = await pdf.save({ useObjectStreams: true });
+  assert.ok(bytes.length < 5 * 1024 * 1024, `the upload itself is small (${bytes.length} bytes)`);
+  const refused = await refusal(bytes);
+  assert.equal(refused.code, 'pdf_too_large');
+  assert.match(describePdfRefusal('pdf_too_large') ?? '', /larger than 5 MiB/, 'the pages say what to do');
+});
+
+test('a blank form that asks the viewer to draw its values is flattened; one holding a value is refused', async () => {
+  const make = async (value: string) => {
+    const pdf = await PDFDocument.create();
+    const page = await markedPage(pdf);
+    const field = pdf.getForm().createTextField('applicant');
+    if (value) field.setText(value);
+    field.addToPage(page, { x: 50, y: 50, width: 200, height: 20 });
+    pdf.getForm().acroForm.dict.set(PDFName.of('NeedAppearances'), pdf.context.obj(true));
+    return pdf.save();
+  };
+  const blank = await prepare(await make(''));
+  assert.deepEqual(blank.changes, { formFields: 1, annotations: 0, links: 0, pages: 0 });
+  assert.equal((await refusal(await make('Jordan Example'))).code, 'pdf_form_without_appearance');
+});
+
+test('a form whose fields name the same kids over and over is read in linear time, not once per path', async () => {
+  const pdf = await PDFDocument.create();
+  await markedPage(pdf);
+  // 24 levels, each naming the next twice: about 16 million paths, 25 objects.
+  let next = pdf.context.register(pdf.context.obj({ T: PDFString.of('leaf') }));
+  for (let level = 0; level < 24; level++) next = pdf.context.register(pdf.context.obj({ T: PDFString.of(`level${level}`), Kids: [next, next] }));
+  // And a field that is its own kid.
+  const loop = pdf.context.register(pdf.context.obj({ T: PDFString.of('loop') }));
+  (pdf.context.lookup(loop) as PDFDict).set(PDFName.of('Kids'), pdf.context.obj([loop]));
+  pdf.catalog.set(PDFName.of('AcroForm'), pdf.context.obj({ Fields: [next, loop], NeedAppearances: true }));
+  const started = performance.now();
+  const prepared = await prepare(await pdf.save());
+  assert.ok(performance.now() - started < 1000, `prepared in ${Math.round(performance.now() - started)} ms`);
+  assert.deepEqual(prepared.changes, { formFields: 0, annotations: 0, links: 0, pages: 0 }, 'a blank form: kept as its pages show it');
+});
+
+test('the log names the software that made the PDF from a fixed list, never the strings the file carries', async () => {
+  const make = async (producer: string, creator: string) => {
+    const pdf = await PDFDocument.create({ updateMetadata: false });
+    (await markedPage(pdf)).setRotation(degrees(90));
+    pdf.setProducer(producer);
+    pdf.setCreator(creator);
+    return pdf.save();
+  };
+  const leaky = await prepare(await make('user=alex@example.test', 'Drafts/alex/Private Agreement.pdf'));
+  const logged = JSON.stringify(leaky.logs);
+  assert.ok(!/alex|Private|Agreement|example\.test|Drafts/.test(logged), logged);
+  assert.deepEqual([(leaky.logs[0]!.args[1] as Record<string, unknown>).producer, (leaky.logs[0]!.args[1] as Record<string, unknown>).creator], ['other', 'other']);
+  const known = await prepare(await make('Microsoft® Word for Microsoft 365', 'LibreOffice 7.6 Writer'));
+  assert.deepEqual([(known.logs[0]!.args[1] as Record<string, unknown>).producer, (known.logs[0]!.args[1] as Record<string, unknown>).creator], ['Microsoft Word', 'LibreOffice']);
+});
+
+test('many fields naming one long list of kids are read once, not once per field', async () => {
+  const pdf = await PDFDocument.create();
+  await markedPage(pdf);
+  // 2,000 fields, each naming the same list of 80,000 kids (the fields themselves, over and over).
+  const fields = Array.from({ length: 2_000 }, () => pdf.context.register(pdf.context.obj({})));
+  const kids = pdf.context.register(pdf.context.obj(Array.from({ length: 80_000 }, (_, i) => fields[i % fields.length]!)));
+  for (const field of fields) (pdf.context.lookup(field) as PDFDict).set(PDFName.of('Kids'), kids);
+  pdf.catalog.set(PDFName.of('AcroForm'), pdf.context.obj({ Fields: [fields[0]!], NeedAppearances: true }));
+  const bytes = await pdf.save();
+  const started = performance.now();
+  await prepare(bytes);
+  assert.ok(performance.now() - started < 1000, `prepared in ${Math.round(performance.now() - started)} ms`);
+});
+
+test('an annotation\'s subtype is logged as one of the standard names, never the name the file gives it', async () => {
+  const pdf = await PDFDocument.create();
+  const page = await markedPage(pdf);
+  page.node.set(PDFName.of('Annots'), pdf.context.obj([pdf.context.obj({ Type: 'Annot', Subtype: 'Private Agreement.pdf', Rect: [50, 50, 70, 70] })]));
+  const refused = await refusal(await pdf.save());
+  assert.equal(refused.code, 'pdf_annotation_without_appearance');
+  assert.deepEqual(refused.facts, { page: 1, subtype: 'other' });
+  assert.ok(!JSON.stringify(refused.logs).includes('Private'), JSON.stringify(refused.logs));
+});
+
+test('a PDF naming more annotations than Esign flattens is refused at once, however few bytes it takes', async () => {
+  const pdf = await PDFDocument.create();
+  const page = await markedPage(pdf);
+  const look = pdf.context.register(pdf.context.stream('0 0 1 rg 0 0 10 10 re f', { Type: 'XObject', Subtype: 'Form', BBox: [0, 0, 10, 10] }));
+  const stamp = pdf.context.register(pdf.context.obj({ Type: 'Annot', Subtype: 'Stamp', Rect: [10, 10, 20, 20], AP: { N: look } }));
+  // One stamp, named 40,000 times.
+  page.node.set(PDFName.of('Annots'), pdf.context.obj(Array.from({ length: 40_000 }, () => stamp)));
+  const started = performance.now();
+  const refused = await refusal(await pdf.save());
+  assert.ok(performance.now() - started < 1000, `refused in ${Math.round(performance.now() - started)} ms`);
+  assert.deepEqual([refused.code, refused.facts], ['pdf_unsupported', { annotations: 40_000 }]);
+});
+
+test('pages sharing one long content list are copied only so much: past it the upload is refused at once', async () => {
+  for (const rotate of [false, true]) {
+    const pdf = await PDFDocument.create();
+    const empty = pdf.context.register(pdf.context.stream(''));
+    const shared = pdf.context.register(pdf.context.obj(Array.from({ length: 200_000 }, () => empty)));
+    for (let i = 0; i < 100; i++) {
+      const page = pdf.addPage([612, 792]);
+      page.node.set(PDFName.of('Contents'), shared);
+      if (rotate) page.setRotation(degrees(90));
+    }
+    const bytes = await pdf.save();
+    const started = performance.now();
+    const refused = await refusal(bytes);
+    assert.ok(performance.now() - started < 1500, `refused in ${Math.round(performance.now() - started)} ms`);
+    assert.equal(refused.code, 'pdf_unsupported');
+    assert.ok((refused.facts.contents as number) <= 2 * 200_000, 'it stops copying at the limit');
+  }
+});
+
+test('reading which software made a PDF takes the same time however long its metadata is', async () => {
+  const pdf = await PDFDocument.create({ updateMetadata: false });
+  await markedPage(pdf);
+  pdf.setProducer('microsoft '.repeat(12_000));
+  pdf.setCreator('microsoft '.repeat(12_000));
+  const bytes = await pdf.save();
+  const started = performance.now();
+  await prepare(bytes);
+  assert.ok(performance.now() - started < 500, `prepared in ${Math.round(performance.now() - started)} ms`);
+});
+
+test('naming what is flattened takes the same time however many names the page already has', async () => {
+  const pdf = await PDFDocument.create();
+  const page = await markedPage(pdf);
+  const look = pdf.context.register(pdf.context.stream('0 0 1 rg 0 0 10 10 re f', { Type: 'XObject', Subtype: 'Form', BBox: [0, 0, 10, 10] }));
+  const layer = pdf.context.register(pdf.context.obj({ Type: 'OCG', Name: PDFString.of('Notes') }));
+  pdf.catalog.set(PDFName.of('OCProperties'), pdf.context.obj({ OCGs: [layer], D: {} }));
+  // Names already in the page's resources, the ones Esign would pick first among them.
+  const resources = page.node.normalizedEntries();
+  for (let i = 0; i < 100_000; i++) resources.XObject.set(PDFName.of(`FlatAnnot-${i}`), look);
+  const properties = pdf.context.obj({});
+  for (let i = 1; i <= 5_000; i++) properties.set(PDFName.of(`FlatAnnotOC${i}`), pdf.context.obj({}));
+  resources.Resources.set(PDFName.of('Properties'), properties);
+  const stamp = pdf.context.register(pdf.context.obj({ Type: 'Annot', Subtype: 'Stamp', Rect: [10, 10, 20, 20], CA: 0.5, OC: layer, AP: { N: look } }));
+  page.node.set(PDFName.of('Annots'), pdf.context.obj(Array.from({ length: 10_000 }, () => stamp)));
+  const bytes = await pdf.save();
+  const started = performance.now();
+  const prepared = await prepare(bytes);
+  assert.ok(performance.now() - started < 1500, `prepared in ${Math.round(performance.now() - started)} ms`);
+  assert.equal(prepared.changes?.annotations, 10_000);
+  // The stamp is still drawn inside its layer: a new name for it, after the ones the page had.
+  const stored = await PDFDocument.load(prepared.bytes);
+  const named = stored.getPage(0).node.Resources()!.lookup(PDFName.of('Properties'), PDFDict).get(PDFName.of('FlatAnnotOC5001'));
+  assert.ok(named && stored.context.lookup(named) instanceof PDFDict && (stored.context.lookup(named) as PDFDict).get(PDFName.of('Type'))?.toString() === '/OCG');
+});
+
+test('an annotation named over and over with a long made-up subtype is read once', async () => {
+  const pdf = await PDFDocument.create();
+  const page = await markedPage(pdf);
+  const hidden = pdf.context.register(pdf.context.obj({ Type: 'Annot', Subtype: 'X'.repeat(20_000), F: 2, Rect: [10, 10, 20, 20] }));
+  page.node.set(PDFName.of('Annots'), pdf.context.obj(Array.from({ length: 10_000 }, () => hidden)));
+  const bytes = await pdf.save();
+  const started = performance.now();
+  const prepared = await prepare(bytes);
+  assert.ok(performance.now() - started < 1000, `prepared in ${Math.round(performance.now() - started)} ms`);
+  assert.equal(prepared.changes?.annotations, 10_000);
+});
+
+test('pages sharing one resource dictionary still share it once rewritten: it is written once, not once per page', async () => {
+  const pdf = await PDFDocument.create();
+  const look = pdf.context.register(pdf.context.stream('', { Type: 'XObject', Subtype: 'Form', BBox: [0, 0, 1, 1] }));
+  const xobjects = pdf.context.obj({});
+  for (let i = 0; i < 20_000; i++) xobjects.set(PDFName.of(`Im${i}`), look);
+  const resources = pdf.context.register(pdf.context.obj({ XObject: xobjects }));
+  for (let i = 0; i < 100; i++) {
+    const page = pdf.addPage([612, 792]);
+    page.node.set(PDFName.of('Resources'), resources);
+    page.setRotation(degrees(90));
+  }
+  // Written as Esign writes it (no object streams), so the sizes compare.
+  const bytes = await pdf.save({ useObjectStreams: false });
+  const prepared = await prepare(bytes);
+  assert.equal(prepared.changes?.pages, 100);
+  assert.ok(prepared.bytes.length < 1.2 * bytes.length, `${bytes.length} bytes uploaded, ${prepared.bytes.length} stored`);
+});
+
+test('an appearance or layer condition written inside an annotation named many times is stored once', async () => {
+  const pdf = await PDFDocument.create();
+  const page = await markedPage(pdf);
+  const layer = pdf.context.register(pdf.context.obj({ Type: 'OCG', Name: PDFString.of('Notes') }));
+  pdf.catalog.set(PDFName.of('OCProperties'), pdf.context.obj({ OCGs: [layer], D: {} }));
+  // Both written inside the annotation, not as objects of their own.
+  const look = pdf.context.stream(`0 0 1 rg 0 0 5 5 re f\n${'%'.repeat(100 * 1024)}\n`, { Type: 'XObject', Subtype: 'Form', BBox: [0, 0, 5, 5] });
+  const membership = pdf.context.obj({ Type: 'OCMD', VE: [PDFName.of('Or'), ...Array.from({ length: 20_000 }, () => layer)] });
+  const stamp = pdf.context.register(pdf.context.obj({ Type: 'Annot', Subtype: 'Stamp', Rect: [10, 10, 15, 15], OC: membership, AP: pdf.context.obj({ N: look }) }));
+  page.node.set(PDFName.of('Annots'), pdf.context.obj(Array.from({ length: 1_000 }, () => stamp)));
+  const bytes = await pdf.save({ useObjectStreams: false });
+  const prepared = await prepare(bytes);
+  assert.equal(prepared.changes?.annotations, 1_000);
+  assert.ok(prepared.bytes.length < 2 * bytes.length, `${bytes.length} bytes uploaded, ${prepared.bytes.length} stored`);
+});
+
+test('a blank form field named many times has its value read once', async () => {
+  const pdf = await PDFDocument.create();
+  const page = await markedPage(pdf);
+  // A value that is empty once read, but slow to read: escaped line breaks only.
+  const widget = pdf.context.register(pdf.context.obj({ Type: 'Annot', Subtype: 'Widget', FT: 'Tx', T: PDFString.of('blank'), Rect: [50, 50, 250, 70], V: PDFString.of('\\\n'.repeat(50_000)) }));
+  page.node.set(PDFName.of('Annots'), pdf.context.obj(Array.from({ length: 10_000 }, () => widget)));
+  const bytes = await pdf.save();
+  const started = performance.now();
+  const prepared = await prepare(bytes);
+  assert.ok(performance.now() - started < 1000, `prepared in ${Math.round(performance.now() - started)} ms`);
+  assert.equal(prepared.changes?.formFields, 10_000);
+});
+
+test('a slow value shared by many fields, through their parent or as one object, is read once', async () => {
+  const slow = () => PDFString.of('\\\n'.repeat(50_000));
+  // Many widgets whose parent holds the value.
+  const inherited = await PDFDocument.create();
+  const page = await markedPage(inherited);
+  const parent = inherited.context.register(inherited.context.obj({ FT: 'Tx', T: PDFString.of('parent'), V: slow() }));
+  page.node.set(PDFName.of('Annots'), inherited.context.obj(Array.from({ length: 10_000 }, () => inherited.context.register(inherited.context.obj({ Type: 'Annot', Subtype: 'Widget', Parent: parent, Rect: [50, 50, 250, 70] })))));
+  // Many fields naming one value object, read through the form.
+  const shared = await PDFDocument.create();
+  await markedPage(shared);
+  const value = shared.context.register(slow());
+  const fields = Array.from({ length: 10_000 }, () => shared.context.register(shared.context.obj({ FT: 'Tx', V: value })));
+  shared.catalog.set(PDFName.of('AcroForm'), shared.context.obj({ Fields: fields, NeedAppearances: true }));
+  for (const pdf of [inherited, shared]) {
+    const bytes = await pdf.save();
+    const started = performance.now();
+    await prepare(bytes);
+    assert.ok(performance.now() - started < 1500, `prepared in ${Math.round(performance.now() - started)} ms`);
+  }
+});
+
+test('pages with resources of their own that share one font, image or graphics-state list still share it once rewritten', async () => {
+  const pdf = await PDFDocument.create();
+  const look = pdf.context.register(pdf.context.stream('', { Type: 'XObject', Subtype: 'Form', BBox: [0, 0, 1, 1] }));
+  const xobjects = pdf.context.obj({});
+  for (let i = 0; i < 20_000; i++) xobjects.set(PDFName.of(`Im${i}`), look);
+  const shared = pdf.context.register(xobjects);
+  for (let i = 0; i < 100; i++) {
+    const page = pdf.addPage([612, 792]);
+    page.node.set(PDFName.of('Resources'), pdf.context.obj({ XObject: shared }));
+    page.setRotation(degrees(90));
+  }
+  const bytes = await pdf.save({ useObjectStreams: false });
+  const prepared = await prepare(bytes);
+  assert.equal(prepared.changes?.pages, 100);
+  assert.ok(prepared.bytes.length < 1.2 * bytes.length, `${bytes.length} bytes uploaded, ${prepared.bytes.length} stored`);
+});
+
+test('a rewrite that would be over 5 MiB is refused before its output is built', async () => {
+  const pdf = await PDFDocument.create();
+  (await markedPage(pdf)).setRotation(degrees(90));
+  for (let i = 0; i < 20_000; i++) pdf.context.register(PDFString.of('x'.repeat(5_000)));
+  const bytes = await pdf.save({ useObjectStreams: true });
+  const save = PDFDocument.prototype.save;
+  let saved = 0;
+  PDFDocument.prototype.save = function (...args) { saved++; return save.apply(this, args); };
+  try {
+    const refused = await refusal(bytes);
+    assert.equal(refused.code, 'pdf_too_large');
+    assert.equal(saved, 0, 'nothing was written out');
+  } finally { PDFDocument.prototype.save = save; }
+});
+
+test('pages sharing one content list are stored with one each, so drawing a signature on one leaves the others as they were', async () => {
+  const pdf = await PDFDocument.create(), font = await pdf.embedFont(StandardFonts.Helvetica);
+  const first = pdf.addPage([612, 792]), second = pdf.addPage([612, 792]);
+  first.drawText('Shared', { x: 100, y: 600, size: 12, font });
+  const shared = pdf.context.register(pdf.context.obj(first.node.normalizedEntries().Contents.asArray()));
+  first.node.set(PDFName.of('Contents'), shared);
+  second.node.set(PDFName.of('Contents'), shared);
+  second.node.set(PDFName.of('Resources'), first.node.get(PDFName.of('Resources'))!);
+  const bytes = await pdf.save();
+  const prepared = await prepare(bytes);
+  assert.deepEqual(prepared.changes, { formFields: 0, annotations: 0, links: 0, pages: 0 });
+  assert.match(describeUploadChanges(prepared.changes).join(' '), /nothing that shows changed/);
+  // Signing draws on the stored PDF with pdf-lib, page by page.
+  const stored = await PDFDocument.load(prepared.bytes);
+  stored.getPage(0).drawText('Signed', { x: 100, y: 100, size: 12, font: await stored.embedFont(StandardFonts.Helvetica) });
+  const after = await shownText(await stored.save());
+  assert.deepEqual(after[1], (await shownText(bytes))[1], 'the second page is as it was');
+  assert.ok(after[0]!.some((item) => item.text === 'Signed'));
 });

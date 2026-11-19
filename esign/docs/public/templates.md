@@ -88,8 +88,9 @@ Rules the editor and the server check:
 - at most 20 fields per template can be signed, and fields don't overlap;
 - each field is at least 20 by 10 points and stays on its page;
 - the PDF has no form fields or annotations, and its pages are upright and uncropped. Esign makes it so when the PDF is
-  uploaded (below). A template uploaded before Esign did can break these rules: it can still be signed on a signature
-  page, but an envelope sent from it with placed fields is refused.
+  uploaded (below). A template uploaded before Esign did, or one uploaded through the API that Esign couldn't prepare
+  (it is kept as uploaded), can break these rules: it can still be signed on a signature page, but an envelope sent
+  from it with placed fields is refused.
 
 ## What Esign does to a PDF
 
@@ -99,7 +100,9 @@ Fields are drawn into the page itself, where the page shows them. So when a PDF 
 - **form fields** are flattened into the page: their values stay as shown, and they can no longer be edited;
 - **comments, highlights and stamps** are flattened into the page the same way;
 - **links** are removed: their text stays, it no longer opens anything;
-- **rotated or cropped pages** are redrawn upright, at the size they are shown.
+- **rotated or cropped pages** are redrawn upright, at the size they are shown;
+- **pages that share their content** in the file each get their own copy, so a signature drawn on one never shows on
+  another (nothing you see changes).
 
 Esign says what it changed. Signers see and sign the PDF as it is then, and the certificate of completion also records
 the SHA-256 of the file as uploaded, with what was changed (a database record, not bound by the seal). A PDF that needed
@@ -107,7 +110,8 @@ no change is kept exactly as uploaded.
 
 Some PDFs can't be prepared, and the upload says why: a password-protected or encrypted PDF, a damaged one, more than
 100 pages, a dynamic (XFA) form, a filled-in form field or a comment that doesn't say how it looks, or a page in unusual units, at an
-odd angle or larger than 200 inches. Printing it to PDF (Save as PDF) usually makes one Esign can use. The API's reasons
+odd angle or larger than 200 inches, more than 10,000 form fields and comments, or one that would be over 5 MiB
+once prepared. Printing it to PDF (Save as PDF) usually makes one Esign can use. The API's reasons
 are listed in [Uploaded PDFs](/docs/esign/api#uploaded-pdfs).
 
 ## Pre-filled fields
@@ -144,7 +148,7 @@ Each template's row has **Use** (send an envelope from it), or **Edit** for a dr
 
 - **View** (anyone who sees it), or a click on its name: its page, read only. **Details** shows its name, id, owner,
   your role in it, when it was uploaded, its signer roles in signing order with their default signers and fields, your
-  tags and its metadata; below, **Document** shows its PDF as uploaded, with the box of each placed field, in its role's
+  tags and its metadata; below, **Document** shows its PDF as stored (prepared for signing when it was uploaded), with the box of each placed field, in its role's
   colour and named by role and type (dashed when optional). Those who manage find **Use** there too.
 - **Edit** (its editors, admins and owner): on **Details**, its **Name** and its default signers; on **Fields**, the field
   editor. Saving the fields makes a new version of the template, which takes its place in the list with the same name,

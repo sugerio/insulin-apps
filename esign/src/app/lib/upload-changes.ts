@@ -14,8 +14,8 @@ export function describeUploadChanges(changes: UploadChanges | null | undefined)
   if (changes.annotations) out.push(`${count(changes.annotations, 'comment, highlight or stamp', 'comments, highlights or stamps')} flattened into the page`);
   if (changes.links) out.push(`${count(changes.links, 'link', 'links')} removed: the text stays, it no longer opens anything`);
   if (changes.pages) out.push(`${count(changes.pages, 'page', 'pages')} redrawn upright, at the size shown (it was rotated or cropped)`);
-  // Changed all the same: only what no page shows was removed.
-  if (!out.length) out.push('only parts that don\'t show on any page were removed, such as an empty form or a comment\'s pop-up window');
+  // Changed all the same, in what no page shows.
+  if (!out.length) out.push('nothing that shows changed, only how the file is put together (such as an empty form, a comment\'s pop-up window, or pages that shared their content)');
   return out;
 }
 
@@ -38,6 +38,7 @@ export function describePdfRefusal(reason: string, page?: number): string | null
     case 'pdf_page_units': return `${thePage} uses its own units of measure, which Esign doesn't support. Print it to PDF at a standard paper size, and upload the new file.`;
     case 'pdf_page_size': return `${thePage} is empty or larger than 200 inches on a side. Print it to PDF at a standard paper size, and upload the new file.`;
     case 'pdf_page_rotation': return `${thePage} is turned at an angle that isn't a quarter turn. ${PRINT}`;
+    case 'pdf_too_large': return 'Prepared for signing, this PDF would be larger than 5 MiB. Make it smaller (for example, with smaller images) or split it, and upload it again.';
     case 'pdf_unsupported': return `Esign couldn't prepare this PDF for signing. ${PRINT}`;
     default: return null;
   }

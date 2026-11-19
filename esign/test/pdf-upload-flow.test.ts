@@ -109,24 +109,39 @@ test('a template PDF Esign prepared is signed as stored, and the certificate sho
   } finally { console.info = info; await h.mf.dispose(); }
 });
 
-test('a refused upload answers its route\'s error, the reason and the page, and stores nothing', async () => {
+test('an API template Esign can\'t prepare is kept as uploaded, for a signature page; an envelope upload says why and stores nothing', async () => {
   const h = await setup();
-  const warn = console.warn, logged: unknown[][] = [];
-  console.warn = (...args: unknown[]) => { logged.push(args); };
+  const warn = console.warn, info = console.info, logged: { level: string; args: unknown[] }[] = [];
+  console.warn = (...args: unknown[]) => { logged.push({ level: 'warn', args }); };
+  console.info = (...args: unknown[]) => { logged.push({ level: 'info', args }); };
   try {
     const pdf = await PDFDocument.create();
     pdf.addPage([400, 500]);
     const page = pdf.addPage([400, 500]);
     page.node.set(PDFName.of('Annots'), pdf.context.obj([pdf.context.obj({ Type: 'Annot', Subtype: 'Text', Rect: [10, 10, 30, 30] })]));
+    const bytes = await pdf.save();
+    // A template uploaded through the API is signed on a page Esign adds, as before: it is kept as it came.
     const form = new FormData();
-    form.set('file', new File([await pdf.save()], 'synthetic.pdf', { type: 'application/pdf' }));
+    form.set('file', new File([bytes], 'synthetic.pdf', { type: 'application/pdf' }));
     form.set('roles', '["client"]');
-    const refused = await h.req('/api/templates', { method: 'POST', headers: h.auth, body: form });
+    const kept = await h.req('/api/templates', { method: 'POST', headers: h.auth, body: form });
+    assert.equal(kept.status, 201, await kept.clone().text());
+    const template = await kept.json() as { id: string; changes: unknown };
+    assert.equal(template.changes, null);
+    const row = await h.db.prepare('SELECT object_key, uploaded_sha256 FROM templates WHERE id = ?').bind(template.id).first<{ object_key: string; uploaded_sha256: string | null }>();
+    assert.deepEqual(new Uint8Array(await (await h.bucket.get(row!.object_key))!.arrayBuffer()), Uint8Array.from(bytes));
+    assert.equal(row!.uploaded_sha256, null);
+    assert.deepEqual(logged.map((log) => [log.level, (log.args[1] as { route: string; code: string }).route, (log.args[1] as { code: string }).code]), [['info', 'template', 'pdf_annotation_without_appearance']]);
+    // An envelope's upload takes placed fields: refused, with the reason and the page, and nothing stored.
+    logged.length = 0;
+    const draft = await h.req('/api/envelopes', h.post({ recipients: [{ role: 'client', name: 'Casey Client', email: 'casey@example.com' }], documentName: 'Synthetic', draft: true }, { ...h.auth, 'idempotency-key': 'refused-upload' }));
+    assert.equal(draft.status, 201, await draft.clone().text());
+    const { id } = await draft.json() as { id: string };
+    const refused = await h.req(`/api/envelopes/${id}/document`, { method: 'POST', headers: { ...h.auth, 'content-type': 'application/pdf' }, body: bytes });
     assert.equal(refused.status, 422);
-    assert.deepEqual(await refused.json(), { error: 'invalid_pdf', reason: 'pdf_annotation_without_appearance', page: 2 });
-    assert.equal((await h.db.prepare('SELECT count(*) AS n FROM templates').first<{ n: number }>())!.n, 0);
-    assert.equal((await h.bucket.list({ prefix: 'templates/' })).objects.length, 0);
-    assert.equal(logged.length, 1);
-    assert.equal((logged[0]![1] as { route: string; code: string }).route, 'template');
-  } finally { console.warn = warn; await h.mf.dispose(); }
+    assert.deepEqual(await refused.json(), { error: 'unsupported_pdf', reason: 'pdf_annotation_without_appearance', page: 2 });
+    assert.equal((await h.db.prepare('SELECT count(*) AS n FROM artifacts WHERE envelope_id = ?').bind(id).first<{ n: number }>())!.n, 0);
+    assert.equal((await h.bucket.list({ prefix: `envelopes/${id}/` })).objects.length, 0);
+    assert.deepEqual(logged.map((log) => [log.level, (log.args[1] as { route: string }).route]), [['warn', 'envelope-document']]);
+  } finally { console.warn = warn; console.info = info; await h.mf.dispose(); }
 });

@@ -341,10 +341,11 @@ app.post('/api/templates', bodyLimit({ maxSize: MAX_PDF_BYTES + 65536 }), async 
   if (defaultSigners === 'invalid') return context.json({ error: 'invalid_template' }, 422);
   try { await assertRenderableRecipientNames(defaultSignerNames(defaultSigners)); }
   catch { return context.json({ error: 'unsupported_recipient_name' }, 422); }
-  // Flattened and reoriented as an envelope's upload is (pdf-upload.ts), so placed fields can be signed on it.
+  // Flattened and reoriented as an envelope's upload is (pdf-upload.ts), so placed fields can be signed on it. One that
+  // can't be is kept as it came: a template uploaded here is signed on a page Esign adds, which needs none of that.
   let prepared: PreparedPdf;
   const id = crypto.randomUUID();
-  try { prepared = await preparePdfUpload(new Uint8Array(await file.arrayBuffer()), { route: 'template', tenantId: context.get('tenantId'), subjectId: id }); }
+  try { prepared = await preparePdfUpload(new Uint8Array(await file.arrayBuffer()), { route: 'template', tenantId: context.get('tenantId'), subjectId: id }, { keepUnprepared: true }); }
   catch (error) {
     if (error instanceof PdfUploadRefused) return context.json(pdfRefusalBody('invalid_pdf', error), 422);
     throw error;

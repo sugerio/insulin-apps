@@ -277,7 +277,7 @@ describe("Confirm", () => {
     await renderApp("/returns/2025/confirm", { seed: (s) => seed(s, { applies: true }).then(() => undefined) });
     fireEvent.click(await screen.findByRole("button", { name: "Add a slip" }));
     const rows = within(screen.getByRole("form", { name: "Add a slip" })).getAllByRole("row").slice(1) as HTMLTableRowElement[];
-    expect(rows.slice(0, 4).map((row) => row.cells[0]!.textContent)).toEqual(["14", "16", "16A", "18"]);
+    expect(rows.slice(0, 6).map((row) => row.cells[0]!.textContent)).toEqual(["14", "16", "16A", "17", "17A", "18"]);
   });
 
   it("shows only the open return's slips, and moves one to the other adult's return", async () => {

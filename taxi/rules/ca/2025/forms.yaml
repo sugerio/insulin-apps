@@ -13,7 +13,7 @@ forms:
   T1:
     title: T1 Income Tax and Benefit Return
     url: https://www.canada.ca/content/dam/cra-arc/formspubs/pbg/5006-r/5006-r-25e.pdf
-    applies: "true"
+    applies: person.province != "QC"
     fields:
       # Step 2 – Total income
       "1": line.T1.10100
@@ -174,6 +174,177 @@ forms:
         amount: line.T1.26000
         parts:
           - { columns: "71", amount: "70", over: "72", times: "74", tax: "76" }
+
+  # The T1 for residents of Quebec (5005-R): the same rows as 5006-R, numbered from row 49 on as quebec-spec 1.1 maps
+  # them, with Quebec's PPIP rows (49, 91, 93), the refundable Quebec abatement (156) and the net EI overpayment (159),
+  # and no rows for lines 42100, 44800 and 47900. Its Schedules 6, 8 and 10 (5005-S6, -S8, -S10) aren't printed.
+  T1QC:
+    title: T1 Income Tax and Benefit Return for residents of Quebec
+    url: https://www.canada.ca/content/dam/cra-arc/formspubs/pbg/5005-r/5005-r-25e.pdf
+    applies: person.province == "QC"
+    fields:
+      # Step 2 – Total income
+      "1": line.T1.10100
+      "10120": line.T1.10120
+      "2": line.T1.10400
+      "3": line.T1.11300
+      "4": line.T1.11400
+      "11410": line.T1.11410
+      "5": line.T1.11500
+      "8": line.T1.11900
+      "9": line.T1.12000
+      "12010": line.T1.12010
+      "10": line.T1.12100
+      "12": line.T1.12500
+      "12599": line.T1.12599
+      "13": line.T1.12600
+      "14": line.T1.12700
+      "12799": line.T1.12799
+      "15": line.T1.12800
+      "16": line.T1.12900
+      "17": line.T1.12905
+      "18": line.T1.12906
+      "19": line.T1.13000
+      "20": line.T1.13010
+      "21": line.T1.15000 - line.SE.net - line.T1.14700
+      "13499": line.T1.13499
+      "22": line.T1.13500
+      "13699": line.T1.13699
+      "23": line.T1.13700
+      "13899": line.T1.13899
+      "24": line.T1.13900
+      "14099": line.T1.14099
+      "25": line.T1.14100
+      "14299": line.T1.14299
+      "26": line.T1.14300
+      "27": line.SE.net
+      "28": line.T1.15000 - line.T1.14700
+      "29": line.T1.14400
+      "30": line.T1.14500
+      "31": line.T1.14600
+      "32": line.T1.14700
+      "33": line.T1.15000
+      # Step 3 – Net income
+      "34": line.T1.15000
+      "35": line.T1.20700
+      "36": line.T1.20800
+      "37": line.T1.20805
+      "39": line.T1.21200
+      "41": line.T1.21400
+      "42": line.T1.21500
+      "44": line.T1.21900
+      "21999": line.T1.21999
+      "45": line.T1.22000
+      "46": line.T1.22100
+      "47": line.T1.22200
+      "48": line.T1.22215
+      "49": line.T1.22300
+      "51": line.T1.22900
+      "53": line.T1.23200
+      "54": line.T1.23300
+      "55": line.T1.23400
+      "56": line.T1.23500
+      "57": line.T1.23600
+      # Step 4 – Taxable income
+      "58": line.T1.23600
+      "59": line.T1.24400
+      "60": line.T1.24900
+      "61": line.T1.25000
+      "63": line.T1.25200
+      "64": line.T1.25300
+      "67": line.T1.25500
+      "69": line.T1.25700
+      "70": line.T1.26000
+      # Step 5 – Federal tax: Part B, non-refundable tax credits
+      "78": line.T1.30000
+      "79": line.T1.30100
+      "80": line.T1.30300
+      "81": line.T1.30400
+      "82": line.T1.30425
+      "83": line.T1.30450
+      "84": line.T1.30500
+      "85": line.T1.T84
+      "86": line.T1.T84
+      "87": line.T1.30800
+      "88": line.T1.31000
+      "89": line.T1.31200
+      "91": line.T1.31205
+      "93": line.T1.31215
+      "94": line.T1.31220
+      "95": line.T1.31240
+      "96": line.T1.31260
+      "97": line.T1.31270
+      "98": line.T1.31285
+      "99": line.T1.31300
+      "100": line.T1.T96
+      "101": line.T1.31400
+      "102": line.T1.T84 + line.T1.T96 + line.T1.31400
+      "103": line.T1.31600
+      "104": line.T1.31800
+      "105": line.T1.T101
+      "106": line.T1.31900
+      "107": line.T1.32300
+      "108": line.T1.32400
+      "109": line.T1.32600
+      "110": line.T1.T101 + line.T1.31900 + line.T1.32300 + line.T1.32400 + line.T1.32600
+      "111": line.T1.33099
+      "112": round(line.T1.23600 * param.medicalThresholdRate, 2)
+      "113": min(param.medicalThresholdMax, round(line.T1.23600 * param.medicalThresholdRate, 2))
+      "114": line.T1.33200 - line.T1.33199
+      "115": line.T1.33199
+      "116": line.T1.33200
+      "117": line.T1.33500
+      "119": line.T1.33800
+      "120": line.T1.34900
+      "121": line.T1.34990
+      "122": line.T1.35000
+      # Part C – Net federal tax
+      "123": line.T1.40400
+      "125": line.T1.40400
+      "126": line.T1.35000
+      "127": line.T1.40425
+      "129": line.T1.35000 + line.T1.40425
+      "130": line.T1.42900
+      "132": line.T1.42900
+      "133": line.T1.40500
+      "134": line.T1.40600
+      "136": line.T1.40600
+      "138": line.T1.40600
+      "40900": line.T1.40900
+      "139": line.T1.41000
+      "142": line.T1.41600
+      "143": line.T1.41700
+      "144": line.T1.41500
+      "146": line.T1.42000
+      # Step 6 – Refund or balance owing
+      "147": line.T1.42000
+      "149": line.T1.42200
+      "150": line.T1.42800
+      "151": line.T1.43500
+      "152": line.T1.43500
+      "153": line.T1.43700
+      "155": line.T1.43700
+      "156": line.T1.44000
+      "157": line.T1.45000
+      "159": line.T1.45100
+      "160": line.T1.45200
+      "161": line.T1.45300
+      "162": line.T1.45350
+      "163": line.T1.45355
+      "165": line.T1.45600
+      "46800": line.T1.46800
+      "167": line.T1.46900
+      "170": line.T1.47600
+      "171": line.T1.48200
+      "172": line.T1.43500 - line.T1.48200
+      "48400": line.T1.48400
+      "48500": line.T1.48500
+    tables:
+      # Part A – Federal tax on taxable income
+      - brackets: taxBrackets
+        amount: line.T1.26000
+        parts:
+          - { columns: "72", amount: "71", over: "73", times: "75", tax: "77" }
 
   ON428:
     title: Form ON428, Ontario Tax

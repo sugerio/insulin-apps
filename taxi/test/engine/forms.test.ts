@@ -19,6 +19,27 @@ interface Golden {
 }
 const golden = (name: string) => JSON.parse(readFileSync(join(GOLDEN, `${name}.json`), "utf8")) as Golden;
 
+/** Every row of the household's forms that holds one of its expected lines as it is: blank when zero, else that amount. */
+function checkForms(name: string, forms: readonly string[]) {
+  const household = golden(name);
+  const evaluation = new Evaluation(rules, household.input);
+  for (const [personId, expected] of Object.entries(household.expected)) {
+    const filled = fillForms(rules, evaluation, personId);
+    expect(filled.map((each) => each.form.id)).toEqual(forms);
+    let checked = 0;
+    for (const { form, amounts } of filled) {
+      for (const field of form.fields) {
+        const line = /^line\.([A-Z0-9]+\.[A-Za-z0-9]+)$/.exec(field.text)?.[1];
+        if (!line || !(line in expected) || field.when) continue;
+        const written = amounts.find((amount) => amount.key === field.key)?.value.toString() ?? "0";
+        expect(written, `${form.id} row ${field.key} (${line})`).toBe(Dec.from(expected[line]!).roundTo(2, "HALF_UP").toString());
+        checked += 1;
+      }
+    }
+    expect(checked).toBeGreaterThan(30);
+  }
+}
+
 describe("2025 forms", () => {
   for (const [name, ...provincial] of [
     ["on-couple-kids", "ON428"],
@@ -56,26 +77,32 @@ describe("2025 forms", () => {
     ["on-senior-care-couple", "ON428", "ON479"],
   ] as const) {
     it(`${name}: the T1 and ${provincial.join(" and ")} hold the household's expected lines`, () => {
-      const household = golden(name);
-      const evaluation = new Evaluation(rules, household.input);
-      for (const [personId, expected] of Object.entries(household.expected)) {
-        const filled = fillForms(rules, evaluation, personId);
-        expect(filled.map((each) => each.form.id)).toEqual(["T1", ...provincial]);
-        let checked = 0;
-        for (const { form, amounts } of filled) {
-          for (const field of form.fields) {
-            // A row that holds a line as it is: blank when the expected line is zero, else that amount.
-            const line = /^line\.([A-Z0-9]+\.[A-Za-z0-9]+)$/.exec(field.text)?.[1];
-            if (!line || !(line in expected) || field.when) continue;
-            const written = amounts.find((amount) => amount.key === field.key)?.value.toString() ?? "0";
-            expect(written, `${form.id} row ${field.key} (${line})`).toBe(Dec.from(expected[line]!).roundTo(2, "HALF_UP").toString());
-            checked += 1;
-          }
-        }
-        expect(checked).toBeGreaterThan(30);
-      }
+      checkForms(name, ["T1", ...provincial]);
     });
   }
+
+  // A resident of Quebec files the T1 for residents of Quebec (5005-R) instead, with no Form 428 or 479.
+  for (const name of ["qc-fed-employee", "qc-fed-self-employed", "qc-fed-single-parent", "qc-fed-couple", "qc-fed-ei-ppip-overpayment"]) {
+    it(`${name}: the T1 for residents of Quebec holds the household's expected lines`, () => {
+      checkForms(name, ["T1QC"]);
+    });
+  }
+
+  it("numbers the T1 for residents of Quebec's rows as 5005-R prints them", () => {
+    const household = golden("qc-fed-ei-ppip-overpayment");
+    const evaluation = new Evaluation(rules, household.input);
+    const [t1qc] = fillForms(rules, evaluation, "p1");
+    const row = (key: string) => t1qc!.amounts.find((amount) => amount.key === key)?.value.toString();
+    // PPIP premiums paid (31205), the refundable Quebec abatement (44000), EI and net EI overpayment (45000, 45100).
+    expect([row("91"), row("156"), row("157"), row("159"), row("171")]).toEqual(["484.12", "2575.56", "580.33", "580.33", "18655.89"]);
+    // $108,926 is in the second federal bracket: the table is one row lower than on 5006-R.
+    expect(t1qc!.amounts.filter((amount) => amount.key.includes("@")).map((amount) => [amount.key, amount.value.toString()])).toEqual([
+      ["71@1", "108926"],
+      ["73@1", "51551"],
+      ["75@1", "10567.96"],
+      ["77@1", "18887.34"],
+    ]);
+  });
 
   it("fills the column of the bracket the taxable income falls in, ending at the tax line", () => {
     const household = golden("on-couple-kids");

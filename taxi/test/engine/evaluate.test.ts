@@ -203,12 +203,18 @@ describe("the 2025 rules", () => {
   });
 
   it("say what they can't compute instead of guessing", () => {
-    const quebec = alone([t4({ 14: "60000", 22: "9000" })], "QC");
-    expect(quebec.line("p1", "T1.42800")).toEqual({ value: null, status: "missing" });
+    // A resident of Quebec whose T4 shows CPP (not QPP) contributions works them out on Form RC381.
+    const rc381 =
+      "Your T4 slips show CPP contributions (box 16 or 16A). A resident of Quebec with CPP contributions works them out on Form RC381, which this app doesn't handle yet";
+    const quebec = alone([t4({ 14: "60000", 16: "3361.75", 22: "9000" })], "QC");
+    expect(quebec.line("p1", "T1.30800")).toEqual({ value: null, status: "missing" });
     expect(quebec.line("p1", "T1.48400").status).toBe("missing");
-    expect(quebec.line("p1", "T1.42000").status).toBe("estimate");
-    expect(quebec.result().people[0]!.unhandled).toContain("Provincial tax for this province isn't handled by this app");
-    expect(quebec.explain("p1", "line.T1.42800").notes).toEqual(["Provincial tax for this province isn't handled by this app"]);
+    // Quebec's tax is on the TP-1, not on line 42800.
+    expect(quebec.line("p1", "T1.42800").value?.toString()).toBe("0");
+    expect(quebec.result().people[0]!.unhandled).toContain(rc381);
+    expect(quebec.explain("p1", "line.CPP.deducted").notes).toEqual([rc381]);
+    // And outside Quebec, a T4 with QPP contributions.
+    expect(alone([t4({ 14: "60000", 17: "3616" })]).line("p1", "T1.30800").status).toBe("missing");
 
     // Box 26 on one slip and not the other: Schedule 8 takes box 14 for the blank one, which a sum of slips can't do.
     const oneBlank = alone([t4({ 14: "60000", 16: "3361.75", 26: "60000" }), t4({ 14: "30000", 16: "1576.75" }, "s2")]);

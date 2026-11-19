@@ -4,11 +4,13 @@
 slips:
   T4:
     title: T4 Statement of Remuneration Paid
-    about: Employment income an employer paid, and the tax, CPP, EI and dues it withheld
+    about: Employment income an employer paid, and the tax, CPP or QPP, EI, PPIP and dues it withheld
     boxes:
       14: Employment income
       16: Employee's CPP contributions
       16A: Employee's second CPP contributions
+      17: Employee's QPP contributions
+      17A: Employee's second QPP contributions
       18: Employee's EI premiums
       20: RPP contributions
       22: Income tax deducted
@@ -21,6 +23,8 @@ slips:
       44: Union dues
       46: Charitable donations
       52: Pension adjustment
+      55: Employee's PPIP premiums
+      56: PPIP insurable earnings
     informational: [52]   # for next year's RRSP limit
 
   T5:

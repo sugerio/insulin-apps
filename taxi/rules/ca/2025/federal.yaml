@@ -4,6 +4,11 @@
 # Every number below was checked against the 2025 forms: T1 5006-R, Federal Worksheet 5000-D1, Schedules 2, 3, 5, 8, 9
 # and 11, Forms T2125, T2042, T2121, T776, T778, T2091(IND) and T2204, Guides T4002 and T4036, and the CRA's 2025
 # payroll tables for CPP and EI.
+#
+# A resident of Quebec on December 31 files the T1 for residents of Quebec (5005-R) with Quebec's own Schedules 6, 8 and
+# 10 (5005-S6, 5005-S8, 5005-S10): QPP instead of CPP, EI at the Quebec rate, PPIP premiums, the refundable Quebec
+# abatement (line 44000), and the Canada workers benefit at Quebec's rates. The lines below branch on
+# person.province == "QC" for these; Quebec's own tax is on the TP-1, not on line 42800, and there is no Form 479.
 
 params:
   taxBrackets:
@@ -79,6 +84,39 @@ params:
     label: Insurable earnings at or below which all EI premiums are refunded
     source: "Form T2204, line 7 and note 1: $2,000"
     value: 2000
+  eiPremiumRateQc:
+    label: EI premium rate for employees resident in Quebec
+    source: "Schedule 10 for residents of Quebec (5005-S10), Part C, line 19: 1.31%, on line 18 (maximum $65,700; 0 when $2,000 or less)"
+    value: 1.31%
+  eiPremiumMaxQc:
+    label: Most EI premiums for a resident of Quebec
+    source: "5005-S10, Part C, line 20, and 5005-R line 31200: maximum $860.67"
+    value: 860.67
+  # PPIP: the Quebec parental insurance plan (QPIP) premiums, claimed on the federal return of a resident of Quebec.
+  ppipPremiumMax:
+    label: Most PPIP premiums claimed
+    source: "5005-R lines 31205 and 31215: maximum $484.12"
+    value: 484.12
+  ppipMinEarnings:
+    label: PPIP insurable earnings below which no PPIP premiums are claimed
+    source: "canada.ca/line-31205: PPIP insurable earnings less than $2,000 are claimed as an overpayment on the TP-1; TP-1 Schedule R: no premium when net business income and employment income subject to the QPIP total less than $2,000"
+    value: 2000
+  ppipMaxInsurableEarnings:
+    label: Maximum PPIP insurable earnings
+    source: "5005-S10, Part A, line 2: $98,000"
+    value: 98000
+  ppipSelfEmployedRate:
+    label: PPIP rate on self-employment income
+    source: "5005-S10, Part A, line 6: 0.878% (maximum $860.44 on line 7)"
+    value: 0.878%
+  ppipSelfEmployedDeductionShare:
+    label: Share of the PPIP premium on self-employment income that is deducted
+    source: "5005-S10, Part A, line 8: 43.736% (maximum $376.32 on line 9, line 22300); the rest is the credit on line 31215"
+    value: 43.736%
+  quebecAbatementRate:
+    label: Refundable Quebec abatement rate
+    source: "5005-R line 44000 (row 156): amount from line 42900 × 16.5%"
+    value: 16.5%
   medicalThresholdRate:
     label: Medical expense threshold rate
     source: "T1 line 108: 3% of net income"
@@ -211,6 +249,24 @@ params:
     label: Second additional CPP rate on self-employment earnings
     source: "Schedule 8, Part 5, line 45: 8%"
     value: 8%
+  # QPP (5005-S8). Its earnings limits (the monthly proration table of Part 1), the first additional rates (1%, and 2%
+  # on self-employment), the second additional rates (4%, and 8%) are the same numbers as CPP's above.
+  qppBaseRate:
+    label: QPP base rate for employees
+    source: "Schedule 8 for residents of Quebec (5005-S8), Part 2, line 11: 5.4% (maximum $3,661.20)"
+    value: 5.4%
+  qppBaseShare:
+    label: Base part of the QPP contributions on a T4 slip (box 17)
+    source: "5005-S8, Part 2, line 9: 84.375% of line 8 (box 17 of all T4 slips)"
+    value: 84.375%
+  qppEarningsPerContribution:
+    label: Earnings that a dollar of employee base and first additional QPP contributions covers
+    source: "5005-S8, Part 4, line 19: line 9 × 15.625 (1 ÷ 6.4%)"
+    value: "15.625"
+  qppSelfEmployedBaseRate:
+    label: Base QPP rate on self-employment earnings
+    source: "5005-S8, Part 3 line 10 and Part 4 line 42: 10.8% (maximum $7,322.40)"
+    value: 10.8%
   childCareUnder7:
     label: Child care limit for a child born in 2019 or later
     source: "Form T778, Part B, line 1: $8,000"
@@ -422,6 +478,104 @@ params:
     label: Months of full-time study a person can have and still get the Canada workers benefit
     source: "Schedule 6: not a full-time student for more than 13 weeks in the year, unless they had an eligible dependant"
     value: 3
+  # Schedule 6 for residents of Quebec (5005-S6): four family types (no spouse or dependant, a spouse, a dependant, both)
+  # for the basic benefit, and its own rates for the disability supplement.
+  cwbQcWorkingIncomeBase:
+    label: Working income where the basic Canada workers benefit starts, Quebec, with no eligible spouse
+    source: "5005-S6, line 17: $2,400"
+    value: 2400
+  cwbQcWorkingIncomeBaseSpouse:
+    label: Working income where the basic Canada workers benefit starts, Quebec, with an eligible spouse
+    source: "5005-S6, line 17: $3,600 with an eligible spouse (with or without an eligible dependant)"
+    value: 3600
+  cwbQcRate:
+    label: Canada workers benefit rate on working income, Quebec, with no eligible dependant
+    source: "5005-S6, line 19: 37.3% (no eligible dependant, with or without an eligible spouse)"
+    value: 37.3%
+  cwbQcRateDependant:
+    label: Canada workers benefit rate on working income, Quebec, with an eligible dependant and no eligible spouse
+    source: "5005-S6, line 19: 20%"
+    value: 20%
+  cwbQcRateSpouseDependant:
+    label: Canada workers benefit rate on working income, Quebec, with an eligible spouse and an eligible dependant
+    source: "5005-S6, line 19: 23.9%"
+    value: 23.9%
+  cwbQcMaxSingle:
+    label: Most basic Canada workers benefit, Quebec, no eligible spouse or dependant
+    source: "5005-S6, line 21: $3,812.06"
+    value: 3812.06
+  cwbQcMaxSpouse:
+    label: Most basic Canada workers benefit, Quebec, an eligible spouse and no eligible dependant
+    source: "5005-S6, line 21: $5,943.38"
+    value: 5943.38
+  cwbQcMaxDependant:
+    label: Most basic Canada workers benefit, Quebec, an eligible dependant and no eligible spouse
+    source: "5005-S6, line 21: $2,044.00"
+    value: 2044.00
+  cwbQcMaxSpouseDependant:
+    label: Most basic Canada workers benefit, Quebec, an eligible spouse and an eligible dependant
+    source: "5005-S6, line 21: $3,808.23"
+    value: 3808.23
+  cwbQcIncomeBaseSingle:
+    label: Adjusted family net income where the basic benefit starts to go down, Quebec, no eligible spouse or dependant
+    source: "5005-S6, line 24: $14,170.05"
+    value: 14170.05
+  cwbQcIncomeBaseSpouse:
+    label: Adjusted family net income where the basic benefit starts to go down, Quebec, an eligible spouse and no eligible dependant
+    source: "5005-S6, line 24: $21,787.19"
+    value: 21787.19
+  cwbQcIncomeBaseDependant:
+    label: Adjusted family net income where the basic benefit starts to go down, Quebec, an eligible dependant and no eligible spouse
+    source: "5005-S6, line 24: $14,341.56"
+    value: 14341.56
+  cwbQcIncomeBaseSpouseDependant:
+    label: Adjusted family net income where the basic benefit starts to go down, Quebec, an eligible spouse and an eligible dependant
+    source: "5005-S6, line 24: $22,007.75"
+    value: 22007.75
+  cwbQcReductionRate:
+    label: Canada workers benefit reduction rate, Quebec
+    source: "5005-S6, lines 26 and 38: 20%"
+    value: 20%
+  cwbQcReductionRateBothDisabled:
+    label: Disability supplement reduction rate when both spouses are eligible for the disability tax credit, Quebec
+    source: "5005-S6, line 38: 10% if you had an eligible spouse who is also eligible for the DTC"
+    value: 10%
+  cwbQcDisabilityWorkingBase:
+    label: Working income where the disability supplement starts, Quebec
+    source: "5005-S6, line 30: $1,200"
+    value: 1200
+  cwbQcDisabilityRate:
+    label: Disability supplement rate on working income, Quebec, with no eligible spouse
+    source: "5005-S6, line 32: 40%"
+    value: 40%
+  cwbQcDisabilityRateSpouse:
+    label: Disability supplement rate on working income, Quebec, with an eligible spouse
+    source: "5005-S6, line 32: 20%"
+    value: 20%
+  cwbQcDisabilityMax:
+    label: Most Canada workers benefit disability supplement, Quebec
+    source: "5005-S6, line 34: $851.31"
+    value: 851.31
+  cwbQcDisabilityIncomeBaseSingle:
+    label: Adjusted family net income where the disability supplement starts to go down, Quebec, no eligible spouse or dependant
+    source: "5005-S6, line 36: $33,230.35"
+    value: 33230.35
+  cwbQcDisabilityIncomeBaseSpouse:
+    label: Adjusted family net income where the disability supplement starts to go down, Quebec, an eligible spouse and no eligible dependant
+    source: "5005-S6, line 36: $51,504.09"
+    value: 51504.09
+  cwbQcDisabilityIncomeBaseDependant:
+    label: Adjusted family net income where the disability supplement starts to go down, Quebec, an eligible dependant and no eligible spouse
+    source: "5005-S6, line 36: $24,561.56"
+    value: 24561.56
+  cwbQcDisabilityIncomeBaseSpouseDependant:
+    label: Adjusted family net income where the disability supplement starts to go down, Quebec, an eligible spouse and an eligible dependant
+    source: "5005-S6, line 36: $41,048.90"
+    value: 41048.90
+  cwbQcFamilyLimit:
+    label: Adjusted family net income from which a family in Quebec gets no Canada workers benefit
+    source: "5005-S6, the chart of limits: $60,017.19, the highest (an eligible spouse, no dependant, both eligible for the disability tax credit)"
+    value: 60017.19
   trainingCreditRate:
     label: Canada training credit, share of tuition
     source: "Schedule 11, line 2: 50%"
@@ -910,14 +1064,18 @@ lines:
       - min(line.T1.31000 + round(line.CPP.first * 50%, 2), line.CPP.offset)
       - min(round(line.CPP.second * 50%, 2), max(0, line.CPP.offset - line.T1.31000 - round(line.CPP.first * 50%, 2))),
       line.T1.31000 + line.CPP.first + line.CPP.second)
-    source: "Schedule 8, Part 4 line 17 (no employment), or Part 5 lines 70 to 88: half of each contribution, twice for the additional ones, less the employment overpayment used"
+    source: "Schedule 8, Part 4 line 17 (no employment), or Part 5 lines 70 to 88: half of each contribution, twice for the additional ones, less the employment overpayment used. In Quebec, 5005-S8 Part 3 line 15 or Part 4 lines 68 to 86, which come to the same amount (its 84.375% split of lines 73 to 75 only divides it)"
   T1.22215:
     label: Deduction for CPP enhanced contributions on employment income
     module: deductions
     formula: >-
       if(line.CPP.employmentDiff > 0 and line.CPP.withSelfEmployment == 0,
       line.CPP.requiredFirst + line.CPP.requiredSecond, line.CPP.enhancedDeduction)
-    source: "Schedule 8, Part 3a line 28 (more deducted than required: the required first and second additional contributions), else Part 3b line 48 or Part 5 line 69"
+    source: "Schedule 8, Part 3a line 28 (more deducted than required: the required first and second additional contributions), else Part 3b line 48 or Part 5 line 69. In Quebec, 5005-S8 Part 2a line 28, Part 2b line 47 or Part 4 line 67"
+  T1.22300:
+    label: Deduction for PPIP premiums on self-employment income
+    formula: "round(line.PPIP.sePremium * param.ppipSelfEmployedDeductionShare, 2)"
+    source: "5005-S10, Part A, line 9: line 7 × 43.736% (maximum $376.32)"
   T1.22900:
     label: Other employment expenses
     formula: >-
@@ -934,7 +1092,7 @@ lines:
     label: Deductions other than child care
     formula: >-
       line.T1.20700 + line.T1.20800 + line.T1.20805 + line.T1.21000 + line.T1.21200 + line.T1.21500 + line.T1.21900 + line.T1.22000
-      + line.T1.22100 + line.T1.22200 + line.T1.22215 + line.T1.22900 + line.T1.23200
+      + line.T1.22100 + line.T1.22200 + line.T1.22215 + line.T1.22300 + line.T1.22900 + line.T1.23200
   T1.23300:
     label: Total deductions
     formula: "line.DED.other + line.T1.21400"
@@ -970,14 +1128,21 @@ lines:
   # only) and Part 5 (self-employment and employment) work out the contributions on self-employment earnings; with no
   # employment, Part 5's lines below give Part 4's amounts. Not handled: the elections of Part 1 and Form CPT30 (Part 2,
   # conditions c to e), a CPP disability pension (condition b), and electing to pay on other earnings (Form CPT20).
+  #
+  # A resident of Quebec contributes to the QPP instead, on Schedule 8 for residents of Quebec (5005-S8): its Parts 2,
+  # 2a and 2b are Parts 3, 3a and 3b here line for line, and its Parts 3 and 4 are Parts 4 and 5. The same lines work it
+  # out with boxes 17 and 17A instead of 16 and 16A and Quebec's rates; only the months (Part 1) differ. Not handled for
+  # QPP either: a disability pension (condition b), the election to stop contributing (Form RR-50-V) and optional
+  # contributions on other earnings. A T4 with the other plan's contributions needs Form RC381, which isn't handled.
 
   # Part 2 – the number of months, and the year's limits for that many months (the monthly proration table).
   CPP.months:
-    label: Months CPP applied in 2025
+    label: Months CPP or QPP applied in 2025
     formula: >-
+      if(person.province == "QC", if(person.age <= 17 or person.age >= 73, 0, if(person.age == 18, 12 - person.birthMonth, 12)),
       if(person.age <= 17 or person.age >= 71, 0,
-      if(person.age == 18, 12 - person.birthMonth, if(person.age == 70, person.birthMonth, 12)))
-    source: "Schedule 8, Part 2, line A: the months after the month you turned 18 (a), up to and including the month you turned 70 (f), none when 70 or older all year (g)"
+      if(person.age == 18, 12 - person.birthMonth, if(person.age == 70, person.birthMonth, 12))))
+    source: "Schedule 8, Part 2, line A: the months after the month you turned 18 (a), up to and including the month you turned 70 (f), none when 70 or older all year (g). In Quebec, 5005-S8 Part 1, line A: the months after the month you turned 18 (a), none when 73 or older at the end of 2025 (c)"
   CPP.ympe:
     label: Your maximum pensionable earnings
     formula: "round(param.cppMaxPensionableEarnings * line.CPP.months / 12, 2)"
@@ -1011,18 +1176,32 @@ lines:
     label: Employment earnings subject to base and first additional contributions
     formula: "max(0, min(line.CPP.yampe, line.CPP.employed) - line.CPP.employedSecondEarnings - line.CPP.exemption)"
     source: "Schedule 8, Part 3, lines 5 to 7"
+  CPP.deducted:
+    label: Base and first additional CPP or QPP contributions deducted
+    formula: >-
+      if(person.province == "QC", if(sum(T4.box16) + sum(T4.box16A) > 0,
+      unsupported("Your T4 slips show CPP contributions (box 16 or 16A). A resident of Quebec with CPP contributions works them out on Form RC381, which this app doesn't handle yet"),
+      sum(T4.box17)),
+      if(sum(T4.box17) + sum(T4.box17A) > 0,
+      unsupported("Your T4 slips show QPP contributions (box 17 or 17A). Outside Quebec, QPP contributions are worked out on Form RC381, which this app doesn't handle yet"),
+      sum(T4.box16)))
+    source: "Schedule 8, Part 3, line 8: box 16 of T4 slips. In Quebec, 5005-S8 Part 2, line 8: box 17. Either schedule sends a T4 with the other plan's contributions to Form RC381 (5005-S8, page 1)"
+  CPP.secondDeducted:
+    label: Second additional CPP or QPP contributions deducted
+    formula: 'if(person.province == "QC", sum(T4.box17A), sum(T4.box16A))'
+    source: "Schedule 8, Part 3, line 21: box 16A of T4 slips. In Quebec, 5005-S8 Part 2, line 21: box 17A"
   CPP.actualBase:
-    label: Base CPP contributions deducted
-    formula: "round(sum(T4.box16) * param.cppBaseShare, 2)"
-    source: "Schedule 8, Part 3, lines 8 and 9: 83.1933% of box 16 of T4 slips"
+    label: Base CPP or QPP contributions deducted
+    formula: 'round(line.CPP.deducted * if(person.province == "QC", param.qppBaseShare, param.cppBaseShare), 2)'
+    source: "Schedule 8, Part 3, lines 8 and 9: 83.1933% of box 16 of T4 slips. In Quebec, 5005-S8 Part 2, line 9: 84.375% of box 17"
   CPP.actualFirst:
-    label: First additional CPP contributions deducted
-    formula: "sum(T4.box16) - line.CPP.actualBase"
-    source: "Schedule 8, Part 3, line 10"
+    label: First additional CPP or QPP contributions deducted
+    formula: "line.CPP.deducted - line.CPP.actualBase"
+    source: "Schedule 8, Part 3, line 10 (5005-S8, Part 2, line 10)"
   CPP.requiredBase:
-    label: Base CPP contributions required on employment earnings
-    formula: "round(line.CPP.employedBaseEarnings * param.cppBaseRate, 2)"
-    source: "Schedule 8, Part 3, line 11: 4.95%"
+    label: Base CPP or QPP contributions required on employment earnings
+    formula: 'round(line.CPP.employedBaseEarnings * if(person.province == "QC", param.qppBaseRate, param.cppBaseRate), 2)'
+    source: "Schedule 8, Part 3, line 11: 4.95%. In Quebec, 5005-S8 Part 2, line 11: 5.4%"
   CPP.requiredFirst:
     label: First additional CPP contributions required on employment earnings
     formula: "round(line.CPP.employedBaseEarnings * param.cppFirstRate, 2)"
@@ -1045,8 +1224,8 @@ lines:
     source: "Schedule 8, Part 3, line 22: 4%"
   CPP.secondDiff:
     label: Second additional contributions deducted less required
-    formula: "sum(T4.box16A) - line.CPP.requiredSecond"
-    source: "Schedule 8, Part 3, lines 21 to 23: box 16A of T4 slips less line 22"
+    formula: "line.CPP.secondDeducted - line.CPP.requiredSecond"
+    source: "Schedule 8, Part 3, lines 21 to 23: box 16A of T4 slips (box 17A in Quebec, 5005-S8 Part 2) less line 22"
   CPP.employmentDiff:
     label: CPP contributions deducted less required
     formula: "line.CPP.baseFirstDiff + line.CPP.secondDiff"
@@ -1071,8 +1250,8 @@ lines:
       + min(max(0, -line.CPP.firstDiff - max(0, line.CPP.baseDiff)),
       max(0, line.CPP.secondDiff) - min(max(0, line.CPP.secondDiff), max(0, -line.CPP.baseDiff))))
       + if(line.CPP.secondDiff >= 0, line.CPP.requiredSecond,
-      sum(T4.box16A) + min(max(0, line.CPP.baseFirstDiff), -line.CPP.secondDiff))
-    source: "Schedule 8, Part 3b, lines 37 to 48 (Part 5, lines 58 to 69)"
+      line.CPP.secondDeducted + min(max(0, line.CPP.baseFirstDiff), -line.CPP.secondDiff))
+    source: "Schedule 8, Part 3b, lines 37 to 48 (Part 5, lines 58 to 69); 5005-S8, Part 2b lines 36 to 47 (Part 4, lines 56 to 67)"
 
   # Part 4 and Part 5 – contributions on self-employment earnings.
   CPP.seEarnings:
@@ -1082,19 +1261,19 @@ lines:
   CPP.employedPaid:
     label: Base and first additional employment contributions, as Part 5 counts them
     formula: >-
-      sum(T4.box16) - max(0, line.CPP.baseFirstDiff)
+      line.CPP.deducted - max(0, line.CPP.baseFirstDiff)
       + min(max(0, line.CPP.secondDiff), max(0, -line.CPP.baseFirstDiff))
-    source: "Schedule 8, Part 5, lines 5 to 10: box 16 less any overpayment, plus second additional contributions over the required that make up a shortfall"
+    source: "Schedule 8, Part 5, lines 5 to 10 (5005-S8, Part 4, lines 4 to 9): box 16 (17) less any overpayment, plus second additional contributions over the required that make up a shortfall"
   CPP.employedSecondPaid:
     label: Second additional employment contributions, as Part 5 counts them
     formula: >-
-      sum(T4.box16A) - max(0, line.CPP.secondDiff)
+      line.CPP.secondDeducted - max(0, line.CPP.secondDiff)
       + min(max(0, line.CPP.baseFirstDiff), max(0, -line.CPP.secondDiff))
-    source: "Schedule 8, Part 5, lines 11 to 16"
+    source: "Schedule 8, Part 5, lines 11 to 16 (5005-S8, Part 4, lines 10 to 15)"
   CPP.covered:
     label: Earnings already covered by employment contributions
-    formula: "round(line.CPP.employedPaid * param.cppEarningsPerContribution, 2)"
-    source: "Schedule 8, Part 5, line 20"
+    formula: 'round(line.CPP.employedPaid * if(person.province == "QC", param.qppEarningsPerContribution, param.cppEarningsPerContribution), 2)'
+    source: "Schedule 8, Part 5, line 20: × 16.80672. In Quebec, 5005-S8 Part 4, line 19: × 15.625"
   CPP.exemptionLeft:
     label: Basic exemption not used by employment
     formula: "max(0, line.CPP.exemption - line.CPP.employed)"
@@ -1113,9 +1292,9 @@ lines:
       line.CPP.seEarnings - line.CPP.exemptionLeft - line.CPP.baseEarnings)), 0)
     source: "Schedule 8, Part 5, lines 31 to 42 (Part 4, lines 4 to 6)"
   CPP.base:
-    label: Base CPP contributions on self-employment earnings
-    formula: "round(line.CPP.baseEarnings * param.cppSelfEmployedBaseRate, 2)"
-    source: "Schedule 8, Part 5, line 43: 9.9%"
+    label: Base CPP or QPP contributions on self-employment earnings
+    formula: 'round(line.CPP.baseEarnings * if(person.province == "QC", param.qppSelfEmployedBaseRate, param.cppSelfEmployedBaseRate), 2)'
+    source: "Schedule 8, Part 5, line 43: 9.9%. In Quebec, 5005-S8 Part 3 line 10 and Part 4 line 42: 10.8%"
   CPP.first:
     label: First additional CPP contributions on self-employment earnings
     formula: "round(line.CPP.baseEarnings * param.cppSelfEmployedFirstRate, 2)"
@@ -1279,13 +1458,14 @@ lines:
     formula: >-
       if(line.CPP.employmentDiff > 0 and line.CPP.withSelfEmployment == 0,
       line.CPP.requiredBase, line.CPP.baseCredit)
-    source: "Schedule 8, Part 3a line 25 (more deducted than required: the required base contributions), else Part 3b line 36 or Part 5 line 57"
+    source: "Schedule 8, Part 3a line 25 (more deducted than required: the required base contributions), else Part 3b line 36 or Part 5 line 57. In Quebec, 5005-S8 Part 2a line 25, Part 2b line 35 or Part 4 line 55"
   T1.31000:
     label: CPP contributions on self-employment income
     formula: "round(line.CPP.base * 50%, 2)"
-    source: "Schedule 8, Part 4 line 15 or Part 5 line 70: half the base contributions"
+    source: "Schedule 8, Part 4 line 15 or Part 5 line 70: half the base contributions. In Quebec, 5005-S8 Part 3 line 14 or Part 4 line 68"
   # Form T2204 – employee overpayment of EI premiums, for a resident of a province other than Quebec with no EI
-  # special benefits agreement for self-employment (Schedule 13).
+  # special benefits agreement for self-employment (Schedule 13). A resident of Quebec pays EI at Quebec's rate, on
+  # Schedule 10 for residents of Quebec (5005-S10), Part C.
   EI.insurable:
     label: EI insurable earnings
     formula: >-
@@ -1295,16 +1475,49 @@ lines:
   EI.required:
     label: EI premiums required
     formula: >-
+      if(person.province == "QC", if(line.EI.insurable <= param.eiMinInsurableEarnings, 0,
+      min(param.eiPremiumMaxQc, round(line.EI.insurable * param.eiPremiumRateQc, 2))),
       if(line.EI.insurable < param.eiMinInsurableEarnings, 0,
-      min(param.eiPremiumMax, round(line.EI.insurable * param.eiPremiumRate, 2)))
-    source: "Form T2204, lines 10 and 12: 1.64% of line 1, up to $1,077.48; line 1 is 0 when insurable earnings are less than $2,000 (note 1)"
+      min(param.eiPremiumMax, round(line.EI.insurable * param.eiPremiumRate, 2))))
+    source: "Form T2204, lines 10 and 12: 1.64% of line 1, up to $1,077.48; line 1 is 0 when insurable earnings are less than $2,000 (note 1). In Quebec, 5005-S10 Part C, lines 18 to 20: 1.31%, up to $860.67; line 18 is 0 when insurable earnings are $2,000 or less"
   T1.31200:
     label: Employment insurance premiums through employment
     module: credits
     formula: >-
+      if(person.province == "QC", min(line.EI.required, sum(T4.box18)),
       min(max(0, min(param.eiMaxInsurableEarnings, line.EI.insurable) - param.eiMinInsurableEarnings),
-      sum(T4.box18), line.EI.required)
-    source: "Form T2204, line 16: whichever is least of insurable earnings (up to $65,700) over $2,000, the premiums deducted (box 18), and the premiums required"
+      sum(T4.box18), line.EI.required))
+    source: "Form T2204, line 16: whichever is least of insurable earnings (up to $65,700) over $2,000, the premiums deducted (box 18), and the premiums required. In Quebec, 5005-S10 Part C, line 24: whichever is less, line 20 or the premiums deducted (box 18)"
+  # PPIP (Quebec parental insurance plan) premiums, for a resident of Quebec: those deducted on T4 slips (box 55), and
+  # those payable on self-employment income (5005-S10, Part A). Line 31210, PPIP payable on employment outside Quebec
+  # (Part B), needs the province of employment of each T4 (box 10), which the app doesn't keep: it isn't claimed.
+  PPIP.insurable:
+    label: PPIP insurable earnings
+    formula: >-
+      if(person.province == "QC", if(count(T4.box56) == 0, sum(T4.box14), if(count(T4.box56) >= count(T4.box14), sum(T4.box56),
+      unsupported("Some of your T4 slips show PPIP insurable earnings (box 56) and some don't. Enter box 56 on each slip: the amount from box 14 when box 56 is blank"))), 0)
+    source: "5005-S10, Part A line 3 and Part B line 13: box 56 of T4 slips (box 14 if blank)"
+  T1.31205:
+    label: PPIP premiums paid
+    module: credits
+    formula: >-
+      if(person.province == "QC", if(line.PPIP.insurable < param.ppipMinEarnings, 0, min(param.ppipPremiumMax, sum(T4.box55))),
+      if(sum(T4.box55) > 0, unsupported("PPIP premiums (box 55 of a T4) of a person living outside Quebec on December 31 aren't handled by this app yet"), 0))
+    source: "5005-R line 31205 and canada.ca/line-31205: box 55 of all T4 slips, up to $484.12; nothing when PPIP insurable earnings are less than $2,000 (the TP-1 refunds them)"
+  PPIP.seEarnings:
+    label: Self-employment income subject to the PPIP premium
+    formula: >-
+      if(person.province == "QC" and max(0, line.SE.net) + line.PPIP.insurable >= param.ppipMinEarnings,
+      min(max(0, line.SE.net), max(0, param.ppipMaxInsurableEarnings - line.PPIP.insurable)), 0)
+    source: "5005-S10, Part A, lines 1 to 5: net business income (TP-1 Schedule L line 27, the self-employment lines here, not less than 0), up to $98,000 less the PPIP insurable employment earnings; none when the two total less than $2,000 (TP-1 Schedule R)"
+  PPIP.sePremium:
+    label: PPIP premium on self-employment income
+    formula: "round(line.PPIP.seEarnings * param.ppipSelfEmployedRate, 2)"
+    source: "5005-S10, Part A, line 7: line 5 × 0.878% (maximum $860.44)"
+  T1.31215:
+    label: PPIP premiums payable on self-employment income
+    formula: "line.PPIP.sePremium - line.T1.22300"
+    source: "5005-S10, Part A, line 10: line 7 minus line 9 (maximum $484.12)"
   T1.31260:
     label: Canada employment amount
     module: credits
@@ -1333,10 +1546,10 @@ lines:
       min(answer.adoptionExpenses, param.adoptionMax)), 0)
     source: "canada.ca/line-31300: up to $19,580 for each child"
   T1.T96:
-    label: CPP, EI, volunteer, employment, home and adoption amounts (T1 line 96)
+    label: CPP, EI, PPIP, volunteer, employment, home and adoption amounts (T1 line 96; line 100 of 5005-R)
     formula: >-
-      line.T1.30800 + line.T1.31000 + line.T1.31200 + line.T1.31220 + line.T1.31240 + line.T1.31260 + line.T1.31270
-      + line.T1.31285 + line.T1.31300
+      line.T1.30800 + line.T1.31000 + line.T1.31200 + line.T1.31205 + line.T1.31215 + line.T1.31220 + line.T1.31240 + line.T1.31260
+      + line.T1.31270 + line.T1.31285 + line.T1.31300
   T1.31400:
     label: Pension income amount
     formula: "min(param.pensionIncomeAmountMax, line.PEN.creditBase)"
@@ -1465,11 +1678,12 @@ lines:
   # Step 6 – Refund or balance owing
   T1.42800:
     label: Provincial tax
-    formula: 'if(person.province == "ON", line.ON428.90, if(person.province == "BC", line.BC428.91, if(person.province == "AB", line.AB428.75, if(person.province == "MB", line.MB428.82, if(person.province == "SK", line.SK428.82, if(person.province == "NB", line.NB428.97, if(person.province == "NL", line.NL428.105, if(person.province == "NS", line.NS428.99, if(person.province == "PE", line.PE428.97, if(person.province == "YT", line.YT428.79, if(person.province == "NT", line.NT428.66, if(person.province == "NU", line.NU428.66, unsupported("Provincial tax for this province isn''t handled by this app")))))))))))))'
+    formula: 'if(person.province == "ON", line.ON428.90, if(person.province == "BC", line.BC428.91, if(person.province == "AB", line.AB428.75, if(person.province == "MB", line.MB428.82, if(person.province == "SK", line.SK428.82, if(person.province == "NB", line.NB428.97, if(person.province == "NL", line.NL428.105, if(person.province == "NS", line.NS428.99, if(person.province == "PE", line.PE428.97, if(person.province == "YT", line.YT428.79, if(person.province == "NT", line.NT428.66, if(person.province == "NU", line.NU428.66, if(person.province == "QC", 0, unsupported("Provincial tax for this province isn''t handled by this app"))))))))))))))'
+    source: "The Form 428 of your province or territory. A resident of Quebec has none: Quebec's tax is on the TP-1, and 5005-R line 42800 is only for Form T2203 (a business with a permanent establishment outside Quebec), which isn't handled"
   T1.42100:
     label: CPP contributions payable on self-employment income
-    formula: "max(0, line.CPP.base + line.CPP.first + line.CPP.second - 2 * line.CPP.offset)"
-    source: "Schedule 8, Part 4 line 14, or Part 5 line 49 when positive: the contributions less twice the employment overpayment"
+    formula: 'if(person.province == "QC", 0, max(0, line.CPP.base + line.CPP.first + line.CPP.second - 2 * line.CPP.offset))'
+    source: "Schedule 8, Part 4 line 14, or Part 5 line 49 when positive: the contributions less twice the employment overpayment. 5005-R has no line 42100: a resident of Quebec pays QPP on self-employment on the TP-1 (line 445, Schedule U)"
   T1.42200:
     label: Social benefits repayment
     formula: "line.T1.23500"
@@ -1485,14 +1699,22 @@ lines:
   T1.44800:
     label: CPP overpayment
     formula: >-
-      if(line.CPP.withSelfEmployment == 1,
+      if(person.province == "QC", 0, if(line.CPP.withSelfEmployment == 1,
       round(max(0, 2 * line.CPP.offset - line.CPP.base - line.CPP.first - line.CPP.second) * 50%, 2),
-      max(0, line.CPP.employmentDiff))
-    source: "Schedule 8, Part 3a line 29 (line 24 when positive), or Part 5 line 50: half of line 49 when negative"
+      max(0, line.CPP.employmentDiff)))
+    source: "Schedule 8, Part 3a line 29 (line 24 when positive), or Part 5 line 50: half of line 49 when negative. 5005-R has no line 44800: a resident of Quebec claims a QPP overpayment on the TP-1 (line 452; 5005-S8 Part 2a and Part 4 note 1)"
   T1.45000:
     label: Employment insurance overpayment
-    formula: "if(sum(T4.box18) - line.T1.31200 > 1, sum(T4.box18) - line.T1.31200, 0)"
-    source: "Form T2204, lines 8 to 15: the premiums deducted less line 16, when more than $1"
+    formula: 'if(person.province == "QC", max(0, sum(T4.box18) - line.T1.31200), if(sum(T4.box18) - line.T1.31200 > 1, sum(T4.box18) - line.T1.31200, 0))'
+    source: "Form T2204, lines 8 to 15: the premiums deducted less line 16, when more than $1. In Quebec, 5005-S10 Part C, line 23: box 18 less line 20, if positive"
+  T1.45100:
+    label: Net EI overpayment
+    formula: 'if(person.province == "QC", line.T1.45000, 0)'
+    source: "5005-R lines 157 to 159: line 45000 less line 31210 (not claimed here: the app doesn't keep a T4's province of employment). Only on the T1 for residents of Quebec"
+  T1.44000:
+    label: Refundable Quebec abatement
+    formula: 'if(person.province == "QC", round(line.T1.42900 * param.quebecAbatementRate, 2), 0)'
+    source: "5005-R line 44000 (row 156) and canada.ca/line-44000: line 42900 × 16.5%, for a resident of Quebec on December 31. Form T2203 (a business with a permanent establishment outside Quebec) isn't handled"
   # Federal Worksheet, line 45200 – the refundable medical expense supplement
   MED.earned:
     label: Earnings for the refundable medical expense supplement
@@ -1514,6 +1736,8 @@ lines:
 
   # Schedule 6 – Canada workers benefit. A couple's basic benefit is claimed once: on the return of the spouse with the
   # higher working income (the person preparing when equal); each spouse claims their own disability supplement.
+  # A resident of Quebec uses Schedule 6 for residents of Quebec (5005-S6): the same steps with Quebec's amounts and
+  # rates, which depend on four family types instead of two. CWB.workingBase to CWB.familyLimit pick them.
   CWB.working:
     label: Working income
     formula: "line.T1.10100 + line.T1.10400 + line.T1.13010 + line.SE.earned"
@@ -1546,10 +1770,71 @@ lines:
       if(line.CWB.spouse == 1, if(household.partnerInYear, line.CWB.netIncome + spouse.line.CWB.netIncome
       - min(param.cwbSecondaryEarnerMax, if(line.CWB.working < spouse.line.CWB.working, min(line.CWB.working, line.CWB.netIncome),
       min(spouse.line.CWB.working, spouse.line.CWB.netIncome))),
-      if(line.CWB.netIncome + line.HH.spouseNetIncome - min(param.cwbSecondaryEarnerMax, line.CWB.netIncome, line.HH.spouseNetIncome) < param.cwbFamilyLimit and line.CWB.working > 0,
-      unsupported("The Canada workers benefit for a couple needs your spouse's or partner's working income: prepare their return here too"), param.cwbFamilyLimit)),
+      if(line.CWB.netIncome + line.HH.spouseNetIncome - min(param.cwbSecondaryEarnerMax, line.CWB.netIncome, line.HH.spouseNetIncome) < line.CWB.familyLimit and line.CWB.working > 0,
+      unsupported("The Canada workers benefit for a couple needs your spouse's or partner's working income: prepare their return here too"), line.CWB.familyLimit)),
       line.CWB.netIncome)
     source: "Schedule 6, lines 13 to 15: with the secondary earner exemption (up to $16,386). With a spouse whose return isn't prepared here, a family that might get the benefit is asked to prepare it; one that can't is put at the limit"
+  CWB.familyLimit:
+    label: Adjusted family net income from which a family gets no Canada workers benefit
+    formula: 'if(person.province == "QC", param.cwbQcFamilyLimit, param.cwbFamilyLimit)'
+    source: "Schedule 6 (5005-S6 in Quebec), the chart of limits: the highest limit"
+  CWB.workingBase:
+    label: Working income where the basic benefit starts
+    formula: >-
+      if(person.province == "QC", if(line.CWB.spouse == 1, param.cwbQcWorkingIncomeBaseSpouse, param.cwbQcWorkingIncomeBase),
+      param.cwbWorkingIncomeBase)
+    source: "Schedule 6, line 17: $3,000. In Quebec, 5005-S6 line 17: $3,600 with an eligible spouse, else $2,400"
+  CWB.rate:
+    label: Basic benefit rate on working income
+    formula: >-
+      if(person.province == "QC", if(line.CWB.dependant == 1, if(line.CWB.spouse == 1, param.cwbQcRateSpouseDependant, param.cwbQcRateDependant),
+      param.cwbQcRate), param.cwbRate)
+    source: "Schedule 6, line 19: 27%. In Quebec, 5005-S6 line 19: 20% with an eligible dependant and no eligible spouse, 23.9% with both, else 37.3%"
+  CWB.max:
+    label: Most basic Canada workers benefit
+    formula: >-
+      if(person.province == "QC", if(line.CWB.spouse == 1, if(line.CWB.dependant == 1, param.cwbQcMaxSpouseDependant, param.cwbQcMaxSpouse),
+      if(line.CWB.dependant == 1, param.cwbQcMaxDependant, param.cwbQcMaxSingle)),
+      if(line.CWB.spouse == 1 or line.CWB.dependant == 1, param.cwbMaxFamily, param.cwbMaxSingle))
+    source: "Schedule 6, line 21 (5005-S6 line 21 in Quebec, by family type)"
+  CWB.incomeBase:
+    label: Adjusted family net income where the basic benefit starts to go down
+    formula: >-
+      if(person.province == "QC", if(line.CWB.spouse == 1, if(line.CWB.dependant == 1, param.cwbQcIncomeBaseSpouseDependant, param.cwbQcIncomeBaseSpouse),
+      if(line.CWB.dependant == 1, param.cwbQcIncomeBaseDependant, param.cwbQcIncomeBaseSingle)),
+      if(line.CWB.spouse == 1 or line.CWB.dependant == 1, param.cwbIncomeBaseFamily, param.cwbIncomeBaseSingle))
+    source: "Schedule 6, line 24 (5005-S6 line 24 in Quebec, by family type)"
+  CWB.reductionRate:
+    label: Basic benefit reduction rate
+    formula: 'if(person.province == "QC", param.cwbQcReductionRate, param.cwbReductionRate)'
+    source: "Schedule 6, line 26: 15%. In Quebec, 5005-S6 line 26: 20%"
+  CWB.disabilityWorkingBase:
+    label: Working income where the disability supplement starts
+    formula: 'if(person.province == "QC", param.cwbQcDisabilityWorkingBase, param.cwbDisabilityWorkingBase)'
+    source: "Schedule 6, line 30: $1,150. In Quebec, 5005-S6 line 30: $1,200"
+  CWB.disabilityRate:
+    label: Disability supplement rate on working income
+    formula: >-
+      if(person.province == "QC", if(line.CWB.spouse == 1, param.cwbQcDisabilityRateSpouse, param.cwbQcDisabilityRate), param.cwbRate)
+    source: "Schedule 6, line 32: 27%. In Quebec, 5005-S6 line 32: 20% with an eligible spouse, else 40%"
+  CWB.disabilityMax:
+    label: Most Canada workers benefit disability supplement
+    formula: 'if(person.province == "QC", param.cwbQcDisabilityMax, param.cwbDisabilityMax)'
+    source: "Schedule 6, line 34: $843. In Quebec, 5005-S6 line 34: $851.31"
+  CWB.disabilityIncomeBase:
+    label: Adjusted family net income where the disability supplement starts to go down
+    formula: >-
+      if(person.province == "QC", if(line.CWB.spouse == 1, if(line.CWB.dependant == 1, param.cwbQcDisabilityIncomeBaseSpouseDependant,
+      param.cwbQcDisabilityIncomeBaseSpouse), if(line.CWB.dependant == 1, param.cwbQcDisabilityIncomeBaseDependant, param.cwbQcDisabilityIncomeBaseSingle)),
+      if(line.CWB.spouse == 1 or line.CWB.dependant == 1, param.cwbDisabilityIncomeBaseFamily, param.cwbDisabilityIncomeBaseSingle))
+    source: "Schedule 6, line 36 (5005-S6 line 36 in Quebec, by family type)"
+  CWB.disabilityReductionRate:
+    label: Disability supplement reduction rate
+    formula: >-
+      if(line.CWB.spouse == 1 and household.partnerInYear and spouse.answer.hasDisability,
+      if(person.province == "QC", param.cwbQcReductionRateBothDisabled, param.cwbReductionRateBothDisabled),
+      if(person.province == "QC", param.cwbQcReductionRate, param.cwbReductionRate))
+    source: "Schedule 6, line 38: 15% (7.5% when both spouses have the disability tax credit). In Quebec, 5005-S6 line 38: 20% (10%)"
   CWB.claimsBasic:
     label: This return claims the couple's basic benefit (1 for yes)
     formula: >-
@@ -1559,19 +1844,15 @@ lines:
   CWB.basic:
     label: Basic Canada workers benefit
     formula: >-
-      if(line.CWB.claimsBasic == 1, max(0, min(round(max(0, line.CWB.familyWorking - param.cwbWorkingIncomeBase) * param.cwbRate, 2),
-      if(line.CWB.spouse == 1 or line.CWB.dependant == 1, param.cwbMaxFamily, param.cwbMaxSingle))
-      - round(max(0, line.CWB.familyIncome - if(line.CWB.spouse == 1 or line.CWB.dependant == 1, param.cwbIncomeBaseFamily, param.cwbIncomeBaseSingle))
-      * param.cwbReductionRate, 2)), 0)
-    source: "Schedule 6, Step 2: 27% of family working income over $3,000, up to the maximum, less 15% of adjusted family net income over the base"
+      if(line.CWB.claimsBasic == 1, max(0, min(round(max(0, line.CWB.familyWorking - line.CWB.workingBase) * line.CWB.rate, 2), line.CWB.max)
+      - round(max(0, line.CWB.familyIncome - line.CWB.incomeBase) * line.CWB.reductionRate, 2)), 0)
+    source: "Schedule 6, Step 2, lines 16 to 28: 27% of family working income over $3,000, up to the maximum, less 15% of adjusted family net income over the base (in Quebec, 5005-S6 Step 2 with its own amounts and rates)"
   CWB.disability:
     label: Canada workers benefit disability supplement
     formula: >-
-      if(line.CWB.eligible == 1 and answer.hasDisability, max(0, min(round(max(0, line.CWB.working - param.cwbDisabilityWorkingBase) * param.cwbRate, 2),
-      param.cwbDisabilityMax) - round(max(0, line.CWB.familyIncome - if(line.CWB.spouse == 1 or line.CWB.dependant == 1,
-      param.cwbDisabilityIncomeBaseFamily, param.cwbDisabilityIncomeBaseSingle))
-      * if(line.CWB.spouse == 1 and household.partnerInYear and spouse.answer.hasDisability, param.cwbReductionRateBothDisabled, param.cwbReductionRate), 2)), 0)
-    source: "Schedule 6, Step 3: 27% of working income over $1,150, up to $843, less 15% (7.5% when both spouses have the disability tax credit) of adjusted family net income over the base"
+      if(line.CWB.eligible == 1 and answer.hasDisability, max(0, min(round(max(0, line.CWB.working - line.CWB.disabilityWorkingBase) * line.CWB.disabilityRate, 2),
+      line.CWB.disabilityMax) - round(max(0, line.CWB.familyIncome - line.CWB.disabilityIncomeBase) * line.CWB.disabilityReductionRate, 2)), 0)
+    source: "Schedule 6, Step 3, lines 29 to 40: 27% of working income over $1,150, up to $843, less 15% (7.5% when both spouses have the disability tax credit) of adjusted family net income over the base (in Quebec, 5005-S6 Step 3 with its own amounts and rates)"
   T1.45300:
     label: Canada workers benefit
     formula: "line.CWB.basic + line.CWB.disability"
@@ -1615,12 +1896,13 @@ lines:
   T1.47900:
     label: Provincial or territorial credits
     formula: 'if(person.province == "ON", line.ON479.21, if(person.province == "BC", line.BC479.45, if(person.province == "NB", line.NBS12.7, if(person.province == "MB", line.MB479.81, if(person.province == "SK", line.SK479.10, if(person.province == "NL", line.NL479.9, if(person.province == "NS", line.NS479.5, if(person.province == "PE", line.PE428.98, if(person.province == "YT", line.YT479.6, if(person.province == "NT", line.NT479.21, if(person.province == "NU", line.NU479.21, 0)))))))))))'
-    source: "T1 line 47900: the Form 479 of your province or territory"
+    source: "T1 line 47900: the Form 479 of your province or territory. 5005-R (Quebec) has no line 47900 and there is no Form 479 for Quebec: Quebec's credits are on the TP-1"
   T1.48200:
     label: Total credits
     formula: >-
-      line.T1.43700 + line.T1.44800 + line.T1.45000 + line.T1.45200 + line.T1.45300 + line.T1.45350 + line.T1.45355
-      + line.T1.45600 + line.T1.46900 + line.T1.47600 + line.T1.47900
+      line.T1.43700 + line.T1.45200 + line.T1.45300 + line.T1.45350 + line.T1.45355 + line.T1.45600 + line.T1.46900 + line.T1.47600
+      + if(person.province == "QC", line.T1.44000 + line.T1.45100, line.T1.44800 + line.T1.45000 + line.T1.47900)
+    source: "T1 line 48200 (row 166). In Quebec, 5005-R row 171: lines 155 (43850, which is line 43700: the tax transfer on line 43800 isn't handled), 156 (44000) and 159 to 170, with no line 44800 or 47900"
   T1.48400:
     label: Refund
     formula: "max(0, line.T1.48200 - line.T1.43500)"

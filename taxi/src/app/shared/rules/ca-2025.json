@@ -565,6 +565,46 @@
       "value": "2000",
       "source": "Form T2204, line 7 and note 1: $2,000"
     },
+    "eiPremiumRateQc": {
+      "label": "EI premium rate for employees resident in Quebec",
+      "value": "0.0131",
+      "source": "Schedule 10 for residents of Quebec (5005-S10), Part C, line 19: 1.31%, on line 18 (maximum $65,700; 0 when $2,000 or less)"
+    },
+    "eiPremiumMaxQc": {
+      "label": "Most EI premiums for a resident of Quebec",
+      "value": "860.67",
+      "source": "5005-S10, Part C, line 20, and 5005-R line 31200: maximum $860.67"
+    },
+    "ppipPremiumMax": {
+      "label": "Most PPIP premiums claimed",
+      "value": "484.12",
+      "source": "5005-R lines 31205 and 31215: maximum $484.12"
+    },
+    "ppipMinEarnings": {
+      "label": "PPIP insurable earnings below which no PPIP premiums are claimed",
+      "value": "2000",
+      "source": "canada.ca/line-31205: PPIP insurable earnings less than $2,000 are claimed as an overpayment on the TP-1; TP-1 Schedule R: no premium when net business income and employment income subject to the QPIP total less than $2,000"
+    },
+    "ppipMaxInsurableEarnings": {
+      "label": "Maximum PPIP insurable earnings",
+      "value": "98000",
+      "source": "5005-S10, Part A, line 2: $98,000"
+    },
+    "ppipSelfEmployedRate": {
+      "label": "PPIP rate on self-employment income",
+      "value": "0.00878",
+      "source": "5005-S10, Part A, line 6: 0.878% (maximum $860.44 on line 7)"
+    },
+    "ppipSelfEmployedDeductionShare": {
+      "label": "Share of the PPIP premium on self-employment income that is deducted",
+      "value": "0.43736",
+      "source": "5005-S10, Part A, line 8: 43.736% (maximum $376.32 on line 9, line 22300); the rest is the credit on line 31215"
+    },
+    "quebecAbatementRate": {
+      "label": "Refundable Quebec abatement rate",
+      "value": "0.165",
+      "source": "5005-R line 44000 (row 156): amount from line 42900 × 16.5%"
+    },
     "medicalThresholdRate": {
       "label": "Medical expense threshold rate",
       "value": "0.03",
@@ -729,6 +769,26 @@
       "label": "Second additional CPP rate on self-employment earnings",
       "value": "0.08",
       "source": "Schedule 8, Part 5, line 45: 8%"
+    },
+    "qppBaseRate": {
+      "label": "QPP base rate for employees",
+      "value": "0.054",
+      "source": "Schedule 8 for residents of Quebec (5005-S8), Part 2, line 11: 5.4% (maximum $3,661.20)"
+    },
+    "qppBaseShare": {
+      "label": "Base part of the QPP contributions on a T4 slip (box 17)",
+      "value": "0.84375",
+      "source": "5005-S8, Part 2, line 9: 84.375% of line 8 (box 17 of all T4 slips)"
+    },
+    "qppEarningsPerContribution": {
+      "label": "Earnings that a dollar of employee base and first additional QPP contributions covers",
+      "value": "15.625",
+      "source": "5005-S8, Part 4, line 19: line 9 × 15.625 (1 ÷ 6.4%)"
+    },
+    "qppSelfEmployedBaseRate": {
+      "label": "Base QPP rate on self-employment earnings",
+      "value": "0.108",
+      "source": "5005-S8, Part 3 line 10 and Part 4 line 42: 10.8% (maximum $7,322.40)"
     },
     "childCareUnder7": {
       "label": "Child care limit for a child born in 2019 or later",
@@ -1005,6 +1065,126 @@
       "label": "Months of full-time study a person can have and still get the Canada workers benefit",
       "value": "3",
       "source": "Schedule 6: not a full-time student for more than 13 weeks in the year, unless they had an eligible dependant"
+    },
+    "cwbQcWorkingIncomeBase": {
+      "label": "Working income where the basic Canada workers benefit starts, Quebec, with no eligible spouse",
+      "value": "2400",
+      "source": "5005-S6, line 17: $2,400"
+    },
+    "cwbQcWorkingIncomeBaseSpouse": {
+      "label": "Working income where the basic Canada workers benefit starts, Quebec, with an eligible spouse",
+      "value": "3600",
+      "source": "5005-S6, line 17: $3,600 with an eligible spouse (with or without an eligible dependant)"
+    },
+    "cwbQcRate": {
+      "label": "Canada workers benefit rate on working income, Quebec, with no eligible dependant",
+      "value": "0.373",
+      "source": "5005-S6, line 19: 37.3% (no eligible dependant, with or without an eligible spouse)"
+    },
+    "cwbQcRateDependant": {
+      "label": "Canada workers benefit rate on working income, Quebec, with an eligible dependant and no eligible spouse",
+      "value": "0.2",
+      "source": "5005-S6, line 19: 20%"
+    },
+    "cwbQcRateSpouseDependant": {
+      "label": "Canada workers benefit rate on working income, Quebec, with an eligible spouse and an eligible dependant",
+      "value": "0.239",
+      "source": "5005-S6, line 19: 23.9%"
+    },
+    "cwbQcMaxSingle": {
+      "label": "Most basic Canada workers benefit, Quebec, no eligible spouse or dependant",
+      "value": "3812.06",
+      "source": "5005-S6, line 21: $3,812.06"
+    },
+    "cwbQcMaxSpouse": {
+      "label": "Most basic Canada workers benefit, Quebec, an eligible spouse and no eligible dependant",
+      "value": "5943.38",
+      "source": "5005-S6, line 21: $5,943.38"
+    },
+    "cwbQcMaxDependant": {
+      "label": "Most basic Canada workers benefit, Quebec, an eligible dependant and no eligible spouse",
+      "value": "2044",
+      "source": "5005-S6, line 21: $2,044.00"
+    },
+    "cwbQcMaxSpouseDependant": {
+      "label": "Most basic Canada workers benefit, Quebec, an eligible spouse and an eligible dependant",
+      "value": "3808.23",
+      "source": "5005-S6, line 21: $3,808.23"
+    },
+    "cwbQcIncomeBaseSingle": {
+      "label": "Adjusted family net income where the basic benefit starts to go down, Quebec, no eligible spouse or dependant",
+      "value": "14170.05",
+      "source": "5005-S6, line 24: $14,170.05"
+    },
+    "cwbQcIncomeBaseSpouse": {
+      "label": "Adjusted family net income where the basic benefit starts to go down, Quebec, an eligible spouse and no eligible dependant",
+      "value": "21787.19",
+      "source": "5005-S6, line 24: $21,787.19"
+    },
+    "cwbQcIncomeBaseDependant": {
+      "label": "Adjusted family net income where the basic benefit starts to go down, Quebec, an eligible dependant and no eligible spouse",
+      "value": "14341.56",
+      "source": "5005-S6, line 24: $14,341.56"
+    },
+    "cwbQcIncomeBaseSpouseDependant": {
+      "label": "Adjusted family net income where the basic benefit starts to go down, Quebec, an eligible spouse and an eligible dependant",
+      "value": "22007.75",
+      "source": "5005-S6, line 24: $22,007.75"
+    },
+    "cwbQcReductionRate": {
+      "label": "Canada workers benefit reduction rate, Quebec",
+      "value": "0.2",
+      "source": "5005-S6, lines 26 and 38: 20%"
+    },
+    "cwbQcReductionRateBothDisabled": {
+      "label": "Disability supplement reduction rate when both spouses are eligible for the disability tax credit, Quebec",
+      "value": "0.1",
+      "source": "5005-S6, line 38: 10% if you had an eligible spouse who is also eligible for the DTC"
+    },
+    "cwbQcDisabilityWorkingBase": {
+      "label": "Working income where the disability supplement starts, Quebec",
+      "value": "1200",
+      "source": "5005-S6, line 30: $1,200"
+    },
+    "cwbQcDisabilityRate": {
+      "label": "Disability supplement rate on working income, Quebec, with no eligible spouse",
+      "value": "0.4",
+      "source": "5005-S6, line 32: 40%"
+    },
+    "cwbQcDisabilityRateSpouse": {
+      "label": "Disability supplement rate on working income, Quebec, with an eligible spouse",
+      "value": "0.2",
+      "source": "5005-S6, line 32: 20%"
+    },
+    "cwbQcDisabilityMax": {
+      "label": "Most Canada workers benefit disability supplement, Quebec",
+      "value": "851.31",
+      "source": "5005-S6, line 34: $851.31"
+    },
+    "cwbQcDisabilityIncomeBaseSingle": {
+      "label": "Adjusted family net income where the disability supplement starts to go down, Quebec, no eligible spouse or dependant",
+      "value": "33230.35",
+      "source": "5005-S6, line 36: $33,230.35"
+    },
+    "cwbQcDisabilityIncomeBaseSpouse": {
+      "label": "Adjusted family net income where the disability supplement starts to go down, Quebec, an eligible spouse and no eligible dependant",
+      "value": "51504.09",
+      "source": "5005-S6, line 36: $51,504.09"
+    },
+    "cwbQcDisabilityIncomeBaseDependant": {
+      "label": "Adjusted family net income where the disability supplement starts to go down, Quebec, an eligible dependant and no eligible spouse",
+      "value": "24561.56",
+      "source": "5005-S6, line 36: $24,561.56"
+    },
+    "cwbQcDisabilityIncomeBaseSpouseDependant": {
+      "label": "Adjusted family net income where the disability supplement starts to go down, Quebec, an eligible spouse and an eligible dependant",
+      "value": "41048.9",
+      "source": "5005-S6, line 36: $41,048.90"
+    },
+    "cwbQcFamilyLimit": {
+      "label": "Adjusted family net income from which a family in Quebec gets no Canada workers benefit",
+      "value": "60017.19",
+      "source": "5005-S6, the chart of limits: $60,017.19, the highest (an eligible spouse, no dependant, both eligible for the disability tax credit)"
     },
     "trainingCreditRate": {
       "label": "Canada training credit, share of tuition",
@@ -4358,13 +4538,18 @@
     "T1.22200": {
       "label": "Deduction for CPP contributions on self-employment income",
       "formula": "if(line.CPP.employed > 0, line.T1.31000 + 2 * round(line.CPP.first * 50%, 2) + 2 * round(line.CPP.second * 50%, 2) - min(line.T1.31000 + round(line.CPP.first * 50%, 2), line.CPP.offset) - min(round(line.CPP.second * 50%, 2), max(0, line.CPP.offset - line.T1.31000 - round(line.CPP.first * 50%, 2))), line.T1.31000 + line.CPP.first + line.CPP.second)",
-      "source": "Schedule 8, Part 4 line 17 (no employment), or Part 5 lines 70 to 88: half of each contribution, twice for the additional ones, less the employment overpayment used"
+      "source": "Schedule 8, Part 4 line 17 (no employment), or Part 5 lines 70 to 88: half of each contribution, twice for the additional ones, less the employment overpayment used. In Quebec, 5005-S8 Part 3 line 15 or Part 4 lines 68 to 86, which come to the same amount (its 84.375% split of lines 73 to 75 only divides it)"
     },
     "T1.22215": {
       "label": "Deduction for CPP enhanced contributions on employment income",
       "formula": "if(line.CPP.employmentDiff > 0 and line.CPP.withSelfEmployment == 0, line.CPP.requiredFirst + line.CPP.requiredSecond, line.CPP.enhancedDeduction)",
-      "source": "Schedule 8, Part 3a line 28 (more deducted than required: the required first and second additional contributions), else Part 3b line 48 or Part 5 line 69",
+      "source": "Schedule 8, Part 3a line 28 (more deducted than required: the required first and second additional contributions), else Part 3b line 48 or Part 5 line 69. In Quebec, 5005-S8 Part 2a line 28, Part 2b line 47 or Part 4 line 67",
       "module": "deductions"
+    },
+    "T1.22300": {
+      "label": "Deduction for PPIP premiums on self-employment income",
+      "formula": "round(line.PPIP.sePremium * param.ppipSelfEmployedDeductionShare, 2)",
+      "source": "5005-S10, Part A, line 9: line 7 × 43.736% (maximum $376.32)"
     },
     "T1.22900": {
       "label": "Other employment expenses",
@@ -4378,7 +4563,7 @@
     },
     "DED.other": {
       "label": "Deductions other than child care",
-      "formula": "line.T1.20700 + line.T1.20800 + line.T1.20805 + line.T1.21000 + line.T1.21200 + line.T1.21500 + line.T1.21900 + line.T1.22000 + line.T1.22100 + line.T1.22200 + line.T1.22215 + line.T1.22900 + line.T1.23200"
+      "formula": "line.T1.20700 + line.T1.20800 + line.T1.20805 + line.T1.21000 + line.T1.21200 + line.T1.21500 + line.T1.21900 + line.T1.22000 + line.T1.22100 + line.T1.22200 + line.T1.22215 + line.T1.22300 + line.T1.22900 + line.T1.23200"
     },
     "T1.23300": {
       "label": "Total deductions",
@@ -4408,9 +4593,9 @@
       "formula": "max(0, line.T1.23400 - line.T1.23500)"
     },
     "CPP.months": {
-      "label": "Months CPP applied in 2025",
-      "formula": "if(person.age <= 17 or person.age >= 71, 0, if(person.age == 18, 12 - person.birthMonth, if(person.age == 70, person.birthMonth, 12)))",
-      "source": "Schedule 8, Part 2, line A: the months after the month you turned 18 (a), up to and including the month you turned 70 (f), none when 70 or older all year (g)"
+      "label": "Months CPP or QPP applied in 2025",
+      "formula": "if(person.province == \"QC\", if(person.age <= 17 or person.age >= 73, 0, if(person.age == 18, 12 - person.birthMonth, 12)), if(person.age <= 17 or person.age >= 71, 0, if(person.age == 18, 12 - person.birthMonth, if(person.age == 70, person.birthMonth, 12))))",
+      "source": "Schedule 8, Part 2, line A: the months after the month you turned 18 (a), up to and including the month you turned 70 (f), none when 70 or older all year (g). In Quebec, 5005-S8 Part 1, line A: the months after the month you turned 18 (a), none when 73 or older at the end of 2025 (c)"
     },
     "CPP.ympe": {
       "label": "Your maximum pensionable earnings",
@@ -4447,20 +4632,30 @@
       "formula": "max(0, min(line.CPP.yampe, line.CPP.employed) - line.CPP.employedSecondEarnings - line.CPP.exemption)",
       "source": "Schedule 8, Part 3, lines 5 to 7"
     },
+    "CPP.deducted": {
+      "label": "Base and first additional CPP or QPP contributions deducted",
+      "formula": "if(person.province == \"QC\", if(sum(T4.box16) + sum(T4.box16A) > 0, unsupported(\"Your T4 slips show CPP contributions (box 16 or 16A). A resident of Quebec with CPP contributions works them out on Form RC381, which this app doesn't handle yet\"), sum(T4.box17)), if(sum(T4.box17) + sum(T4.box17A) > 0, unsupported(\"Your T4 slips show QPP contributions (box 17 or 17A). Outside Quebec, QPP contributions are worked out on Form RC381, which this app doesn't handle yet\"), sum(T4.box16)))",
+      "source": "Schedule 8, Part 3, line 8: box 16 of T4 slips. In Quebec, 5005-S8 Part 2, line 8: box 17. Either schedule sends a T4 with the other plan's contributions to Form RC381 (5005-S8, page 1)"
+    },
+    "CPP.secondDeducted": {
+      "label": "Second additional CPP or QPP contributions deducted",
+      "formula": "if(person.province == \"QC\", sum(T4.box17A), sum(T4.box16A))",
+      "source": "Schedule 8, Part 3, line 21: box 16A of T4 slips. In Quebec, 5005-S8 Part 2, line 21: box 17A"
+    },
     "CPP.actualBase": {
-      "label": "Base CPP contributions deducted",
-      "formula": "round(sum(T4.box16) * param.cppBaseShare, 2)",
-      "source": "Schedule 8, Part 3, lines 8 and 9: 83.1933% of box 16 of T4 slips"
+      "label": "Base CPP or QPP contributions deducted",
+      "formula": "round(line.CPP.deducted * if(person.province == \"QC\", param.qppBaseShare, param.cppBaseShare), 2)",
+      "source": "Schedule 8, Part 3, lines 8 and 9: 83.1933% of box 16 of T4 slips. In Quebec, 5005-S8 Part 2, line 9: 84.375% of box 17"
     },
     "CPP.actualFirst": {
-      "label": "First additional CPP contributions deducted",
-      "formula": "sum(T4.box16) - line.CPP.actualBase",
-      "source": "Schedule 8, Part 3, line 10"
+      "label": "First additional CPP or QPP contributions deducted",
+      "formula": "line.CPP.deducted - line.CPP.actualBase",
+      "source": "Schedule 8, Part 3, line 10 (5005-S8, Part 2, line 10)"
     },
     "CPP.requiredBase": {
-      "label": "Base CPP contributions required on employment earnings",
-      "formula": "round(line.CPP.employedBaseEarnings * param.cppBaseRate, 2)",
-      "source": "Schedule 8, Part 3, line 11: 4.95%"
+      "label": "Base CPP or QPP contributions required on employment earnings",
+      "formula": "round(line.CPP.employedBaseEarnings * if(person.province == \"QC\", param.qppBaseRate, param.cppBaseRate), 2)",
+      "source": "Schedule 8, Part 3, line 11: 4.95%. In Quebec, 5005-S8 Part 2, line 11: 5.4%"
     },
     "CPP.requiredFirst": {
       "label": "First additional CPP contributions required on employment earnings",
@@ -4489,8 +4684,8 @@
     },
     "CPP.secondDiff": {
       "label": "Second additional contributions deducted less required",
-      "formula": "sum(T4.box16A) - line.CPP.requiredSecond",
-      "source": "Schedule 8, Part 3, lines 21 to 23: box 16A of T4 slips less line 22"
+      "formula": "line.CPP.secondDeducted - line.CPP.requiredSecond",
+      "source": "Schedule 8, Part 3, lines 21 to 23: box 16A of T4 slips (box 17A in Quebec, 5005-S8 Part 2) less line 22"
     },
     "CPP.employmentDiff": {
       "label": "CPP contributions deducted less required",
@@ -4504,8 +4699,8 @@
     },
     "CPP.enhancedDeduction": {
       "label": "Enhanced CPP contributions through employment, when no more was deducted than required",
-      "formula": "if(line.CPP.firstDiff >= 0, line.CPP.requiredFirst, line.CPP.actualFirst + min(max(0, line.CPP.baseDiff), -line.CPP.firstDiff) + min(max(0, -line.CPP.firstDiff - max(0, line.CPP.baseDiff)), max(0, line.CPP.secondDiff) - min(max(0, line.CPP.secondDiff), max(0, -line.CPP.baseDiff)))) + if(line.CPP.secondDiff >= 0, line.CPP.requiredSecond, sum(T4.box16A) + min(max(0, line.CPP.baseFirstDiff), -line.CPP.secondDiff))",
-      "source": "Schedule 8, Part 3b, lines 37 to 48 (Part 5, lines 58 to 69)"
+      "formula": "if(line.CPP.firstDiff >= 0, line.CPP.requiredFirst, line.CPP.actualFirst + min(max(0, line.CPP.baseDiff), -line.CPP.firstDiff) + min(max(0, -line.CPP.firstDiff - max(0, line.CPP.baseDiff)), max(0, line.CPP.secondDiff) - min(max(0, line.CPP.secondDiff), max(0, -line.CPP.baseDiff)))) + if(line.CPP.secondDiff >= 0, line.CPP.requiredSecond, line.CPP.secondDeducted + min(max(0, line.CPP.baseFirstDiff), -line.CPP.secondDiff))",
+      "source": "Schedule 8, Part 3b, lines 37 to 48 (Part 5, lines 58 to 69); 5005-S8, Part 2b lines 36 to 47 (Part 4, lines 56 to 67)"
     },
     "CPP.seEarnings": {
       "label": "Pensionable net self-employment earnings",
@@ -4514,18 +4709,18 @@
     },
     "CPP.employedPaid": {
       "label": "Base and first additional employment contributions, as Part 5 counts them",
-      "formula": "sum(T4.box16) - max(0, line.CPP.baseFirstDiff) + min(max(0, line.CPP.secondDiff), max(0, -line.CPP.baseFirstDiff))",
-      "source": "Schedule 8, Part 5, lines 5 to 10: box 16 less any overpayment, plus second additional contributions over the required that make up a shortfall"
+      "formula": "line.CPP.deducted - max(0, line.CPP.baseFirstDiff) + min(max(0, line.CPP.secondDiff), max(0, -line.CPP.baseFirstDiff))",
+      "source": "Schedule 8, Part 5, lines 5 to 10 (5005-S8, Part 4, lines 4 to 9): box 16 (17) less any overpayment, plus second additional contributions over the required that make up a shortfall"
     },
     "CPP.employedSecondPaid": {
       "label": "Second additional employment contributions, as Part 5 counts them",
-      "formula": "sum(T4.box16A) - max(0, line.CPP.secondDiff) + min(max(0, line.CPP.baseFirstDiff), max(0, -line.CPP.secondDiff))",
-      "source": "Schedule 8, Part 5, lines 11 to 16"
+      "formula": "line.CPP.secondDeducted - max(0, line.CPP.secondDiff) + min(max(0, line.CPP.baseFirstDiff), max(0, -line.CPP.secondDiff))",
+      "source": "Schedule 8, Part 5, lines 11 to 16 (5005-S8, Part 4, lines 10 to 15)"
     },
     "CPP.covered": {
       "label": "Earnings already covered by employment contributions",
-      "formula": "round(line.CPP.employedPaid * param.cppEarningsPerContribution, 2)",
-      "source": "Schedule 8, Part 5, line 20"
+      "formula": "round(line.CPP.employedPaid * if(person.province == \"QC\", param.qppEarningsPerContribution, param.cppEarningsPerContribution), 2)",
+      "source": "Schedule 8, Part 5, line 20: × 16.80672. In Quebec, 5005-S8 Part 4, line 19: × 15.625"
     },
     "CPP.exemptionLeft": {
       "label": "Basic exemption not used by employment",
@@ -4543,9 +4738,9 @@
       "source": "Schedule 8, Part 5, lines 31 to 42 (Part 4, lines 4 to 6)"
     },
     "CPP.base": {
-      "label": "Base CPP contributions on self-employment earnings",
-      "formula": "round(line.CPP.baseEarnings * param.cppSelfEmployedBaseRate, 2)",
-      "source": "Schedule 8, Part 5, line 43: 9.9%"
+      "label": "Base CPP or QPP contributions on self-employment earnings",
+      "formula": "round(line.CPP.baseEarnings * if(person.province == \"QC\", param.qppSelfEmployedBaseRate, param.cppSelfEmployedBaseRate), 2)",
+      "source": "Schedule 8, Part 5, line 43: 9.9%. In Quebec, 5005-S8 Part 3 line 10 and Part 4 line 42: 10.8%"
     },
     "CPP.first": {
       "label": "First additional CPP contributions on self-employment earnings",
@@ -4710,13 +4905,13 @@
     "T1.30800": {
       "label": "Base CPP contributions through employment",
       "formula": "if(line.CPP.employmentDiff > 0 and line.CPP.withSelfEmployment == 0, line.CPP.requiredBase, line.CPP.baseCredit)",
-      "source": "Schedule 8, Part 3a line 25 (more deducted than required: the required base contributions), else Part 3b line 36 or Part 5 line 57",
+      "source": "Schedule 8, Part 3a line 25 (more deducted than required: the required base contributions), else Part 3b line 36 or Part 5 line 57. In Quebec, 5005-S8 Part 2a line 25, Part 2b line 35 or Part 4 line 55",
       "module": "credits"
     },
     "T1.31000": {
       "label": "CPP contributions on self-employment income",
       "formula": "round(line.CPP.base * 50%, 2)",
-      "source": "Schedule 8, Part 4 line 15 or Part 5 line 70: half the base contributions"
+      "source": "Schedule 8, Part 4 line 15 or Part 5 line 70: half the base contributions. In Quebec, 5005-S8 Part 3 line 14 or Part 4 line 68"
     },
     "EI.insurable": {
       "label": "EI insurable earnings",
@@ -4725,14 +4920,40 @@
     },
     "EI.required": {
       "label": "EI premiums required",
-      "formula": "if(line.EI.insurable < param.eiMinInsurableEarnings, 0, min(param.eiPremiumMax, round(line.EI.insurable * param.eiPremiumRate, 2)))",
-      "source": "Form T2204, lines 10 and 12: 1.64% of line 1, up to $1,077.48; line 1 is 0 when insurable earnings are less than $2,000 (note 1)"
+      "formula": "if(person.province == \"QC\", if(line.EI.insurable <= param.eiMinInsurableEarnings, 0, min(param.eiPremiumMaxQc, round(line.EI.insurable * param.eiPremiumRateQc, 2))), if(line.EI.insurable < param.eiMinInsurableEarnings, 0, min(param.eiPremiumMax, round(line.EI.insurable * param.eiPremiumRate, 2))))",
+      "source": "Form T2204, lines 10 and 12: 1.64% of line 1, up to $1,077.48; line 1 is 0 when insurable earnings are less than $2,000 (note 1). In Quebec, 5005-S10 Part C, lines 18 to 20: 1.31%, up to $860.67; line 18 is 0 when insurable earnings are $2,000 or less"
     },
     "T1.31200": {
       "label": "Employment insurance premiums through employment",
-      "formula": "min(max(0, min(param.eiMaxInsurableEarnings, line.EI.insurable) - param.eiMinInsurableEarnings), sum(T4.box18), line.EI.required)",
-      "source": "Form T2204, line 16: whichever is least of insurable earnings (up to $65,700) over $2,000, the premiums deducted (box 18), and the premiums required",
+      "formula": "if(person.province == \"QC\", min(line.EI.required, sum(T4.box18)), min(max(0, min(param.eiMaxInsurableEarnings, line.EI.insurable) - param.eiMinInsurableEarnings), sum(T4.box18), line.EI.required))",
+      "source": "Form T2204, line 16: whichever is least of insurable earnings (up to $65,700) over $2,000, the premiums deducted (box 18), and the premiums required. In Quebec, 5005-S10 Part C, line 24: whichever is less, line 20 or the premiums deducted (box 18)",
       "module": "credits"
+    },
+    "PPIP.insurable": {
+      "label": "PPIP insurable earnings",
+      "formula": "if(person.province == \"QC\", if(count(T4.box56) == 0, sum(T4.box14), if(count(T4.box56) >= count(T4.box14), sum(T4.box56), unsupported(\"Some of your T4 slips show PPIP insurable earnings (box 56) and some don't. Enter box 56 on each slip: the amount from box 14 when box 56 is blank\"))), 0)",
+      "source": "5005-S10, Part A line 3 and Part B line 13: box 56 of T4 slips (box 14 if blank)"
+    },
+    "T1.31205": {
+      "label": "PPIP premiums paid",
+      "formula": "if(person.province == \"QC\", if(line.PPIP.insurable < param.ppipMinEarnings, 0, min(param.ppipPremiumMax, sum(T4.box55))), if(sum(T4.box55) > 0, unsupported(\"PPIP premiums (box 55 of a T4) of a person living outside Quebec on December 31 aren't handled by this app yet\"), 0))",
+      "source": "5005-R line 31205 and canada.ca/line-31205: box 55 of all T4 slips, up to $484.12; nothing when PPIP insurable earnings are less than $2,000 (the TP-1 refunds them)",
+      "module": "credits"
+    },
+    "PPIP.seEarnings": {
+      "label": "Self-employment income subject to the PPIP premium",
+      "formula": "if(person.province == \"QC\" and max(0, line.SE.net) + line.PPIP.insurable >= param.ppipMinEarnings, min(max(0, line.SE.net), max(0, param.ppipMaxInsurableEarnings - line.PPIP.insurable)), 0)",
+      "source": "5005-S10, Part A, lines 1 to 5: net business income (TP-1 Schedule L line 27, the self-employment lines here, not less than 0), up to $98,000 less the PPIP insurable employment earnings; none when the two total less than $2,000 (TP-1 Schedule R)"
+    },
+    "PPIP.sePremium": {
+      "label": "PPIP premium on self-employment income",
+      "formula": "round(line.PPIP.seEarnings * param.ppipSelfEmployedRate, 2)",
+      "source": "5005-S10, Part A, line 7: line 5 × 0.878% (maximum $860.44)"
+    },
+    "T1.31215": {
+      "label": "PPIP premiums payable on self-employment income",
+      "formula": "line.PPIP.sePremium - line.T1.22300",
+      "source": "5005-S10, Part A, line 10: line 7 minus line 9 (maximum $484.12)"
     },
     "T1.31260": {
       "label": "Canada employment amount",
@@ -4762,8 +4983,8 @@
       "source": "canada.ca/line-31300: up to $19,580 for each child"
     },
     "T1.T96": {
-      "label": "CPP, EI, volunteer, employment, home and adoption amounts (T1 line 96)",
-      "formula": "line.T1.30800 + line.T1.31000 + line.T1.31200 + line.T1.31220 + line.T1.31240 + line.T1.31260 + line.T1.31270 + line.T1.31285 + line.T1.31300"
+      "label": "CPP, EI, PPIP, volunteer, employment, home and adoption amounts (T1 line 96; line 100 of 5005-R)",
+      "formula": "line.T1.30800 + line.T1.31000 + line.T1.31200 + line.T1.31205 + line.T1.31215 + line.T1.31220 + line.T1.31240 + line.T1.31260 + line.T1.31270 + line.T1.31285 + line.T1.31300"
     },
     "T1.31400": {
       "label": "Pension income amount",
@@ -4912,12 +5133,13 @@
     },
     "T1.42800": {
       "label": "Provincial tax",
-      "formula": "if(person.province == \"ON\", line.ON428.90, if(person.province == \"BC\", line.BC428.91, if(person.province == \"AB\", line.AB428.75, if(person.province == \"MB\", line.MB428.82, if(person.province == \"SK\", line.SK428.82, if(person.province == \"NB\", line.NB428.97, if(person.province == \"NL\", line.NL428.105, if(person.province == \"NS\", line.NS428.99, if(person.province == \"PE\", line.PE428.97, if(person.province == \"YT\", line.YT428.79, if(person.province == \"NT\", line.NT428.66, if(person.province == \"NU\", line.NU428.66, unsupported(\"Provincial tax for this province isn't handled by this app\")))))))))))))"
+      "formula": "if(person.province == \"ON\", line.ON428.90, if(person.province == \"BC\", line.BC428.91, if(person.province == \"AB\", line.AB428.75, if(person.province == \"MB\", line.MB428.82, if(person.province == \"SK\", line.SK428.82, if(person.province == \"NB\", line.NB428.97, if(person.province == \"NL\", line.NL428.105, if(person.province == \"NS\", line.NS428.99, if(person.province == \"PE\", line.PE428.97, if(person.province == \"YT\", line.YT428.79, if(person.province == \"NT\", line.NT428.66, if(person.province == \"NU\", line.NU428.66, if(person.province == \"QC\", 0, unsupported(\"Provincial tax for this province isn't handled by this app\"))))))))))))))",
+      "source": "The Form 428 of your province or territory. A resident of Quebec has none: Quebec's tax is on the TP-1, and 5005-R line 42800 is only for Form T2203 (a business with a permanent establishment outside Quebec), which isn't handled"
     },
     "T1.42100": {
       "label": "CPP contributions payable on self-employment income",
-      "formula": "max(0, line.CPP.base + line.CPP.first + line.CPP.second - 2 * line.CPP.offset)",
-      "source": "Schedule 8, Part 4 line 14, or Part 5 line 49 when positive: the contributions less twice the employment overpayment"
+      "formula": "if(person.province == \"QC\", 0, max(0, line.CPP.base + line.CPP.first + line.CPP.second - 2 * line.CPP.offset))",
+      "source": "Schedule 8, Part 4 line 14, or Part 5 line 49 when positive: the contributions less twice the employment overpayment. 5005-R has no line 42100: a resident of Quebec pays QPP on self-employment on the TP-1 (line 445, Schedule U)"
     },
     "T1.42200": {
       "label": "Social benefits repayment",
@@ -4934,13 +5156,23 @@
     },
     "T1.44800": {
       "label": "CPP overpayment",
-      "formula": "if(line.CPP.withSelfEmployment == 1, round(max(0, 2 * line.CPP.offset - line.CPP.base - line.CPP.first - line.CPP.second) * 50%, 2), max(0, line.CPP.employmentDiff))",
-      "source": "Schedule 8, Part 3a line 29 (line 24 when positive), or Part 5 line 50: half of line 49 when negative"
+      "formula": "if(person.province == \"QC\", 0, if(line.CPP.withSelfEmployment == 1, round(max(0, 2 * line.CPP.offset - line.CPP.base - line.CPP.first - line.CPP.second) * 50%, 2), max(0, line.CPP.employmentDiff)))",
+      "source": "Schedule 8, Part 3a line 29 (line 24 when positive), or Part 5 line 50: half of line 49 when negative. 5005-R has no line 44800: a resident of Quebec claims a QPP overpayment on the TP-1 (line 452; 5005-S8 Part 2a and Part 4 note 1)"
     },
     "T1.45000": {
       "label": "Employment insurance overpayment",
-      "formula": "if(sum(T4.box18) - line.T1.31200 > 1, sum(T4.box18) - line.T1.31200, 0)",
-      "source": "Form T2204, lines 8 to 15: the premiums deducted less line 16, when more than $1"
+      "formula": "if(person.province == \"QC\", max(0, sum(T4.box18) - line.T1.31200), if(sum(T4.box18) - line.T1.31200 > 1, sum(T4.box18) - line.T1.31200, 0))",
+      "source": "Form T2204, lines 8 to 15: the premiums deducted less line 16, when more than $1. In Quebec, 5005-S10 Part C, line 23: box 18 less line 20, if positive"
+    },
+    "T1.45100": {
+      "label": "Net EI overpayment",
+      "formula": "if(person.province == \"QC\", line.T1.45000, 0)",
+      "source": "5005-R lines 157 to 159: line 45000 less line 31210 (not claimed here: the app doesn't keep a T4's province of employment). Only on the T1 for residents of Quebec"
+    },
+    "T1.44000": {
+      "label": "Refundable Quebec abatement",
+      "formula": "if(person.province == \"QC\", round(line.T1.42900 * param.quebecAbatementRate, 2), 0)",
+      "source": "5005-R line 44000 (row 156) and canada.ca/line-44000: line 42900 × 16.5%, for a resident of Quebec on December 31. Form T2203 (a business with a permanent establishment outside Quebec) isn't handled"
     },
     "MED.earned": {
       "label": "Earnings for the refundable medical expense supplement",
@@ -4992,8 +5224,63 @@
     },
     "CWB.familyIncome": {
       "label": "Adjusted family net income",
-      "formula": "if(line.CWB.spouse == 1, if(household.partnerInYear, line.CWB.netIncome + spouse.line.CWB.netIncome - min(param.cwbSecondaryEarnerMax, if(line.CWB.working < spouse.line.CWB.working, min(line.CWB.working, line.CWB.netIncome), min(spouse.line.CWB.working, spouse.line.CWB.netIncome))), if(line.CWB.netIncome + line.HH.spouseNetIncome - min(param.cwbSecondaryEarnerMax, line.CWB.netIncome, line.HH.spouseNetIncome) < param.cwbFamilyLimit and line.CWB.working > 0, unsupported(\"The Canada workers benefit for a couple needs your spouse's or partner's working income: prepare their return here too\"), param.cwbFamilyLimit)), line.CWB.netIncome)",
+      "formula": "if(line.CWB.spouse == 1, if(household.partnerInYear, line.CWB.netIncome + spouse.line.CWB.netIncome - min(param.cwbSecondaryEarnerMax, if(line.CWB.working < spouse.line.CWB.working, min(line.CWB.working, line.CWB.netIncome), min(spouse.line.CWB.working, spouse.line.CWB.netIncome))), if(line.CWB.netIncome + line.HH.spouseNetIncome - min(param.cwbSecondaryEarnerMax, line.CWB.netIncome, line.HH.spouseNetIncome) < line.CWB.familyLimit and line.CWB.working > 0, unsupported(\"The Canada workers benefit for a couple needs your spouse's or partner's working income: prepare their return here too\"), line.CWB.familyLimit)), line.CWB.netIncome)",
       "source": "Schedule 6, lines 13 to 15: with the secondary earner exemption (up to $16,386). With a spouse whose return isn't prepared here, a family that might get the benefit is asked to prepare it; one that can't is put at the limit"
+    },
+    "CWB.familyLimit": {
+      "label": "Adjusted family net income from which a family gets no Canada workers benefit",
+      "formula": "if(person.province == \"QC\", param.cwbQcFamilyLimit, param.cwbFamilyLimit)",
+      "source": "Schedule 6 (5005-S6 in Quebec), the chart of limits: the highest limit"
+    },
+    "CWB.workingBase": {
+      "label": "Working income where the basic benefit starts",
+      "formula": "if(person.province == \"QC\", if(line.CWB.spouse == 1, param.cwbQcWorkingIncomeBaseSpouse, param.cwbQcWorkingIncomeBase), param.cwbWorkingIncomeBase)",
+      "source": "Schedule 6, line 17: $3,000. In Quebec, 5005-S6 line 17: $3,600 with an eligible spouse, else $2,400"
+    },
+    "CWB.rate": {
+      "label": "Basic benefit rate on working income",
+      "formula": "if(person.province == \"QC\", if(line.CWB.dependant == 1, if(line.CWB.spouse == 1, param.cwbQcRateSpouseDependant, param.cwbQcRateDependant), param.cwbQcRate), param.cwbRate)",
+      "source": "Schedule 6, line 19: 27%. In Quebec, 5005-S6 line 19: 20% with an eligible dependant and no eligible spouse, 23.9% with both, else 37.3%"
+    },
+    "CWB.max": {
+      "label": "Most basic Canada workers benefit",
+      "formula": "if(person.province == \"QC\", if(line.CWB.spouse == 1, if(line.CWB.dependant == 1, param.cwbQcMaxSpouseDependant, param.cwbQcMaxSpouse), if(line.CWB.dependant == 1, param.cwbQcMaxDependant, param.cwbQcMaxSingle)), if(line.CWB.spouse == 1 or line.CWB.dependant == 1, param.cwbMaxFamily, param.cwbMaxSingle))",
+      "source": "Schedule 6, line 21 (5005-S6 line 21 in Quebec, by family type)"
+    },
+    "CWB.incomeBase": {
+      "label": "Adjusted family net income where the basic benefit starts to go down",
+      "formula": "if(person.province == \"QC\", if(line.CWB.spouse == 1, if(line.CWB.dependant == 1, param.cwbQcIncomeBaseSpouseDependant, param.cwbQcIncomeBaseSpouse), if(line.CWB.dependant == 1, param.cwbQcIncomeBaseDependant, param.cwbQcIncomeBaseSingle)), if(line.CWB.spouse == 1 or line.CWB.dependant == 1, param.cwbIncomeBaseFamily, param.cwbIncomeBaseSingle))",
+      "source": "Schedule 6, line 24 (5005-S6 line 24 in Quebec, by family type)"
+    },
+    "CWB.reductionRate": {
+      "label": "Basic benefit reduction rate",
+      "formula": "if(person.province == \"QC\", param.cwbQcReductionRate, param.cwbReductionRate)",
+      "source": "Schedule 6, line 26: 15%. In Quebec, 5005-S6 line 26: 20%"
+    },
+    "CWB.disabilityWorkingBase": {
+      "label": "Working income where the disability supplement starts",
+      "formula": "if(person.province == \"QC\", param.cwbQcDisabilityWorkingBase, param.cwbDisabilityWorkingBase)",
+      "source": "Schedule 6, line 30: $1,150. In Quebec, 5005-S6 line 30: $1,200"
+    },
+    "CWB.disabilityRate": {
+      "label": "Disability supplement rate on working income",
+      "formula": "if(person.province == \"QC\", if(line.CWB.spouse == 1, param.cwbQcDisabilityRateSpouse, param.cwbQcDisabilityRate), param.cwbRate)",
+      "source": "Schedule 6, line 32: 27%. In Quebec, 5005-S6 line 32: 20% with an eligible spouse, else 40%"
+    },
+    "CWB.disabilityMax": {
+      "label": "Most Canada workers benefit disability supplement",
+      "formula": "if(person.province == \"QC\", param.cwbQcDisabilityMax, param.cwbDisabilityMax)",
+      "source": "Schedule 6, line 34: $843. In Quebec, 5005-S6 line 34: $851.31"
+    },
+    "CWB.disabilityIncomeBase": {
+      "label": "Adjusted family net income where the disability supplement starts to go down",
+      "formula": "if(person.province == \"QC\", if(line.CWB.spouse == 1, if(line.CWB.dependant == 1, param.cwbQcDisabilityIncomeBaseSpouseDependant, param.cwbQcDisabilityIncomeBaseSpouse), if(line.CWB.dependant == 1, param.cwbQcDisabilityIncomeBaseDependant, param.cwbQcDisabilityIncomeBaseSingle)), if(line.CWB.spouse == 1 or line.CWB.dependant == 1, param.cwbDisabilityIncomeBaseFamily, param.cwbDisabilityIncomeBaseSingle))",
+      "source": "Schedule 6, line 36 (5005-S6 line 36 in Quebec, by family type)"
+    },
+    "CWB.disabilityReductionRate": {
+      "label": "Disability supplement reduction rate",
+      "formula": "if(line.CWB.spouse == 1 and household.partnerInYear and spouse.answer.hasDisability, if(person.province == \"QC\", param.cwbQcReductionRateBothDisabled, param.cwbReductionRateBothDisabled), if(person.province == \"QC\", param.cwbQcReductionRate, param.cwbReductionRate))",
+      "source": "Schedule 6, line 38: 15% (7.5% when both spouses have the disability tax credit). In Quebec, 5005-S6 line 38: 20% (10%)"
     },
     "CWB.claimsBasic": {
       "label": "This return claims the couple's basic benefit (1 for yes)",
@@ -5001,13 +5288,13 @@
     },
     "CWB.basic": {
       "label": "Basic Canada workers benefit",
-      "formula": "if(line.CWB.claimsBasic == 1, max(0, min(round(max(0, line.CWB.familyWorking - param.cwbWorkingIncomeBase) * param.cwbRate, 2), if(line.CWB.spouse == 1 or line.CWB.dependant == 1, param.cwbMaxFamily, param.cwbMaxSingle)) - round(max(0, line.CWB.familyIncome - if(line.CWB.spouse == 1 or line.CWB.dependant == 1, param.cwbIncomeBaseFamily, param.cwbIncomeBaseSingle)) * param.cwbReductionRate, 2)), 0)",
-      "source": "Schedule 6, Step 2: 27% of family working income over $3,000, up to the maximum, less 15% of adjusted family net income over the base"
+      "formula": "if(line.CWB.claimsBasic == 1, max(0, min(round(max(0, line.CWB.familyWorking - line.CWB.workingBase) * line.CWB.rate, 2), line.CWB.max) - round(max(0, line.CWB.familyIncome - line.CWB.incomeBase) * line.CWB.reductionRate, 2)), 0)",
+      "source": "Schedule 6, Step 2, lines 16 to 28: 27% of family working income over $3,000, up to the maximum, less 15% of adjusted family net income over the base (in Quebec, 5005-S6 Step 2 with its own amounts and rates)"
     },
     "CWB.disability": {
       "label": "Canada workers benefit disability supplement",
-      "formula": "if(line.CWB.eligible == 1 and answer.hasDisability, max(0, min(round(max(0, line.CWB.working - param.cwbDisabilityWorkingBase) * param.cwbRate, 2), param.cwbDisabilityMax) - round(max(0, line.CWB.familyIncome - if(line.CWB.spouse == 1 or line.CWB.dependant == 1, param.cwbDisabilityIncomeBaseFamily, param.cwbDisabilityIncomeBaseSingle)) * if(line.CWB.spouse == 1 and household.partnerInYear and spouse.answer.hasDisability, param.cwbReductionRateBothDisabled, param.cwbReductionRate), 2)), 0)",
-      "source": "Schedule 6, Step 3: 27% of working income over $1,150, up to $843, less 15% (7.5% when both spouses have the disability tax credit) of adjusted family net income over the base"
+      "formula": "if(line.CWB.eligible == 1 and answer.hasDisability, max(0, min(round(max(0, line.CWB.working - line.CWB.disabilityWorkingBase) * line.CWB.disabilityRate, 2), line.CWB.disabilityMax) - round(max(0, line.CWB.familyIncome - line.CWB.disabilityIncomeBase) * line.CWB.disabilityReductionRate, 2)), 0)",
+      "source": "Schedule 6, Step 3, lines 29 to 40: 27% of working income over $1,150, up to $843, less 15% (7.5% when both spouses have the disability tax credit) of adjusted family net income over the base (in Quebec, 5005-S6 Step 3 with its own amounts and rates)"
     },
     "T1.45300": {
       "label": "Canada workers benefit",
@@ -5056,11 +5343,12 @@
     "T1.47900": {
       "label": "Provincial or territorial credits",
       "formula": "if(person.province == \"ON\", line.ON479.21, if(person.province == \"BC\", line.BC479.45, if(person.province == \"NB\", line.NBS12.7, if(person.province == \"MB\", line.MB479.81, if(person.province == \"SK\", line.SK479.10, if(person.province == \"NL\", line.NL479.9, if(person.province == \"NS\", line.NS479.5, if(person.province == \"PE\", line.PE428.98, if(person.province == \"YT\", line.YT479.6, if(person.province == \"NT\", line.NT479.21, if(person.province == \"NU\", line.NU479.21, 0)))))))))))",
-      "source": "T1 line 47900: the Form 479 of your province or territory"
+      "source": "T1 line 47900: the Form 479 of your province or territory. 5005-R (Quebec) has no line 47900 and there is no Form 479 for Quebec: Quebec's credits are on the TP-1"
     },
     "T1.48200": {
       "label": "Total credits",
-      "formula": "line.T1.43700 + line.T1.44800 + line.T1.45000 + line.T1.45200 + line.T1.45300 + line.T1.45350 + line.T1.45355 + line.T1.45600 + line.T1.46900 + line.T1.47600 + line.T1.47900"
+      "formula": "line.T1.43700 + line.T1.45200 + line.T1.45300 + line.T1.45350 + line.T1.45355 + line.T1.45600 + line.T1.46900 + line.T1.47600 + if(person.province == \"QC\", line.T1.44000 + line.T1.45100, line.T1.44800 + line.T1.45000 + line.T1.47900)",
+      "source": "T1 line 48200 (row 166). In Quebec, 5005-R row 171: lines 155 (43850, which is line 43700: the tax transfer on line 43800 isn't handled), 156 (44000) and 159 to 170, with no line 44800 or 47900"
     },
     "T1.48400": {
       "label": "Refund",
@@ -9229,10 +9517,11 @@
   "slips": {
     "T4": {
       "title": "T4 Statement of Remuneration Paid",
-      "about": "Employment income an employer paid, and the tax, CPP, EI and dues it withheld",
+      "about": "Employment income an employer paid, and the tax, CPP or QPP, EI, PPIP and dues it withheld",
       "boxes": {
         "14": "Employment income",
         "16": "Employee's CPP contributions",
+        "17": "Employee's QPP contributions",
         "18": "Employee's EI premiums",
         "20": "RPP contributions",
         "22": "Income tax deducted",
@@ -9245,7 +9534,10 @@
         "44": "Union dues",
         "46": "Charitable donations",
         "52": "Pension adjustment",
-        "16A": "Employee's second CPP contributions"
+        "55": "Employee's PPIP premiums",
+        "56": "PPIP insurable earnings",
+        "16A": "Employee's second CPP contributions",
+        "17A": "Employee's second QPP contributions"
       },
       "informational": [
         "52"
@@ -9685,7 +9977,7 @@
       "url": "https://www.canada.ca/content/dam/cra-arc/formspubs/pbg/5006-r/5006-r-25e.pdf",
       "sha256": "2d8c3d8e2e4c3ef0e962936134186306fb758cec3a971448f1c10dfbe406cff8",
       "pages": 8,
-      "applies": "true",
+      "applies": "person.province != \"QC\"",
       "fields": [
         {
           "key": "1",
@@ -10740,6 +11032,1093 @@
                 "72",
                 "74",
                 "76"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "T1QC": {
+      "title": "T1 Income Tax and Benefit Return for residents of Quebec",
+      "url": "https://www.canada.ca/content/dam/cra-arc/formspubs/pbg/5005-r/5005-r-25e.pdf",
+      "sha256": "7e6551a188f9928da00f53df66466b1cb9d9b49316638ec0521b4a0d3c3daa25",
+      "pages": 8,
+      "applies": "person.province == \"QC\"",
+      "fields": [
+        {
+          "key": "1",
+          "page": 3,
+          "x": 552,
+          "y": 668.3,
+          "value": "line.T1.10100"
+        },
+        {
+          "key": "2",
+          "page": 3,
+          "x": 552,
+          "y": 614.3,
+          "value": "line.T1.10400"
+        },
+        {
+          "key": "3",
+          "page": 3,
+          "x": 552,
+          "y": 600.8,
+          "value": "line.T1.11300"
+        },
+        {
+          "key": "4",
+          "page": 3,
+          "x": 552,
+          "y": 587.3,
+          "value": "line.T1.11400"
+        },
+        {
+          "key": "5",
+          "page": 3,
+          "x": 552,
+          "y": 560.3,
+          "value": "line.T1.11500"
+        },
+        {
+          "key": "8",
+          "page": 3,
+          "x": 552,
+          "y": 506.3,
+          "value": "line.T1.11900"
+        },
+        {
+          "key": "9",
+          "page": 3,
+          "x": 552,
+          "y": 455.3,
+          "value": "line.T1.12000"
+        },
+        {
+          "key": "10",
+          "page": 3,
+          "x": 552,
+          "y": 428.3,
+          "value": "line.T1.12100"
+        },
+        {
+          "key": "12",
+          "page": 3,
+          "x": 552,
+          "y": 401.3,
+          "value": "line.T1.12500"
+        },
+        {
+          "key": "13",
+          "page": 3,
+          "x": 552,
+          "y": 387.8,
+          "value": "line.T1.12600"
+        },
+        {
+          "key": "14",
+          "page": 3,
+          "x": 552,
+          "y": 374.3,
+          "value": "line.T1.12700"
+        },
+        {
+          "key": "15",
+          "page": 3,
+          "x": 552,
+          "y": 348.5,
+          "value": "line.T1.12800"
+        },
+        {
+          "key": "16",
+          "page": 3,
+          "x": 552,
+          "y": 334.3,
+          "value": "line.T1.12900"
+        },
+        {
+          "key": "17",
+          "page": 3,
+          "x": 552,
+          "y": 320.8,
+          "value": "line.T1.12905"
+        },
+        {
+          "key": "18",
+          "page": 3,
+          "x": 552,
+          "y": 307.3,
+          "value": "line.T1.12906"
+        },
+        {
+          "key": "19",
+          "page": 3,
+          "x": 552,
+          "y": 293.8,
+          "value": "line.T1.13000"
+        },
+        {
+          "key": "20",
+          "page": 3,
+          "x": 552,
+          "y": 280.3,
+          "value": "line.T1.13010"
+        },
+        {
+          "key": "21",
+          "page": 3,
+          "x": 552,
+          "y": 266.8,
+          "value": "line.T1.15000 - line.SE.net - line.T1.14700"
+        },
+        {
+          "key": "22",
+          "page": 3,
+          "x": 444,
+          "y": 239.8,
+          "value": "line.T1.13500"
+        },
+        {
+          "key": "23",
+          "page": 3,
+          "x": 444,
+          "y": 226.3,
+          "value": "line.T1.13700"
+        },
+        {
+          "key": "24",
+          "page": 3,
+          "x": 444,
+          "y": 212.8,
+          "value": "line.T1.13900"
+        },
+        {
+          "key": "25",
+          "page": 3,
+          "x": 444,
+          "y": 199.3,
+          "value": "line.T1.14100"
+        },
+        {
+          "key": "26",
+          "page": 3,
+          "x": 444,
+          "y": 185.8,
+          "value": "line.T1.14300"
+        },
+        {
+          "key": "27",
+          "page": 3,
+          "x": 552,
+          "y": 172.3,
+          "value": "line.SE.net"
+        },
+        {
+          "key": "28",
+          "page": 3,
+          "x": 552,
+          "y": 158.8,
+          "value": "line.T1.15000 - line.T1.14700"
+        },
+        {
+          "key": "29",
+          "page": 3,
+          "x": 444,
+          "y": 145.3,
+          "value": "line.T1.14400"
+        },
+        {
+          "key": "30",
+          "page": 3,
+          "x": 444,
+          "y": 131.8,
+          "value": "line.T1.14500"
+        },
+        {
+          "key": "31",
+          "page": 3,
+          "x": 444,
+          "y": 118.3,
+          "value": "line.T1.14600"
+        },
+        {
+          "key": "32",
+          "page": 3,
+          "x": 552,
+          "y": 104.8,
+          "value": "line.T1.14700"
+        },
+        {
+          "key": "33",
+          "page": 3,
+          "x": 552,
+          "y": 91.3,
+          "value": "line.T1.15000"
+        },
+        {
+          "key": "34",
+          "page": 4,
+          "x": 552,
+          "y": 731.3,
+          "value": "line.T1.15000"
+        },
+        {
+          "key": "35",
+          "page": 4,
+          "x": 444,
+          "y": 680.3,
+          "value": "line.T1.20700"
+        },
+        {
+          "key": "36",
+          "page": 4,
+          "x": 444,
+          "y": 666.8,
+          "value": "line.T1.20800"
+        },
+        {
+          "key": "37",
+          "page": 4,
+          "x": 444,
+          "y": 653.3,
+          "value": "line.T1.20805"
+        },
+        {
+          "key": "39",
+          "page": 4,
+          "x": 444,
+          "y": 600.8,
+          "value": "line.T1.21200"
+        },
+        {
+          "key": "41",
+          "page": 4,
+          "x": 444,
+          "y": 573.8,
+          "value": "line.T1.21400"
+        },
+        {
+          "key": "42",
+          "page": 4,
+          "x": 444,
+          "y": 560.3,
+          "value": "line.T1.21500"
+        },
+        {
+          "key": "44",
+          "page": 4,
+          "x": 444,
+          "y": 519.8,
+          "value": "line.T1.21900"
+        },
+        {
+          "key": "45",
+          "page": 4,
+          "x": 444,
+          "y": 494.3,
+          "value": "line.T1.22000"
+        },
+        {
+          "key": "46",
+          "page": 4,
+          "x": 444,
+          "y": 468.8,
+          "value": "line.T1.22100"
+        },
+        {
+          "key": "47",
+          "page": 4,
+          "x": 444,
+          "y": 443.3,
+          "value": "line.T1.22200"
+        },
+        {
+          "key": "48",
+          "page": 4,
+          "x": 444,
+          "y": 417.8,
+          "value": "line.T1.22215"
+        },
+        {
+          "key": "49",
+          "page": 4,
+          "x": 444,
+          "y": 392.3,
+          "value": "line.T1.22300"
+        },
+        {
+          "key": "51",
+          "page": 4,
+          "x": 444,
+          "y": 365.3,
+          "value": "line.T1.22900"
+        },
+        {
+          "key": "53",
+          "page": 4,
+          "x": 444,
+          "y": 338.3,
+          "value": "line.T1.23200"
+        },
+        {
+          "key": "54",
+          "page": 4,
+          "x": 552,
+          "y": 324.8,
+          "value": "line.T1.23300"
+        },
+        {
+          "key": "55",
+          "page": 4,
+          "x": 552,
+          "y": 311.3,
+          "value": "line.T1.23400"
+        },
+        {
+          "key": "56",
+          "page": 4,
+          "x": 552,
+          "y": 209.3,
+          "value": "line.T1.23500"
+        },
+        {
+          "key": "57",
+          "page": 4,
+          "x": 552,
+          "y": 171.8,
+          "value": "line.T1.23600"
+        },
+        {
+          "key": "58",
+          "page": 5,
+          "x": 552,
+          "y": 731.3,
+          "value": "line.T1.23600"
+        },
+        {
+          "key": "59",
+          "page": 5,
+          "x": 444,
+          "y": 717.8,
+          "value": "line.T1.24400"
+        },
+        {
+          "key": "60",
+          "page": 5,
+          "x": 444,
+          "y": 692.3,
+          "value": "line.T1.24900"
+        },
+        {
+          "key": "61",
+          "page": 5,
+          "x": 444,
+          "y": 666.8,
+          "value": "line.T1.25000"
+        },
+        {
+          "key": "63",
+          "page": 5,
+          "x": 444,
+          "y": 639.8,
+          "value": "line.T1.25200"
+        },
+        {
+          "key": "64",
+          "page": 5,
+          "x": 444,
+          "y": 626.3,
+          "value": "line.T1.25300"
+        },
+        {
+          "key": "67",
+          "page": 5,
+          "x": 444,
+          "y": 573.8,
+          "value": "line.T1.25500"
+        },
+        {
+          "key": "69",
+          "page": 5,
+          "x": 552,
+          "y": 546.8,
+          "value": "line.T1.25700"
+        },
+        {
+          "key": "70",
+          "page": 5,
+          "x": 552,
+          "y": 533.3,
+          "value": "line.T1.26000"
+        },
+        {
+          "key": "78",
+          "page": 5,
+          "x": 552,
+          "y": 207.8,
+          "value": "line.T1.30000"
+        },
+        {
+          "key": "79",
+          "page": 5,
+          "x": 552,
+          "y": 194.3,
+          "value": "line.T1.30100"
+        },
+        {
+          "key": "80",
+          "page": 5,
+          "x": 552,
+          "y": 180.8,
+          "value": "line.T1.30300"
+        },
+        {
+          "key": "81",
+          "page": 5,
+          "x": 552,
+          "y": 167.3,
+          "value": "line.T1.30400"
+        },
+        {
+          "key": "82",
+          "page": 5,
+          "x": 552,
+          "y": 141.8,
+          "value": "line.T1.30425"
+        },
+        {
+          "key": "83",
+          "page": 5,
+          "x": 552,
+          "y": 128.3,
+          "value": "line.T1.30450"
+        },
+        {
+          "key": "84",
+          "page": 5,
+          "x": 552,
+          "y": 102.8,
+          "value": "line.T1.30500"
+        },
+        {
+          "key": "85",
+          "page": 5,
+          "x": 552,
+          "y": 89.3,
+          "value": "line.T1.T84"
+        },
+        {
+          "key": "86",
+          "page": 6,
+          "x": 552,
+          "y": 731.3,
+          "value": "line.T1.T84"
+        },
+        {
+          "key": "87",
+          "page": 6,
+          "x": 444,
+          "y": 705.8,
+          "value": "line.T1.30800"
+        },
+        {
+          "key": "88",
+          "page": 6,
+          "x": 444,
+          "y": 692.3,
+          "value": "line.T1.31000"
+        },
+        {
+          "key": "89",
+          "page": 6,
+          "x": 444,
+          "y": 666.8,
+          "value": "line.T1.31200"
+        },
+        {
+          "key": "91",
+          "page": 6,
+          "x": 444,
+          "y": 627.8,
+          "value": "line.T1.31205"
+        },
+        {
+          "key": "93",
+          "page": 6,
+          "x": 444,
+          "y": 588.8,
+          "value": "line.T1.31215"
+        },
+        {
+          "key": "94",
+          "page": 6,
+          "x": 444,
+          "y": 575.3,
+          "value": "line.T1.31220"
+        },
+        {
+          "key": "95",
+          "page": 6,
+          "x": 444,
+          "y": 561.8,
+          "value": "line.T1.31240"
+        },
+        {
+          "key": "96",
+          "page": 6,
+          "x": 444,
+          "y": 536.3,
+          "value": "line.T1.31260"
+        },
+        {
+          "key": "97",
+          "page": 6,
+          "x": 444,
+          "y": 522.8,
+          "value": "line.T1.31270"
+        },
+        {
+          "key": "98",
+          "page": 6,
+          "x": 444,
+          "y": 509.3,
+          "value": "line.T1.31285"
+        },
+        {
+          "key": "99",
+          "page": 6,
+          "x": 444,
+          "y": 495.8,
+          "value": "line.T1.31300"
+        },
+        {
+          "key": "100",
+          "page": 6,
+          "x": 552,
+          "y": 482.3,
+          "value": "line.T1.T96"
+        },
+        {
+          "key": "101",
+          "page": 6,
+          "x": 552,
+          "y": 468.8,
+          "value": "line.T1.31400"
+        },
+        {
+          "key": "102",
+          "page": 6,
+          "x": 552,
+          "y": 455.3,
+          "value": "line.T1.T84 + line.T1.T96 + line.T1.31400"
+        },
+        {
+          "key": "103",
+          "page": 6,
+          "x": 552,
+          "y": 429.8,
+          "value": "line.T1.31600"
+        },
+        {
+          "key": "104",
+          "page": 6,
+          "x": 552,
+          "y": 416.3,
+          "value": "line.T1.31800"
+        },
+        {
+          "key": "105",
+          "page": 6,
+          "x": 552,
+          "y": 402.8,
+          "value": "line.T1.T101"
+        },
+        {
+          "key": "106",
+          "page": 6,
+          "x": 552,
+          "y": 389.3,
+          "value": "line.T1.31900"
+        },
+        {
+          "key": "107",
+          "page": 6,
+          "x": 552,
+          "y": 375.8,
+          "value": "line.T1.32300"
+        },
+        {
+          "key": "108",
+          "page": 6,
+          "x": 552,
+          "y": 362.3,
+          "value": "line.T1.32400"
+        },
+        {
+          "key": "109",
+          "page": 6,
+          "x": 552,
+          "y": 348.8,
+          "value": "line.T1.32600"
+        },
+        {
+          "key": "110",
+          "page": 6,
+          "x": 552,
+          "y": 335.3,
+          "value": "line.T1.T101 + line.T1.31900 + line.T1.32300 + line.T1.32400 + line.T1.32600"
+        },
+        {
+          "key": "111",
+          "page": 6,
+          "x": 444,
+          "y": 309.8,
+          "value": "line.T1.33099"
+        },
+        {
+          "key": "112",
+          "page": 6,
+          "x": 336,
+          "y": 296.3,
+          "value": "round(line.T1.23600 * param.medicalThresholdRate, 2)"
+        },
+        {
+          "key": "113",
+          "page": 6,
+          "x": 444,
+          "y": 282.8,
+          "value": "min(param.medicalThresholdMax, round(line.T1.23600 * param.medicalThresholdRate, 2))"
+        },
+        {
+          "key": "114",
+          "page": 6,
+          "x": 444,
+          "y": 269.3,
+          "value": "line.T1.33200 - line.T1.33199"
+        },
+        {
+          "key": "115",
+          "page": 6,
+          "x": 444,
+          "y": 243.8,
+          "value": "line.T1.33199"
+        },
+        {
+          "key": "116",
+          "page": 6,
+          "x": 552,
+          "y": 230.3,
+          "value": "line.T1.33200"
+        },
+        {
+          "key": "117",
+          "page": 6,
+          "x": 552,
+          "y": 216.8,
+          "value": "line.T1.33500"
+        },
+        {
+          "key": "119",
+          "page": 6,
+          "x": 552,
+          "y": 189.8,
+          "value": "line.T1.33800"
+        },
+        {
+          "key": "120",
+          "page": 6,
+          "x": 552,
+          "y": 176.3,
+          "value": "line.T1.34900"
+        },
+        {
+          "key": "121",
+          "page": 6,
+          "x": 552,
+          "y": 162.3,
+          "value": "line.T1.34990"
+        },
+        {
+          "key": "122",
+          "page": 6,
+          "x": 552,
+          "y": 149.3,
+          "value": "line.T1.35000"
+        },
+        {
+          "key": "123",
+          "page": 7,
+          "x": 552,
+          "y": 734.3,
+          "value": "line.T1.40400"
+        },
+        {
+          "key": "125",
+          "page": 7,
+          "x": 552,
+          "y": 707.3,
+          "value": "line.T1.40400"
+        },
+        {
+          "key": "126",
+          "page": 7,
+          "x": 444,
+          "y": 693.8,
+          "value": "line.T1.35000"
+        },
+        {
+          "key": "127",
+          "page": 7,
+          "x": 444,
+          "y": 680.3,
+          "value": "line.T1.40425"
+        },
+        {
+          "key": "129",
+          "page": 7,
+          "x": 552,
+          "y": 653.3,
+          "value": "line.T1.35000 + line.T1.40425"
+        },
+        {
+          "key": "130",
+          "page": 7,
+          "x": 552,
+          "y": 639.8,
+          "value": "line.T1.42900"
+        },
+        {
+          "key": "132",
+          "page": 7,
+          "x": 552,
+          "y": 612.8,
+          "value": "line.T1.42900"
+        },
+        {
+          "key": "133",
+          "page": 7,
+          "x": 552,
+          "y": 599.3,
+          "value": "line.T1.40500"
+        },
+        {
+          "key": "134",
+          "page": 7,
+          "x": 552,
+          "y": 585.8,
+          "value": "line.T1.40600"
+        },
+        {
+          "key": "136",
+          "page": 7,
+          "x": 552,
+          "y": 558.8,
+          "value": "line.T1.40600"
+        },
+        {
+          "key": "138",
+          "page": 7,
+          "x": 552,
+          "y": 531.8,
+          "value": "line.T1.40600"
+        },
+        {
+          "key": "139",
+          "page": 7,
+          "x": 444,
+          "y": 494.3,
+          "value": "line.T1.41000"
+        },
+        {
+          "key": "142",
+          "page": 7,
+          "x": 552,
+          "y": 429.8,
+          "value": "line.T1.41600"
+        },
+        {
+          "key": "143",
+          "page": 7,
+          "x": 552,
+          "y": 416.3,
+          "value": "line.T1.41700"
+        },
+        {
+          "key": "144",
+          "page": 7,
+          "x": 552,
+          "y": 402.8,
+          "value": "line.T1.41500"
+        },
+        {
+          "key": "146",
+          "page": 7,
+          "x": 552,
+          "y": 375.8,
+          "value": "line.T1.42000"
+        },
+        {
+          "key": "147",
+          "page": 7,
+          "x": 552,
+          "y": 330.8,
+          "value": "line.T1.42000"
+        },
+        {
+          "key": "149",
+          "page": 7,
+          "x": 552,
+          "y": 291.8,
+          "value": "line.T1.42200"
+        },
+        {
+          "key": "150",
+          "page": 7,
+          "x": 552,
+          "y": 266.3,
+          "value": "line.T1.42800"
+        },
+        {
+          "key": "151",
+          "page": 7,
+          "x": 552,
+          "y": 252.8,
+          "value": "line.T1.43500"
+        },
+        {
+          "key": "152",
+          "page": 8,
+          "x": 552,
+          "y": 731.3,
+          "value": "line.T1.43500"
+        },
+        {
+          "key": "153",
+          "page": 8,
+          "x": 336,
+          "y": 717.8,
+          "value": "line.T1.43700"
+        },
+        {
+          "key": "155",
+          "page": 8,
+          "x": 444,
+          "y": 690.8,
+          "value": "line.T1.43700"
+        },
+        {
+          "key": "156",
+          "page": 8,
+          "x": 444,
+          "y": 665.3,
+          "value": "line.T1.44000"
+        },
+        {
+          "key": "157",
+          "page": 8,
+          "x": 336,
+          "y": 651.8,
+          "value": "line.T1.45000"
+        },
+        {
+          "key": "159",
+          "page": 8,
+          "x": 444,
+          "y": 612.8,
+          "value": "line.T1.45100"
+        },
+        {
+          "key": "160",
+          "page": 8,
+          "x": 444,
+          "y": 599.3,
+          "value": "line.T1.45200"
+        },
+        {
+          "key": "161",
+          "page": 8,
+          "x": 444,
+          "y": 585.8,
+          "value": "line.T1.45300"
+        },
+        {
+          "key": "162",
+          "page": 8,
+          "x": 444,
+          "y": 572.3,
+          "value": "line.T1.45350"
+        },
+        {
+          "key": "163",
+          "page": 8,
+          "x": 444,
+          "y": 546.8,
+          "value": "line.T1.45355"
+        },
+        {
+          "key": "165",
+          "page": 8,
+          "x": 444,
+          "y": 519.8,
+          "value": "line.T1.45600"
+        },
+        {
+          "key": "167",
+          "page": 8,
+          "x": 444,
+          "y": 480.8,
+          "value": "line.T1.46900"
+        },
+        {
+          "key": "170",
+          "page": 8,
+          "x": 444,
+          "y": 440.3,
+          "value": "line.T1.47600"
+        },
+        {
+          "key": "171",
+          "page": 8,
+          "x": 552,
+          "y": 426.8,
+          "value": "line.T1.48200"
+        },
+        {
+          "key": "172",
+          "page": 8,
+          "x": 552,
+          "y": 389.3,
+          "value": "line.T1.43500 - line.T1.48200"
+        },
+        {
+          "key": "10120",
+          "page": 3,
+          "x": 444.1,
+          "y": 641.3,
+          "value": "line.T1.10120"
+        },
+        {
+          "key": "11410",
+          "page": 3,
+          "x": 444.1,
+          "y": 573.8,
+          "value": "line.T1.11410"
+        },
+        {
+          "key": "12010",
+          "page": 3,
+          "x": 444.1,
+          "y": 441.8,
+          "value": "line.T1.12010"
+        },
+        {
+          "key": "12599",
+          "page": 3,
+          "x": 336.1,
+          "y": 387.8,
+          "value": "line.T1.12599"
+        },
+        {
+          "key": "12799",
+          "page": 3,
+          "x": 336.1,
+          "y": 348.5,
+          "value": "line.T1.12799"
+        },
+        {
+          "key": "13499",
+          "page": 3,
+          "x": 279.1,
+          "y": 239.8,
+          "value": "line.T1.13499"
+        },
+        {
+          "key": "13699",
+          "page": 3,
+          "x": 279.1,
+          "y": 226.3,
+          "value": "line.T1.13699"
+        },
+        {
+          "key": "13899",
+          "page": 3,
+          "x": 279.1,
+          "y": 212.8,
+          "value": "line.T1.13899"
+        },
+        {
+          "key": "14099",
+          "page": 3,
+          "x": 279.1,
+          "y": 199.3,
+          "value": "line.T1.14099"
+        },
+        {
+          "key": "14299",
+          "page": 3,
+          "x": 279.1,
+          "y": 185.8,
+          "value": "line.T1.14299"
+        },
+        {
+          "key": "21999",
+          "page": 4,
+          "x": 228.1,
+          "y": 494.3,
+          "value": "line.T1.21999"
+        },
+        {
+          "key": "40900",
+          "page": 7,
+          "x": 255.1,
+          "y": 494.3,
+          "value": "line.T1.40900"
+        },
+        {
+          "key": "46800",
+          "page": 8,
+          "x": 288.1,
+          "y": 480.8,
+          "value": "line.T1.46800"
+        },
+        {
+          "key": "48400",
+          "page": 8,
+          "x": 221.9,
+          "y": 362.3,
+          "value": "line.T1.48400"
+        },
+        {
+          "key": "48500",
+          "page": 8,
+          "x": 533.9,
+          "y": 362.3,
+          "value": "line.T1.48500"
+        }
+      ],
+      "tables": [
+        {
+          "brackets": "taxBrackets",
+          "amount": "line.T1.26000",
+          "parts": [
+            {
+              "page": 5,
+              "columns": [
+                204.3,
+                291.2,
+                378.3,
+                465.1,
+                552.3
+              ],
+              "amount": 401.3,
+              "over": 374.3,
+              "times": 347.3,
+              "tax": 308.3,
+              "rows": [
+                "71",
+                "73",
+                "75",
+                "77"
               ]
             }
           ]
@@ -17718,5 +19097,5 @@
     }
   },
   "outcome": "RESULT.net",
-  "version": "a0995a95459054a2"
+  "version": "b25911e73aca4c3b"
 }

@@ -22,6 +22,8 @@ The base URL is `https://knowledge.insulinapps.com`, and every endpoint is under
   with the client-credentials grant and sends it as a Bearer token. See
   [API access with OAuth clients](/docs/platform/api-and-service-accounts).
 
+![Knowledge's Connect AI page on insulinapps.com: the address of Knowledge's MCP server, what happens the first time an assistant connects, and the setup for Claude Code and Codex CLI](/docs/assets/screenshots/knowledge-connect-ai.png "Settings › Connect AI: Knowledge's MCP server and each client's setup")
+
 ```bash
 # Get an access token, then ask what this OAuth client may call.
 TOKEN=$(curl -s https://insulinapps.com/oauth/token \
@@ -69,6 +71,27 @@ curl -s https://knowledge.insulinapps.com/api/catalog -H "Authorization: Bearer 
 The message names Insulin Apps support's address when the platform has one. See [Limits](/docs/knowledge/limits).
 
 ## Search: the main call
+
+An AI assistant asks Knowledge the way a person does on the site, through Knowledge's MCP server, and gets the
+passages back rather than a written answer:
+
+```diagram
+title: How an AI assistant asks Knowledge
+description: An AI assistant such as Claude, ChatGPT, Codex, Gemini or opencode connects once to Knowledge's MCP server at knowledge.insulinapps.com/mcp, signing in as its person, and from then on acts with that person's roles and no more. Each search names one to five collections the person can ask. Knowledge answers with passages, each with its file, its pages and the exact words, from which the assistant writes its answer and links to the sources on the site; with covered false when nothing in those collections covers the question, so the assistant says it won't guess; or, when a collection is asleep or learning, with the time to ask again.
+size: 760 x 360
+box assistant 20 30 180 84 "Your AI assistant" "Claude, ChatGPT, Codex," "Gemini, opencode…"
+box mcp 240 30 260 84 accent "Knowledge's MCP server" "knowledge.insulinapps.com/mcp" "acts as you: your roles, no more"
+box search 530 30 200 84 "A search" "names 1 to 5 collections" "you can ask"
+box passages 20 200 230 110 accent "Passages" "each with its file, pages and" "exact words: the assistant" "writes the answer and links" "to the sources"
+box uncovered 265 200 230 110 muted "covered: false" "nothing in them covers" "the question: the assistant" "says it won't guess"
+box waiting 520 200 220 110 dashed "Waking or learning" "status and retryAfterSeconds:" "ask again then"
+arrow assistant.r -> mcp.l
+arrow mcp.r -> search.l
+arrow search.b -> passages.t mid=160
+arrow search.b -> uncovered.t mid=160
+arrow search.b -> waiting.t
+text 380 340 small muted "Every request is checked as on the site; sharing, settings, export and delete stay on the site."
+```
 
 `POST /api/search` with `{ "collections": ["<id>", …], "query": "<question>", "topK": 8 }` (`topK` optional, 1 to 20)
 returns:

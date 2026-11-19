@@ -1,22 +1,28 @@
 #!/usr/bin/env node
-// Captures the docs' screenshots (assets/screenshots/*.png) from a real local run: the gateway with Cap Table and
-// Esign, as `npm run dev -- --app captable --app esign` starts them, driven in Chrome through synthetic data only.
+// Captures the docs' screenshots (assets/screenshots/*.png) from a real local run: the gateway with Cap Table, Esign
+// and Knowledge (with its in-memory engine), as `npm run dev -- --app captable --app esign --app knowledge` starts
+// them, driven in Chrome through synthetic data only.
 //
 //   (cd captable && npm ci && NITRO_PRESET=cloudflare_module npm run build)
 //   (cd esign && npm ci && NITRO_PRESET=cloudflare_module npm run build)
+//   (cd knowledge && npm ci && NITRO_PRESET=cloudflare_module npm run build)
 //   (cd .github/hosting/gateway && npm ci)
 //   (cd .github/hosting/docs && npm ci && node screenshots.mjs)
 //
-// Options: --port <n> (8795), --chrome <path to a Chrome binary> (else the installed Google Chrome), --headed, and
-// --only <name,...> to write only those screenshots (every step still runs, since each builds on the one before).
-// Then run `npm run build:docs` in the gateway: the pages link each image with its content hash.
+// Options: --port <n> (8795; Knowledge's step also uses the next one, see knowledge-screenshots.mjs), --chrome <path to
+// a Chrome binary> (else the installed Google Chrome), --headed, --only <name,...> to write only those screenshots
+// (every step still runs, since each builds on the one before), and --app <name> (repeated, or a comma-separated list)
+// to start and capture only some apps: `--app captable,esign` for the platform's, Cap Table's and Esign's screenshots,
+// which go together, and `--app knowledge` for Knowledge's alone (only it needs building then). Then run
+// `npm run build:docs` in the gateway: the pages link each image with its content hash.
 //
 // What the run does: signs up (confirming through the captured-mail page), creates an organization, adds a custom role,
 // invites people with an organization role and with specific apps, accepts an invitation, stores a credential, creates
 // two OAuth clients and rotates one's secret, connects an MCP client, imports Cap Table's own spreadsheet template
 // filled with a fictional company, opens its dashboard, cap table and holder view, uploads an Esign template, places
-// its fields, sends an envelope and signs it, then creates a second organization under the same email domain, which
-// reaches the limit of two, so the next one is a request to support. Light mode, a 1280 x 800 viewport.
+// its fields, sends an envelope and signs it, captures Knowledge (knowledge-screenshots.mjs: collections, asking,
+// sources, sharing, history, Needs attention, Health), then creates a second organization under the same email domain,
+// which reaches the limit of two, so the next one is a request to support. Light mode, a 1280 x 800 viewport.
 //
 // The run is local and offline except for Cloudflare's Turnstile widget, which the sign-up and sign-in forms load (the
 // local config uses Cloudflare's always-passing test keys). It serves the stack over https, with wrangler's
@@ -35,7 +41,7 @@
 // through Miniflare's outboundService). platform-organization.png therefore shows the Invitations card as an owner sees
 // it before any domain is verified.
 import { createHash, randomBytes } from 'node:crypto'
-import { mkdtemp, mkdir, rm, stat, writeFile } from 'node:fs/promises'
+import { copyFile, mkdtemp, mkdir, readdir, rm, stat, writeFile } from 'node:fs/promises'
 import { request as httpsRequest } from 'node:https'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
@@ -47,7 +53,10 @@ const docsDir = dirname(fileURLToPath(import.meta.url))
 const repositoryDir = resolve(docsDir, '..', '..', '..')
 const gatewayDir = join(repositoryDir, '.github', 'hosting', 'gateway')
 const OUT = join(docsDir, 'assets', 'screenshots')
-const { startDev } = await import(pathToFileURL(join(gatewayDir, 'scripts', 'dev.mjs')).href)
+const { startDev, wrangler } = await import(pathToFileURL(join(gatewayDir, 'scripts', 'dev.mjs')).href)
+const { appsFromArgs, COMPATIBILITY_DATE } = await import(pathToFileURL(join(gatewayDir, 'scripts', 'app-config.mjs')).href)
+const { engineWorkerName } = await import(pathToFileURL(join(repositoryDir, '.github', 'scripts', 'engine.mjs')).href)
+const { captureKnowledge, startControlRelay } = await import(pathToFileURL(join(docsDir, 'knowledge-screenshots.mjs')).href)
 
 const argument = (name, fallback) => {
   const at = process.argv.indexOf(name)
@@ -55,6 +64,12 @@ const argument = (name, fallback) => {
 }
 const PORT = argument('--port', '8795')
 const ONLY = argument('--only', null)?.split(',') ?? null
+const APPS = process.argv.includes('--app') ? appsFromArgs(process.argv.slice(2)) : ['captable', 'esign', 'knowledge']
+for (const app of APPS) if (!['captable', 'esign', 'knowledge'].includes(app)) throw new Error(`--app ${app}: the screenshots know captable, esign and knowledge`)
+// The platform's screenshots use Cap Table and Esign (roles, invitations to specific apps, an app's settings pages).
+const PLATFORM = APPS.includes('captable') && APPS.includes('esign')
+if (!PLATFORM && (APPS.includes('captable') || APPS.includes('esign'))) throw new Error('--app captable and --app esign go together: the platform\'s screenshots use both')
+const KNOWLEDGE = APPS.includes('knowledge')
 const DOMAIN = 'insulinapps.localhost'
 const APEX = `https://${DOMAIN}:${PORT}`
 const host = (app) => `https://${app}.${DOMAIN}:${PORT}`
@@ -103,14 +118,22 @@ async function waitForStack(child) {
 }
 
 let saved = 0
-/** Saves a PNG of the viewport (or of `locator`), unless --only leaves it out. */
+// Where screenshots are written during the run: a folder of the run's own, copied to OUT at its end. Writing into OUT
+// itself would make wrangler reload the stack (it serves the docs' assets), and a reload empties Knowledge's in-memory
+// engine.
+let staging = OUT
+/**
+ * Saves a PNG of the viewport (or of `locator`), unless --only leaves it out. A run without Cap Table and Esign writes
+ * only Knowledge's: the platform's pages it passes through would show a different set of apps.
+ */
 async function shot(page, name, { locator, fullPage = false } = {}) {
   if (ONLY && !ONLY.includes(name)) return
+  if (!PLATFORM && !name.startsWith('knowledge-')) return
   await page.waitForLoadState('networkidle').catch(() => {})
   // The apps show "Loading…" (or "Loading the company…") while they fetch; wait for the page itself.
   await page.waitForFunction(() => !/Loading[^\n]{0,40}(?:…|\.\.\.)/.test(document.body.innerText), null, { timeout: 20_000 }).catch(() => {})
   await page.evaluate(() => document.fonts?.ready).catch(() => {})
-  const path = join(OUT, `${name}.png`)
+  const path = join(staging, `${name}.png`)
   if (locator) await locator.screenshot({ path, animations: 'disabled' })
   else await page.screenshot({ path, fullPage, animations: 'disabled' })
   const { size } = await stat(path)
@@ -277,9 +300,11 @@ async function placeholder(context, name, title, lines) {
 async function main() {
   await mkdir(OUT, { recursive: true })
   const state = await mkdtemp(join(tmpdir(), 'insulin-docs-screenshots-'))
-  log(`Starting the gateway, Cap Table and Esign at ${APEX} (state in ${state})`)
+  staging = join(state, 'screenshots')
+  await mkdir(staging)
+  log(`Starting the gateway with ${APPS.join(', ')} at ${APEX} (state in ${state})`)
   const child = await startDev({
-    apps: ['captable', 'esign'],
+    apps: APPS,
     port: PORT,
     state,
     https: true,
@@ -298,14 +323,20 @@ async function main() {
       },
     },
   })
+  let relay
   const stop = async () => {
+    await relay?.stop()
     child.kill('SIGINT')
     await new Promise((accept) => setTimeout(accept, 1500))
+    // What was captured, even before a failure, goes to OUT once the stack has stopped.
+    for (const name of await readdir(staging)) await copyFile(join(staging, name), join(OUT, name))
     await rm(state, { recursive: true, force: true })
   }
   let browser
   try {
     await waitForStack(child)
+    // Knowledge's step reaches the in-memory engine's control interface through a relay on the next port.
+    if (KNOWLEDGE) relay = await startControlRelay({ wrangler, port: Number(PORT) + 1, state, engine: engineWorkerName('knowledge'), compatibilityDate: COMPATIBILITY_DATE })
     log('Ready. Capturing:')
     browser = await chromium.launch({ headless: !process.argv.includes('--headed'), ...(argument('--chrome', null) ? { executablePath: argument('--chrome', null) } : { channel: 'chrome' }) })
     const options = { viewport: VIEWPORT, deviceScaleFactor: 1, colorScheme: 'light', ignoreHTTPSErrors: true, locale: 'en-US', timezoneId: 'America/Los_Angeles', acceptDownloads: true }
@@ -327,250 +358,258 @@ async function main() {
     await page.waitForURL((url) => url.searchParams.has('org'))
     const orgId = new URL(page.url()).searchParams.get('org')
 
-    // A custom role for Cap Table, built from its permission catalog.
-    await page.goto(`${APEX}/settings/roles?org=${orgId}`)
-    const roleForm = page.locator('form:has(input[name="app"][value="captable"])')
-    await roleForm.locator('input[name="name"]').fill('Board observer')
-    await roleForm.locator('input[name="description"]').fill('Sees the whole cap table, changes nothing.')
-    await roleForm.locator('input[name="permission"][value="captable.view"]').check()
-    await roleForm.locator('button:has-text("Create role")').click()
-    await page.waitForLoadState()
-    await page.locator('h2', { hasText: 'Cap Table' }).first().scrollIntoViewIfNeeded()
-    await shot(page, 'platform-roles')
+    if (PLATFORM) {
+      // A custom role for Cap Table, built from its permission catalog.
+      await page.goto(`${APEX}/settings/roles?org=${orgId}`)
+      const roleForm = page.locator('form:has(input[name="app"][value="captable"])')
+      await roleForm.locator('input[name="name"]').fill('Board observer')
+      await roleForm.locator('input[name="description"]').fill('Sees the whole cap table, changes nothing.')
+      await roleForm.locator('input[name="permission"][value="captable.view"]').check()
+      await roleForm.locator('button:has-text("Create role")').click()
+      await page.waitForLoadState()
+      await page.locator('h2', { hasText: 'Cap Table' }).first().scrollIntoViewIfNeeded()
+      await shot(page, 'platform-roles')
 
-    // Invitations: Jordan with an organization role, Riley to specific apps with the custom role in Cap Table.
-    await page.goto(`${APEX}/settings/users?org=${orgId}`)
-    await page.fill('form[action$="/invitations"] input[name="email"]', HOLDER.email)
-    await page.selectOption('form[action$="/invitations"] select[name="role"]', 'VIEWER')
-    await page.click('button:has-text("Send invitation")')
-    await page.waitForLoadState()
-    await page.fill('form[action$="/invitations"] input[name="email"]', DIRECTOR.email)
-    await page.selectOption('form[action$="/invitations"] select[name="role"]', 'APPS')
-    const custom = await page.locator('form[action$="/invitations"] select[name="app:captable"] option', { hasText: 'Board observer' }).getAttribute('value')
-    await page.selectOption('form[action$="/invitations"] select[name="app:captable"]', custom)
-    await page.selectOption('form[action$="/invitations"] select[name="app:esign"]', 'VIEWER')
-    await page.click('button:has-text("Send invitation")')
-    await page.waitForLoadState()
-    await shot(page, 'platform-people', { fullPage: true })
+      // Invitations: Jordan with an organization role, Riley to specific apps with the custom role in Cap Table.
+      await page.goto(`${APEX}/settings/users?org=${orgId}`)
+      await page.fill('form[action$="/invitations"] input[name="email"]', HOLDER.email)
+      await page.selectOption('form[action$="/invitations"] select[name="role"]', 'VIEWER')
+      await page.click('button:has-text("Send invitation")')
+      await page.waitForLoadState()
+      await page.fill('form[action$="/invitations"] input[name="email"]', DIRECTOR.email)
+      await page.selectOption('form[action$="/invitations"] select[name="role"]', 'APPS')
+      const custom = await page.locator('form[action$="/invitations"] select[name="app:captable"] option', { hasText: 'Board observer' }).getAttribute('value')
+      await page.selectOption('form[action$="/invitations"] select[name="app:captable"]', custom)
+      await page.selectOption('form[action$="/invitations"] select[name="app:esign"]', 'VIEWER')
+      await page.click('button:has-text("Send invitation")')
+      await page.waitForLoadState()
+      await shot(page, 'platform-people', { fullPage: true })
 
-    // Jordan signs up, confirms, and opens the invitation.
-    const holder = await browser.newContext(options)
-    holder.setDefaultTimeout(TIMEOUT)
-    const holderPage = await holder.newPage()
-    await signUp(holderPage, HOLDER)
-    await holderPage.goto(await mailLink(holderPage, HOLDER.email, '/invitations/'))
-    await shot(holderPage, 'platform-invitation')
-    await holderPage.click('button:has-text("Accept")')
-    await holderPage.waitForLoadState()
+      // Jordan signs up, confirms, and opens the invitation.
+      const holder = await browser.newContext(options)
+      holder.setDefaultTimeout(TIMEOUT)
+      const holderPage = await holder.newPage()
+      await signUp(holderPage, HOLDER)
+      await holderPage.goto(await mailLink(holderPage, HOLDER.email, '/invitations/'))
+      await shot(holderPage, 'platform-invitation')
+      await holderPage.click('button:has-text("Accept")')
+      await holderPage.waitForLoadState()
 
-    // The signed-in home page, an app's people, its integrations with a stored credential, and its API access.
-    await page.goto(`${APEX}/`)
-    await shot(page, 'platform-home')
-    await page.goto(`${APEX}/apps/captable/settings/users`)
-    await shot(page, 'platform-app-people')
-    await page.goto(`${APEX}/apps/captable/settings/integrations`)
-    await page.fill('#new-credential-key', 'payroll')
-    await page.fill('#new-credential-name', 'Payroll provider')
-    await page.fill('#new-credential-base', 'https://api.payroll.example.com')
-    await page.selectOption('#new-credential-scheme', 'bearer')
-    // A synthetic value, encrypted by the local gateway and never shown again.
-    await page.fill('#new-credential-secret', 'local-screenshots-not-a-secret')
-    await page.click('button:has-text("Save credential")')
-    await page.waitForLoadState()
-    await page.goto(`${APEX}/apps/captable/settings/integrations`)
-    await shot(page, 'platform-integrations')
+      // The signed-in home page, an app's people, its integrations with a stored credential, and its API access.
+      await page.goto(`${APEX}/`)
+      await shot(page, 'platform-home')
+      await page.goto(`${APEX}/apps/captable/settings/users`)
+      await shot(page, 'platform-app-people')
+      await page.goto(`${APEX}/apps/captable/settings/integrations`)
+      await page.fill('#new-credential-key', 'payroll')
+      await page.fill('#new-credential-name', 'Payroll provider')
+      await page.fill('#new-credential-base', 'https://api.payroll.example.com')
+      await page.selectOption('#new-credential-scheme', 'bearer')
+      // A synthetic value, encrypted by the local gateway and never shown again.
+      await page.fill('#new-credential-secret', 'local-screenshots-not-a-secret')
+      await page.click('button:has-text("Save credential")')
+      await page.waitForLoadState()
+      await page.goto(`${APEX}/apps/captable/settings/integrations`)
+      await shot(page, 'platform-integrations')
 
-    // API access: two OAuth clients, one of them just rotated. A secret is shown only in the answer to the POST that
-    // made it; the screenshot is of the page loaded afresh, which never shows one.
-    const api = `${APEX}/apps/captable/settings/api`
-    for (const [name, role] of [['Payroll sync', 'VIEWER'], ['Back office', 'EDITOR']]) {
+      // API access: two OAuth clients, one of them just rotated. A secret is shown only in the answer to the POST that
+      // made it; the screenshot is of the page loaded afresh, which never shows one.
+      const api = `${APEX}/apps/captable/settings/api`
+      for (const [name, role] of [['Payroll sync', 'VIEWER'], ['Back office', 'EDITOR']]) {
+        await page.goto(api)
+        await page.fill('#new-client-name', name)
+        await page.selectOption('#new-client-role', role)
+        await page.click('form[action$="/settings/api/clients"] button[type="submit"]')
+        await page.getByText(`${name} is ready`).waitFor()
+      }
       await page.goto(api)
-      await page.fill('#new-client-name', name)
-      await page.selectOption('#new-client-role', role)
-      await page.click('form[action$="/settings/api/clients"] button[type="submit"]')
-      await page.getByText(`${name} is ready`).waitFor()
+      await page.locator('tr', { hasText: 'Back office' }).locator('button', { hasText: 'Rotate secret' }).click()
+      await page.getByText('Back office has a new secret').waitFor()
+      await page.goto(api)
+      await page.getByText('The previous secret works until').waitFor()
+      await shot(page, 'platform-api-access', { fullPage: true })
+
+      await page.goto(`${APEX}/account/security`)
+      await shot(page, 'platform-security')
+      await page.goto(`${APEX}/settings/sso?org=${orgId}`)
+      await shot(page, 'platform-sso')
+      // The Organization tab, with the Invitations card as it is before a domain is verified (see the top of the file).
+      await page.goto(`${APEX}/settings/organization?org=${orgId}`)
+      await shot(page, 'platform-organization')
+
+      // An MCP client: dynamic registration, then the consent page in the browser, then Account → AI agents.
+      const callback = 'http://127.0.0.1:33418/callback'
+      const registered = await (await page.request.post(`${APEX}/oauth/register`, {
+        data: { client_name: 'Claude Code', redirect_uris: [callback], grant_types: ['authorization_code', 'refresh_token'], response_types: ['code'], token_endpoint_auth_method: 'none' },
+      })).json()
+      if (!registered.client_id) throw new Error(`registration failed: ${JSON.stringify(registered)}`)
+      const verifier = randomBytes(32).toString('base64url')
+      const challenge = createHash('sha256').update(verifier).digest('base64url')
+      const authorize = new URL(`${APEX}/oauth/authorize`)
+      for (const [key, value] of Object.entries({ response_type: 'code', client_id: registered.client_id, redirect_uri: callback, code_challenge: challenge, code_challenge_method: 'S256', state: 'docs', resource: `${host('captable')}/mcp` })) {
+        authorize.searchParams.set(key, value)
+      }
+      await page.route('http://127.0.0.1:33418/**', (route) => route.fulfill({ status: 200, contentType: 'text/plain', body: 'Connected. You can close this tab.' }))
+      await page.goto(authorize.href)
+      await shot(page, 'platform-agent-consent')
+      await page.click('button[value="allow"]')
+      await page.waitForURL((url) => url.host === '127.0.0.1:33418')
+      await page.goto(`${APEX}/account/agents`)
+      await shot(page, 'platform-agents')
+      await page.goto(`${APEX}/apps/captable/settings/connect-ai`)
+      await shot(page, 'platform-connect-ai', { fullPage: true })
+
+      // Cap Table: the setup page, its own template filled with the fictional company, the preview, the import.
+      const captable = host('captable')
+      await page.goto(`${captable}/`)
+      await page.waitForURL((url) => url.pathname === '/setup')
+      await page.getByRole('heading', { name: 'Set up your company' }).waitFor()
+      await shot(page, 'captable-setup')
+      await page.click('a:has-text("Import from a spreadsheet")')
+      const [download] = await Promise.all([page.waitForEvent('download'), page.click('button:has-text("Download the template")')])
+      const template = await (await import('node:fs/promises')).readFile(await download.path())
+      await page.setInputFiles('input[type="file"]', { name: 'northwind-cap-table.xlsx', mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', buffer: fillTemplate(template) })
+      await page.click('button:has-text("Check the files")')
+      await page.getByRole('heading', { name: 'Review the import' }).waitFor()
+      await shot(page, 'captable-import-preview')
+      await page.getByRole('button', { name: 'Import', exact: true }).click()
+      await page.click('a:has-text("Go to the dashboard"), button:has-text("Go to the dashboard")')
+      await page.waitForURL((url) => url.pathname.endsWith('/dashboard'))
+      const company = new URL(page.url()).pathname.replace(/\/dashboard$/, '')
+      // A fresh load: the wizard's own navigation can leave the dashboard waiting on the company it just created.
+      await page.goto(`${captable}${company}/dashboard`)
+      await shot(page, 'captable-dashboard')
+      await page.goto(`${captable}${company}/captable`)
+      await shot(page, 'captable-cap-table')
+      await page.goto(`${captable}${company}/stakeholders`)
+      await shot(page, 'captable-stakeholders')
+      await page.goto(`${captable}${company}/issue/options`)
+      await shot(page, 'captable-record-grant')
+      await page.goto(`${captable}${company}/docs`)
+      await shot(page, 'captable-docs')
+
+      // Jordan, a Viewer whose address matches a stakeholder, sees their own holdings.
+      await holderPage.goto(`${captable}/`)
+      await holderPage.waitForLoadState('networkidle')
+      await shot(holderPage, 'captable-holder-view')
+
+      // Esign: a template with an added signature page, one with placed fields, an envelope, and its signing page.
+      const esign = host('esign')
+      await page.goto(`${esign}/templates`)
+      await page.setInputFiles('#template-pdf', { name: 'supply-agreement.pdf', mimeType: 'application/pdf', buffer: AGREEMENT })
+      await page.getByLabel('Role 1', { exact: true }).fill('buyer')
+      await page.click('button:has-text("Add a role")')
+      await page.getByLabel('Role 2', { exact: true }).fill('supplier')
+      await page.click('button:has-text("Upload with a signature page")')
+      await page.getByText('Template uploaded.').waitFor()
+      await shot(page, 'esign-templates')
+      await page.setInputFiles('#template-pdf', { name: 'supply-agreement-fields.pdf', mimeType: 'application/pdf', buffer: AGREEMENT })
+      await page.getByLabel('Role 1', { exact: true }).fill('buyer')
+      // The form keeps the roles of the last upload.
+      if (!await page.getByLabel('Role 2', { exact: true }).count()) await page.click('button:has-text("Add a role")')
+      await page.getByLabel('Role 2', { exact: true }).fill('supplier')
+      await page.click('button:has-text("Upload and place fields")')
+      const editor = page.frameLocator('iframe[title="Signature field editor"]')
+      // Each field starts at the page's top left; arrow keys move it by 1% of the page.
+      const place = async (role, type, down, right) => {
+        await editor.getByRole('radio', { name: role }).check()
+        await editor.getByRole('button', { name: `Add ${type} field` }).click()
+        const field = editor.getByRole('button', { name: `${role} — ${type}`, exact: true })
+        await field.focus()
+        for (let i = 0; i < down; i += 1) await field.press('ArrowDown')
+        for (let i = 0; i < right; i += 1) await field.press('ArrowRight')
+      }
+      await place('buyer', 'Signature', 40, 6)
+      await place('buyer', 'Date signed', 40, 52)
+      await place('supplier', 'Signature', 52, 6)
+      await place('supplier', 'Date signed', 52, 52)
+      await page.locator('iframe[title="Signature field editor"]').evaluate((frame) => frame.scrollIntoView({ block: 'start' }))
+      await page.waitForTimeout(300)
+      await shot(page, 'esign-template-editor')
+      await page.click('button:has-text("Save fields")')
+      await page.getByText(/saved/i).first().waitFor().catch(() => page.waitForTimeout(2000))
+
+      await page.goto(`${esign}/envelopes/new`)
+      // The template with placed fields, once the list has loaded.
+      await page.locator('#envelope-template option:not([value=""])').first().waitFor({ state: 'attached' })
+      const templateOptions = await page.locator('#envelope-template option:not([value=""])').evaluateAll((options) => options.map((option) => ({ value: option.value, text: option.textContent ?? '' })))
+      await page.selectOption('#envelope-template', (templateOptions.find((option) => !option.text.includes('signature page')) ?? templateOptions[0]).value)
+      for (const [index, signer] of SIGNERS.entries()) {
+        await page.fill(`#signer-${index}-name`, signer.name)
+        await page.fill(`#signer-${index}-email`, signer.email)
+      }
+      await page.fill('#doc-name', 'Supply Agreement')
+      await shot(page, 'esign-new-envelope')
+      await page.click('button:has-text("Send for signature")')
+      await page.waitForURL((url) => /^\/envelopes\/[0-9a-f-]{36}$/.test(url.pathname))
+      const envelopeUrl = page.url()
+
+      {
+        // The first signer's page, opened the way the envelope page's "Open … signing page" does.
+        const tasks = await page.evaluate(async (id) => (await (await fetch(`/api/envelopes/${id}`)).json()), envelopeUrl.split('/').pop())
+        const task = (tasks.envelope?.tasks ?? tasks.tasks ?? []).find((candidate) => candidate.status === 'ACTIVE')
+        const view = await page.evaluate(async ([id, taskId, origin]) => (await fetch(`/api/envelopes/${id}/tasks/${taskId}/recipient-view`, {
+          method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ origin }),
+        })).json(), [envelopeUrl.split('/').pop(), task.id, esign])
+        if (!view.code) throw new Error(`no signing code for the page: ${JSON.stringify(view)}`)
+        const { code } = view
+        const signer = await browser.newContext(options)
+        signer.setDefaultTimeout(TIMEOUT)
+        const signing = await signer.newPage()
+        const before = await newestMailId(page)
+        await signing.goto(`${esign}/sign#code=${encodeURIComponent(code)}&host=${encodeURIComponent(esign)}`)
+        await signing.click('button:has-text("Continue")')
+        await signing.getByRole('button', { name: 'Verify code' }).waitFor()
+        await shot(signing, 'esign-signing-code')
+        const otp = await mailCode(page, SIGNERS[0].email, before)
+        const boxes = signing.locator('input[inputmode="numeric"]')
+        for (const [index, digit] of [...otp].entries()) await boxes.nth(index).fill(digit)
+        await signing.click('button:has-text("Verify code")')
+        await signing.getByRole('heading', { name: 'Adopt your signature' }).waitFor()
+        await signing.getByLabel('Full name').fill(SIGNERS[0].name)
+        await signing.locator('input[type="checkbox"]').first().check()
+        await shot(signing, 'esign-signing-review')
+        await signing.click('button:has-text("Sign document")')
+        await signing.getByText('Signature recorded.').waitFor()
+        await signer.close()
+      }
+      await page.goto(envelopeUrl)
+      await page.getByRole('heading').first().waitFor()
+      await shot(page, 'esign-envelope', { fullPage: true })
+      await placeholder(owner, 'esign-completed', 'A completed envelope', [
+        'This image is a placeholder. A completed envelope can\'t be captured on a local run: Esign seals a finished envelope with its seal key and an RFC 3161 timestamp from an outside service, so locally it stays Finishing.',
+        'When an envelope is completed, its page shows the status Completed and two downloads: Signed PDF with certificate, and Certificate of completion.',
+      ])
     }
-    await page.goto(api)
-    await page.locator('tr', { hasText: 'Back office' }).locator('button', { hasText: 'Rotate secret' }).click()
-    await page.getByText('Back office has a new secret').waitFor()
-    await page.goto(api)
-    await page.getByText('The previous secret works until').waitFor()
-    await shot(page, 'platform-api-access', { fullPage: true })
 
-    await page.goto(`${APEX}/account/security`)
-    await shot(page, 'platform-security')
-    await page.goto(`${APEX}/settings/sso?org=${orgId}`)
-    await shot(page, 'platform-sso')
-    // The Organization tab, with the Invitations card as it is before a domain is verified (see the top of the file).
-    await page.goto(`${APEX}/settings/organization?org=${orgId}`)
-    await shot(page, 'platform-organization')
-
-    // An MCP client: dynamic registration, then the consent page in the browser, then Account → AI agents.
-    const callback = 'http://127.0.0.1:33418/callback'
-    const registered = await (await page.request.post(`${APEX}/oauth/register`, {
-      data: { client_name: 'Claude Code', redirect_uris: [callback], grant_types: ['authorization_code', 'refresh_token'], response_types: ['code'], token_endpoint_auth_method: 'none' },
-    })).json()
-    if (!registered.client_id) throw new Error(`registration failed: ${JSON.stringify(registered)}`)
-    const verifier = randomBytes(32).toString('base64url')
-    const challenge = createHash('sha256').update(verifier).digest('base64url')
-    const authorize = new URL(`${APEX}/oauth/authorize`)
-    for (const [key, value] of Object.entries({ response_type: 'code', client_id: registered.client_id, redirect_uri: callback, code_challenge: challenge, code_challenge_method: 'S256', state: 'docs', resource: `${host('captable')}/mcp` })) {
-      authorize.searchParams.set(key, value)
+    // Knowledge, with its own colleagues and collections (knowledge-screenshots.mjs).
+    if (KNOWLEDGE) {
+      await captureKnowledge({ browser, options, page, orgId, apex: APEX, knowledge: host('knowledge'), control: relay.url, shot, signUp, mailLink, log, timeout: TIMEOUT })
     }
-    await page.route('http://127.0.0.1:33418/**', (route) => route.fulfill({ status: 200, contentType: 'text/plain', body: 'Connected. You can close this tab.' }))
-    await page.goto(authorize.href)
-    await shot(page, 'platform-agent-consent')
-    await page.click('button[value="allow"]')
-    await page.waitForURL((url) => url.host === '127.0.0.1:33418')
-    await page.goto(`${APEX}/account/agents`)
-    await shot(page, 'platform-agents')
-    await page.goto(`${APEX}/apps/captable/settings/connect-ai`)
-    await shot(page, 'platform-connect-ai', { fullPage: true })
 
-    // Cap Table: the setup page, its own template filled with the fictional company, the preview, the import.
-    const captable = host('captable')
-    await page.goto(`${captable}/`)
-    await page.waitForURL((url) => url.pathname === '/setup')
-    await page.getByRole('heading', { name: 'Set up your company' }).waitFor()
-    await shot(page, 'captable-setup')
-    await page.click('a:has-text("Import from a spreadsheet")')
-    const [download] = await Promise.all([page.waitForEvent('download'), page.click('button:has-text("Download the template")')])
-    const template = await (await import('node:fs/promises')).readFile(await download.path())
-    await page.setInputFiles('input[type="file"]', { name: 'northwind-cap-table.xlsx', mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', buffer: fillTemplate(template) })
-    await page.click('button:has-text("Check the files")')
-    await page.getByRole('heading', { name: 'Review the import' }).waitFor()
-    await shot(page, 'captable-import-preview')
-    await page.click('.wiz-foot button:has-text("Import")')
-    await page.click('a:has-text("Go to the dashboard"), button:has-text("Go to the dashboard")')
-    await page.waitForURL((url) => url.pathname.endsWith('/dashboard'))
-    const company = new URL(page.url()).pathname.replace(/\/dashboard$/, '')
-    // A fresh load: the wizard's own navigation can leave the dashboard waiting on the company it just created.
-    await page.goto(`${captable}${company}/dashboard`)
-    await shot(page, 'captable-dashboard')
-    await page.goto(`${captable}${company}/captable`)
-    await shot(page, 'captable-cap-table')
-    await page.goto(`${captable}${company}/stakeholders`)
-    await shot(page, 'captable-stakeholders')
-    await page.goto(`${captable}${company}/issue/options`)
-    await shot(page, 'captable-record-grant')
-    await page.goto(`${captable}${company}/docs`)
-    await shot(page, 'captable-docs')
-
-    // Jordan, a Viewer whose address matches a stakeholder, sees their own holdings.
-    await holderPage.goto(`${captable}/`)
-    await holderPage.waitForLoadState('networkidle')
-    await shot(holderPage, 'captable-holder-view')
-
-    // Esign: a template with an added signature page, one with placed fields, an envelope, and its signing page.
-    const esign = host('esign')
-    await page.goto(`${esign}/templates`)
-    await page.setInputFiles('#template-pdf', { name: 'supply-agreement.pdf', mimeType: 'application/pdf', buffer: AGREEMENT })
-    await page.getByLabel('Role 1', { exact: true }).fill('buyer')
-    await page.click('button:has-text("Add a role")')
-    await page.getByLabel('Role 2', { exact: true }).fill('supplier')
-    await page.click('button:has-text("Upload with a signature page")')
-    await page.getByText('Template uploaded.').waitFor()
-    await shot(page, 'esign-templates')
-    await page.setInputFiles('#template-pdf', { name: 'supply-agreement-fields.pdf', mimeType: 'application/pdf', buffer: AGREEMENT })
-    await page.getByLabel('Role 1', { exact: true }).fill('buyer')
-    // The form keeps the roles of the last upload.
-    if (!await page.getByLabel('Role 2', { exact: true }).count()) await page.click('button:has-text("Add a role")')
-    await page.getByLabel('Role 2', { exact: true }).fill('supplier')
-    await page.click('button:has-text("Upload and place fields")')
-    const editor = page.frameLocator('iframe[title="Signature field editor"]')
-    // Each field starts at the page's top left; arrow keys move it by 1% of the page.
-    const place = async (role, type, down, right) => {
-      await editor.getByRole('radio', { name: role }).check()
-      await editor.getByRole('button', { name: `Add ${type} field` }).click()
-      const field = editor.getByRole('button', { name: `${role} — ${type}`, exact: true })
-      await field.focus()
-      for (let i = 0; i < down; i += 1) await field.press('ArrowDown')
-      for (let i = 0; i < right; i += 1) await field.press('ArrowRight')
+    if (PLATFORM) {
+      // A second organization under example.com reaches the limit of two. The organization menu, back in the first one,
+      // lists both; then Create an organization asks support for more instead.
+      await page.goto(`${APEX}/orgs/new`)
+      await page.fill('input[name="name"]', SECOND_ORG)
+      await page.click('button:has-text("Create organization")')
+      await page.waitForURL((url) => url.searchParams.has('org') && url.searchParams.get('org') !== orgId)
+      await page.goto(`${APEX}/`)
+      // The organization switcher at the top of the navigation's level 1 (DESIGN.md §3.2).
+      const orgMenu = page.locator('[data-slot="nav-primary"] summary', { hasText: 'Organization:' })
+      await orgMenu.click()
+      await page.locator('[data-slot="nav-primary"] form button', { hasText: ORG }).click()
+      await page.getByRole('heading', { name: `Apps in ${ORG}` }).waitFor()
+      await orgMenu.click()
+      await page.locator('[data-slot="nav-primary"] a', { hasText: 'Create an organization' }).waitFor()
+      await shot(page, 'platform-org-menu')
+      await page.goto(`${APEX}/orgs/new`)
+      await page.getByRole('heading', { name: 'Request more organizations' }).waitFor()
+      await page.fill('input[name="name"]', 'Northwind Europe')
+      await page.fill('#field-reason', 'A separate workspace for our European subsidiary, with its own cap table and its own people.')
+      await shot(page, 'platform-request-organizations')
+      await holder.close()
     }
-    await place('buyer', 'Signature', 40, 6)
-    await place('buyer', 'Date signed', 40, 52)
-    await place('supplier', 'Signature', 52, 6)
-    await place('supplier', 'Date signed', 52, 52)
-    await page.locator('iframe[title="Signature field editor"]').evaluate((frame) => frame.scrollIntoView({ block: 'start' }))
-    await page.waitForTimeout(300)
-    await shot(page, 'esign-template-editor')
-    await page.click('button:has-text("Save fields")')
-    await page.getByText(/saved/i).first().waitFor().catch(() => page.waitForTimeout(2000))
-
-    await page.goto(`${esign}/envelopes/new`)
-    // The template with placed fields, once the list has loaded.
-    await page.locator('#envelope-template option:not([value=""])').first().waitFor({ state: 'attached' })
-    const templateOptions = await page.locator('#envelope-template option:not([value=""])').evaluateAll((options) => options.map((option) => ({ value: option.value, text: option.textContent ?? '' })))
-    await page.selectOption('#envelope-template', (templateOptions.find((option) => !option.text.includes('signature page')) ?? templateOptions[0]).value)
-    for (const [index, signer] of SIGNERS.entries()) {
-      await page.fill(`#signer-${index}-name`, signer.name)
-      await page.fill(`#signer-${index}-email`, signer.email)
-    }
-    await page.fill('#doc-name', 'Supply Agreement')
-    await shot(page, 'esign-new-envelope')
-    await page.click('button:has-text("Send for signature")')
-    await page.waitForURL((url) => /^\/envelopes\/[0-9a-f-]{36}$/.test(url.pathname))
-    const envelopeUrl = page.url()
-
-    {
-      // The first signer's page, opened the way the envelope page's "Open … signing page" does.
-      const tasks = await page.evaluate(async (id) => (await (await fetch(`/api/envelopes/${id}`)).json()), envelopeUrl.split('/').pop())
-      const task = (tasks.envelope?.tasks ?? tasks.tasks ?? []).find((candidate) => candidate.status === 'ACTIVE')
-      const view = await page.evaluate(async ([id, taskId, origin]) => (await fetch(`/api/envelopes/${id}/tasks/${taskId}/recipient-view`, {
-        method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ origin }),
-      })).json(), [envelopeUrl.split('/').pop(), task.id, esign])
-      if (!view.code) throw new Error(`no signing code for the page: ${JSON.stringify(view)}`)
-      const { code } = view
-      const signer = await browser.newContext(options)
-      signer.setDefaultTimeout(TIMEOUT)
-      const signing = await signer.newPage()
-      const before = await newestMailId(page)
-      await signing.goto(`${esign}/sign#code=${encodeURIComponent(code)}&host=${encodeURIComponent(esign)}`)
-      await signing.click('button:has-text("Continue")')
-      await signing.getByRole('button', { name: 'Verify code' }).waitFor()
-      await shot(signing, 'esign-signing-code')
-      const otp = await mailCode(page, SIGNERS[0].email, before)
-      const boxes = signing.locator('input[inputmode="numeric"]')
-      for (const [index, digit] of [...otp].entries()) await boxes.nth(index).fill(digit)
-      await signing.click('button:has-text("Verify code")')
-      await signing.getByRole('heading', { name: 'Adopt your signature' }).waitFor()
-      await signing.getByLabel('Full name').fill(SIGNERS[0].name)
-      await signing.locator('input[type="checkbox"]').first().check()
-      await shot(signing, 'esign-signing-review')
-      await signing.click('button:has-text("Sign document")')
-      await signing.getByText('Signature recorded.').waitFor()
-      await signer.close()
-    }
-    await page.goto(envelopeUrl)
-    await page.getByRole('heading').first().waitFor()
-    await shot(page, 'esign-envelope', { fullPage: true })
-    await placeholder(owner, 'esign-completed', 'A completed envelope', [
-      'This image is a placeholder. A completed envelope can\'t be captured on a local run: Esign seals a finished envelope with its seal key and an RFC 3161 timestamp from an outside service, so locally it stays Finishing.',
-      'When an envelope is completed, its page shows the status Completed and two downloads: Signed PDF with certificate, and Certificate of completion.',
-    ])
-
-    // A second organization under example.com reaches the limit of two. The organization menu, back in the first one,
-    // lists both; then Create an organization asks support for more instead.
-    await page.goto(`${APEX}/orgs/new`)
-    await page.fill('input[name="name"]', SECOND_ORG)
-    await page.click('button:has-text("Create organization")')
-    await page.waitForURL((url) => url.searchParams.has('org') && url.searchParams.get('org') !== orgId)
-    await page.goto(`${APEX}/`)
-    // The organization switcher at the top of the navigation's level 1 (DESIGN.md §3.2).
-    const orgMenu = page.locator('[data-slot="nav-primary"] summary', { hasText: 'Organization:' })
-    await orgMenu.click()
-    await page.locator('[data-slot="nav-primary"] form button', { hasText: ORG }).click()
-    await page.getByRole('heading', { name: `Apps in ${ORG}` }).waitFor()
-    await orgMenu.click()
-    await page.locator('[data-slot="nav-primary"] a', { hasText: 'Create an organization' }).waitFor()
-    await shot(page, 'platform-org-menu')
-    await page.goto(`${APEX}/orgs/new`)
-    await page.getByRole('heading', { name: 'Request more organizations' }).waitFor()
-    await page.fill('input[name="name"]', 'Northwind Europe')
-    await page.fill('#field-reason', 'A separate workspace for our European subsidiary, with its own cap table and its own people.')
-    await shot(page, 'platform-request-organizations')
-
-    await holder.close()
     await owner.close()
     log(`${saved} screenshot(s) in ${OUT}. Now run \`npm run build:docs\` in .github/hosting/gateway.`)
   } catch (error) {

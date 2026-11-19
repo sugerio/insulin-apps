@@ -50,6 +50,8 @@ A collection's **What it knows** tab lists the facts Insulin found, each as one 
 can check, with the file it came from. Search them by word: the search looks through the facts shown, and when there
 are more, **Show more** at the end of the list adds them.
 
+![A collection's What it knows tab: facts as sentences, each with the file it came from, three checked by Ana Lima, the others with Looks right and Fix](/docs/assets/screenshots/knowledge-what-it-knows.png "What it knows: facts to check, or to fix once")
+
 - **Looks right** (owners, admins and editors) marks a fact as checked, with the person's name.
 - **Fix** writes the right sentence. It is saved as a correction called "Correction to a fact", holding only the new
   sentence: never the old one, nor the name of the file it came from (a name can say the same wrong thing). Answers
@@ -63,6 +65,8 @@ Through the API: `POST /api/collections/{id}/facts/{factId}/check` marks a fact 
 
 **Needs attention**, for Editors and Admins in Knowledge, lists what only a person can settle in the collections where
 they are an owner, admin or editor:
+
+![Needs attention for one collection: two values hidden before learning in a file, an answer a Viewer reported as wrong with Fix the answer and It's right, and a scanned PDF Insulin couldn't read](/docs/assets/screenshots/knowledge-attention.png "Needs attention: what only a person can settle")
 
 - **Files Insulin couldn't read**, with the reason and what to upload instead;
 - **values hidden before learning**: which file, and how many values were hidden in all (see

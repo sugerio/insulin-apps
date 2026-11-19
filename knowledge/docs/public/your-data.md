@@ -7,6 +7,43 @@ order: 11
 This page explains how a collection is exported and deleted, what Knowledge keeps, and which numbers it sends Insulin
 Apps. It is for collection owners and admins, organization owners, and anyone who wants to know where their data goes.
 
+## Where Knowledge runs and keeps your data
+
+Knowledge runs on Cloudflare, in three parts. Insulin Apps signs people in and knows their organization and role. The
+Knowledge app checks every request against that role, the collection's sharing and the limits. Its engine, which only
+the app can reach, keeps each collection apart from every other.
+
+```diagram
+title: Where Knowledge runs and where your data lives
+description: People, AI assistants and programs reach Knowledge through Insulin Apps at insulinapps.com, which signs people in, keeps organizations, people and roles, and passes each request on with who is asking. The Knowledge app checks the caller's role, the collection's sharing and the limits, and keeps sharing, the lists, questions asked and logs in its own database. Only the app reaches the engine, which runs one Durable Object and one container for each collection, asleep when nobody asks. It saves a restore point after every change, kept 30 days, keeps the learned text with hidden values removed in storage (original files are deleted once read), and takes daily backups, the latest kept as long as the collection exists. The built-in model, Gemma 4, writes the answers on the site, unless an Admin chose the organization's own model, which is reached through the organization's integration on Insulin Apps. An export is a zip file of the learned text, notes, facts, corrections, history and settings, never the original files.
+size: 760 x 600
+box people 20 20 230 50 "People" "in a web browser"
+box assistants 265 20 230 50 "AI assistants" "over MCP, as their person"
+box programs 510 20 230 50 "Programs" "the API, with an OAuth client"
+box gateway 20 100 720 60 accent "Insulin Apps (insulinapps.com)" "signs people in; keeps organizations, people and roles"
+group app 20 190 720 104 "Knowledge app"
+box check 36 224 420 54 "Checks every request" "your role, the collection's sharing, the limits"
+box appdb 480 220 244 62 db "Knowledge's database" "sharing, lists, questions, logs"
+group engine 20 320 720 128 "Knowledge engine, private: only the app reaches it"
+box collection 36 354 280 70 "One engine per collection" "a Durable Object and a container," "asleep when nobody asks"
+box restore 356 352 184 74 db "Restore points" "a copy after each" "change, kept 30 days"
+box model 566 352 158 74 muted "Built-in model" "Gemma 4 writes the" "site's answers"
+group storage 20 480 470 100 "Storage"
+box text 36 512 200 56 "Stored text" "hidden values removed," "originals deleted once read"
+box backups 252 512 222 56 "Daily backups" "the latest kept as long" "as the collection exists"
+box export 510 480 230 100 dashed "An export (.zip)" "the learned text, notes, facts," "corrections, history, settings;" "never the original files"
+arrow people.b -> gateway.t:0.16
+arrow assistants.b -> gateway.t:0.5
+arrow programs.b -> gateway.t:0.84
+arrow gateway.b:0.314 -> check.t "who is asking, and their role" label=0.3
+arrow check.r -> appdb.l
+arrow check.b:0.3333 -> collection.t "names the organization" label=0.3
+arrow collection.r -> restore.l
+arrow collection.b:0.357 -> text.t
+arrow collection.b:0.964 -> backups.t:0.243 "daily"
+arrow engine.b:0.8403 -> export.t dashed "owner or admin"
+```
+
 ## Export a collection
 
 A collection's owner and admins export it from its **Sharing** tab: **Export** prepares a download, which stays

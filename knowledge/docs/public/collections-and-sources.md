@@ -28,6 +28,32 @@ A collection's **Overview** says what state it is in:
 | Repairing | It couldn't open its latest restore point, so it answers from an earlier version while Insulin repairs it. |
 | Stopped until the 1st | The organization has used this month's awake hours (see [Limits](/docs/knowledge/limits)). Everything learned is kept; removing a file for good still works. |
 
+Most of the time a collection is asleep or ready. It wakes for a question, learns when something is added, and saves a
+restore point after every change:
+
+```diagram
+title: A collection's day: asleep, waking, ready, learning
+description: A collection sleeps when nobody has asked it for 10 minutes. The next question wakes it, in about a minute; after more than 30 days unused it comes back from its latest backup instead, in a few minutes. Ready, it answers in a few seconds. When files, web pages, notes or corrections are added it learns them, and questions to it wait; then it saves a restore point and is ready again. Going back to an earlier restore point takes about a minute, and it then answers from that version; undo works the same way.
+size: 780 x 380
+box asleep 20 150 140 64 muted "Asleep" "nobody asked for" "10 minutes"
+box waking 210 150 140 64 "Waking up" "for a question:" "about a minute"
+box ready 400 150 150 64 accent "Ready" "answers in seconds"
+box learning 400 290 150 64 "Learning" "new files or notes;" "questions wait"
+box saving 610 290 150 64 "Saving" "a restore point" "of this version"
+box backup 190 30 180 70 dashed "Back from its backup" "unused over 30 days:" "a few minutes"
+box goingback 600 30 160 70 "Going back or undo" "to a restore point:" "about a minute"
+arrow asleep.r -> waking.l
+arrow waking.r -> ready.l
+arrow ready.b:0.1 -> asleep.b mid=264 "10 minutes without a question"
+arrow ready.b:0.6 -> learning.t:0.6
+arrow learning.r -> saving.l
+arrow saving.t -> ready.r:0.75 "ready again" label=0.35
+arrow asleep.t -> backup.l
+arrow backup.r -> ready.t:0.3
+arrow ready.r:0.3 -> goingback.b:0.3
+arrow goingback.l -> ready.t:0.8
+```
+
 ## Add files, web pages and notes
 
 On a collection's **Sources** tab, its owner, admins and editors can add three kinds of source:
@@ -62,6 +88,8 @@ hours) is back on the list, and can be cancelled again.
 Before anything starts, Knowledge checks every file and names the ones it can't learn, with the reason and what to do
 instead. Only the others are learned:
 
+![A collection's Sources tab after choosing three files: 2 of 3 files can't be learned, a scanned PDF and a workbook with macros, each with what to do instead, the button Learn 1 file, then the files and notes the collection holds](/docs/assets/screenshots/knowledge-sources.png "Files that can't be learned are named before anything starts")
+
 - **A type Insulin can't read**, such as an Excel workbook with macros (`.xlsm`), an older Word or PowerPoint file
   (`.doc`, `.ppt`) or an image. Save it in one of the types above and add it again.
 - **An empty file**, or one **larger than the organization's largest file**. Split it, or save it smaller.
@@ -78,6 +106,8 @@ instead. Only the others are learned:
 Learning is how Insulin reads each file and works out the facts in it. Each file goes **Waiting → Reading →
 Understanding → learned**, with the time left in real minutes. When it ends, Knowledge saves a restore point and says
 how many files it learned and how many new facts it found.
+
+![Learning your files, step 3 of New collection: three files being understood, about 2 minutes left, and a note that questions wait and Insulin e-mails you when it is done](/docs/assets/screenshots/knowledge-learning.png "Learning: each file's progress and the time left")
 
 - **Questions wait.** While a collection learns, questions to it wait until it finishes; assistants are told to ask
   again in a minute.

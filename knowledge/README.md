@@ -15,6 +15,60 @@ the `SUGER_ENGINE` service binding, with one Durable Object and container per co
 knows, Sharing and History, Needs attention, Rules and data, Health) and the in-app Docs are built; the real engine
 is described in `engine/`. Use synthetic data only.
 
+## Architecture
+
+```mermaid
+flowchart TB
+  subgraph callers["Callers"]
+    browser["Browser"]
+    assistant["AI assistant (MCP)"]
+    client["API client (OAuth)"]
+  end
+  gateway["Hosting gateway<br/>.github/hosting/gateway<br/>sign-in, organizations, roles,<br/>/mcp, x-suger-* headers"]
+  subgraph app["Knowledge app (knowledge/)"]
+    api["Hono API, src/app/server<br/>identity.ts, access.ts authorize(),<br/>limits.ts, ask.ts"]
+    d1[("D1<br/>collections, shares, members,<br/>imports, reports, logs")]
+    tick["POST /api/scheduled<br/>tick.ts: outbox, limits,<br/>members, usage report"]
+  end
+  subgraph engine["Engine (knowledge/engine/)"]
+    router["router.ts, routes.ts<br/>contract.ts, x-knowledge-org"]
+    collection["CollectionEngine Durable Object<br/>one per collection: imports,<br/>restore points, backups, exports"]
+    container["Container, one per collection<br/>Cognee: ops.py, query.py<br/>asleep when unused"]
+    shared["Capacity, Outbox and<br/>Registry Durable Objects"]
+    model["Workers AI<br/>Gemma 4: answer.ts"]
+  end
+  subgraph storage["Storage"]
+    snapshots[("Container snapshots<br/>restore points, 30 days")]
+    files[("R2 FILES<br/>inbox, redacted text,<br/>facts, exports")]
+    backups[("R2 BACKUPS<br/>daily backups")]
+  end
+  stub["engine/src/stub<br/>in-memory engine: npm run dev,<br/>the local stack, tests"]
+
+  browser --> gateway
+  assistant --> gateway
+  client --> gateway
+  gateway -- "identity headers" --> api
+  gateway -. "every five minutes" .-> tick
+  api --> d1
+  tick --> d1
+  api -- "limits, members, mail, metrics" --> gateway
+  api -- "SUGER_ENGINE" --> router
+  tick -- "GET /v1/outbox" --> router
+  router --> collection
+  router --> shared
+  router --> model
+  collection --> container
+  collection --> snapshots
+  collection --> files
+  collection --> backups
+  stub -. "same contract.ts" .- router
+```
+
+The app decides who may do what (`access.ts`) and checks the limits before every engine call; the engine trusts its
+binding and keeps each collection in a Durable Object and container of its own (`engine/README.md`). What changes
+answers lives in the engine, and D1 follows it through the outbox. The public docs draw the same picture for business
+readers: `docs/public/your-data.md`.
+
 ## Who can do what
 
 Three kinds of roles work together (design section 08):

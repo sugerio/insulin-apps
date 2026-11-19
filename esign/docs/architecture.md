@@ -245,8 +245,40 @@ Two ways to sign:
   signs); every role needs at least one required Signature field and may have several. Envelope
   creation refuses other field types and overlapping fields (`422
   positioned_fields_not_supported`). The PDF must have unrotated, uncropped pages with a zero
-  media-box origin, default units, no annotations and no form; each field is at least 20 × 10
-  points.
+  media-box origin, default units, no annotations and no form (`validateFieldsPdf`); each field is
+  at least 20 × 10 points. Every upload is made so first (below).
+
+#### Uploaded PDFs
+
+`pdf-upload.ts` (`preparePdfUpload`) runs on every upload: `POST /api/templates`,
+`POST /api/envelopes/:id/document`, the editor's staged source and a file sent with an editor save.
+It reads the PDF (strictly, as signing does) and rewrites what placed fields can't be drawn over,
+keeping how PDF.js shows each page:
+
+- each visible annotation with a normal appearance (widgets included, picked by `/AS`) is drawn into
+  the page content as ISO 32000-1 12.5.5 says: its `BBox`, transformed by its `Matrix`, fitted to
+  its `Rect`, with its `CA` opacity; hidden ones (`F` Hidden or NoView) and pop-ups are dropped;
+  links without an appearance, and widgets without one whose field holds no value, are dropped. Then every page's `/Annots` and the catalog's
+  `/AcroForm` are removed;
+- a rotated, cropped or offset page has its content wrapped in `q <turn> cm <-origin> cm <crop> re W n
+  … Q`, and gets a media box and crop box of the visible size at the origin, `/Rotate 0`, and no
+  bleed, trim or art box. The editor's normalized coordinates are measured on the displayed page,
+  which is this page, so fields placed on the original land in the same place.
+
+A PDF that needs no change is stored byte for byte. A changed one is saved, read back and checked
+with `validateFieldsPdf`. It is refused (`PdfUploadRefused`, `422` with the route's own `error`, a
+`reason` and maybe a `page`) when encrypted, unreadable, outside 1–100 pages, an XFA form, a form
+with `NeedAppearances`, a visible annotation with no appearance, a page with `UserUnit` other than 1,
+a visible area that is empty or over 14,400 points a side, or a rotation that isn't a multiple of 90.
+Every refusal is logged (`console.warn`) and every rewrite (`console.info`) with the route, tenant,
+subject, size, SHA-256, PDF version, producer and creator (printable ASCII, truncated) and the
+reason's facts (page, subtype): never the content, a title or the file name.
+
+What changed is kept beside the stored PDF, never the uploaded file: `uploaded_sha256` and
+`upload_changes_json` (`{formFields, annotations, links, pages}`) on `artifacts`, `templates` and
+(`staged_…`) `editor_sessions`, carried to the template an editor saves and to one made from an
+uploaded envelope. The certificate (JSON `upload`, the delivery PDF's Document section) shows them
+as unsealed database values; the sealed source is the stored PDF.
 
 | Field | What is drawn |
 | --- | --- |
@@ -309,7 +341,7 @@ tables:
 | `templates` | The source PDF's object key, `roles_json` and `fields_json` (placed fields; `[]` for none; pre-filled ones, type `Prefill`, nobody's, with a name, label and maybe a default), the host's `name` and `metadata_json`, and `default_signers_json` (who usually signs as some roles, `default-signers.ts`; the one part of a template that can change, and never evidence) |
 | `envelopes` | Tenant, template, status, creation time, `request_sha256`, `details_json` |
 | `tasks` | One per recipient: role, name, email (immutable by trigger), routing order, status, `expires_at`, `details_json` |
-| `artifacts` | Each envelope's initial document (D0): object key and SHA-256. With pre-filled fields, D0 is the template's PDF with their values drawn on it when the envelope was sent (`prefill.ts`: loaded and saved as a signature's output is, so the same values give the same bytes and a retry stores the same D0); the envelope's `fields_json` then keeps its signers' fields only, and `details_json` the values (`prefill`) |
+| `artifacts` | Each envelope's initial document (D0): object key and SHA-256; for an upload Esign changed, `uploaded_sha256` and `upload_changes_json` (Uploaded PDFs, above). With pre-filled fields, D0 is the template's PDF with their values drawn on it when the envelope was sent (`prefill.ts`: loaded and saved as a signature's output is, so the same values give the same bytes and a retry stores the same D0); the envelope's `fields_json` then keeps its signers' fields only, and `details_json` the values (`prefill`) |
 | `access_codes` | One-time page codes (hashed) with scope, tenant, subject, origin, expiry, `used_at`, and how a recipient code was issued (`entry_json`) |
 | `access_sessions` | Page sessions (hashed tokens) with the same fields and `otp_verified_at` |
 | `invitations` | One per task Esign invites by email: the SHA-256 of its latest link's token, when it was reserved and sent |
@@ -596,7 +628,7 @@ by the same live session with the same input and values, and returns the same si
 | Route | Auth | Purpose |
 | --- | --- | --- |
 | `POST /api/template-editing-sessions` | Management | `{allowedParentOrigin, roles?, sourceTemplateId?, envelopeId?, prefill?}` (`envelopeId`: an upload draft's own document and roles, instead of a template) (`prefill`: the host's pre-filled fields, the only ones offered); returns `{sessionId, url}`, the code in the URL fragment |
-| `POST /api/template-editing-sessions/:id/source` | Management | The PDF bytes (`Content-Type: application/pdf`, at most 5 MiB and 100 pages), once, before the page is opened |
+| `POST /api/template-editing-sessions/:id/source` | Management | The PDF bytes (`Content-Type: application/pdf`, at most 5 MiB and 100 pages), once, before the page is opened; prepared as Uploaded PDFs says, `{ok, changes}` |
 | `GET /api/template-editing-sessions/:id` | Management | `{templateId}` once saved, else null |
 | `GET /editor/page/:id` | — | The editor page, framable only by the session's parent origin |
 | `POST /api/public/editor/exchange` | Same origin | `{pageId, code}` → `{token}` |
@@ -633,7 +665,8 @@ to the parent origin. A message is only a prompt: the host's backend reads the r
 `GET /api/template-editing-sessions/:id`. One session saves once; another version needs a new
 session.
 
-Saved fields use coordinates normalized to the displayed page's top-left. A save allows at most 20
+Saved fields use coordinates normalized to the displayed page's top-left. A file sent with a save
+is prepared as Uploaded PDFs says before its fields are checked. A save allows at most 20
 roles and 200 fields, refuses rotated pages and overlapping fields, and requires exactly one
 Signature field per role and no field types other than Signature, Date signed and Title.
 

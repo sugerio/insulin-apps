@@ -60,8 +60,9 @@ Esign confirms it; Esign tries again every ten minutes, and sends it then.
 
 To send a PDF of your own without making a template, choose **New envelope** › **Upload and send** on **Envelopes**. Three steps:
 
-1. **Document and signers.** Choose the PDF (up to 5 MiB and 100 pages, with no form fields or annotations, pages not
-   rotated) and its **Document name**. Add the signers in signing order (**Add signer**, and the arrows to reorder), each
+1. **Document and signers.** Choose the PDF (up to 5 MiB and 100 pages; Esign prepares it for signing as
+   [What Esign does to a PDF](/docs/esign/templates#what-esign-does-to-a-pdf) says, and tells you what it changed) and
+   its **Document name**. Add the signers in signing order (**Add signer**, and the arrows to reorder), each
    with a **Role** you name, such as `partner` (letters, digits, `-` and `_`, different for each), their **Name** and
    **Email**, and an optional title and company. A message and a sign-by day are optional. **Next: place fields**.
 2. **Fields.** The field editor opens on the PDF, with a role for each signer ("partner — Pat Partner"). Place each

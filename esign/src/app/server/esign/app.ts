@@ -27,6 +27,7 @@ import { mergeTags, mountTagRoutes, parseTagFilter, parseTags, taggedIds, tagsBy
 import { mountMemberRoutes, recordMember } from './members.ts';
 import { deleteDraftObjects, deleteReplacedDocuments, envelopeDocument, initialDocumentId, mountEnvelopeDocumentRoutes } from './envelope-documents.ts';
 import { parsePrefill, PrefillDoesNotFit, resolvePrefill, stampPrefill } from './prefill.ts';
+import { parseUploadChanges, pdfRefusalBody, PdfUploadRefused, preparePdfUpload, type PreparedPdf, uploadRecord } from './pdf-upload.ts';
 import { memberStatusConfigured, organizationNow, STATUS_IDS_MAX, STATUS_TIMEOUT_MS, type DirectoryEnv, type OrganizationNow } from './directory.ts';
 import { deferOrganization, dueDrafts, dueOrganizations, LEASE_MARGIN_MS, parseSendAt, readCursor, recordScheduleFailure, releaseLease, restWaiting, SCHEDULED_BUDGET_MS, SCHEDULED_PER_RUN, scheduledBy, scheduledCaller, scheduleView, splitDraft, takeLease, writeCursor, type Schedule } from './scheduled-send.ts';
 
@@ -340,14 +341,17 @@ app.post('/api/templates', bodyLimit({ maxSize: MAX_PDF_BYTES + 65536 }), async 
   if (defaultSigners === 'invalid') return context.json({ error: 'invalid_template' }, 422);
   try { await assertRenderableRecipientNames(defaultSignerNames(defaultSigners)); }
   catch { return context.json({ error: 'unsupported_recipient_name' }, 422); }
-  const bytes = new Uint8Array(await file.arrayBuffer());
-  try {
-    const pdf = await PDFDocument.load(bytes, { throwOnInvalidObject: true });
-    if (pdf.getPageCount() < 1 || pdf.getPageCount() > 100) throw new Error('invalid page count');
-  } catch { return context.json({ error: 'invalid_pdf' }, 422); }
+  // Flattened and reoriented as an envelope's upload is (pdf-upload.ts), so placed fields can be signed on it.
+  let prepared: PreparedPdf;
   const id = crypto.randomUUID();
+  try { prepared = await preparePdfUpload(new Uint8Array(await file.arrayBuffer()), { route: 'template', tenantId: context.get('tenantId'), subjectId: id }); }
+  catch (error) {
+    if (error instanceof PdfUploadRefused) return context.json(pdfRefusalBody('invalid_pdf', error), 422);
+    throw error;
+  }
+  const [uploadedSha256, changesJson] = uploadRecord(prepared);
   const key = `templates/${id}/source.pdf`;
-  const stored = await context.env.ARTIFACTS.put(key, bytes, { onlyIf: { etagDoesNotMatch: '*' }, httpMetadata: { contentType: 'application/pdf' } });
+  const stored = await context.env.ARTIFACTS.put(key, prepared.bytes, { onlyIf: { etagDoesNotMatch: '*' }, httpMetadata: { contentType: 'application/pdf' } });
   if (!stored) return context.json({ error: 'storage_conflict' }, 503);
   // An ambiguous D1 failure may have committed. Keep the object for later reconciliation;
   // deleting it here could leave a committed template without its source. The template, its shares and
@@ -355,12 +359,12 @@ app.post('/api/templates', bodyLimit({ maxSize: MAX_PDF_BYTES + 65536 }), async 
   const tenantId = context.get('tenantId'), caller = context.get('caller'), now = Date.now(), db = context.env.DB;
   const given = sharesFor(shares, caller);
   await db.batch([
-    db.prepare('INSERT INTO templates (id, tenant_id, object_key, roles_json, created_at, name, metadata_json, default_signers_json, owner_user_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
-      .bind(id, tenantId, key, JSON.stringify(roles), now, name, JSON.stringify(metadata ?? {}), JSON.stringify(defaultSigners ?? {}), caller.userId),
+    db.prepare('INSERT INTO templates (id, tenant_id, object_key, roles_json, created_at, name, metadata_json, default_signers_json, owner_user_id, uploaded_sha256, upload_changes_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+      .bind(id, tenantId, key, JSON.stringify(roles), now, name, JSON.stringify(metadata ?? {}), JSON.stringify(defaultSigners ?? {}), caller.userId, uploadedSha256, changesJson),
     ...shareInserts(db, tenantId, 'template', id, given, caller.userId, now),
     ...tagWrites(db, tenantId, caller.userId, 'template', id, tags),
   ]);
-  return context.json({ id, ...(name ? { name } : {}), metadata: metadata ?? {}, roles, defaultSigners: defaultSigners ?? {}, tags }, 201);
+  return context.json({ id, ...(name ? { name } : {}), metadata: metadata ?? {}, roles, defaultSigners: defaultSigners ?? {}, tags, changes: prepared.changes }, 201);
 });
 
 /** A multipart field holding JSON, parsed by `parse`; absent is the parser's undefined. */
@@ -517,8 +521,11 @@ async function templateFromEnvelope(context: import('hono').Context<Env>): Promi
   if (typeof input.fromEnvelope !== 'string' || name === 'invalid' || tags === 'invalid' || shares === 'invalid' || (input.defaultSigners !== undefined && typeof input.defaultSigners !== 'boolean')) return context.json({ error: 'invalid_template' }, 422);
   const id = input.fromEnvelope, db = context.env.DB, tenantId = context.get('tenantId'), caller = context.get('caller');
   if (!await documentRole(db, tenantId, caller, 'envelope', id)) return context.json({ error: 'not_found' }, 404);
-  const envelope = await db.prepare('SELECT template_id, status, details_json, roles_json, fields_json FROM envelopes WHERE id = ? AND tenant_id = ?').bind(id, tenantId)
-    .first<{ template_id: string | null; status: string; details_json: string; roles_json: string | null; fields_json: string | null }>();
+  const envelope = await db.prepare(`SELECT template_id, status, details_json, roles_json, fields_json,
+    (SELECT a.uploaded_sha256 FROM artifacts a WHERE a.envelope_id = envelopes.id) AS uploaded_sha256,
+    (SELECT a.upload_changes_json FROM artifacts a WHERE a.envelope_id = envelopes.id) AS upload_changes_json
+    FROM envelopes WHERE id = ? AND tenant_id = ?`).bind(id, tenantId)
+    .first<{ template_id: string | null; status: string; details_json: string; roles_json: string | null; fields_json: string | null; uploaded_sha256: string | null; upload_changes_json: string | null }>();
   if (!envelope) return context.json({ error: 'not_found' }, 404);
   if (envelope.template_id !== null || envelope.status === DRAFT || !envelope.roles_json || !envelope.fields_json) return context.json({ error: 'not_an_uploaded_envelope' }, 409);
   const from = JSON.parse(envelope.roles_json) as string[];
@@ -546,8 +553,9 @@ async function templateFromEnvelope(context: import('hono').Context<Env>): Promi
   if (!await context.env.ARTIFACTS.put(key, document, { onlyIf: { etagDoesNotMatch: '*' }, httpMetadata: { contentType: 'application/pdf' } })) return context.json({ error: 'storage_conflict' }, 503);
   const given = sharesFor(shares, caller);
   await db.batch([
-    db.prepare("INSERT INTO templates (id, tenant_id, object_key, roles_json, fields_json, created_at, name, metadata_json, default_signers_json, owner_user_id, status) VALUES (?, ?, ?, ?, ?, ?, ?, '{}', ?, ?, 'active')")
-      .bind(templateId, tenantId, key, JSON.stringify(roles), JSON.stringify(fields), now, templateName, JSON.stringify(defaultSigners), caller.userId),
+    // It keeps the record of what was changed when the document was uploaded.
+    db.prepare("INSERT INTO templates (id, tenant_id, object_key, roles_json, fields_json, created_at, name, metadata_json, default_signers_json, owner_user_id, status, uploaded_sha256, upload_changes_json) VALUES (?, ?, ?, ?, ?, ?, ?, '{}', ?, ?, 'active', ?, ?)")
+      .bind(templateId, tenantId, key, JSON.stringify(roles), JSON.stringify(fields), now, templateName, JSON.stringify(defaultSigners), caller.userId, envelope.uploaded_sha256, envelope.upload_changes_json),
     ...shareInserts(db, tenantId, 'template', templateId, given, caller.userId, now),
     ...tagWrites(db, tenantId, caller.userId, 'template', templateId, tags),
   ]);
@@ -1089,9 +1097,14 @@ app.get('/api/envelopes/:id', async (context) => {
   // Scheduled, also when it sends or why it didn't (scheduled-send.ts), apart from the request.
   let draft: unknown, scheduled: { sendAt?: string; sendError?: string } = {};
   if (envelope.status === DRAFT) { const split = splitDraft(envelope.draft_json); draft = split.request; scheduled = scheduleView(split.schedule); }
-  // A draft whose document is uploaded with it: whether it has one yet, and the roles and fields placed on it so far.
+  // A draft whose document is uploaded with it: whether it has one yet, what Esign changed in it when it was uploaded
+  // (pdf-upload.ts), and the roles and fields placed on it so far.
+  const document = envelope.status === DRAFT && envelope.template_id === null
+    ? await context.env.DB.prepare('SELECT upload_changes_json FROM artifacts WHERE id = ? AND envelope_id = ?').bind(initialDocumentId(id), id).first<{ upload_changes_json: string | null }>()
+    : null;
   const upload = envelope.status === DRAFT && envelope.template_id === null ? {
-    document: !!await context.env.DB.prepare('SELECT 1 FROM artifacts WHERE id = ? AND envelope_id = ?').bind(initialDocumentId(id), id).first(),
+    document: !!document,
+    changes: parseUploadChanges(document?.upload_changes_json),
     roles: envelope.roles_json ? JSON.parse(envelope.roles_json) as string[] : [],
     fields: placedFields(envelope.fields_json ?? '[]', true),
   } : undefined;

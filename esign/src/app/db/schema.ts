@@ -37,6 +37,12 @@ export const templates = sqliteTable('templates', {
    * editor before it is ready; it starts no envelope, and the editor changes it in place until it is saved as active.
    */
   status: text('status').notNull().default('active'),
+  /**
+   * When its PDF was flattened or reoriented on upload (pdf-upload.ts): the SHA-256 of the file as uploaded, and what
+   * was changed (JSON `{formFields, annotations, links, pages}`). Null when it was stored as it came.
+   */
+  uploaded_sha256: text('uploaded_sha256'),
+  upload_changes_json: text('upload_changes_json'),
 }, (table) => [
   index('templates_by_tenant').on(table.tenant_id, table.created_at),
   index('templates_by_owner').on(table.tenant_id, table.owner_user_id, table.created_at),
@@ -100,6 +106,9 @@ export const artifacts = sqliteTable('artifacts', {
   envelope_id: text('envelope_id').notNull().unique().references(() => envelopes.id),
   object_key: text('object_key').notNull().unique(),
   sha256: text('sha256').notNull(),
+  /** An uploaded document flattened or reoriented on upload (pdf-upload.ts): as on `templates`. Null otherwise. */
+  uploaded_sha256: text('uploaded_sha256'),
+  upload_changes_json: text('upload_changes_json'),
 })
 
 /**
@@ -206,6 +215,9 @@ export const editorSessions = sqliteTable('editor_sessions', {
   preset_roles_json: text('preset_roles_json').notNull().default('[]'),
   staged_object_key: text('staged_object_key'),
   staged_sha256: text('staged_sha256'),
+  /** The staged PDF, when it was flattened or reoriented on upload: as on `templates`, for the template it saves. */
+  staged_uploaded_sha256: text('staged_uploaded_sha256'),
+  staged_changes_json: text('staged_changes_json'),
   result_template_id: text('result_template_id').references(() => templates.id),
   /** The name and metadata (JSON) the saved template gets; none means the source template's. */
   template_name: text('template_name'),

@@ -10,5 +10,9 @@ test('a refused save says why, and is marked as refused (not uncertain)', () => 
   assert.match(refusal({ error: 'invalid_pdf_or_fields' }).message, /overlap/);
   assert.match(refusal({ error: 'invalid_roles' }).message, /open it again/);
   assert.match(refusal({}).message, /weren't accepted/);
+  // A PDF chosen in the editor that Esign can't prepare for signing: why, and what to do.
+  assert.match(refusal({ error: 'invalid_pdf_or_fields', reason: 'pdf_encrypted' }).message, /password-protected or encrypted/);
+  assert.match(refusal({ error: 'invalid_pdf_or_fields', reason: 'pdf_page_size', page: 4 }).message, /^Page 4 is empty or larger than 200 inches/);
+  assert.match(refusal({ error: 'invalid_pdf_or_fields', reason: 'something_new' }).message, /overlap/, 'an unknown reason falls back on the error');
   assert.equal(refusal({}).refused, true);
 });

@@ -116,6 +116,9 @@ What the certificate doesn't establish, it says:
 - each signer's name, email address, role and the consent text they agreed to are sealed with their signing record, and
   shown as such; the envelope's other current details, such as each signer's status, are read from the database and
   aren't bound by the seal;
+- when Esign flattened or reoriented the PDF on upload ([What Esign does to a PDF](/docs/esign/templates#what-esign-does-to-a-pdf)),
+  the certificate shows the SHA-256 of the file as uploaded and what was changed, from the database and not bound by the
+  seal; the source the seal binds is the changed PDF, which every signer saw and signed;
 - for a signing link issued, the IP address and browser are those of whoever issued the link (a member or the host
   product's server), not the signer's;
 - who a signer is, beyond control of their email address at the time (and any sign-in the host reported), isn't
@@ -143,7 +146,10 @@ The field editor opens the same way, with its own kind of code and session that 
 
 Everything is in Esign's one database, scoped to your organization:
 
-- templates (the PDF, roles and placed fields), envelopes, signer tasks and each envelope's initial document;
+- templates (the PDF, roles and placed fields), envelopes, signer tasks and each envelope's initial document; for a PDF
+  Esign changed on upload, the SHA-256 of the file as uploaded and what was changed, never the file itself. A refused
+  upload isn't stored: its reason, size, SHA-256, PDF version and the producing software's name are logged, never its
+  content or file name;
 - one record per signature, the drawn images and each signer's output PDF;
 - the seal and the delivery PDF of each completed envelope;
 - the audit trail;

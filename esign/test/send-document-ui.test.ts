@@ -180,3 +180,23 @@ test('Upload and send: "Also save as a template" saves one once sent, and the en
     assert.equal(`${app.location.pathname}${app.location.search}`, `/envelopes/${ID}?savedAsTemplate=77777777-7777-4777-8777-777777777777`);
   } finally { await app.unmount(); }
 });
+
+test('a PDF Esign prepared says what changed, where it is chosen; a PDF it can\'t prepare says why and what to do', async () => {
+  const draft = { recipients: [{ role: 'partner', name: 'Pat Partner', email: 'pat@partner.example', delivery: 'email' }], documentName: 'Reseller agreement' };
+  const app = await renderMember(`/envelopes/send?draft=${ID}`, (c) => {
+    if (c.path === '/api/me') return json(EDITOR);
+    if (c.path.startsWith('/api/contacts')) return json({ contacts: [] });
+    if (c.path.startsWith('/api/tags?')) return json({ tags: [] });
+    if (c.path === `/api/envelopes/${ID}/document`) return json({ error: 'unsupported_pdf', reason: 'pdf_annotation_without_appearance', page: 3 }, 422);
+    if (c.path === `/api/envelopes/${ID}` && c.method === 'POST') return json({ id: ID, status: 'DRAFT' });
+    if (c.path === `/api/envelopes/${ID}`) return json({ id: ID, templateId: null, status: 'DRAFT', tasks: [], draft, upload: { document: true, changes: { formFields: 2, annotations: 0, links: 1, pages: 1 }, roles: ['partner'], fields: [] }, owner: OWNER, myRole: 'owner', tags: [] });
+  });
+  try {
+    assert.match(app.text(), /Esign prepared this PDF for signing: 2 form fields flattened into the page: the values stay, they can't be edited; 1 link removed: the text stays, it no longer opens anything; 1 page redrawn upright, at the size shown \(it was rotated or cropped\)\. Signers see and sign it as it is now/);
+    // Another PDF chosen: the notice was about the one before.
+    await app.act(async () => { app.byId('send-pdf').props.onChange({ target: { files: [pdf()] } }); });
+    assert.doesNotMatch(app.text(), /Esign prepared this PDF/);
+    await app.click(app.button('Next: place fields'), 'Next');
+    assert.match(app.text(), /A comment or mark on page 3 doesn't say how it looks, so Esign can't flatten it as you see it\. Remove it, or open it, print it to PDF \(Save as PDF\), and upload the new file\./);
+  } finally { await app.unmount(); }
+});

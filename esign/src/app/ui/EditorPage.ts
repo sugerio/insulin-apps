@@ -1,4 +1,5 @@
 import React from 'react';
+import {describePdfRefusal} from '../lib/upload-changes.ts';
 import {FieldEditor,type Field,type EditorHandle,type PrefillCatalogEntry} from './FieldEditor.ts';
 import {readSaveCall} from './editor-save-protocol.ts';
 import {consumeEditorFragment} from './editor-client.ts';
@@ -26,8 +27,10 @@ async function openSession(pageId:string,code:string):Promise<Session>{
 }
 
 /** Why the server refused a save, as the editor shows it: nothing was saved, and the fields can be fixed. */
-export function refusal(body:{error?:unknown;message?:unknown}):Error&{refused:true}{
-  const text=body.error==='invalid_signing_fields'&&typeof body.message==='string'?`${body.message.replace(/^Role (\S+): missing Signature field$/,'Role $1: add a Signature field').replace(/^Role (\S+): no required Signature field$/,'Role $1: make at least one Signature field required')}.`
+export function refusal(body:{error?:unknown;message?:unknown;reason?:unknown;page?:unknown}):Error&{refused:true}{
+  // A PDF chosen in the editor that Esign can't prepare for signing (server/esign/pdf-upload.ts) says why.
+  const pdf=typeof body.reason==='string'?describePdfRefusal(body.reason,typeof body.page==='number'?body.page:undefined):null;
+  const text=pdf?pdf:body.error==='invalid_signing_fields'&&typeof body.message==='string'?`${body.message.replace(/^Role (\S+): missing Signature field$/,'Role $1: add a Signature field').replace(/^Role (\S+): no required Signature field$/,'Role $1: make at least one Signature field required')}.`
     :body.error==='invalid_pdf_or_fields'?'Some fields overlap, or one doesn\'t fit on its page: move them apart and save again.'
     :body.error==='invalid_roles'?'The roles changed since the editor opened: close it and open it again.'
     :'The fields weren\'t accepted. Check them and save again.';

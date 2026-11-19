@@ -43,6 +43,13 @@
       "when": 1794823003604,
       "tag": "0005_prefill_catalog",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1795052888842,
+      "tag": "0006_pdf_upload_changes",
+      "breakpoints": true
     }
   ]
 }

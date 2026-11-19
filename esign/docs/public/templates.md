@@ -87,8 +87,28 @@ Rules the editor and the server check:
 - every role has at least one required Signature field, and only these three field types are used;
 - at most 20 fields per template can be signed, and fields don't overlap;
 - each field is at least 20 by 10 points and stays on its page;
-- the PDF's pages are not rotated or cropped, and the PDF has no form fields or annotations. A PDF that breaks these rules
-  can still be uploaded through the API with a signature page, but an envelope sent from it with placed fields is refused.
+- the PDF has no form fields or annotations, and its pages are upright and uncropped. Esign makes it so when the PDF is
+  uploaded (below). A template uploaded before Esign did can break these rules: it can still be signed on a signature
+  page, but an envelope sent from it with placed fields is refused.
+
+## What Esign does to a PDF
+
+Fields are drawn into the page itself, where the page shows them. So when a PDF is uploaded, for a template or with
+**Upload and send**, Esign changes what would get in the way, and keeps how the page looks:
+
+- **form fields** are flattened into the page: their values stay as shown, and they can no longer be edited;
+- **comments, highlights and stamps** are flattened into the page the same way;
+- **links** are removed: their text stays, it no longer opens anything;
+- **rotated or cropped pages** are redrawn upright, at the size they are shown.
+
+Esign says what it changed. Signers see and sign the PDF as it is then, and the certificate of completion also records
+the SHA-256 of the file as uploaded, with what was changed (a database record, not bound by the seal). A PDF that needed
+no change is kept exactly as uploaded.
+
+Some PDFs can't be prepared, and the upload says why: a password-protected or encrypted PDF, a damaged one, more than
+100 pages, a dynamic (XFA) form, a filled-in form field or a comment that doesn't say how it looks, or a page in unusual units, at an
+odd angle or larger than 200 inches. Printing it to PDF (Save as PDF) usually makes one Esign can use. The API's reasons
+are listed in [Uploaded PDFs](/docs/esign/api#uploaded-pdfs).
 
 ## Pre-filled fields
 

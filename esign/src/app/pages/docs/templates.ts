@@ -15,9 +15,24 @@ export const templates: DocTopic = {
       body: [
         p('A template is a PDF and the ', b('roles'), ' that sign it, in signing order. A role is a name for a part in the document, such as ', code('partner'), ' or ', code('seller'), '; when you send an envelope, you name the person for each role.'),
         ul(
-          'The PDF can be up to 5 MB and 100 pages.',
+          ['The PDF can be up to 5 MB and 100 pages. Esign prepares it for signing when you upload it: see ', h(DocLink, { to: 'templates', section: 'the-pdf' }, 'What Esign does to a PDF'), '.'],
           'A template has 1 to 20 roles. Role names use letters, digits, - and _ (no spaces), up to 64 characters, and each is different.',
         ),
+      ],
+    },
+    {
+      id: 'the-pdf',
+      title: 'What Esign does to a PDF',
+      body: [
+        p('Fields are drawn into the page itself, where the page shows them. So when you upload a PDF, for a template or with Upload and send, Esign changes what would get in the way, and keeps how the page looks:'),
+        ul(
+          [b('Form fields'), ' are flattened into the page: their values stay as you see them, and they can no longer be edited.'],
+          [b('Comments, highlights and stamps'), ' are flattened into the page the same way.'],
+          [b('Links'), ' are removed: their text stays, it no longer opens anything.'],
+          [b('Rotated or cropped pages'), ' are redrawn upright, at the size they are shown.'],
+        ),
+        p('Esign tells you when it changed something. Signers see and sign the PDF as it is then, and the certificate of completion records the fingerprint (SHA-256) of the file as you uploaded it, with what was changed. A PDF that needed no change is kept exactly as uploaded.'),
+        p('Some PDFs can\'t be prepared, and Esign says why when you upload one: a password-protected or encrypted PDF, a damaged one, more than 100 pages, a dynamic (XFA) form, a filled-in form field or a comment that doesn\'t say how it looks, or a page in unusual units, at an odd angle or larger than 200 inches. Printing it to PDF (Save as PDF) usually makes one Esign can use.'),
       ],
     },
     {

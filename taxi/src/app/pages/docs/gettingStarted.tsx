@@ -24,7 +24,8 @@ export const gettingStarted: DocTopic = {
           <p>
             <b>Who it is for:</b> residents of every province and territory, also in the year they moved to or from Canada, with income from
             work, pensions, EI, investments, self-employment (a business, a profession, farming or fishing), rent or abroad. For a Quebec resident
-            it also prepares the Quebec return (TP-1) from the RL slips.
+            it also prepares the Quebec return (TP-1) from the RL slips, and prints it on Revenu Québec's forms after the federal ones: the two
+            returns are mailed apart, the federal one to the CRA and the TP-1 to Revenu Québec, each signed.
           </p>
         </>
       ),

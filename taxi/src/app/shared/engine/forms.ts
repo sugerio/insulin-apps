@@ -2,10 +2,10 @@ import { Dec } from "./decimal.ts";
 import type { EngineInput, Evaluation } from "./evaluate.ts";
 import type { FormSpec, PersonalFact, RuleSet } from "./rules.ts";
 
-// What a return puts on each CRA form (forms.yaml), and where: the amounts and counts worked out by the same engine as
-// the return's lines, ticks from yes/no formulas, and Step 1's name, birth date and province from the person's facts,
-// placed by the measured layout. Zero and missing amounts are left out (the form's box stays blank), unless the CRA asks
-// for the zero.
+// What a return puts on each CRA or Revenu Québec form (forms.yaml), and where: the amounts and counts worked out by the
+// same engine as the return's lines, ticks from yes/no formulas, and Step 1's name, birth date and province from the
+// person's facts, placed by the measured layout. Zero and missing amounts are left out (the form's box stays blank),
+// unless the form asks for the zero.
 
 export interface PlacedAmount {
   /** The row or line code it fills, `<row>@<n>` for a row's n-th box, or `<row>@<column>` in a bracket table. */
@@ -51,24 +51,28 @@ export function splitName(name: string): { first: string; last: string } {
 }
 
 /**
- * The personal facts for a person's forms, from the engine's input. The spouse's name comes from the input when their
- * return is prepared here too; otherwise the caller gives it (the household's spouse), or it stays blank. The engine
- * knows no country, so the caller names the province (a code otherwise).
+ * The personal facts for a person's forms, from the engine's input. The spouse's name and birth date come from the
+ * input when their return is prepared here too; otherwise the caller gives them (the household's spouse), or they stay
+ * blank. The engine knows no country, so the caller names the province (a code otherwise).
  */
 export function personalFacts(
   input: EngineInput,
   personId: string,
-  options: { spouseName?: string | null; provinceName?: (code: string) => string } = {},
+  options: { spouseName?: string | null; spouseBirthDate?: string | null; provinceName?: (code: string) => string } = {},
 ): PersonalFacts {
   const person = input.people.find((each) => each.id === personId)!;
-  const spouse = options.spouseName ?? input.people.find((each) => each.id !== personId)?.name ?? null;
+  const other = input.people.find((each) => each.id !== personId);
+  const spouse = options.spouseName ?? other?.name ?? null;
   const { first, last } = splitName(person.name);
+  const spouseName = spouse === null ? null : splitName(spouse);
   return {
     firstName: first || null,
     lastName: last || null,
     birthDate: person.birthDate,
     province: person.province === null ? null : (options.provinceName?.(person.province) ?? person.province),
-    spouseFirstName: spouse === null ? null : splitName(spouse).first || null,
+    spouseFirstName: spouseName?.first || null,
+    spouseLastName: spouseName?.last || null,
+    spouseBirthDate: options.spouseBirthDate ?? other?.birthDate ?? null,
   };
 }
 
@@ -91,7 +95,7 @@ export function fillForms(rules: RuleSet, evaluation: Evaluation, personId: stri
         const fact = facts[field.fact];
         if (!fact) continue;
         // A date in boxes is its digits, one per cell (year, month, day); elsewhere it is written as stored.
-        const text = field.cell !== undefined && field.fact === "birthDate" ? fact.replaceAll("-", "") : fact;
+        const text = field.cell !== undefined && (field.fact === "birthDate" || field.fact === "spouseBirthDate") ? fact.replaceAll("-", "") : fact;
         marks.push({ kind: "text", key, page, x, y, text, ...(field.width === undefined ? {} : { width: field.width }), ...(field.cell === undefined ? {} : { cell: field.cell }) });
         continue;
       }
@@ -134,11 +138,15 @@ export function fillForms(rules: RuleSet, evaluation: Evaluation, personId: stri
   return filled;
 }
 
-/** An amount as written in a form's box: dollars with thousands separators, and cents; a negative one in brackets. */
-export function formAmount(value: Dec): { dollars: string; cents: string } {
+/**
+ * An amount as written in a form's box: dollars with thousands separators, and cents. A negative one is in brackets on
+ * the CRA's forms ("if negative, show in brackets") and has a minus sign on Revenu Québec's.
+ */
+export function formAmount(value: Dec, negativeStyle: "brackets" | "minus" = "brackets"): { dollars: string; cents: string } {
   const negative = value.isNegative();
   const [whole, fraction = ""] = value.abs().roundTo(2, "HALF_UP").toString().split(".");
   const dollars = whole!.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
   const cents = fraction.padEnd(2, "0");
-  return negative ? { dollars: `(${dollars}`, cents: `${cents})` } : { dollars, cents };
+  if (!negative) return { dollars, cents };
+  return negativeStyle === "minus" ? { dollars: `-${dollars}`, cents } : { dollars: `(${dollars}`, cents: `${cents})` };
 }

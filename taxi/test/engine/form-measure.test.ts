@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { measureForm, type Shape, type TextItem } from "../../scripts/form-measure.ts";
+import { measureForm, measureRqForm, type Shape, type TextItem } from "../../scripts/form-measure.ts";
 
 // The layout script's measuring (scripts/form-measure.ts), on small made-up pages drawn the way the CRA's print forms
 // draw their boxes. The real forms are measured by npm run form-layout; these pin each kind of box it has to find.
@@ -112,5 +112,133 @@ describe("measuring a form's boxes", () => {
   it("refuses a label that isn't on the page, or is there twice with nothing to tell them apart", () => {
     expect(() => measureForm([], [], { x: { kind: "text", page: 1, label: "First name" } })).toThrow(/no "First name"/);
     expect(() => measureForm([text(516, 339.6, "Yes"), text(516, 239.6, "Yes")], [], { x: { kind: "tick", page: 1, label: "Yes" } })).toThrow(/2 times/);
+  });
+});
+
+// Revenu Québec's forms, drawn as the TP-1 and its schedules draw them: a line number 7.5 points high in a 15-point frame
+// just left of its box, the box 3 points after the frame, its cents line (a full-height line) 18 points before its end,
+// and its bottom line 3 points below the number's baseline.
+const number = (x: number, y: number, value: string, page = 1, height = 7.5): TextItem => ({ page, x, y, width: 3.7 * value.length, text: value, height });
+/** A numbered amount box: the number's frame, then the box from `left` to `right`. */
+const rqBox = (frame: number, left: number, right: number, y: number, page = 1): Shape[] => [
+  stroke(frame, y - 3, frame, y + 9, page),
+  stroke(frame + 15, y - 3, frame + 15, y + 9, page),
+  ...rqAmount(left, right, y, page),
+];
+/** An amount box with no number of its own (a second column). */
+const rqAmount = (left: number, right: number, y: number, page = 1): Shape[] => [
+  fill(left, y - 3, right, y + 9, page),
+  stroke(left, y - 3, left, y + 9, page),
+  stroke(right - 18, y - 3, right - 18, y + 9, page),
+  stroke(left, y - 3, right - 18, y - 3, page),
+  stroke(right - 18, y - 3, right, y - 3, page),
+];
+
+describe("measuring Revenu Québec's boxes", () => {
+  it("finds a row's cents line right of its number, in whatever column its box is", () => {
+    const measured = measureRqForm(
+      [number(473, 441.5, "101"), number(359, 706.7, "201"), number(32, 281.1, "166"), number(165.9, 281.1, "167")],
+      [...rqBox(471, 489, 573, 441.5), ...rqBox(357, 375, 459, 706.7), ...rqBox(30.3, 47.6, 131.6, 281.1), ...rqBox(164.2, 181.5, 265.5, 281.1)],
+    );
+    expect(measured.rows).toEqual({ "101": [1, 555, 441.5], "166": [1, 113.6, 281.1], "167": [1, 247.5, 281.1], "201": [1, 441, 706.7] });
+  });
+
+  it("reads a decimal line from its number and the smaller digit after it, or from one item", () => {
+    const measured = measureRqForm(
+      [number(471.3, 613.5, "377", 1, 7), number(482.3, 613.5, "1", 1, 7), number(473, 286.1, "40.6")],
+      [...rqBox(471, 489, 573, 613.5), ...rqBox(471, 489, 573, 286.1)],
+    );
+    expect(measured.rows).toEqual({ "377.1": [1, 555, 613.5], "40.6": [1, 555, 286.1] });
+  });
+
+  it("takes the boxes after a row's own as its columns, and keys a number printed again by its page, then its order", () => {
+    const measured = measureRqForm(
+      [
+        // A work chart's row: your column, then your spouse's.
+        number(390, 247.5, "1"),
+        // Schedule P: line 64 in column 1 and column 2, then again in section 2.
+        number(359, 616.6, "64", 2),
+        number(473, 616.6, "64", 2),
+        number(359, 339.5, "64", 2),
+        // Line 199 at the foot of page 2, carried to the top of page 3.
+        number(473, 109.3, "199", 2),
+        number(473, 718.8, "199", 3),
+      ],
+      [
+        ...rqBox(384, 402, 486, 247.5),
+        ...rqAmount(489, 573, 247.5),
+        ...rqBox(357, 375, 459, 616.6, 2),
+        ...rqBox(471, 489, 573, 616.6, 2),
+        ...rqBox(357, 375, 459, 339.5, 2),
+        ...rqBox(471, 489, 573, 109.3, 2),
+        ...rqBox(471, 489, 573, 718.8, 3),
+      ],
+    );
+    expect(measured.rows).toEqual({ "1": [1, 468, 247.5], "64": [2, 441, 616.6], "p2:64": [2, 441, 339.5], "199": [2, 555, 109.3], "p3:199": [3, 555, 718.8] });
+    expect(measured.columns).toEqual({ "1": [468, 555], "64": [441, 555] });
+  });
+
+  it("skips a numbered check box and a box of digit cells, lists a code's box as plain, and marks a printed amount", () => {
+    const sin = [59.4, 71.7, 83.3, 95.3, 107.3, 119.3, 131.3, 143.3].map((x) => stroke(x, 433.1, x, 437.1));
+    const measured = measureRqForm(
+      [number(431.9, 290, "403"), number(31, 435.9, "21.1"), number(419.9, 573.4, "449"), number(473, 561.2, "16"), text(526, 561.2, "42,090", 24), text(558, 561.2, "00", 9)],
+      [
+        // Check box 403: a square right of the frame.
+        fill(430.2, 287.1, 444.7, 298.6),
+        fill(447.3, 287.1, 458.8, 298.6),
+        // A SIN's cells.
+        stroke(30.2, 433, 44.7, 444.5),
+        stroke(47.9, 433.1, 47.9, 444.6),
+        stroke(155.4, 433.1, 155.4, 444.6),
+        ...sin,
+        // Box 449: two digit cells.
+        fill(418.2, 570.5, 432.7, 582),
+        fill(435, 570.3, 459, 582.3),
+        stroke(447, 570.5, 447, 574.5),
+        stroke(458.8, 570.5, 458.8, 582),
+        ...rqBox(471, 489, 573, 561.2),
+      ],
+    );
+    expect(measured.rows).toEqual({ "16": [1, 555, 561.2], "449": [1, 458.8, 573.4] });
+    expect(measured.plain).toEqual(["449"]);
+    expect(measured.printed).toEqual(["16"]);
+  });
+
+  it("finds Step 1's boxes by their line numbers, and an answer's tick box by its label", () => {
+    const cells = [198.3, 210.3, 222.3, 234.3, 246.3, 258.3, 270.3].map((x) => stroke(x, 546.6, x, 550.6));
+    const measured = measureRqForm(
+      [number(35.9, 574.9, "1"), number(315.9, 574.9, "2"), number(173.9, 549.3, "6"), number(547.5, 661.8, "50"), text(30, 409.9, "Situation", 37), text(511.2, 397.9, "Yes", 12)],
+      [
+        stroke(30.3, 571.7, 30.3, 583.7),
+        stroke(45.3, 571.7, 45.3, 583.7),
+        fill(48.3, 571.7, 572.8, 583.7),
+        stroke(298.3, 571.7, 298.3, 583.5),
+        stroke(310.3, 571.7, 310.3, 583.7),
+        stroke(325.3, 571.7, 325.3, 583.7),
+        stroke(328.3, 571.7, 328.3, 583.5),
+        stroke(572.8, 571.7, 572.8, 583.5),
+        stroke(168.3, 546.1, 168.3, 558.1),
+        stroke(183.3, 546.1, 183.3, 558.1),
+        stroke(186.3, 546.1, 186.3, 557.8),
+        stroke(282.3, 546.1, 282.3, 557.8),
+        ...cells,
+        stroke(543.7, 658.6, 558.7, 670.6),
+        fill(561.3, 659.1, 572.8, 670.6),
+        fill(495.4, 397.6, 506.9, 409.1),
+      ],
+      {
+        lastName: { kind: "text", page: 1, line: "1" },
+        firstName: { kind: "text", page: 1, line: "2" },
+        birthDate: { kind: "comb", page: 1, line: "6" },
+        spouseSelfEmployed: { kind: "tick", page: 1, line: "50" },
+        spouseYes: { kind: "tick", page: 1, label: "Yes", below: "Situation" },
+      },
+    );
+    expect(measured.text).toEqual({ lastName: [1, 50.3, 574.9, 246], firstName: [1, 330.3, 574.9, 240.5] });
+    expect(measured.combs).toEqual({ birthDate: [1, 186.3, 549.3, 12] });
+    expect(measured.ticks).toEqual({ spouseSelfEmployed: [1, 567.1, 664.9], spouseYes: [1, 501.2, 403.4] });
+    // Step 1's numbers have no amount box.
+    expect(measured.rows).toEqual({});
+    expect(() => measureRqForm([], [], { x: { kind: "text", page: 1, line: "1" } })).toThrow(/no line 1 on page 1/);
   });
 });

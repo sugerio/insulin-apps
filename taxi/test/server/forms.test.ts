@@ -6,8 +6,9 @@ import type { FormSource } from "../../src/app/server/lib/forms.ts";
 import { rulesFor } from "../../src/app/shared/rules/index.ts";
 import { VIEWER, startServer, type TestServer } from "../support/server.ts";
 
-// Printing a return on the CRA's forms. The CRA's PDFs aren't in the repository, so these tests print on blank
-// stand-in pages of the same size and count, and read the amounts back from where they were written.
+// Printing a return on the CRA's forms (and Revenu Québec's, for a resident of Quebec). The PDFs aren't in the
+// repository, so these tests print on blank stand-in pages of the same size and count, and read the amounts back from
+// where they were written.
 
 const rules = rulesFor(2025)!;
 let server: TestServer;
@@ -23,7 +24,9 @@ function standIn(): FormSource & { fetched: string[] } {
       fetched.push(url);
       const form = [...rules.forms.values()].find((each) => each.url === url)!;
       const pdf = await PDFDocument.create();
-      for (let page = 0; page < form.pages; page += 1) pdf.addPage([612, 792]);
+      // Revenu Québec's pages are a little smaller than the CRA's.
+      const size: [number, number] = url.includes("revenuquebec.ca") ? [603, 774] : [612, 792];
+      for (let page = 0; page < form.pages; page += 1) pdf.addPage(size);
       return pdf.save();
     },
   };
@@ -161,6 +164,54 @@ describe("printing a return", () => {
     // The CRA asks for the spouse's net income even when it is zero.
     expect(near("spouseNetIncome")).toEqual(["0", "00"]);
     expect(pages[0]!.some((item) => item.text === "X" && Math.abs(item.y - field("married").y) < 4)).toBe(true);
+  });
+
+  it("prints a Quebec resident's two returns: the T1 for residents of Quebec, then Revenu Québec's TP-1, then the worksheet", async () => {
+    const source = standIn();
+    server = await startServer({ forms: source });
+    const camille = await json<Person>(server.call("POST", "/api/people", { body: { name: "Camille Roy", relationship: "self", birthDate: "1991-03-14" } }), 201);
+    await json<TaxYear>(server.call("POST", "/api/years", { body: { year: 2025, people: [camille.id] } }), 201);
+    let year = await json<TaxYear>(
+      server.call("PUT", "/api/years/2025/household", { body: { revision: 1, maritalStatus: "single", adults: [{ personId: camille.id, province: "QC", residentAllYear: true }] } }),
+    );
+    // An employer in Quebec issues a T4 and an RL-1 for the same pay.
+    year = await json<TaxYear>(
+      server.call("POST", "/api/years/2025/slips", {
+        body: { revision: year.revision, personId: camille.id, type: "T4", issuer: "Érable Conseil inc.", boxes: { 14: "62000", 17: "3744", 22: "7400", 26: "62000", 55: "306.28", 56: "62000" } },
+      }),
+      201,
+    );
+    year = await json<TaxYear>(
+      server.call("POST", "/api/years/2025/slips", {
+        body: { revision: year.revision, personId: camille.id, type: "RL1", issuer: "Érable Conseil inc.", boxes: { A: "62000", B_A: "3744", E: "6900", G: "62000", H: "306.28", I: "62000" } },
+      }),
+      201,
+    );
+    await finish(camille, year.revision);
+
+    const pages = await pagesOf(await (await download(camille.id)).arrayBuffer());
+    // The federal forms first, then the TP-1 and its schedules (no group drug plan was said, so Schedule K's premium).
+    const printed = source.fetched.map((url) => [...rules.forms.values()].find((form) => form.url === url)!);
+    expect(printed.map((form) => form.id)).toEqual(["T1QC", "TP1", "QCK", "QCU"]);
+    const tp1 = rules.forms.get("TP1")!;
+    const offset = rules.forms.get("T1QC")!.pages;
+    // Line 101 (page 2 of the TP-1): the RL-1's box A, $62,000.00, on each side of the cents line.
+    const line101 = tp1.fields.find((field) => field.key === "101")!;
+    const written = pages[offset + line101.page - 1]!.filter((item) => Math.abs(item.y - line101.y) < 0.5);
+    expect(written.map((item) => item.text)).toEqual(["62,000", "00"]);
+    expect(written[0]!.x).toBeLessThan(line101.x);
+    expect(written[1]!.x).toBeGreaterThan(line101.x);
+    // Page 1: the name in its two boxes and no spouse; never a SIN or an address.
+    const place = (key: string) => tp1.fields.find((field) => field.key === key)!;
+    const at = (key: string) => pages[offset + place(key).page - 1]!.filter((item) => Math.abs(item.y - place(key).y) < 4 && Math.abs(item.x - place(key).x) < 20).map((item) => item.text);
+    expect(at("lastName")).toEqual(["Roy"]);
+    expect(at("firstName")).toEqual(["Camille"]);
+    expect(at("spouseNo")).toEqual(["X"]);
+
+    const worksheet = pages.slice(printed.reduce((sum, form) => sum + form.pages, 0)).flat().map((item) => item.text);
+    expect(worksheet).toContain("Camille Roy: 2025 return worksheet");
+    expect(worksheet.some((text) => text.startsWith("Quebec refund (TP-1 line 478)") || text.startsWith("Quebec balance due (TP-1 line 479)"))).toBe(true);
+    expect(worksheet.join(" ")).toMatch(/Mail the two returns in two parts, each signed/);
   });
 
   it("refuses a form that isn't the one the layout was measured on", async () => {

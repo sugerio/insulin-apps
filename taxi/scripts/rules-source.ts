@@ -49,7 +49,22 @@ export function compileNamed(name: string): CompiledRules {
   return compileRules(chain, (text) => createHash("sha256").update(text).digest("hex").slice(0, 16));
 }
 
-/** The compiled JSON as written to disk. */
+/**
+ * The compiled JSON as written to disk: indented, but with whatever fits in 120 characters (a form's field, a bracket)
+ * on one line, which keeps the file readable and under the platform's limit of 1 MiB a file.
+ */
 export function serialize(compiled: CompiledRules): string {
-  return `${JSON.stringify(compiled, null, 2)}\n`;
+  return `${compact(compiled, "")}\n`;
+}
+
+function compact(value: unknown, indent: string): string {
+  const flat = JSON.stringify(value);
+  if (typeof value !== "object" || value === null || indent.length + flat.length <= 120) return flat;
+  const inner = `${indent}  `;
+  const lines = Array.isArray(value)
+    ? value.map((item) => `${inner}${compact(item ?? null, inner)}`)
+    : Object.entries(value)
+        .filter(([, item]) => item !== undefined)
+        .map(([key, item]) => `${inner}${JSON.stringify(key)}: ${compact(item, inner)}`);
+  return Array.isArray(value) ? `[\n${lines.join(",\n")}\n${indent}]` : `{\n${lines.join(",\n")}\n${indent}}`;
 }

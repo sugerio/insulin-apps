@@ -148,9 +148,9 @@ export interface Hint {
 
 /**
  * What a form's text box can hold: facts about the person that no tax line computes, kept out of the formulas. A name
- * is split at its last space (first name, last name).
+ * is split at its last space (first name, last name). The TP-1 asks for the spouse's last name and date of birth too.
  */
-export const PERSONAL_FACTS = ["firstName", "lastName", "birthDate", "province", "spouseFirstName"] as const;
+export const PERSONAL_FACTS = ["firstName", "lastName", "birthDate", "province", "spouseFirstName", "spouseLastName", "spouseBirthDate"] as const;
 export type PersonalFact = (typeof PERSONAL_FACTS)[number];
 export const FIELD_KINDS = ["amount", "count", "tick", "text"] as const;
 

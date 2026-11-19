@@ -97,7 +97,7 @@ function Results({ estimate, slips }: { estimate: Estimate; slips: SlipList }) {
             </ul>
           </section>
         ) : null}
-        <Download ready={checks.length === 0} href={`/api/years/${year.year}/returns/${owner.id}/forms`} />
+        <Download ready={checks.length === 0} quebec={Boolean(quebecRefund && quebecOwing)} href={`/api/years/${year.year}/returns/${owner.id}/forms`} />
       </CardContent>
     </Card>
   );
@@ -122,16 +122,28 @@ function Headline({ title, refund, owing }: { title?: string; refund: string | n
   );
 }
 
-/** The return on the CRA's forms, with its worksheet: only a finished return can be printed. */
-function Download({ ready, href }: { ready: boolean; href: string }) {
+/**
+ * The return on the CRA's forms (and, for a resident of Quebec, on Revenu Québec's TP-1 after them), with its
+ * worksheet: only a finished return can be printed.
+ */
+function Download({ ready, quebec, href }: { ready: boolean; quebec: boolean; href: string }) {
   return (
     <section aria-label="Your forms" className="flex flex-col gap-2 rounded-lg border p-4">
       <h2 className="text-sm font-medium">Your forms</h2>
-      <p className="text-xs text-muted-foreground">
-        The CRA's T1, the schedules and forms your return uses and the provincial forms, filled in with what Taxi knows, and a worksheet that shows how
-        each amount was worked out. Add your social insurance number, address and the other Step 1 answers by hand, sign the T1 and mail it; or copy the
-        amounts into NETFILE-certified software.
-      </p>
+      {quebec ? (
+        <p className="text-xs text-muted-foreground">
+          Both of your returns, filled in with what Taxi knows: the CRA's T1 for residents of Quebec with the schedules and forms it uses, then Revenu
+          Québec's TP-1 with its schedules, and a worksheet that shows how each amount was worked out. Add your social insurance number, address and the
+          other answers on the first pages by hand. Mail them in two parts, each signed: the federal return to the CRA, the TP-1 to Revenu Québec. Or copy
+          the amounts into tax software certified for both.
+        </p>
+      ) : (
+        <p className="text-xs text-muted-foreground">
+          The CRA's T1, the schedules and forms your return uses and the provincial forms, filled in with what Taxi knows, and a worksheet that shows how
+          each amount was worked out. Add your social insurance number, address and the other Step 1 answers by hand, sign the T1 and mail it; or copy the
+          amounts into NETFILE-certified software.
+        </p>
+      )}
       {ready ? (
         <div className="flex flex-wrap gap-2">
           <Button asChild size="sm">

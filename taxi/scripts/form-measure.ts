@@ -17,6 +17,9 @@
 // Places that aren't amount rows (Step 1 of the T1) are found by the label printed at them: a text box is the white
 // box under its label, a date's boxes are the white box under its label cut into cells by its ticks, and a tick box is
 // the small square on its label's line.
+//
+// Revenu Québec draws its forms (the TP-1 and its schedules) another way, so they have their own measuring,
+// measureRqForm, below.
 
 export interface TextItem {
   page: number;
@@ -25,6 +28,8 @@ export interface TextItem {
   y: number;
   width: number;
   text: string;
+  /** The font's height; Revenu Québec's line numbers are told from other numbers by it. */
+  height?: number;
 }
 
 /** A path the page draws, by its bounding box: a stroked line or a filled box. */
@@ -39,12 +44,19 @@ export interface Shape {
 
 export type PlaceKind = "text" | "comb" | "tick" | "amount";
 /** A place found by its label: the first item on the page that starts with `label` (below the item starting with `below`). */
-export interface PlaceSpec {
+export interface LabelPlace {
   kind: PlaceKind;
   page: number;
   label: string;
   below?: string;
 }
+/** On a Revenu Québec form, a place found by the line number printed in the frame at its left. */
+export interface LinePlace {
+  kind: "text" | "comb" | "tick";
+  page: number;
+  line: string;
+}
+export type PlaceSpec = LabelPlace | LinePlace;
 
 export type Point = [page: number, x: number, y: number];
 export interface Measured {
@@ -241,6 +253,7 @@ export function measureForm(items: TextItem[], shapes: Shape[], places: Record<s
   const combs: NonNullable<Measured["combs"]> = {};
   const tickBoxes: NonNullable<Measured["ticks"]> = {};
   for (const [key, spec] of Object.entries(places)) {
+    if (!("label" in spec)) throw new Error(`${key}: a CRA form's places are found by their labels`);
     const label = labelOf(items, spec, key);
     const fail = (what: string): never => {
       throw new Error(`${key}: no ${what} near "${spec.label}" on page ${spec.page}`);
@@ -269,15 +282,7 @@ export function measureForm(items: TextItem[], shapes: Shape[], places: Record<s
         combs[key] = [spec.page, round(ticksIn[0]! - cell), round(box!.y0 + 2.3), round(cell)];
       }
     } else if (spec.kind === "tick") {
-      // The small square on the label's line, the nearest one to it.
-      const square = fills
-        .filter((fill) => {
-          const size = fill.x1 - fill.x0;
-          return fill.page === spec.page && size >= 7 && size <= 13 && Math.abs(fill.y1 - fill.y0 - size) < 1 && Math.abs((fill.y0 + fill.y1) / 2 - (label.y + 3)) <= 6;
-        })
-        .sort((a, b) => gap(a, label) - gap(b, label))[0];
-      if (!square) fail("tick box");
-      tickBoxes[key] = [spec.page, round((square!.x0 + square!.x1) / 2), round((square!.y0 + square!.y1) / 2)];
+      tickBoxes[key] = tickBy(fills, spec, label) ?? fail("tick box");
     } else {
       // An amount box right of a label with no row number: its cents line, the baseline at the box's foot.
       const line = lines.filter((each) => each.page === spec.page && each.x > label.x + label.width && off(each, label.y) <= 3).sort((a, b) => b.x - a.x)[0];
@@ -297,7 +302,256 @@ export function measureForm(items: TextItem[], shapes: Shape[], places: Record<s
   };
 }
 
-function labelOf(items: TextItem[], spec: PlaceSpec, key: string): TextItem {
+// Revenu Québec draws its forms (the TP-1 and its schedules, on pages of 603 by 774 points) differently: each line's
+// number is printed in a small frame just left of its box, in columns that differ from form to form, and several boxes
+// can share a line (the TP-1's lines 96 to 98.2, a work chart's "you" and "your spouse" columns). A box's dollars and
+// cents are split by a vertical line, often a dotted one drawn over a solid one, 18 points before the box's right end.
+// So a row is found from its number: its cents line is a vertical line right of the number's frame, through the
+// number's baseline, with the box's bottom line (3 points below the baseline) running on 16.5 to 20.5 points past it.
+// Nothing is assumed about how far the box is from the number, so every column of every schedule is found the same
+// way; and a long line down a column of boxes isn't taken for another row's, as the bottom line has to be on this
+// row. A decimal line is printed as its number and a smaller digit ("377" "1": line 377.1), or as one item ("40.6").
+//
+// Other boxes on a row's line, before the next number, are its columns (a work chart's spouse column, Schedule F's
+// "more than $63,060"); a number printed again on its own line is the same line in another column. A number printed
+// again elsewhere is keyed by its page (p3:199), then by its order on that page (p2:64#2): "." already marks a decimal
+// line. A numbered box with no cents line (a code, a count of months) is plain, its x the box's right end; a frame with
+// a check box or a box of digit cells beside it is no row. Step 1's boxes are found by their line numbers too.
+
+/** Revenu Québec's line numbers are 7 to 7.5 points high; the text around them is 8.5 or more, a date's printed digits 9. */
+const RQ_NUMBER_HEIGHT = [6.5, 8];
+/**
+ * How far right of its cents line a box ends: 18 points, give or take the drawing's rounding. A number's frame is 14.5
+ * to 15.5 points wide, so its left edge isn't taken for a cents line.
+ */
+const RQ_CENTS = [16.5, 20.5];
+/** A code's box (box 449 of the TP-1) has a cell for each digit: at most 40 points wide, where a SIN's or a date's is wider. */
+const RQ_CODE_WIDTH = 40;
+
+interface RqNumber {
+  page: number;
+  x: number;
+  /** Where the number (and a decimal line's digit) ends. */
+  end: number;
+  y: number;
+  line: string;
+  items: TextItem[];
+}
+
+export function measureRqForm(items: TextItem[], shapes: Shape[], places: Record<string, PlaceSpec> = {}): Measured {
+  const numbers = rqNumbers(items);
+  const numberItems = new Set(numbers.flatMap((number) => number.items));
+  const verticals = shapes.filter((shape) => shape.paint === "stroke" && shape.x1 - shape.x0 < 0.5 && shape.y1 - shape.y0 >= 2.5);
+  const fills = shapes.filter((shape) => shape.paint === "fill");
+  /**
+   * A vertical line through a box on this baseline (a box runs from about 3 points below it to 9 above), at least 8
+   * points of it: the strokes of the small letters printed under a date's boxes are shorter.
+   */
+  const crosses = (line: Shape, y: number) => line.y0 <= y + 1 && line.y1 >= y + 4 && line.y1 - line.y0 >= 8;
+  /** A line the box's full height: its edge, not one of the short ticks between a date's digits. */
+  const spans = (line: Shape, y: number) => line.y0 <= y + 0.5 && line.y1 >= y + 7;
+  /** A tick between digit cells: rising from the box's foot, short of its top. */
+  const tick = (line: Shape, y: number) => line.y0 <= y + 1 && line.y1 >= y && !spans(line, y);
+  /** The bottom line of a box on this baseline, from the cents line (or before it) to the box's right end. */
+  const centsPartAt = (page: number, x: number, y: number) =>
+    shapes.some(
+      (shape) =>
+        shape.page === page &&
+        shape.paint === "stroke" &&
+        shape.y1 - shape.y0 < 0.5 &&
+        shape.y0 >= y - 4.5 &&
+        shape.y0 <= y - 1 &&
+        shape.x0 <= x + 1 &&
+        shape.x1 >= x + RQ_CENTS[0]! &&
+        shape.x1 <= x + RQ_CENTS[1]!,
+    );
+  /** The right edge of the frame around a number: a vertical line, or a framed box, just past it. */
+  const frameOf = (number: RqNumber): number | undefined => {
+    const edges = shapes
+      .filter((shape) => shape.page === number.page && shape.x1 >= number.end - 0.5 && shape.x1 <= number.end + 8 && shape.y0 <= number.y + 1 && shape.y1 >= number.y + 4)
+      .filter((shape) => (shape.x1 - shape.x0 < 0.5 ? shape.paint === "stroke" : shape.x0 <= number.x + 1 && shape.x1 - shape.x0 <= 25))
+      .map((shape) => shape.x1);
+    return edges.length > 0 ? Math.min(...edges) : undefined;
+  };
+  /** The next number on the line: a box ends before its frame, which starts up to 6 points left of the number. */
+  const limitOf = (number: RqNumber) =>
+    Math.min(...numbers.filter((other) => other.page === number.page && other.x > number.x && Math.abs(other.y - number.y) < 4).map((other) => other.x - 8), Infinity);
+  /** A check box: a small square just right of the frame. */
+  const checkBoxBeside = (number: RqNumber, frame: number) =>
+    fills.find((fill) => {
+      const size = fill.x1 - fill.x0;
+      return fill.page === number.page && size >= 7 && size <= 13 && Math.abs(fill.y1 - fill.y0 - size) < 1 && fill.x0 >= frame - 1 && fill.x0 <= frame + 12 && Math.abs((fill.y0 + fill.y1) / 2 - (number.y + 3)) <= 6;
+    });
+
+  const rows: Record<string, Point> = {};
+  const lineOf = new Map<string, string>();
+  const columns: Record<string, number[]> = {};
+  const plain: string[] = [];
+  const widths = new Map<string, number>();
+  const seen = new Set<string>();
+  for (const number of numbers) {
+    const framed = frameOf(number);
+    const frame = framed ?? number.end;
+    // A numbered check box ("check box 403") holds no amount.
+    if (checkBoxBeside(number, frame)) continue;
+    const limit = limitOf(number);
+    const cents = [
+      ...new Set(
+        verticals
+          .filter((line) => line.page === number.page && line.x0 > frame + 6 && line.x0 < limit && crosses(line, number.y) && centsPartAt(number.page, line.x0, number.y))
+          .map((line) => round(line.x0)),
+      ),
+    ]
+      .sort((a, b) => a - b)
+      .filter((x, index, all) => index === 0 || x - all[index - 1]! > 1);
+    let boxes = cents;
+    let isPlain = false;
+    if (cents.length === 0) {
+      // No cents line: a plain box from the frame to its right end, if it is one (a framed number, and digit cells only
+      // in a code's narrow box). It ends at its right edge, or where its white fill or its bottom line ends; a rate's
+      // box ends at its printed "%".
+      if (framed === undefined) continue;
+      const edge = Math.min(...verticals.filter((line) => line.page === number.page && line.x0 > frame + 6 && line.x0 < limit && spans(line, number.y)).map((line) => line.x0));
+      let right = Math.min(
+        edge,
+        ...fills.filter((fill) => fill.page === number.page && fill.x0 >= frame - 0.5 && fill.x0 <= frame + 6 && fill.x1 < limit && fill.y0 <= number.y + 1 && fill.y1 >= number.y + 4 && fill.x1 - fill.x0 <= 200).map((fill) => fill.x1),
+        ...shapes
+          .filter((line) => line.page === number.page && line.paint === "stroke" && line.y1 - line.y0 < 0.5 && line.y0 >= number.y - 4.5 && line.y0 <= number.y - 1 && line.x0 >= frame - 0.5 && line.x0 <= frame + 6 && line.x1 < limit)
+          .map((line) => line.x1),
+      );
+      const end = Number.isFinite(edge) ? edge : right;
+      const cells = verticals.filter((line) => line.page === number.page && line.x0 > frame + 6 && line.x0 < end - 1 && tick(line, number.y));
+      if (cells.length > 0 && end - frame > RQ_CODE_WIDTH) continue;
+      const percent = items.find((item) => item.page === number.page && item.text === "%" && Math.abs(item.y - number.y) < 3 && item.x > frame + 6 && item.x < right);
+      if (percent) right = percent.x;
+      if (!Number.isFinite(right) || right - frame < 14 || right - frame > 200) continue;
+      boxes = [round(right)];
+      isPlain = true;
+    }
+    // The same number again on its line: another column of that line.
+    const same = Object.keys(rows).find((key) => lineOf.get(key) === number.line && rows[key]![0] === number.page && Math.abs(rows[key]![2] - number.y) < 1);
+    if (same) {
+      const all = [...(columns[same] ?? [rows[same]![1]]), ...boxes];
+      columns[same] = all;
+      if (isPlain) plain.push(`${same}@${all.length}`);
+      continue;
+    }
+    let key = seen.has(number.line) ? `p${number.page}:${number.line}` : number.line;
+    for (let count = 2; key in rows; count += 1) key = `p${number.page}:${number.line}#${count}`;
+    seen.add(number.line);
+    lineOf.set(key, number.line);
+    rows[key] = [number.page, boxes[0]!, round(number.y)];
+    widths.set(key, boxes[0]! - frame);
+    if (boxes.length > 1) columns[key] = boxes;
+    if (isPlain) plain.push(key);
+  }
+
+  // A box that already holds a printed amount ("42,090 00"): nothing is written there.
+  const printed = Object.entries(rows)
+    .filter(([key, [page, x, y]]) => {
+      const [from, to] = plain.includes(key) ? [x - widths.get(key)!, x] : [x - 60, x + 18];
+      return items.some((item) => !numberItems.has(item) && item.page === page && Math.abs(item.y - y) < 4 && item.x + item.width > from + 1 && item.x < to - 1 && /^\$?[\d,]*\d(\.\d+)?%?$/.test(item.text));
+    })
+    .map(([key]) => key);
+
+  const text: NonNullable<Measured["text"]> = {};
+  const combs: NonNullable<Measured["combs"]> = {};
+  const tickBoxes: NonNullable<Measured["ticks"]> = {};
+  for (const [key, spec] of Object.entries(places)) {
+    if ("label" in spec) {
+      // An answer's tick box ("Yes", "No"), by the option's label.
+      if (spec.kind !== "tick") throw new Error(`${key}: a Revenu Québec form's boxes are found by their line numbers`);
+      tickBoxes[key] = tickBy(fills, spec, labelOf(items, spec, key)) ?? fail(key, `no tick box near "${spec.label}" on page ${spec.page}`);
+      continue;
+    }
+    const number = numbers.find((each) => each.page === spec.page && each.line === spec.line) ?? fail(key, `no line ${spec.line} on page ${spec.page}`);
+    const frame = frameOf(number) ?? fail(key, `line ${spec.line} has no frame`);
+    if (spec.kind === "tick") {
+      const square = checkBoxBeside(number, frame) ?? fail(key, `no check box beside line ${spec.line}`);
+      tickBoxes[key] = [spec.page, round((square.x0 + square.x1) / 2), round((square.y0 + square.y1) / 2)];
+      continue;
+    }
+    // A box starts 3 points right of its number's frame and ends at the next line its full height.
+    const left = frame + 3;
+    const right = Math.min(...verticals.filter((line) => line.page === spec.page && line.x0 > frame + 6 && spans(line, number.y)).map((line) => line.x0));
+    if (!Number.isFinite(right)) fail(key, `no box beside line ${spec.line}`);
+    if (spec.kind === "text") {
+      text[key] = [spec.page, round(left + 2), round(number.y), round(right - left - 4)];
+    } else {
+      // Each tick is drawn twice (solid, then dotted over it).
+      const cells = [
+        ...new Set(
+          verticals.filter((line) => line.page === spec.page && line.x0 > left + 1 && line.x0 < right - 1 && tick(line, number.y)).map((line) => round(line.x0)),
+        ),
+      ].sort((a, b) => a - b);
+      if (cells.length < 2) fail(key, `no date cells beside line ${spec.line}`);
+      const cell = Math.min(...cells.slice(1).map((x, index) => x - cells[index]!));
+      combs[key] = [spec.page, round(cells[0]! - cell), round(number.y), round(cell)];
+    }
+  }
+
+  return {
+    rows,
+    ...(Object.keys(columns).length > 0 ? { columns } : {}),
+    ...(printed.length > 0 ? { printed } : {}),
+    ...(plain.length > 0 ? { plain } : {}),
+    ...(Object.keys(text).length > 0 ? { text } : {}),
+    ...(Object.keys(combs).length > 0 ? { combs } : {}),
+    ...(Object.keys(tickBoxes).length > 0 ? { ticks: tickBoxes } : {}),
+  };
+}
+
+/** Revenu Québec's line numbers, top to bottom: a number with its decimal digit is one line ("377" "1" is 377.1). */
+function rqNumbers(items: TextItem[]): RqNumber[] {
+  const candidates = items.filter(
+    (item) => item.height !== undefined && item.height >= RQ_NUMBER_HEIGHT[0]! && item.height <= RQ_NUMBER_HEIGHT[1]! && /^\d{1,3}(\.\d)?$/.test(item.text),
+  );
+  const digitOf = (item: TextItem) =>
+    /^\d{1,3}$/.test(item.text)
+      ? candidates.find(
+          (other) =>
+            other !== item &&
+            other.page === item.page &&
+            /^\d$/.test(other.text) &&
+            Math.abs(other.y - item.y) < 0.6 &&
+            other.x >= item.x + item.width - 0.5 &&
+            other.x <= item.x + item.width + 3,
+        )
+      : undefined;
+  const digits = new Map(candidates.flatMap((item) => (digitOf(item) ? [[item, digitOf(item)!] as const] : [])));
+  const taken = new Set(digits.values());
+  return candidates
+    .filter((item) => !taken.has(item))
+    .map((item) => {
+      const digit = digits.get(item);
+      return {
+        page: item.page,
+        x: item.x,
+        end: digit ? digit.x + digit.width : item.x + item.width,
+        y: item.y,
+        line: digit ? `${item.text}.${digit.text}` : item.text,
+        items: digit ? [item, digit] : [item],
+      };
+    })
+    .sort((a, b) => a.page - b.page || b.y - a.y || a.x - b.x);
+}
+
+function fail(key: string, message: string): never {
+  throw new Error(`${key}: ${message}`);
+}
+
+/** The small square on a label's line, the nearest one to it: its centre. */
+function tickBy(fills: Shape[], spec: LabelPlace, label: TextItem): Point | undefined {
+  const square = fills
+    .filter((fill) => {
+      const size = fill.x1 - fill.x0;
+      return fill.page === spec.page && size >= 7 && size <= 13 && Math.abs(fill.y1 - fill.y0 - size) < 1 && Math.abs((fill.y0 + fill.y1) / 2 - (label.y + 3)) <= 6;
+    })
+    .sort((a, b) => gap(a, label) - gap(b, label))[0];
+  return square && [spec.page, round((square.x0 + square.x1) / 2), round((square.y0 + square.y1) / 2)];
+}
+
+function labelOf(items: TextItem[], spec: LabelPlace, key: string): TextItem {
   const onPage = items.filter((item) => item.page === spec.page).sort((a, b) => b.y - a.y || a.x - b.x);
   const top = spec.below === undefined ? Infinity : onPage.find((item) => item.text.startsWith(spec.below!))?.y;
   if (top === undefined) throw new Error(`${key}: no "${spec.below}" on page ${spec.page}`);

@@ -3,14 +3,16 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { OPS, getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { Document, parse, visit } from "yaml";
-import { measureForm, type PlaceSpec, type Shape, type TextItem } from "./form-measure.ts";
+import { measureForm, measureRqForm, type PlaceSpec, type Shape, type TextItem } from "./form-measure.ts";
 import { RULES_ROOT } from "./rules-source.ts";
 
 // npm run form-layout -- <country>/<year> <FORM>=<print PDF> ...
 //
 // Measures where each amount, name, date and tick goes on the CRA's print version of a form (for example
-// 5006-r-25e.pdf, downloaded from canada.ca) and writes rules/<country>/<year>/form-layout.yaml. This file reads the
-// PDF (its text, and the lines and boxes it draws); scripts/form-measure.ts says how a place is found from them.
+// 5006-r-25e.pdf, downloaded from canada.ca) or on Revenu Québec's form (TP-1.D-V(2025-12).pdf, from revenuquebec.ca),
+// and writes rules/<country>/<year>/form-layout.yaml. This file reads the PDF (its text, and the lines and boxes it
+// draws); scripts/form-measure.ts says how a place is found from them. The two publishers draw their boxes differently,
+// so a form whose url in forms.yaml is on revenuquebec.ca is measured Revenu Québec's way.
 //
 // The layout records the SHA-256 of the PDF it measured: the app refuses to fill a different file. The PDFs themselves
 // are never committed (Crown copyright; the repository holds no binary files).
@@ -21,7 +23,8 @@ const STANDARD_FONTS = new URL("../node_modules/pdfjs-dist/standard_fonts/", imp
  * The places on a form that aren't amount rows, by the label printed at them: the T1's Step 1 (the person's name, birth
  * date, marital status and province, their spouse's first name and net income, and the foreign property question; the
  * other Step 1 boxes, such as the SIN and address, stay for the person to fill in) and Schedule 3's questions about a
- * home sold (a flipped property, the principal residence designation).
+ * home sold (a flipped property, the principal residence designation). On Revenu Québec's forms a box is found by the
+ * line number beside it, and an answer's tick box by its label.
  */
 const PLACES: Record<string, Record<string, PlaceSpec>> = {
   T1: {
@@ -45,6 +48,28 @@ const PLACES: Record<string, Record<string, PlaceSpec>> = {
   get T1QC() {
     return PLACES.T1!;
   },
+  // The TP-1's Step 1 ("Information about you", "Information about your spouse"): its boxes are found by their line
+  // numbers; the answers' tick boxes by the option beside them.
+  TP1: {
+    lastName: { kind: "text", page: 1, line: "1" },
+    firstName: { kind: "text", page: 1, line: "2" },
+    birthDate: { kind: "comb", page: 1, line: "6" },
+    spouseNo: { kind: "tick", page: 1, label: "No", below: "Situation" },
+    spouseYes: { kind: "tick", page: 1, label: "Yes", below: "Situation" },
+    foreignPropertyYes: { kind: "tick", page: 1, label: "Yes", below: "Foreign property" },
+    foreignPropertyNo: { kind: "tick", page: 1, label: "No", below: "Foreign property" },
+    spouseLastName: { kind: "text", page: 2, line: "31" },
+    spouseFirstName: { kind: "text", page: 2, line: "32" },
+    spouseBirthDate: { kind: "comb", page: 2, line: "36" },
+    spouseSelfEmployed: { kind: "tick", page: 2, line: "50" },
+  },
+  // Schedule G's designation of a principal residence, and Schedule J's level of dependence.
+  QCG: {
+    principalResidence: { kind: "tick", page: 1, line: "109" },
+  },
+  QCJ: {
+    youNonDependent: { kind: "tick", page: 1, label: "non-dependent", below: "Level of dependence" },
+  },
   S3: {
     flippedYes: { kind: "tick", page: 1, label: "Yes", below: "Did you dispose of a housing unit" },
     flippedNo: { kind: "tick", page: 1, label: "No", below: "Did you dispose of a housing unit" },
@@ -59,6 +84,12 @@ if (!target || specs.length === 0 || specs.some((spec) => !/^[A-Z0-9-]+=.+\.pdf$
 }
 const file = join(RULES_ROOT, target, "form-layout.yaml");
 const current = existsSync(file) ? ((parse(readFileSync(file, "utf8")) as { formLayout?: Record<string, unknown> }).formLayout ?? {}) : {};
+const formsFile = join(RULES_ROOT, target, "forms.yaml");
+const urls = existsSync(formsFile) ? ((parse(readFileSync(formsFile, "utf8")) as { forms?: Record<string, { url?: string } | null> }).forms ?? {}) : {};
+const isRevenuQuebec = (form: string) => {
+  const url = urls[form]?.url;
+  return url !== undefined && new URL(url).hostname.endsWith("revenuquebec.ca");
+};
 
 for (const spec of specs) {
   const [form, path] = spec.split("=") as [string, string];
@@ -70,19 +101,19 @@ for (const spec of specs) {
     const pdfPage = await doc.getPage(page);
     for (const item of (await pdfPage.getTextContent()).items) {
       if (!("str" in item) || !item.str.trim()) continue;
-      items.push({ page, x: item.transform[4] as number, y: item.transform[5] as number, width: item.width, text: item.str.trim() });
+      items.push({ page, x: item.transform[4] as number, y: item.transform[5] as number, width: item.width, height: item.height, text: item.str.trim() });
     }
     shapes.push(...shapesOf(page, await pdfPage.getOperatorList()));
   }
-  const measured = measureForm(items, shapes, PLACES[form]);
+  const measured = (isRevenuQuebec(form) ? measureRqForm : measureForm)(items, shapes, PLACES[form]);
   current[form] = { sha256: createHash("sha256").update(bytes).digest("hex"), pages: doc.numPages, ...measured };
   console.log(`form-layout: ${form}: ${doc.numPages} pages, ${Object.keys(measured.rows).length} rows, ${Object.keys(measured.columns ?? {}).length} rows with columns`);
 }
 
-const header = `# Where things go on the CRA's print forms, in PDF points from the bottom left: each row's page, the x of the line
-# between dollars and cents (for a plain box with no such line, its right end), and the baseline; the boxes beside a
-# row (columns); and Step 1's text boxes, date boxes and tick boxes. Generated by scripts/form-layout.ts from the PDFs
-# with these SHA-256 hashes; don't edit by hand. forms.yaml says what goes where.
+const header = `# Where things go on the CRA's and Revenu Québec's print forms, in PDF points from the bottom left: each row's
+# page, the x of the line between dollars and cents (for a plain box with no such line, its right end), and the
+# baseline; the boxes beside a row (columns); and Step 1's text boxes, date boxes and tick boxes. Generated by
+# scripts/form-layout.ts from the PDFs with these SHA-256 hashes; don't edit by hand. forms.yaml says what goes where.
 `;
 // One line per place: [page, x, y].
 const document = new Document({ formLayout: current });

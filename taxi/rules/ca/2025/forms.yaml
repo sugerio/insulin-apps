@@ -1,20 +1,24 @@
 # The CRA forms a return is printed on, and what goes in each row. A row is the number printed at the right of its box
-# (or the line code of a box without one); form-layout.yaml says where it is on the CRA's print PDF. Each amount is a
-# formula from the return's side, like a line's. A zero or a missing amount is left blank, as the CRA asks ("complete
-# only the lines that apply to you"), unless the field says `zero: true`. Rows the app has nothing for (a pension, a
-# foreign tax credit) are left out. `<row>@<n>` is the row's n-th box from the left (the "you" column of a "you / your
-# spouse" table is @1, an amount carried in on the row's line). A field is an amount unless it says otherwise:
+# (or the line code of a box without one); form-layout.yaml says where it is on the CRA's print PDF. A resident of
+# Quebec's return also prints on Revenu Québec's TP-1 and schedules, at the end: their rows are the line numbers
+# printed left of their boxes (see "Revenu Québec's forms" below). Each amount is a formula from the return's side,
+# like a line's. A zero or a missing amount is left blank, as the CRA asks ("complete only the lines that apply to
+# you"), unless the field says `zero: true`. Rows the app has nothing for (a pension, a foreign tax credit) are left
+# out. `<row>@<n>` is the row's n-th box from the left (the "you" column of a "you / your spouse" table is @1, an
+# amount carried in on the row's line). A field is an amount unless it says otherwise:
 #   { count: <formula> }   a whole number (a number of children or months), with no cents
 #   { tick: <formula> }    a tick in a box, when the formula is yes from the person's answers (not from a usual answer)
-#   { text: <fact> }       the person's firstName, lastName, birthDate or province, or their spouseFirstName
+#   { text: <fact> }       the person's firstName, lastName, birthDate or province, or their spouseFirstName,
+#                          spouseLastName or spouseBirthDate
 # A form applies to the returns whose `applies` is yes; the forms are printed in this order, as the CRA asks them
-# attached: the T1, its schedules and forms, then the provincial or territorial ones.
+# attached: the T1, its schedules and forms, then the provincial or territorial ones; for a resident of Quebec, the
+# TP-1 and its schedules after them.
 #
 # A bracket table fills, in the column of the bracket the amount falls in, the amount, the amount over the column's
 # floor, that times the rate, and that plus the printed base; its parts are the printed tables, in bracket order.
 #
-# The PDFs come from canada.ca on first use (url) and must match the layout's SHA-256: a form the CRA changes is
-# measured again with npm run form-layout before it is filled.
+# The PDFs come from canada.ca (or revenuquebec.ca) on first use (url) and must match the layout's SHA-256: a form the
+# CRA or Revenu Québec changes is measured again with npm run form-layout before it is filled.
 
 forms:
   T1:
@@ -2741,3 +2745,623 @@ forms:
       "18": line.ON479.18
       "19": line.ON479.18
       "21": line.ON479.21
+
+  # -------------------------------------------------------------------------------------------------------------------
+  # Revenu Québec's forms: a resident of Quebec files the TP-1 besides the federal return (T1QC and its schedules,
+  # above), so it prints after them, followed by the TP-1's schedules in Revenu Québec's order. The PDFs come from
+  # revenuquebec.ca. A row is the line number printed in the frame left of its box: the TP-1's own line, or the
+  # schedule's. A decimal line keeps its point ("377.1" is line TP1.377_1); a number printed again is keyed by its page
+  # ("p3:199" is line 199 carried to page 3; on Schedule P's page 2, section 2's line 64 is "p2:64"), then by its order
+  # on that page ("p2:64#2"). Schedule D (the solidarity tax credit) has no amounts and its dwelling and roll
+  # numbers are copied by hand; Schedules A and M only carry an answer to lines 367, 398.1 and 385, so they aren't
+  # printed; the work charts (TP-1.D.GR-V) are kept by the person, not sent.
+
+  # Rows the app has nothing for stay blank: the CPP lines (96 to 96.2, form LE-35-V), the codes of lines 206, 249,
+  # 286, 296 and 461, and lines it doesn't handle (see qc.yaml). Line 350 (the basic personal amount) is printed.
+  TP1:
+    title: TP-1 Income Tax Return (Revenu Québec)
+    url: https://www.revenuquebec.ca/documents/en/formulaires/tp/2025-12/TP-1.D-V%282025-12%29.pdf
+    applies: person.province == "QC"
+    fields:
+      # Information about you and your spouse: what the app knows. The SIN, address, sex, language, the first-return
+      # box, the dates of a change in situation, arrival or departure, and the other questions stay for the person.
+      lastName: { text: lastName }
+      firstName: { text: firstName }
+      birthDate: { text: birthDate }
+      spouseYes: { tick: 'household.maritalStatus == "married" or household.maritalStatus == "common_law"' }
+      spouseNo: { tick: 'household.maritalStatus != "married" and household.maritalStatus != "common_law"' }
+      foreignPropertyYes: { tick: answer.hasForeignProperty }
+      foreignPropertyNo: { tick: not answer.hasForeignProperty }
+      spouseLastName: { text: spouseLastName, when: "line.HH.partner == 1" }
+      spouseFirstName: { text: spouseFirstName, when: "line.HH.partner == 1" }
+      spouseBirthDate: { text: spouseBirthDate, when: "line.HH.partner == 1" }
+      # Known only when the spouse's return is prepared here too.
+      spouseSelfEmployed: { tick: "line.SPOUSES.together == 1 and spouse.answer.hasSelfEmployment" }
+      # Revenu Québec asks for the spouse's net income even when it is zero.
+      "51": { value: line.QC.spouseNet, when: "line.HH.partner == 1", zero: true }
+      # Contributions (not added into income)
+      "97": line.TP1.97
+      "98": line.TP1.98
+      "98.1": line.TP1.98_1
+      "98.2": line.TP1.98_2
+      "100": sum(RL1.boxM)
+      # Total income
+      "101": line.TP1.101
+      "110": line.TP1.110
+      "111": line.TP1.111
+      "114": line.TP1.114
+      "119": line.TP1.119
+      "122": line.TP1.122
+      "123": line.TP1.123
+      "166": line.TP1.166
+      "167": line.TP1.167
+      "128": line.TP1.128
+      "130": line.TP1.130
+      "139": line.TP1.139
+      "142": line.TP1.142
+      "147": line.TP1.147
+      "154": line.TP1.154
+      "164": line.TP1.164
+      "199": line.TP1.199
+      # Net income
+      "p3:199": line.TP1.199
+      "201": line.TP1.201
+      "205": line.TP1.205
+      "207": line.TP1.207
+      "214": line.TP1.214
+      "215": line.TP1.215
+      "225": line.TP1.225
+      "231": line.TP1.231
+      "245": line.TP1.245
+      "248": line.TP1.248
+      "254": line.TP1.254
+      "256": line.TP1.256
+      "275": line.TP1.275
+      # Taxable income
+      "279": line.TP1.279
+      "289": line.TP1.289
+      "290": line.TP1.290
+      "298": line.TP1.298
+      "299": line.TP1.299
+      # Non-refundable tax credits
+      "361": line.TP1.361
+      "367": line.TP1.367
+      "376": line.TP1.376
+      "377": line.TP1.377
+      "377.1": line.TP1.377_1
+      "381": line.TP1.381
+      "385": line.TP1.385
+      "388": line.TP1.388
+      "389": line.TP1.389
+      "393": line.TP1.393
+      "395": line.TP1.395
+      "397.1": line.TP1.397_1
+      "397": line.TP1.397
+      "398": line.TP1.398
+      "398.1": line.TP1.398_1
+      "399": line.TP1.399
+      # Income tax and contributions
+      "401": line.TP1.401
+      "406": line.TP1.406
+      "413": line.TP1.413
+      "414": line.TP1.414
+      "415": line.TP1.415
+      "425": line.TP1.425
+      "430": line.TP1.430
+      "431": line.TP1.431
+      "432": line.TP1.432
+      "p5:432": line.TP1.432
+      "439": line.TP1.439
+      "441": line.TP1.441
+      "445": line.TP1.445
+      "446": line.TP1.446
+      # The situation that exempts you from the drug insurance premium (14, 32 or 34), instead of Schedule K.
+      "449": { count: line.TP1.449 }
+      "447": line.TP1.447
+      "450": line.TP1.450
+      # Refund or balance due
+      "451": line.TP1.451
+      "451.1": line.TP1.451_1
+      "451.2": line.TP1.451_2
+      "451.3": line.TP1.451_3
+      "452": line.TP1.452
+      "453": line.TP1.453
+      "455": line.TP1.455
+      "456": line.TP1.456
+      "457": line.TP1.457
+      "458": line.TP1.458
+      "462": line.TP1.462
+      "463": line.TP1.463
+      "465": line.TP1.465
+      "468": line.TP1.468
+      "470": line.TP1.470
+      "474": line.TP1.474
+      "478": line.TP1.478
+      "475": line.TP1.475
+      "479": line.TP1.479
+
+  # The age, living-alone and retirement amounts (Part B, claimed for the couple on the return of the person preparing:
+  # the other spouse's Schedule B takes it off on line 33), medical expenses (Part C) and the refundable medical credit
+  # (Part D). Line 21 (a single-parent family's adult student) and Part E aren't handled.
+  QCB:
+    title: Schedule B, Tax Relief Measures (Revenu Québec)
+    url: https://www.revenuquebec.ca/documents/en/formulaires/tp/2025-12/TP-1.D.B-V%282025-12%29.pdf
+    applies: 'person.province == "QC" and (line.TP1.361 > 0 or line.TP1.381 > 0 or line.QCB.50 > 0)'
+    fields:
+      # Part A – Family income
+      "10": line.TP1.275
+      "12": line.QC.spouseNet
+      "14": line.QC.family
+      # Part B
+      "15": { value: line.QC.family, when: "line.QCB.30 > 0" }
+      "18": { value: line.QCB.18, when: "line.QCB.30 > 0" }
+      "20": line.QCB.20
+      "22": line.QCB.22
+      "23": line.QCB.23
+      "27": line.QCB.27
+      "28": line.QCB.28
+      "30": line.QCB.30
+      "31": { value: line.QCB.31, when: "line.QCB.30 > 0" }
+      "32": line.QCB.32
+      "33": "if(line.QC.couple == 1, spouse.line.TP1.361, 0)"
+      "34": line.TP1.361
+      # Work chart – amount for retirement income: your column, then your spouse's (lines 2 to 5 aren't handled).
+      "1@1": { value: "line.TP1.122 + line.TP1.123", when: "line.QCB.27 > 0" }
+      "6@1": { value: line.TP1.245, when: "line.QCB.27 > 0" }
+      "7@1": { value: line.TP1.245, when: "line.QCB.27 > 0" }
+      "8@1": { value: "line.TP1.122 + line.TP1.123 - line.TP1.245", when: "line.QCB.27 > 0" }
+      "9@1": line.QCB.27
+      "1@2": { value: "spouse.line.TP1.122 + spouse.line.TP1.123", when: "line.QCB.28 > 0" }
+      "6@2": { value: spouse.line.TP1.245, when: "line.QCB.28 > 0" }
+      "7@2": { value: spouse.line.TP1.245, when: "line.QCB.28 > 0" }
+      "8@2": { value: "spouse.line.TP1.122 + spouse.line.TP1.123 - spouse.line.TP1.245", when: "line.QCB.28 > 0" }
+      "9@2": line.QCB.28
+      # Part C – Medical expenses, on the return of the spouse who claims them.
+      "36": line.QCB.36
+      "37": { value: line.QC.family, when: "line.QCB.36 > 0" }
+      "39": { value: line.QCB.39, when: "line.QCB.36 > 0" }
+      "40": line.TP1.381
+      # Part D – Refundable tax credit for medical expenses
+      "41": { value: line.TP1.381, when: "line.QCB.50 > 0" }
+      "42": { value: line.T1.21500, when: "line.QCB.50 > 0" }
+      "43": { value: "line.TP1.381 + line.T1.21500", when: "line.QCB.50 > 0" }
+      "44": { value: line.QCB.44, when: "line.QCB.50 > 0" }
+      "45": { value: line.QC.family, when: "line.QCB.50 > 0" }
+      "47": { value: "max(0, line.QC.family - param.qcMedicalRefundThreshold)", when: "line.QCB.50 > 0" }
+      "48": { value: line.QCB.48, when: "line.QCB.50 > 0" }
+      "50": line.QCB.50
+
+  # On the return of the spouse who paid more of the childcare (line 96, what the other claims, is 0). The situations
+  # (lines 10 to 17), each child's name and expenses (Part A, sections 1 and 2) and lines 39 and 40 are copied from the
+  # RL-24 slips and receipts by hand; line 41 is the total the app worked out. Children with an impairment (line 42)
+  # aren't handled.
+  QCC:
+    title: Schedule C, Tax Credit for Childcare Expenses (Revenu Québec)
+    url: https://www.revenuquebec.ca/documents/en/formulaires/tp/2025-12/TP-1.D.C-V%282025-12%29.pdf
+    applies: 'person.province == "QC" and line.TP1.455 > 0'
+    fields:
+      "41": line.QCC.41
+      # Part B – Childcare expense limit
+      "44": { count: household.childrenUnder7 }
+      "45": "param.qcChildCareUnder7 * household.childrenUnder7"
+      "46": { count: "household.childrenUnder17 - household.childrenUnder7" }
+      "47": "param.qcChildCare7to16 * (household.childrenUnder17 - household.childrenUnder7)"
+      "50": line.QCC.50
+      # Part C – Family income
+      "76": line.TP1.275
+      "78": line.QC.spouseNet
+      "80": line.QC.family
+      # Part D – the rate, in percent
+      "85": line.QCC.85
+      "92": { count: "line.QCC.92 * 100" }
+      "94": line.QCC.94
+      "98": line.TP1.455
+
+  QCF:
+    title: Schedule F, Contribution to the Health Services Fund (Revenu Québec)
+    url: https://www.revenuquebec.ca/documents/en/formulaires/tp/2025-12/TP-1.D.F-V%282025-12%29.pdf
+    applies: 'person.province == "QC" and line.TP1.446 > 0'
+    fields:
+      # Part A – Income subject to the contribution
+      "10": line.TP1.199
+      "12": line.TP1.101
+      "16": line.TP1.101
+      "18": line.QCF.18
+      "22": line.TP1.114
+      "23": line.TP1.128
+      "24": "line.TP1.166 + line.TP1.167"
+      "25": "max(0, line.TP1.128 - line.TP1.166 - line.TP1.167)"
+      "26": line.TP1.142
+      "28": line.TP1.147
+      "34": line.QCF.34
+      "36": line.QCF.36
+      "43": line.QCR.26
+      "43.1": "line.QCU.101 + line.QCU.103 + if(line.QCU.33 > 0, min(line.QCU.94 - line.QCU.48, line.QCU.99), 0)"
+      "46": line.TP1.245
+      "54": line.TP1.225
+      "56": line.TP1.231
+      "68": line.QCF.68
+      "70": line.QCF.70
+      # Part B – the column for $63,060 or less, or the one for more (lines 77 and 81 are printed).
+      "76@1": { value: line.QCF.70, when: "line.QCF.70 <= param.hsfSecondThreshold" }
+      "78@1": { value: "line.QCF.70 - param.hsfThreshold", when: "line.QCF.70 <= param.hsfSecondThreshold" }
+      "80@1": { value: "round((line.QCF.70 - param.hsfThreshold) * param.hsfRate, 2)", when: "line.QCF.70 <= param.hsfSecondThreshold" }
+      "82@1": { value: line.TP1.446, when: "line.QCF.70 <= param.hsfSecondThreshold" }
+      "76@2": { value: line.QCF.70, when: "line.QCF.70 > param.hsfSecondThreshold" }
+      "78@2": { value: "line.QCF.70 - param.hsfSecondThreshold", when: "line.QCF.70 > param.hsfSecondThreshold" }
+      "80@2": { value: "round((line.QCF.70 - param.hsfSecondThreshold) * param.hsfRate, 2)", when: "line.QCF.70 > param.hsfSecondThreshold" }
+      "82@2": { value: line.TP1.446, when: "line.QCF.70 > param.hsfSecondThreshold" }
+
+  # Part B gets the totals of each kind of property, as on federal Schedule 3; the property by property rows
+  # (description, dates, proceeds, cost) stay for the person or an attached sheet. Parts C to E aren't handled.
+  QCG:
+    title: Schedule G, Capital Gains and Losses (Revenu Québec)
+    url: https://www.revenuquebec.ca/documents/en/formulaires/tp/2025-12/TP-1.D.G-V%282025-12%29.pdf
+    applies: >-
+      person.province == "QC" and (line.QCG.gains != 0
+      or (answer.soldProperty and answer.propertyUse == "principal_residence"))
+    fields:
+      # Part A – a home that was the principal residence every year owned (form TP-274-V goes with it).
+      principalResidence: { tick: 'answer.soldProperty and answer.propertyUse == "principal_residence"' }
+      # Part B – shares and fund units, immovables, personal-use property, and the RL slips' capital gains
+      "10": line.S3.13200
+      "14": line.S3.13800
+      "16": line.S3.15800
+      "22": "sum(RL3.boxI) + sum(RL16.boxA)"
+      "26": line.QCG.gains
+      "30": line.QCG.gains
+      "34": line.QCG.gains
+      "44": line.QCG.gains
+      # Part F – Taxable capital gains (or net capital losses)
+      "88": line.QCG.gains
+      "94.1": line.QCG.gains
+      "107.1": "round(line.QCG.gains * param.qcCapitalGainsInclusionRate, 2)"
+      "108": "round(line.QCG.gains * param.qcCapitalGainsInclusionRate, 2)"
+
+  # A non-dependent senior who rents an apartment (Part A, section 2, one rent all year) or pays for services (Part B,
+  # one total: the kinds of service, lines 50 to 56, aren't asked). The three questions on page 1 stay for the person.
+  QCJ:
+    title: Schedule J, Tax Credit for Home-Support Services for Seniors (Revenu Québec)
+    url: https://www.revenuquebec.ca/documents/en/formulaires/tp/2025-12/TP-1.D.J-V%282025-12%29.pdf
+    applies: 'person.province == "QC" and line.TP1.458 > 0'
+    fields:
+      youNonDependent: { tick: answer.hasHomeSupport }
+      "30@1": { value: "clamp(answer.homeSupportRent, param.homeSupportRentMin, param.homeSupportRentMax)", when: "line.QCJ.34 > 0" }
+      "31@1": { value: "round(clamp(answer.homeSupportRent, param.homeSupportRentMin, param.homeSupportRentMax) * param.homeSupportRentShare, 2)", when: "line.QCJ.34 > 0" }
+      "32": { count: answer.homeSupportRentMonths, when: "line.QCJ.34 > 0" }
+      "33@1": line.QCJ.34
+      "34": line.QCJ.34
+      "74": line.QCJ.74
+      "75": line.QCJ.75
+      "80": line.TP1.275
+      "81": line.QC.spouseNet
+      "82": line.QC.family
+      "87": line.QCJ.75
+      "88": line.QCJ.88
+      "89": line.QCJ.89
+      "90": line.QCJ.90
+
+  # Part B's ticks (the situations and the months) stay for the person; the app knows the number of months. Lines 91 to
+  # 97 (paying your spouse's premium) aren't used: each spouse pays their own.
+  QCK:
+    title: Schedule K, Premium Payable Under the Québec Prescription Drug Insurance Plan (Revenu Québec)
+    url: https://www.revenuquebec.ca/documents/en/formulaires/tp/2025-12/TP-1.D.K-V%282025-12%29.pdf
+    applies: 'person.province == "QC" and line.TP1.447 > 0'
+    fields:
+      # Part A – Income used to calculate the premium
+      "36": line.TP1.275
+      "37": line.QC.spouseNet
+      "40": line.QCK.40
+      "41": "if(line.HH.partner == 1, param.drugIncomeCouple, param.drugIncomeSingle)"
+      "42": >-
+        if(line.HH.partner == 1, if(household.childrenUnder18 >= 2, param.drugChildrenCouple,
+        if(household.childrenUnder18 == 1, param.drugChildCouple, 0)), 0)
+      "44": >-
+        if(line.HH.partner == 0, if(household.childrenUnder18 >= 2, param.drugChildrenSingle,
+        if(household.childrenUnder18 == 1, param.drugChildSingle, 0)), 0)
+      "46": line.QCK.46
+      "48": line.QCK.48
+      # Part B – months with no premium to pay
+      "60": { count: line.QCK.60 }
+      "61": { count: line.QCK.61 }
+      "62": { count: line.QCK.62 }
+      # Part C – the table's column: without a spouse (A, B) or with one (A, B); A up to $5,000 of income, B up to
+      # $14,669. Lines 78, 80 and 82 are printed; above $14,669 the premium is the most, on line 84.
+      "77@1": { value: line.QCK.48, when: "line.HH.partner == 0 and line.QCK.48 <= param.drugTableBreak" }
+      "79@1": { value: line.QCK.48, when: "line.HH.partner == 0 and line.QCK.48 <= param.drugTableBreak" }
+      "81@1": { value: "round(line.QCK.48 * param.drugRateSingleLow, 2)", when: "line.HH.partner == 0 and line.QCK.48 <= param.drugTableBreak" }
+      "83@1": { value: line.QCK.84, when: "line.HH.partner == 0 and line.QCK.48 <= param.drugTableBreak" }
+      "77@2": { value: line.QCK.48, when: "line.HH.partner == 0 and line.QCK.48 > param.drugTableBreak and line.QCK.48 <= param.drugTableTop" }
+      "79@2": { value: "line.QCK.48 - param.drugTableBreak", when: "line.HH.partner == 0 and line.QCK.48 > param.drugTableBreak and line.QCK.48 <= param.drugTableTop" }
+      "81@2": { value: "round((line.QCK.48 - param.drugTableBreak) * param.drugRateSingleHigh, 2)", when: "line.HH.partner == 0 and line.QCK.48 > param.drugTableBreak and line.QCK.48 <= param.drugTableTop" }
+      "83@2": { value: line.QCK.84, when: "line.HH.partner == 0 and line.QCK.48 > param.drugTableBreak and line.QCK.48 <= param.drugTableTop" }
+      "77@3": { value: line.QCK.48, when: "line.HH.partner == 1 and line.QCK.48 <= param.drugTableBreak" }
+      "79@3": { value: line.QCK.48, when: "line.HH.partner == 1 and line.QCK.48 <= param.drugTableBreak" }
+      "81@3": { value: "round(line.QCK.48 * param.drugRateCoupleLow, 2)", when: "line.HH.partner == 1 and line.QCK.48 <= param.drugTableBreak" }
+      "83@3": { value: line.QCK.84, when: "line.HH.partner == 1 and line.QCK.48 <= param.drugTableBreak" }
+      "77@4": { value: line.QCK.48, when: "line.HH.partner == 1 and line.QCK.48 > param.drugTableBreak and line.QCK.48 <= param.drugTableTop" }
+      "79@4": { value: "line.QCK.48 - param.drugTableBreak", when: "line.HH.partner == 1 and line.QCK.48 > param.drugTableBreak and line.QCK.48 <= param.drugTableTop" }
+      "81@4": { value: "round((line.QCK.48 - param.drugTableBreak) * param.drugRateCoupleHigh, 2)", when: "line.HH.partner == 1 and line.QCK.48 > param.drugTableBreak and line.QCK.48 <= param.drugTableTop" }
+      "83@4": { value: line.QCK.84, when: "line.HH.partner == 1 and line.QCK.48 > param.drugTableBreak and line.QCK.48 <= param.drugTableTop" }
+      "84": line.QCK.84
+      "85": "round(line.QCK.84 * line.QCK.62 / 12, 2)"
+      "86": line.QCK.86
+      "88": "round(param.drugMonthlyFirstHalf * line.QCK.60, 2) + round(param.drugMonthlySecondHalf * line.QCK.61, 2)"
+      "89": line.QCK.89
+      "90": line.QCK.90
+      "98": line.TP1.447
+
+  # The net income of each kind of business, as on the federal return (the gross is the T2125's). Lines 28 to 30 and 40
+  # (a partnership, commissions after a business closed, a family-type resource) aren't handled.
+  QCL:
+    title: Schedule L, Business Income (Revenu Québec)
+    url: https://www.revenuquebec.ca/documents/en/formulaires/tp/2025-12/TP-1.D.L-V%282025-12%29.pdf
+    applies: 'person.province == "QC" and line.TP1.164 != 0'
+    fields:
+      "12": line.T1.13499
+      "13": line.T1.14099
+      "14": line.T1.14299
+      "15": line.T1.13699
+      "16": line.T1.13899
+      "22": line.T1.13500
+      "23": line.T1.14100
+      "24": line.T1.14300
+      "25": line.T1.13700
+      "26": line.T1.13900
+      "27": line.TP1.164
+      "34": line.TP1.164
+
+  # On the return of the spouse with the higher work income. Column 1 (the work premium) only: the adapted work premium
+  # (column 2), the designated child's name (Part B) and the supplement (Part D) aren't handled. Part E is section 1 for
+  # a person with a spouse, section 2 ("p2:") for one without. The spouse's work income comes as a total (lines 38, 49).
+  QCP:
+    title: Schedule P, Tax Credits Respecting the Work Premium (Revenu Québec)
+    url: https://www.revenuquebec.ca/documents/en/formulaires/tp/2025-12/TP-1.D.P-V%282025-12%29.pdf
+    applies: 'person.province == "QC" and line.TP1.456 > 0'
+    fields:
+      # Part A – Work income
+      "10": "max(0, line.TP1.101 - sum(RL1.box211))"
+      "14": "max(0, line.SE.net)"
+      "18": line.QC.work
+      "29": line.QC.work
+      "38": line.QCP.49
+      "49": line.QCP.49
+      # Part C – Family income
+      "52": line.TP1.275
+      "53": line.QC.spouseNet
+      "54": line.QC.family
+      # Part E, section 1 – with a spouse (lines 66, 70 and 80 are printed). Column 2 (the adapted work premium) is filled when
+      # it applies; its rate (line 75) has no measured box and stays for the person to write.
+      "64@1": { value: line.QCP.64, when: "line.HH.partner == 1" }
+      "64@2": { value: line.QCP.64, when: "line.QCP.adapted == 1 and line.HH.partner == 1" }
+      "68@1": { value: "min(line.QCP.64, param.workPremiumCapCouple)", when: "line.HH.partner == 1" }
+      "72@1": { value: line.QCP.72, when: "line.HH.partner == 1" }
+      "68@2": { value: "min(line.QCP.64, param.adaptedWorkPremiumCapCouple)", when: "line.QCP.adapted == 1 and line.HH.partner == 1" }
+      "72@2": { value: line.QCP.72_2, when: "line.QCP.adapted == 1 and line.HH.partner == 1" }
+      "74": { value: "if(household.childrenUnder18 > 0, param.workPremiumRateChildCouple, param.workPremiumRate) * 100", when: "line.HH.partner == 1" }
+      "76@1": { value: line.QCP.76, when: "line.HH.partner == 1" }
+      "76@2": { value: line.QCP.76_2, when: "line.QCP.adapted == 1 and line.HH.partner == 1" }
+      "78@1": { value: line.QC.family, when: "line.HH.partner == 1" }
+      "78@2": { value: line.QC.family, when: "line.QCP.adapted == 1 and line.HH.partner == 1" }
+      "82@1": { value: "max(0, line.QC.family - param.workPremiumCapCouple)", when: "line.HH.partner == 1" }
+      "83@1": { value: line.QCP.83, when: "line.HH.partner == 1" }
+      "82@2": { value: "max(0, line.QC.family - param.adaptedWorkPremiumCapCouple)", when: "line.QCP.adapted == 1 and line.HH.partner == 1" }
+      "83@2": { value: line.QCP.83_2, when: "line.QCP.adapted == 1 and line.HH.partner == 1" }
+      "84@1": { value: line.QCP.84, when: "line.HH.partner == 1" }
+      "84@2": { value: line.QCP.84_2, when: "line.QCP.adapted == 1 and line.HH.partner == 1" }
+      "85": { value: line.QCP.87, when: "line.HH.partner == 1" }
+      "86": { value: "line.QCP.87 - line.QCP.90", when: "line.HH.partner == 1" }
+      "87": { value: line.QCP.90, when: "line.HH.partner == 1" }
+      # Part E, section 2 – without a spouse
+      "p2:64@1": { value: line.QCP.64, when: "line.HH.partner == 0" }
+      "p2:64@2": { value: line.QCP.64, when: "line.QCP.adapted == 1 and line.HH.partner == 0" }
+      "p2:68@1": { value: "min(line.QCP.64, param.workPremiumCapSingle)", when: "line.HH.partner == 0" }
+      "p2:72@1": { value: line.QCP.72, when: "line.HH.partner == 0" }
+      "p2:68@2": { value: "min(line.QCP.64, param.adaptedWorkPremiumCapSingle)", when: "line.QCP.adapted == 1 and line.HH.partner == 0" }
+      "p2:72@2": { value: line.QCP.72_2, when: "line.QCP.adapted == 1 and line.HH.partner == 0" }
+      "p2:74": { value: "if(household.childrenUnder18 > 0, param.workPremiumRateChildSingle, param.workPremiumRate) * 100", when: "line.HH.partner == 0" }
+      "p2:76@1": { value: line.QCP.76, when: "line.HH.partner == 0" }
+      "p2:76@2": { value: line.QCP.76_2, when: "line.QCP.adapted == 1 and line.HH.partner == 0" }
+      "p2:78@1": { value: line.QC.family, when: "line.HH.partner == 0" }
+      "p2:78@2": { value: line.QC.family, when: "line.QCP.adapted == 1 and line.HH.partner == 0" }
+      "p2:82@1": { value: "max(0, line.QC.family - param.workPremiumCapSingle)", when: "line.HH.partner == 0" }
+      "p2:83@1": { value: line.QCP.83, when: "line.HH.partner == 0" }
+      "p2:82@2": { value: "max(0, line.QC.family - param.adaptedWorkPremiumCapSingle)", when: "line.QCP.adapted == 1 and line.HH.partner == 0" }
+      "p2:83@2": { value: line.QCP.83_2, when: "line.QCP.adapted == 1 and line.HH.partner == 0" }
+      "p2:84@1": { value: line.QCP.84, when: "line.HH.partner == 0" }
+      "p2:84@2": { value: line.QCP.84_2, when: "line.QCP.adapted == 1 and line.HH.partner == 0" }
+      "p2:87": { value: line.QCP.87, when: "line.HH.partner == 0" }
+      # Part F
+      "89": line.QCP.90
+      "90": line.TP1.456
+
+  # Only the spouse who transfers retirement income files it. The spouse's name and SIN (lines 3 and 4) stay for the
+  # person; lines 12 to 16 aren't handled.
+  QCQ:
+    title: Schedule Q, Retirement Income Transferred to Your Spouse (Revenu Québec)
+    url: https://www.revenuquebec.ca/documents/en/formulaires/tp/2025-12/TP-1.D.Q-V%282025-12%29.pdf
+    applies: 'person.province == "QC" and line.TP1.245 > 0'
+    fields:
+      "10": line.TP1.122
+      "20": line.QCQ.20
+      "22": line.TP1.245
+      "50": sum(RL2.boxJ)
+      "52": line.TP1.245
+      "53": line.QCQ.20
+      "58": line.QCQ.58
+
+  # Part A only: employment outside Quebec (Part B) isn't handled. Line 13 is printed.
+  QCR:
+    title: Schedule R, Québec Parental Insurance Plan (QPIP) Premium (Revenu Québec)
+    url: https://www.revenuquebec.ca/documents/en/formulaires/tp/2025-12/TP-1.D.R-V%282025-12%29.pdf
+    applies: 'person.province == "QC" and line.TP1.439 > 0'
+    fields:
+      "10": line.QCR.12
+      "12": line.QCR.12
+      "14": line.QCR.14
+      "18": line.QCR.14
+      "20": line.QCR.20
+      "22": "min(line.QCR.12, line.QCR.20)"
+      "24": line.QCR.24
+      "26": line.QCR.26
+
+  # The student's own fees at 8% (Part A, section 2). Fees of 2013 and earlier at 20% (section 1) and a transfer to a
+  # parent (Part B) aren't handled.
+  QCT:
+    title: Schedule T, Tax Credit for Tuition or Examination Fees (Revenu Québec)
+    url: https://www.revenuquebec.ca/documents/en/formulaires/tp/2025-12/TP-1.D.T-V%282025-12%29.pdf
+    applies: 'person.province == "QC" and line.QCT.45 > 0'
+    fields:
+      "40.6": { value: sum(RL8.boxB), when: "line.QCT.41 > 0" }
+      "40.7": { value: line.T1.45350, when: "line.QCT.41 > 0" }
+      "41": line.QCT.41
+      "43": line.QCT.41
+      "44": answer.unusedProvincialTuition
+      "44.1": line.QCT.44_1
+      "45": line.QCT.45
+      "46": line.TP1.398
+      "47": "line.QCT.45 - line.TP1.398"
+      "48": "(line.QCT.45 - line.TP1.398) * 12.5"
+
+  # Part B for an employee, Part C with self-employment (the app takes the short way through lines 56 to 75: an
+  # employee's QPP over the maximum isn't handled with self-employment, so line 74 is 0 and lines 56 to 73 stay blank).
+  # Part A (an election to stop contributing) isn't handled.
+  QCU:
+    title: Schedule U, Québec Pension Plan (QPP) Contribution and Deduction (Revenu Québec)
+    url: https://www.revenuquebec.ca/documents/en/formulaires/tp/2025-12/TP-1.D.U-V%282025-12%29.pdf
+    applies: 'person.province == "QC" and (line.QCU.23 > 0 or line.QCU.33 > 0)'
+    fields:
+      # Part B – Deduction for QPP contributions on employment income
+      "10": { value: "min(line.TP1.98, param.qppMaxEmployee)", when: "line.QCU.33 == 0" }
+      "11": { value: line.QCU.11, when: "line.QCU.33 == 0" }
+      "12": { value: "min(line.TP1.98_1, param.qppMaxPensionable)", when: "line.QCU.33 == 0" }
+      "13": { value: param.qppExemption, when: "line.QCU.33 == 0" }
+      "14": { value: "max(0, min(line.TP1.98_1, param.qppMaxPensionable) - param.qppExemption)", when: "line.QCU.33 == 0" }
+      "14.1": { value: param.qppMaxPensionable, when: "line.QCU.33 == 0" }
+      "14.2": { value: param.qppExemption, when: "line.QCU.33 == 0" }
+      "14.3": { value: "param.qppMaxPensionable - param.qppExemption", when: "line.QCU.33 == 0" }
+      "14.4": { value: line.QCU.14_4, when: "line.QCU.33 == 0" }
+      "15": { value: "round(line.QCU.14_4 * param.qppFirstRate, 2)", when: "line.QCU.33 == 0" }
+      "16": { value: line.QCU.16, when: "line.QCU.33 == 0" }
+      "17": { value: line.TP1.98, when: "line.QCU.33 == 0" }
+      "17.1": { value: line.QCU.14_4, when: "line.QCU.33 == 0" }
+      "17.2": { value: "round(line.QCU.14_4 * param.qppEmployeeRate, 2)", when: "line.QCU.33 == 0" }
+      "17.3": { value: "max(0, line.TP1.98 - round(line.QCU.14_4 * param.qppEmployeeRate, 2))", when: "line.QCU.33 == 0" }
+      "17.4": { value: line.TP1.98_2, when: "line.QCU.33 == 0" }
+      "17.5": { value: line.QCU.17_5, when: "line.QCU.33 == 0" }
+      "18.5": { value: line.TP1.98_1, when: "line.QCU.33 == 0" }
+      "18.6": { value: param.qppMaxPensionable, when: "line.QCU.33 == 0" }
+      "18.7": { value: "max(0, line.TP1.98_1 - param.qppMaxPensionable)", when: "line.QCU.33 == 0" }
+      "18.8": { value: param.qppAdditionalMaxPensionable, when: "line.QCU.33 == 0" }
+      "18.9": { value: param.qppMaxPensionable, when: "line.QCU.33 == 0" }
+      "19": { value: "param.qppAdditionalMaxPensionable - param.qppMaxPensionable", when: "line.QCU.33 == 0" }
+      "20": { value: "min(max(0, line.TP1.98_1 - param.qppMaxPensionable), param.qppAdditionalMaxPensionable - param.qppMaxPensionable)", when: "line.QCU.33 == 0" }
+      "21": { value: line.QCU.21, when: "line.QCU.33 == 0" }
+      "22": { value: "min(line.QCU.17_5, line.QCU.21)", when: "line.QCU.33 == 0" }
+      "22.1": { value: line.QCU.16, when: "line.QCU.33 == 0" }
+      "23": { value: line.QCU.23, when: "line.QCU.33 == 0" }
+      # Part C, section 1 – QPP contribution on income from self-employment
+      "30": line.QCU.33
+      "31.1": line.QCU.33
+      "31.3": line.QCU.33
+      "33": line.QCU.33
+      "34": { value: line.TP1.98, when: "line.QCU.33 > 0" }
+      "35": { value: line.TP1.98_2, when: "line.QCU.33 > 0" }
+      "36": { value: "line.TP1.98 + line.TP1.98_2", when: "line.QCU.33 > 0" }
+      "38": { value: "round((line.TP1.98 + line.TP1.98_2) / param.qppEmployeeRate, 2)", when: "line.QCU.33 > 0" }
+      "39": { value: param.qppExemption, when: "line.QCU.33 > 0" }
+      "40": { value: line.QCU.40, when: "line.QCU.33 > 0" }
+      "41": { value: line.TP1.98_1, when: "line.QCU.33 > 0" }
+      "42": { value: "max(0, line.QCU.40 - line.TP1.98_1)", when: "line.QCU.33 > 0" }
+      "43": line.QCU.43
+      "44": { value: param.qppMaxPensionable, when: "line.QCU.33 > 0" }
+      "45": { value: param.qppExemption, when: "line.QCU.33 > 0" }
+      "46": { value: "param.qppMaxPensionable - param.qppExemption", when: "line.QCU.33 > 0" }
+      "47": { value: "round((line.TP1.98 + line.TP1.98_2) / param.qppEmployeeRate, 2)", when: "line.QCU.33 > 0" }
+      "47.1": { value: "max(0, param.qppMaxPensionable - line.QCU.40)", when: "line.QCU.33 > 0" }
+      "47.2": { value: "min(line.QCU.43, max(0, param.qppMaxPensionable - line.QCU.40))", when: "line.QCU.33 > 0" }
+      "48": line.QCU.48
+      "53": { value: param.qppAdditionalMaxPensionable, when: "line.QCU.33 > 0" }
+      "54": { value: param.qppMaxPensionable, when: "line.QCU.33 > 0" }
+      "55": { value: "param.qppAdditionalMaxPensionable - param.qppMaxPensionable", when: "line.QCU.33 > 0" }
+      "75": { value: line.QCU.40, when: "line.QCU.33 > 0" }
+      "76": { value: "min(line.TP1.98_1, line.QCU.40)", when: "line.QCU.33 > 0" }
+      "77": { value: "line.QCU.33 + min(line.TP1.98_1, line.QCU.40)", when: "line.QCU.33 > 0" }
+      "78": { value: param.qppMaxPensionable, when: "line.QCU.33 > 0" }
+      "79": { value: "max(0, line.QCU.33 + min(line.TP1.98_1, line.QCU.40) - param.qppMaxPensionable)", when: "line.QCU.33 > 0" }
+      "81": { value: "max(0, line.QCU.33 + min(line.TP1.98_1, line.QCU.40) - param.qppMaxPensionable)", when: "line.QCU.33 > 0" }
+      "82": { value: "param.qppAdditionalMaxPensionable - param.qppMaxPensionable", when: "line.QCU.33 > 0" }
+      "84": { value: "param.qppAdditionalMaxPensionable - param.qppMaxPensionable", when: "line.QCU.33 > 0" }
+      "85": line.QCU.33
+      "87": { value: line.TP1.98_1, when: "line.QCU.33 > 0" }
+      "88": { value: param.qppMaxPensionable, when: "line.QCU.33 > 0" }
+      "89": { value: "max(0, line.TP1.98_1 - param.qppMaxPensionable)", when: "line.QCU.33 > 0" }
+      "91": line.QCU.33
+      "92":
+        value: "min(max(0, line.QCU.33 + min(line.TP1.98_1, line.QCU.40) - param.qppMaxPensionable), param.qppAdditionalMaxPensionable - param.qppMaxPensionable, line.QCU.33)"
+        when: "line.QCU.33 > 0"
+      "93":
+        value: "round(min(max(0, line.QCU.33 + min(line.TP1.98_1, line.QCU.40) - param.qppMaxPensionable), param.qppAdditionalMaxPensionable - param.qppMaxPensionable, line.QCU.33) * param.qppSecondSelfEmployedRate, 2)"
+        when: "line.QCU.33 > 0"
+      "93.1": { value: line.QCU.48, when: "line.QCU.33 > 0" }
+      "94": line.QCU.94
+      "95.1": { value: line.QCU.71, when: "line.QCU.33 > 0" }
+      "95.2": { value: line.TP1.98_1, when: "line.QCU.33 > 0" }
+      "95.3": line.QCU.33
+      "95.4": { value: "line.TP1.98_1 + line.QCU.33", when: "line.QCU.33 > 0" }
+      "95.5": { value: "min(param.qppAdditionalMaxPensionable, line.TP1.98_1 + line.QCU.33)", when: "line.QCU.33 > 0" }
+      "95.6": { value: param.qppMaxPensionable, when: "line.QCU.33 > 0" }
+      "95.7": { value: "max(0, min(param.qppAdditionalMaxPensionable, line.TP1.98_1 + line.QCU.33) - param.qppMaxPensionable)", when: "line.QCU.33 > 0" }
+      "95.8":
+        value: "round(max(0, min(param.qppAdditionalMaxPensionable, line.TP1.98_1 + line.QCU.33) - param.qppMaxPensionable) * param.qppSecondRate, 2)"
+        when: "line.QCU.33 > 0"
+      "95": line.QCU.95
+      "96": { value: "line.TP1.98 + line.TP1.98_2", when: "line.QCU.33 > 0" }
+      "97": { value: "max(0, line.QCU.95 - line.TP1.98 - line.TP1.98_2)", when: "line.QCU.33 > 0" }
+      "98": line.QCU.98
+      "99": line.QCU.99
+      # Part C, section 2 – QPP deduction
+      "100": line.QCU.48
+      "101": line.QCU.101
+      "102": line.QCU.48
+      "103": line.QCU.103
+      "104": { value: line.TP1.98, when: "line.QCU.33 > 0" }
+      "105": { value: "round(line.TP1.98 * param.qppFirstShare, 2)", when: "line.QCU.33 > 0" }
+      "106": line.QCU.33
+      "107": { value: line.TP1.98_1, when: "line.QCU.33 > 0" }
+      "108": { value: "line.QCU.33 + line.TP1.98_1", when: "line.QCU.33 > 0" }
+      "109": { value: param.qppExemption, when: "line.QCU.33 > 0" }
+      "110": { value: "max(0, line.QCU.33 + line.TP1.98_1 - param.qppExemption)", when: "line.QCU.33 > 0" }
+      "111": line.QCU.111
+      "112": { value: "round(line.QCU.111 * param.qppFirstRate, 2)", when: "line.QCU.33 > 0" }
+      "113": { value: "min(round(line.TP1.98 * param.qppFirstShare, 2), round(line.QCU.111 * param.qppFirstRate, 2))", when: "line.QCU.33 > 0" }
+      "114":
+        value: "line.QCU.101 + line.QCU.103 + min(round(line.TP1.98 * param.qppFirstShare, 2), round(line.QCU.111 * param.qppFirstRate, 2))"
+        when: "line.QCU.33 > 0"
+      "115": { value: "min(line.QCU.94 - line.QCU.48, line.QCU.99)", when: "line.QCU.33 > 0" }
+      "116": { value: line.TP1.98, when: "line.QCU.33 > 0" }
+      "116.1": { value: line.QCU.111, when: "line.QCU.33 > 0" }
+      "116.2": { value: "round(line.QCU.111 * param.qppEmployeeRate, 2)", when: "line.QCU.33 > 0" }
+      "116.3": { value: "max(0, line.TP1.98 - round(line.QCU.111 * param.qppEmployeeRate, 2))", when: "line.QCU.33 > 0" }
+      "116.4": { value: line.TP1.98_2, when: "line.QCU.33 > 0" }
+      "116.5": { value: "max(0, line.TP1.98 - round(line.QCU.111 * param.qppEmployeeRate, 2)) + line.TP1.98_2", when: "line.QCU.33 > 0" }
+      "117.5": { value: line.TP1.98_1, when: "line.QCU.33 > 0" }
+      "117.6": line.QCU.33
+      "117.7": { value: "line.TP1.98_1 + line.QCU.33", when: "line.QCU.33 > 0" }
+      "117.8": { value: param.qppMaxPensionable, when: "line.QCU.33 > 0" }
+      "117.9": { value: "max(0, line.TP1.98_1 + line.QCU.33 - param.qppMaxPensionable)", when: "line.QCU.33 > 0" }
+      "118": { value: param.qppAdditionalMaxPensionable, when: "line.QCU.33 > 0" }
+      "118.1": { value: param.qppMaxPensionable, when: "line.QCU.33 > 0" }
+      "118.2": { value: "param.qppAdditionalMaxPensionable - param.qppMaxPensionable", when: "line.QCU.33 > 0" }
+      "118.3":
+        value: "min(max(0, line.TP1.98_1 + line.QCU.33 - param.qppMaxPensionable), param.qppAdditionalMaxPensionable - param.qppMaxPensionable)"
+        when: "line.QCU.33 > 0"
+      "122":
+        value: "round(min(max(0, line.TP1.98_1 + line.QCU.33 - param.qppMaxPensionable), param.qppAdditionalMaxPensionable - param.qppMaxPensionable) * param.qppSecondRate, 2)"
+        when: "line.QCU.33 > 0"
+      "123":
+        value: >-
+          min(max(0, line.TP1.98 - round(line.QCU.111 * param.qppEmployeeRate, 2)) + line.TP1.98_2,
+          round(min(max(0, line.TP1.98_1 + line.QCU.33 - param.qppMaxPensionable), param.qppAdditionalMaxPensionable - param.qppMaxPensionable) * param.qppSecondRate, 2))
+        when: "line.QCU.33 > 0"
+      "124": line.QCU.124

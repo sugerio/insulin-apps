@@ -32,7 +32,7 @@ function checkForms(name: string, forms: readonly string[]) {
     for (const { form, amounts } of filled) {
       for (const field of form.fields) {
         if (field.kind !== "amount") continue;
-        const line = /^line\.([A-Z0-9]+\.[A-Za-z0-9]+)$/.exec(field.text)?.[1];
+        const line = /^line\.([A-Z0-9]+\.[A-Za-z0-9_]+)$/.exec(field.text)?.[1];
         if (!line || !(line in expected) || field.when) continue;
         const written = amounts.find((amount) => amount.key === field.key)?.value.toString() ?? "0";
         expect(written, `${form.id} row ${field.key} (${line})`).toBe(Dec.from(expected[line]!).roundTo(2, "HALF_UP").toString());
@@ -79,6 +79,14 @@ describe("2025 forms", () => {
     ["nt-student-couple", "T1,S2,S5,T2209,T2036,NT428,NTS2,NT479", "T1,S11,NT428,NTS11,NT479"],
     ["nu-young-family", "T1,S2,S5,T2209,T2036,NU428,NUS2,NU479", "T1,S11,NU428,NUS11,NU479"],
     ["nu-single-parent", "T1,S5,S9,S11,NU428,NUS11,NU479"],
+    // A resident of Quebec: the T1 for residents of Quebec and its federal forms, then the TP-1 and its schedules.
+    ["couple-kids-qc", "T1QC,T777,TP1,QCK,QCU", "T1QC,T778,TP1,QCC,QCK,QCU"],
+    ["high-income-couple-qc", "T1QC,S9,TP1,QCK,QCU", "T1QC,S3,S11,TP1,QCG,QCK,QCT,QCU"],
+    ["one-earner-couple-student-qc", "T1QC,S2,S5,TP1,QCU", "T1QC,TP1"],
+    ["self-employed-qc", "T1QC,T2125,TP1,QCF,QCK,QCL,QCR,QCU"],
+    ["senior-couple-qc", "T1QC,TP1,QCB,QCF,QCJ,QCK,QCQ", "T1QC,TP1,QCF,QCK"],
+    ["single-employee-qc", "T1QC,S9,TP1,QCU"],
+    ["single-parent-low-income-qc", "T1QC,S5,S6,T778,TP1,QCB,QCC,QCP,QCU"],
   ] as const) {
     it(`${name}: its forms hold the household's expected lines`, () => {
       const household = golden(name);
@@ -89,18 +97,24 @@ describe("2025 forms", () => {
         const filled = fillForms(rules, evaluation, personId, personalFacts(evaluation.input, personId));
         expect(filled.map((each) => each.form.id).join(","), name).toBe(people[index]);
         let checked = 0;
+        let quebec = 0;
         for (const { form, amounts } of filled) {
           for (const field of form.fields) {
-            // A row that holds a line as it is: blank when the expected line is zero, else that amount.
+            // A row that holds a line as it is: blank when the expected line is zero (or the row's condition is no),
+            // else that amount.
             if (field.kind !== "amount") continue;
-            const line = /^line\.([A-Z0-9]+\.[A-Za-z0-9]+)$/.exec(field.text)?.[1];
-            if (!line || !(line in expected) || field.when) continue;
+            const line = /^line\.([A-Z0-9]+\.[A-Za-z0-9_]+)$/.exec(field.text)?.[1];
+            if (!line || !(line in expected)) continue;
+            const shown = !field.when || evaluation.evaluate(personId, field.when.formula).value === true;
+            const value = Dec.from(expected[line]!).roundTo(2, "HALF_UP").toString();
             const written = amounts.find((amount) => amount.key === field.key)?.value.toString() ?? "0";
-            expect(written, `${form.id} row ${field.key} (${line})`).toBe(Dec.from(expected[line]!).roundTo(2, "HALF_UP").toString());
+            expect(written, `${form.id} row ${field.key} (${line})`).toBe(shown ? value : "0");
             checked += 1;
+            if (form.url.includes("revenuquebec.ca")) quebec += 1;
           }
         }
         expect(checked).toBeGreaterThan(30);
+        if (name.endsWith("-qc")) expect(quebec, "rows of the TP-1 and its schedules").toBeGreaterThan(5);
       });
     });
   }
@@ -119,6 +133,32 @@ describe("2025 forms", () => {
       ["75@1", "10567.96"],
       ["77@1", "18887.34"],
     ]);
+  });
+
+  it("fills the TP-1's information about you and your spouse, and keys a decimal line by its number", () => {
+    const gerard = marksOf("senior-couple-qc", 0, "TP1");
+    expect(gerard.marks).toEqual({
+      lastName: "Bouchard",
+      firstName: "Gérard",
+      birthDate: "19510211",
+      spouseYes: "X",
+      foreignPropertyNo: "X",
+      spouseLastName: "Bouchard",
+      spouseFirstName: "Lise",
+      spouseBirthDate: "19540730",
+    });
+    // Line 51: the spouse's net income, from line 275 of their TP-1.
+    expect(gerard.amounts["51"]).toBe("33600");
+    // Line 377.1 (TP1.377_1) and line 432, carried to page 5 (p5:432).
+    expect([gerard.amounts["377.1"], gerard.amounts["p5:432"]]).toEqual(["3848.58", "1695.42"]);
+    const single = marksOf("single-employee-qc", 0, "TP1");
+    expect(single.marks).toMatchObject({ spouseNo: "X" });
+    expect(Object.keys(single.marks).filter((key) => key.startsWith("spouse") && key !== "spouseNo")).toEqual([]);
+    expect(single.amounts["51"]).toBeUndefined();
+    // The exemption code instead of Schedule K, as a whole number.
+    expect(single.marks["449"]).toBe("14");
+    // Nobody outside Quebec gets a Revenu Québec form.
+    expect(marksOf("on-couple-kids", 0, "TP1")).toEqual({ marks: {}, amounts: {} });
   });
 
   it("fills the column of the bracket the taxable income falls in, ending at the tax line", () => {
@@ -221,6 +261,8 @@ describe("2025 forms", () => {
     expect(formAmount(Dec.from("1234567.5"))).toEqual({ dollars: "1,234,567", cents: "50" });
     expect(formAmount(Dec.from("12"))).toEqual({ dollars: "12", cents: "00" });
     expect(formAmount(Dec.from("-3472.91"))).toEqual({ dollars: "(3,472", cents: "91)" });
+    // Revenu Québec's forms ask for a minus sign.
+    expect(formAmount(Dec.from("-3572.36"), "minus")).toEqual({ dollars: "-3,572", cents: "36" });
   });
 });
 

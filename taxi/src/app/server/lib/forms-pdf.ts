@@ -1,11 +1,13 @@
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from "pdf-lib";
 import { formAmount, type FilledForm, type PlacedMark } from "../../shared/engine/forms.ts";
+import { decryptPdf } from "./pdf-decrypt.ts";
 
-// Builds one return's PDF: each CRA form with its amounts written in, then a worksheet that says how every number was
-// worked out. The CRA's forms are its print versions (no form fields), so each amount is drawn at its place: dollars
-// ending just left of the line between dollars and cents, cents just right of it (in a box with no such line, the
-// amount with its decimal point ends at the box's end). A whole number ends where its dollars would; text starts at its
-// box (smaller when it doesn't fit), a date has one digit per cell, and a tick is an X.
+// Builds one return's PDF: each form (the CRA's, then for a resident of Quebec Revenu Québec's) with its amounts written
+// in, then a worksheet that says how every number was worked out. The forms are print versions (no form fields), so
+// each amount is drawn at its place on the form's own page: dollars ending just left of the line between dollars and
+// cents, cents just right of it (in a box with no such line, the amount with its decimal point ends at the box's end).
+// A whole number ends where its dollars would; text starts at its box (smaller when it doesn't fit), a date has one
+// digit per cell, and a tick is an X.
 
 const SIZE = 9;
 const INK = rgb(0, 0, 0.55);
@@ -31,13 +33,14 @@ export async function buildReturnPdf(forms: { filled: FilledForm; template: Uint
   const bold = await out.embedFont(StandardFonts.HelveticaBold);
   const clean = textCleaner(font);
   for (const { filled, template } of forms) {
-    const source = await PDFDocument.load(template);
+    // Revenu Québec's forms are encrypted (with an empty password), which pdf-lib can't read.
+    const source = await PDFDocument.load(await decryptPdf(template));
     const pages = await out.copyPages(source, source.getPageIndices());
     for (const page of pages) out.addPage(page);
     for (const amount of filled.amounts) {
       const page = pages[amount.page - 1];
       if (!page) continue;
-      const { dollars, cents } = formAmount(amount.value);
+      const { dollars, cents } = formAmount(amount.value, filled.form.url.includes("revenuquebec.ca") ? "minus" : "brackets");
       if (amount.plain) {
         const text = `${dollars}.${cents}`;
         page.drawText(text, { x: amount.x - 2.5 - font.widthOfTextAtSize(text, SIZE), y: amount.y, size: SIZE, font, color: INK });

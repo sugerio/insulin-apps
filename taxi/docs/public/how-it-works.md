@@ -121,11 +121,19 @@ a name, a birth date, an amount or a document.
 ## Limits today
 
 - The forms leave Step 1 of the T1 and the schedules to fill in by hand.
-- The 2025 rules cover the T1 and the Ontario, British Columbia and Alberta forms for one or two adults: employment,
-  interest, dividends, trust income and capital gains; RRSP, FHSA, pension plan and union dues; the basic, age, CPP,
-  EI, employment, tuition, medical and donation credits; the spouse and eligible dependant amounts; and a spouse's
-  unused age amount and tuition moved between returns. Child care expenses and moving a spouse's age amount in
-  British Columbia or Alberta come later.
+- The 2025 rules cover the T1 and the Ontario, British Columbia and Alberta forms for one or two adults:
+  - income: employment, OAS, CPP, workplace pensions, annuities and RRIFs (T4A, T4A(P), T4A(OAS), T4RIF), EI
+    benefits (T4E), interest, dividends, trust income, capital gains, self-employment (Form T2125, with CPP on it from
+    Schedule 8), rental income (Form T776), income earned abroad, and the sale of real estate (Schedule 3);
+  - deductions: RRSP, FHSA, pension plan, union dues, child care (Form T778), moving (Form T1-M), home office as an
+    employee (Form T777) and the OAS repayment (line 23500);
+  - credits: the basic, age, CPP, EI, employment, pension, tuition, medical and donation amounts, the spouse and
+    eligible dependant amounts, a spouse's unused age, pension and tuition amounts, and the federal and provincial
+    foreign tax credits (Forms T2209 and T2036).
+- Not handled, and said so when it applies: capital cost allowance, farming and fishing income, pension income
+  splitting (Form T1032), repaying EI benefits, a home that was your residence only some of the years, CPP for part of
+  a year, a disabled child's child care limit, and moving a spouse's age or pension amount in British Columbia or
+  Alberta.
 - When the rules meet a case they don't handle, such as a CPP overpayment from two jobs, the number is shown as
   missing with the reason, never guessed.
 - Only the 2025 tax year.

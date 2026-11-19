@@ -49,6 +49,11 @@ export function formatMoney(value: string): string {
   return `${value.startsWith("-") ? "-" : ""}$${GROUPED.format(BigInt(whole))}.${cents}`;
 }
 
+/** A slip box as printed: a count (months of study) as a number, an amount as money. */
+export function formatBox(slipType: { counts: string[] } | undefined, box: string, value: string): string {
+  return slipType?.counts.includes(box) ? GROUPED.format(Number(value)) : formatMoney(value);
+}
+
 /** A rate as "14.5%". */
 export function formatRate(value: string): string {
   return `${Dec.from(value).mul(100).toString()}%`;

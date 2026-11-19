@@ -1,0 +1,151 @@
+{
+  "about": "A single sales representative in Ontario with commission income and a salary above the CPP maximum together (second additional CPP), and RRIF payments before 65. Synthetic data.",
+  "input": {
+    "year": 2025,
+    "people": [
+      {
+        "id": "p1",
+        "name": "Morgan Reid",
+        "role": "self",
+        "birthDate": "1985-07-07",
+        "province": "ON"
+      }
+    ],
+    "household": {
+      "maritalStatus": "single",
+      "dependants": []
+    },
+    "answers": {
+      "p1": {
+        "rrspDeduction": "0",
+        "fhsaDeduction": "0",
+        "medicalExpenses": "0",
+        "donations": "0",
+        "unusedTuition": "0",
+        "tuitionTransfer": "0",
+        "hasSelfEmployment": true,
+        "hasRentalIncome": false,
+        "hasPensionIncome": false,
+        "hasEiBenefits": false,
+        "hasForeignIncome": false,
+        "soldProperty": false,
+        "hasChildCare": false,
+        "hasWorkFromHome": false,
+        "hasMovingExpenses": false,
+        "hasOasPension": false,
+        "hasCppBenefits": false,
+        "hasRrifIncome": true,
+        "hasForeignProperty": false,
+        "selfEmploymentKind": "commission",
+        "selfEmploymentGross": "40000",
+        "selfEmploymentExpenses": "8000"
+      }
+    },
+    "slips": [
+      {
+        "id": "s1",
+        "person": "p1",
+        "type": "T4",
+        "issuer": "Summit Sales Inc.",
+        "boxes": {
+          "14": "50000",
+          "16": "2766.75",
+          "18": "820",
+          "22": "7000",
+          "24": "50000",
+          "26": "50000"
+        }
+      },
+      {
+        "id": "s2",
+        "person": "p1",
+        "type": "T4RIF",
+        "issuer": "Lakeview Credit Union",
+        "boxes": {
+          "16": "2000",
+          "28": "200"
+        }
+      }
+    ]
+  },
+  "expected": {
+    "p1": {
+      "T1.10100": "50000",
+      "T1.10400": "0",
+      "T1.11300": "0",
+      "T1.11400": "0",
+      "T1.11500": "0",
+      "T1.11900": "0",
+      "T1.12010": "0",
+      "T1.12000": "0",
+      "T1.12100": "0",
+      "T1.12600": "0",
+      "S3.13800": "0",
+      "S3.15800": "0",
+      "S3.19900": "0",
+      "T1.12700": "0",
+      "T1.13000": "2000",
+      "T1.13500": "0",
+      "T1.13700": "0",
+      "T1.13900": "32000",
+      "T1.15000": "84000",
+      "T1.22215": "465",
+      "T1.42100": "3326.7",
+      "T1.31000": "1054.35",
+      "T1.22200": "2272.35",
+      "T1.21900": "0",
+      "T1.22900": "0",
+      "T1.23200": "0",
+      "T1.21400": "0",
+      "T1.23300": "2737.35",
+      "T1.23400": "81262.65",
+      "T1.23500": "0",
+      "T1.42200": "0",
+      "T1.23600": "81262.65",
+      "T1.26000": "81262.65",
+      "T1.40400": "13216.35",
+      "T1.30000": "16129",
+      "T1.30100": "0",
+      "T1.30800": "2301.75",
+      "T1.31200": "820",
+      "T1.31260": "1471",
+      "T1.31400": "0",
+      "ON428.8": "5267.2",
+      "ON428.10": "0",
+      "ON428.27": "0",
+      "T1.30300": "0",
+      "T1.30400": "0",
+      "T1.32300": "0",
+      "S11.24": "0",
+      "T1.32600": "0",
+      "T1.33200": "0",
+      "T1.33500": "21776.1",
+      "T1.33800": "3157.53",
+      "T1.34900": "0",
+      "T1.34990": "0",
+      "T1.35000": "3157.53",
+      "T1.40425": "0",
+      "T1.42900": "10058.82",
+      "T1.40500": "0",
+      "T1.40600": "10058.82",
+      "T1.42000": "10058.82",
+      "ON428.50": "854.62",
+      "ON428.57": "0",
+      "ON428.68": "0",
+      "ON428.90": "5162.58",
+      "ON428.13": "0",
+      "ON428.16": "0",
+      "ON428.34": "0",
+      "ON428.75": "0",
+      "ON428.80": "0",
+      "ON428.85": "0",
+      "ON428.89": "750",
+      "ON428.82": "0",
+      "T1.42800": "5162.58",
+      "T1.43500": "18548.1",
+      "T1.43700": "7200",
+      "T1.48400": "0",
+      "T1.48500": "11348.1"
+    }
+  }
+}

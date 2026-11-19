@@ -85,6 +85,10 @@ params:
     label: Net income from which there is no British Columbia tax reduction
     source: "BC428: no reduction when net income is $40,807 or more"
     value: 40807
+  bcPensionAmountMax:
+    label: Most British Columbia pension income amount
+    source: "BC428 line 36 (58360): maximum $1,000"
+    value: 1000
 
 lines:
   # Part A – British Columbia tax on taxable income
@@ -109,17 +113,22 @@ lines:
     source: "BC428 lines 21 to 23. The app assumes the child had no income"
   BC428.33:
     label: CPP and EI credit amounts
-    formula: "line.T1.30800 + line.T1.31200"
+    formula: "line.T1.30800 + line.T1.31000 + line.T1.31200"
+    source: "BC428 lines 27 to 33: lines 30800, 31000 and 31200 of your return"
+  BC428.36:
+    label: British Columbia pension income amount
+    formula: "min(param.bcPensionAmountMax, line.T1.11500)"
+    source: "BC428 line 36 (58360): eligible pension income, up to $1,000"
   BC428.44:
     label: Amounts transferred from your spouse or common-law partner
-    formula: 'if(line.HH.partner == 1 and household.partnerInYear and spouse.person.age >= 65, unsupported("Transferring your spouse''s unused British Columbia age amount (Schedule BC(S2)) isn''t handled by this app yet"), 0)'
+    formula: 'if(line.HH.partner == 1 and household.partnerInYear, if(spouse.person.age >= 65 or spouse.line.BC428.36 > 0, unsupported("Transferring your spouse''s unused British Columbia age or pension amount (Schedule BC(S2)) isn''t handled by this app yet"), 0), 0)'
   BC428.51:
     label: Allowable medical expenses
     formula: "max(0, line.T1.33099 - min(param.bcMedicalThresholdMax, round(line.T1.23600 * param.medicalThresholdRate, 2)))"
     source: "BC428 lines 46 to 51: expenses over whichever is less, $2,689 or 3% of net income"
   BC428.54:
     label: British Columbia credit amounts
-    formula: "line.BC428.16 + line.BC428.17 + line.BC428.20 + line.BC428.23 + line.BC428.33 + line.BC428.44 + line.BC428.51"
+    formula: "line.BC428.16 + line.BC428.17 + line.BC428.20 + line.BC428.23 + line.BC428.33 + line.BC428.36 + line.BC428.44 + line.BC428.51"
   BC428.56:
     label: British Columbia credit amounts at the credit rate
     formula: "round(line.BC428.54 * param.bcCreditRate, 2)"
@@ -146,6 +155,21 @@ lines:
     label: British Columbia tax reduction
     formula: "if(line.T1.23600 >= param.bcTaxReductionLimit, 0, max(0, param.bcTaxReductionBasic - round(max(0, line.T1.23600 - param.bcTaxReductionBase) * param.bcTaxReductionRate, 2)))"
     source: "BC428 lines 73 to 79: $562, less 3.56% of net income over $25,020"
+  # Form T2036 – the provincial foreign tax credit: the foreign tax left after the federal credit, up to the share of
+  # the province's tax otherwise payable on the foreign income.
+  BC.taxOtherwise:
+    label: British Columbia tax otherwise payable, for the foreign tax credit
+    formula: "max(0, line.BC428.68 - line.BC428.79)"
+    source: "Form T2036, note 4: British Columbia tax without the foreign tax credit"
+  BC428.71:
+    label: Provincial foreign tax credit
+    formula: >-
+      if(line.FTC.left > 0 and line.T1.23600 > 0, min(line.FTC.left,
+      round(min(line.FTC.netForeign, line.T1.23600) * line.BC.taxOtherwise / line.T1.23600, 2), line.BC.taxOtherwise), 0)
+    source: "Form T2036, line 5"
+  BC428.72:
+    label: British Columbia tax after the foreign tax credit
+    formula: "max(0, line.BC428.68 - line.BC428.71)"
   BC428.91:
     label: British Columbia tax
-    formula: "max(0, line.BC428.68 - line.BC428.79)"
+    formula: "max(0, line.BC428.72 - line.BC428.79)"

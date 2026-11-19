@@ -6,7 +6,7 @@ import { rulesFor } from "../src/app/shared/rules/index.ts";
 // npm run sample-slips -- [--out <dir>] [--self <name>] [--spouse <name>]
 //
 // Writes sample 2025 slips as PDFs, for trying the app and for testing AI reading: a T4 for each adult, two T5s (two banks) for the
-// person preparing, a T2202 for the spouse, and receipts and notices: a donation receipt, a dental receipt for the
+// person preparing, a T4E and a T2202 for the spouse, and receipts and notices: a donation receipt, a dental receipt for the
 // spouse, an RRSP receipt for early 2026, and each adult's 2024 notice of assessment. Every page says it is a synthetic sample. The repository keeps no
 // binary files, so the PDFs are made here and never committed; the default folder is ignored by git and by the app
 // checks. Box labels come from the year's rules (slips.yaml), so a sample shows the boxes the app reads.
@@ -25,7 +25,7 @@ const rules = rulesFor(YEAR)!;
 
 interface Sample {
   file: string;
-  type: "T4" | "T5" | "T2202";
+  type: "T4" | "T5" | "T2202" | "T4E";
   title: string;
   issuer: { name: string; lines: string[] };
   recipient: { name: string; lines: string[] };
@@ -86,6 +86,14 @@ const samples: Sample[] = [
     issuer: { name: "Northwind Bank", lines: ["250 Bay Street", "Toronto ON  M5J 2S1"] },
     recipient: { name: self, lines: home },
     boxes: { 13: "380.00" },
+  },
+  {
+    file: `T4E-${slug(spouse)}-Service-Canada.pdf`,
+    type: "T4E",
+    title: "Statement of Employment Insurance and Other Benefits",
+    issuer: { name: "Service Canada", lines: ["Employment Insurance", "Ottawa ON  K1A 0J9"] },
+    recipient: { name: spouse, lines: home },
+    boxes: { 7: "30", 14: "4200.00", 15: "4200.00", 22: "420.00" },
   },
   {
     file: `T2202-${slug(spouse)}-Lakeview-University.pdf`,
@@ -228,7 +236,8 @@ async function render(sample: Sample): Promise<Uint8Array> {
     page.drawRectangle({ x, y: y + height - 14, width: 26, height: 14, color: rgb(0.15, 0.15, 0.2) });
     text(box, x + 4, y + height - 11, 8, bold, rgb(1, 1, 1));
     text(fit(labels[box] ?? "", font, 7, width - 34), x + 30, y + height - 11, 7, font, muted);
-    const shown = sample.type === "T2202" && box !== "26" ? amount : Number(amount).toLocaleString("en-CA", { minimumFractionDigits: 2 });
+    const count = rules.slips.get(sample.type)!.counts.includes(box);
+    const shown = count ? amount : Number(amount).toLocaleString("en-CA", { minimumFractionDigits: 2 });
     text(shown, x + width - 8 - font.widthOfTextAtSize(shown, 14), y + 9, 14, font);
   });
 

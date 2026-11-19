@@ -1,0 +1,157 @@
+{
+  "about": "A single retiree in British Columbia, 72, with a large pension: part of the OAS is repaid (line 23500), and a cottage sold at a gain. Synthetic data.",
+  "input": {
+    "year": 2025,
+    "people": [
+      {
+        "id": "p1",
+        "name": "Robin Chan",
+        "role": "self",
+        "birthDate": "1953-05-20",
+        "province": "BC"
+      }
+    ],
+    "household": {
+      "maritalStatus": "single",
+      "dependants": []
+    },
+    "answers": {
+      "p1": {
+        "rrspDeduction": "0",
+        "fhsaDeduction": "0",
+        "medicalExpenses": "0",
+        "donations": "0",
+        "unusedTuition": "0",
+        "tuitionTransfer": "0",
+        "hasSelfEmployment": false,
+        "hasRentalIncome": false,
+        "hasPensionIncome": true,
+        "hasEiBenefits": false,
+        "hasForeignIncome": false,
+        "soldProperty": true,
+        "hasChildCare": false,
+        "hasWorkFromHome": false,
+        "hasMovingExpenses": false,
+        "hasOasPension": true,
+        "hasCppBenefits": true,
+        "hasRrifIncome": false,
+        "hasForeignProperty": false,
+        "propertyUse": "personal_use",
+        "propertyProceeds": "400000",
+        "propertyCost": "250000",
+        "propertyOutlays": "20000"
+      }
+    },
+    "slips": [
+      {
+        "id": "s1",
+        "person": "p1",
+        "type": "T4A",
+        "issuer": "Coast Pension Plan",
+        "boxes": {
+          "016": "110000",
+          "022": "30000",
+          "024": "4000"
+        }
+      },
+      {
+        "id": "s2",
+        "person": "p1",
+        "type": "T4AOAS",
+        "issuer": "Service Canada",
+        "boxes": {
+          "18": "8800",
+          "22": "1300"
+        }
+      },
+      {
+        "id": "s3",
+        "person": "p1",
+        "type": "T4AP",
+        "issuer": "Service Canada",
+        "boxes": {
+          "20": "14000",
+          "22": "1400"
+        }
+      }
+    ]
+  },
+  "expected": {
+    "p1": {
+      "T1.10100": "0",
+      "T1.10400": "0",
+      "T1.11300": "8800",
+      "T1.11400": "14000",
+      "T1.11500": "114000",
+      "T1.11900": "0",
+      "T1.12010": "0",
+      "T1.12000": "0",
+      "T1.12100": "0",
+      "T1.12600": "0",
+      "S3.13800": "0",
+      "S3.15800": "130000",
+      "S3.19900": "65000",
+      "T1.12700": "65000",
+      "T1.13000": "0",
+      "T1.13500": "0",
+      "T1.13700": "0",
+      "T1.13900": "0",
+      "T1.15000": "201800",
+      "T1.22215": "0",
+      "T1.42100": "0",
+      "T1.31000": "0",
+      "T1.22200": "0",
+      "T1.21900": "0",
+      "T1.22900": "0",
+      "T1.23200": "0",
+      "T1.21400": "0",
+      "T1.23300": "0",
+      "T1.23400": "201800",
+      "T1.23500": "8800",
+      "T1.42200": "8800",
+      "T1.23600": "193000",
+      "T1.26000": "193000",
+      "T1.40400": "40879.79",
+      "T1.30000": "15810.56",
+      "T1.30100": "0",
+      "T1.30800": "0",
+      "T1.31200": "0",
+      "T1.31260": "0",
+      "T1.31400": "2000",
+      "ON428.8": "17674.4",
+      "ON428.10": "0",
+      "ON428.27": "1762",
+      "T1.30300": "0",
+      "T1.30400": "0",
+      "T1.32300": "0",
+      "S11.24": "0",
+      "T1.32600": "0",
+      "T1.33200": "0",
+      "T1.33500": "17810.56",
+      "T1.33800": "2582.53",
+      "T1.34900": "0",
+      "T1.34990": "0",
+      "T1.35000": "2582.53",
+      "T1.40425": "0",
+      "T1.42900": "38297.26",
+      "T1.40500": "0",
+      "T1.40600": "38297.26",
+      "T1.42000": "38297.26",
+      "BC428.60": "704.96",
+      "BC428.65": "0",
+      "BC428.68": "18408.93",
+      "BC428.91": "18408.93",
+      "BC428.8": "19113.89",
+      "BC428.20": "0",
+      "BC428.23": "0",
+      "BC428.79": "0",
+      "BC428.36": "1000",
+      "BC428.71": "0",
+      "T1.42800": "18408.93",
+      "T1.43500": "65506.19",
+      "T1.43700": "32700",
+      "T1.48400": "0",
+      "T1.48500": "32806.19"
+    }
+  }
+}

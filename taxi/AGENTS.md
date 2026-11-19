@@ -13,7 +13,8 @@ platform; the organization is the tenant.
 
 Each adult of a tax year (the person preparing, and their spouse when in the year) has a return with seven steps:
 personal info, upload documents, income, deductions, credits, confirm, finish. Income, deductions and credits are built
-from the questions' `module` in questions.yaml (one `ModuleStep`). The app shows one return at a time, at
+from the questions' `module` in questions.yaml (one `ModuleStep`); a yes/no question with parts (`parent`) is a group
+whose parts are asked in its card. The app shows one return at a time, at
 `/returns/:year/:personId/:step`, with a switcher to the other; the server reports each return's steps
 (`TaxYear.returns`). The engine works out both returns together, so the couple's credits and transfers hold. Hints
 (`rules/<country>/<year>/hints.yaml`, `src/app/shared/engine/hints.ts`) are what-ifs on those returns: a saving is the

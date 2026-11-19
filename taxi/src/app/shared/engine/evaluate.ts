@@ -130,7 +130,7 @@ export class Evaluation {
         const question = rules.questions.get(id);
         if (!question) continue; // reported as unhandled
         const ok =
-          question.type === "money"
+          question.type === "money" || question.type === "percent"
             ? typeof answer === "string" && /^-?\d+(\.\d+)?$/.test(answer)
             : question.type === "boolean"
               ? typeof answer === "boolean"
@@ -294,7 +294,7 @@ export class Evaluation {
         const given = answer ?? question.default;
         // A decision's default is the app's choice, not a guess at what the person would say.
         const status: Status = answer !== undefined || question.decision ? "complete" : question.default !== undefined ? "estimate" : "missing";
-        const value = given === undefined ? null : question.type === "money" ? Dec.from(given as string) : given;
+        const value = given === undefined ? null : question.type === "money" || question.type === "percent" ? Dec.from(given as string) : given;
         return { value, status, label: question.ask, reads: [] };
       }
       case "person":
@@ -335,6 +335,10 @@ export class Evaluation {
         };
       case "partnerInYear":
         return { value: this.input.people.length > 1, status: "complete", label: "Both returns are prepared together", reads: [] };
+      case "childrenUnder7":
+        return { value: childrenUnder(7), status: "complete", label: "Dependants under 7 at the end of the year", reads: [] };
+      case "childrenUnder17":
+        return { value: childrenUnder(17), status: "complete", label: "Dependants under 17 at the end of the year", reads: [] };
       case "childrenUnder18":
         return { value: childrenUnder(18), status: "complete", label: "Dependants under 18 at the end of the year", reads: [] };
       case "childrenUnder19":

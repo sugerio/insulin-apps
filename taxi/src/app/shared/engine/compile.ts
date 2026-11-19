@@ -37,7 +37,7 @@ const sourceParam = z.strictObject({
 });
 const sourceLine = z.strictObject({ label: z.string().min(1), formula: z.string().min(1), source: z.string().min(1).optional(), module: z.enum(MODULES).optional() });
 const sourceQuestion = z.strictObject({
-  type: z.enum(["money", "boolean", "choice"]),
+  type: z.enum(["money", "percent", "boolean", "choice"]),
   ask: z.string().min(1),
   module: z.enum(MODULES).optional(),
   help: z.string().min(1).optional(),
@@ -46,6 +46,9 @@ const sourceQuestion = z.strictObject({
   suggest: z.string().min(1).optional(),
   default: z.union([sourceNumber, z.boolean()]).optional(),
   decision: z.boolean().optional(),
+  parent: z.string().min(1).optional(),
+  note: z.string().min(1).optional(),
+  optionLabels: z.record(z.string(), z.string().min(1)).optional(),
   options: z.array(z.string()).optional(),
 });
 const sourceSlip = z.strictObject({
@@ -53,8 +56,10 @@ const sourceSlip = z.strictObject({
   about: z.string().min(1),
   boxes: z.record(z.string(), z.string()),
   informational: z.array(sourceNumber).optional(),
+  counts: z.array(sourceNumber).optional(),
   receipt: z.boolean().optional(),
   printedYears: z.array(z.number().int()).optional(),
+  name: z.string().min(1).optional(),
 });
 
 const sourceHint = z.strictObject({
@@ -186,6 +191,7 @@ export function compileRules(chain: SourceYear[], hash: (text: string) => string
     slips: mapValues(merged.slips as Record<string, z.infer<typeof sourceSlip>>, (slip) => ({
       ...slip,
       informational: (slip.informational ?? []).map(String),
+      counts: (slip.counts ?? []).map(String),
       receipt: slip.receipt ?? false,
       printedYears: slip.printedYears ?? [0],
     })),

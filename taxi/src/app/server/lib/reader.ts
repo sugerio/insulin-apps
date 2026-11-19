@@ -158,12 +158,20 @@ export function claudeReader(client: Anthropic): SlipReader {
           type: slip.type,
           person: slip.person,
           issuer: slip.issuer,
-          boxes: Object.fromEntries(slip.boxes.map((box) => [box.box, box.amount])),
-          unsure: slip.unsure,
+          boxes: Object.fromEntries(slip.boxes.map((box) => [printedBox(context.rules, slip.type, box.box), box.amount])),
+          unsure: slip.unsure.map((box) => printedBox(context.rules, slip.type, box)),
         })),
       };
     },
   };
+}
+
+/** A box number as the slip type prints it: "16" read from a T4A is box "016". */
+function printedBox(rules: RuleSet, type: string, box: string): string {
+  const boxes = rules.slips.get(type)?.boxes ?? {};
+  if (box in boxes) return box;
+  const padded = box.padStart(3, "0");
+  return padded in boxes ? padded : box;
 }
 
 /** A reader for where AI reading isn't set up: every file says why. */

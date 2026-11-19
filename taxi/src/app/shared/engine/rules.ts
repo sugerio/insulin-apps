@@ -58,7 +58,7 @@ export interface Line {
   /** A line worked out from slips, shown in this module so people see what their slips already claim. */
   module?: Module;
 }
-export type QuestionType = "money" | "boolean" | "choice";
+export type QuestionType = "money" | "percent" | "boolean" | "choice";
 export interface Question {
   id: string;
   type: QuestionType;
@@ -73,6 +73,12 @@ export interface Question {
   receipts?: string;
   /** For an amount: a line that works out a starting amount from documents (receipts, a notice of assessment). */
   suggest?: string;
+  /** A part of a yes/no question (a group): asked in its card once it applies (self-employment's income and expenses). */
+  parent?: string;
+  /** For a yes/no question: shown when it is answered yes (what else to do, such as a form to file separately). */
+  note?: string;
+  /** For a choice: each option's words on screen. */
+  optionLabels?: Record<string, string>;
   /** Used, and the result marked an estimate, while the question has no answer. */
   default?: string | boolean;
   /** The default is the app's choice, not a guess: the result is complete without an answer (a hint may change it). */
@@ -86,10 +92,14 @@ export interface SlipType {
   boxes: Record<string, string>;
   /** Boxes that never change a return (the CRA's checks, next year's limits): not reported as unhandled. */
   informational: string[];
+  /** Boxes that hold a count (months of study), not an amount of money. */
+  counts: string[];
   /** A receipt or notice rather than a numbered slip: its "boxes" are amounts with no number printed beside them. */
   receipt: boolean;
   /** The years it may carry, relative to the tax year (0 the year itself; -1 last year's notice of assessment). */
   printedYears: number[];
+  /** How it is named on screen when its id can't be (T4A(OAS) for T4AOAS). */
+  name?: string;
 }
 
 export const HINT_KINDS = ["saving", "info", "warning"] as const;
@@ -164,7 +174,7 @@ export interface FormSpec {
 
 /** What to call a document of this type on screen: a slip by its type (T4), a receipt or notice by its title. */
 export function documentName(slipType: SlipType | undefined, id: string): string {
-  return slipType?.receipt ? slipType.title : id;
+  return slipType?.receipt ? slipType.title : (slipType?.name ?? id);
 }
 
 export interface RuleSet {
@@ -205,7 +215,7 @@ export const compiledRulesSchema = z.strictObject({
   questions: z.record(
     z.string(),
     z.strictObject({
-      type: z.enum(["money", "boolean", "choice"]),
+      type: z.enum(["money", "percent", "boolean", "choice"]),
       ask: z.string(),
       module: z.enum(MODULES).optional(),
       help: z.string().optional(),
@@ -215,6 +225,9 @@ export const compiledRulesSchema = z.strictObject({
       default: z.union([z.string(), z.boolean()]).optional(),
       decision: z.boolean().optional(),
       options: z.array(z.string()).optional(),
+      parent: z.string().optional(),
+      note: z.string().optional(),
+      optionLabels: z.record(z.string(), z.string()).optional(),
     }),
   ),
   hints: z.record(
@@ -268,8 +281,10 @@ export const compiledRulesSchema = z.strictObject({
       about: z.string(),
       boxes: z.record(z.string(), z.string()),
       informational: z.array(z.string()),
+      counts: z.array(z.string()),
       receipt: z.boolean(),
       printedYears: z.array(z.number().int()).min(1),
+      name: z.string().optional(),
     }),
   ),
 });
@@ -342,6 +357,7 @@ export function loadRuleSet(json: unknown, where: (entry: string) => string = ()
   const usedBoxes = new Map<string, Set<string>>();
   for (const slip of slips.values()) {
     for (const box of slip.informational) if (!(box in slip.boxes)) fail(`slips.${slip.id}`, `informational box ${box} isn't one of its boxes`);
+    for (const box of slip.counts) if (!(box in slip.boxes)) fail(`slips.${slip.id}`, `count box ${box} isn't one of its boxes`);
     usedBoxes.set(slip.id, new Set(slip.informational));
   }
   for (const line of lines.values()) {
@@ -468,7 +484,7 @@ function checkRuleSet(ruleSet: RuleSet, fail: (entry: string, message: string, c
     }
     if (question.default !== undefined) {
       const ok =
-        question.type === "money"
+        question.type === "money" || question.type === "percent"
           ? typeof question.default === "string" && /^-?\d+(\.\d+)?$/.test(question.default)
           : question.type === "boolean"
             ? typeof question.default === "boolean"
@@ -476,6 +492,16 @@ function checkRuleSet(ruleSet: RuleSet, fail: (entry: string, message: string, c
       if (!ok) fail(entry, `The default doesn't fit a ${question.type} question`);
     }
     if (question.decision && question.default === undefined) fail(entry, "A decision needs a default");
+    if (question.parent !== undefined) {
+      const parent = ruleSet.questions.get(question.parent);
+      if (!parent || parent.type !== "boolean" || parent.slip || parent.parent) fail(entry, "A question's parent must be a yes/no question without a slip, not itself a part");
+      if (parent!.module !== question.module) fail(entry, "A question and its parent are asked in the same module");
+      if (question.type === "boolean") fail(entry, "A part of a group is an amount, a percent or a choice");
+    }
+    if (question.optionLabels && (question.type !== "choice" || Object.keys(question.optionLabels).some((option) => !question.options!.includes(option)))) {
+      fail(entry, "optionLabels name the options of a choice");
+    }
+    if (question.note !== undefined && question.type !== "boolean") fail(entry, "Only a yes/no question has a note");
   }
 
   // Each line's type, and the lines it reads (in its own return or the spouse's: both count toward a cycle).
@@ -498,7 +524,7 @@ function checkRuleSet(ruleSet: RuleSet, fail: (entry: string, message: string, c
     for (const change of hint.change) {
       const question = ruleSet.questions.get(change.question);
       if (!question) return fail(entry, `No question ${change.question}`);
-      const want = question.type === "money" ? "number" : question.type === "boolean" ? "boolean" : "string";
+      const want = question.type === "money" || question.type === "percent" ? "number" : question.type === "boolean" ? "boolean" : "string";
       if (formulaType(ruleSet, change.formula, at, reads) !== want) fail(entry, `The change to ${change.question} must be a ${want === "boolean" ? "yes/no value" : want}`);
     }
     if (hint.kind === "saving" && hint.change.length === 0) fail(entry, "A saving hint changes at least one answer");
@@ -631,14 +657,14 @@ function refType(ruleSet: RuleSet, path: string[], fail: (message: string) => ne
     case "answer": {
       const question = rest.length === 1 ? ruleSet.questions.get(rest[0]!) : undefined;
       if (!question) return fail(`No question ${rest.join(".")}`);
-      return question.type === "money" ? "number" : question.type === "boolean" ? "boolean" : "string";
+      return question.type === "money" || question.type === "percent" ? "number" : question.type === "boolean" ? "boolean" : "string";
     }
     case "household":
       if (spouse) return fail(`${name}: the household is the same for both spouses; write household.${rest.join(".")}`);
       if (rest.length === 1 && rest[0] === "maritalStatus") return "string";
       if (rest.length === 1 && rest[0] === "partnerInYear") return "boolean";
-      if (rest.length === 1 && (rest[0] === "childrenUnder18" || rest[0] === "childrenUnder19")) return "number";
-      return fail(`${name}: the household has maritalStatus, partnerInYear, childrenUnder18 and childrenUnder19`);
+      if (rest.length === 1 && ["childrenUnder7", "childrenUnder17", "childrenUnder18", "childrenUnder19"].includes(rest[0]!)) return "number";
+      return fail(`${name}: the household has maritalStatus, partnerInYear, childrenUnder7, childrenUnder17, childrenUnder18 and childrenUnder19`);
     case "person":
       if (rest.length === 1 && rest[0] === "age") return "number";
       if (rest.length === 1 && rest[0] === "province") return "string";

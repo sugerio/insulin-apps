@@ -1,0 +1,165 @@
+{
+  "about": "A single retiree in Ontario, 67: OAS, CPP, a workplace pension and RRIF payments, so the pension income amount and Ontario's. Synthetic data.",
+  "input": {
+    "year": 2025,
+    "people": [
+      {
+        "id": "p1",
+        "name": "Pat Lee",
+        "role": "self",
+        "birthDate": "1958-02-14",
+        "province": "ON"
+      }
+    ],
+    "household": {
+      "maritalStatus": "single",
+      "dependants": []
+    },
+    "answers": {
+      "p1": {
+        "rrspDeduction": "0",
+        "fhsaDeduction": "0",
+        "medicalExpenses": "0",
+        "donations": "0",
+        "unusedTuition": "0",
+        "tuitionTransfer": "0",
+        "hasSelfEmployment": false,
+        "hasRentalIncome": false,
+        "hasPensionIncome": true,
+        "hasEiBenefits": false,
+        "hasForeignIncome": false,
+        "soldProperty": false,
+        "hasChildCare": false,
+        "hasWorkFromHome": false,
+        "hasMovingExpenses": false,
+        "hasOasPension": true,
+        "hasCppBenefits": true,
+        "hasRrifIncome": true,
+        "hasForeignProperty": false
+      }
+    },
+    "slips": [
+      {
+        "id": "s1",
+        "person": "p1",
+        "type": "T4AOAS",
+        "issuer": "Service Canada",
+        "boxes": {
+          "18": "8800",
+          "22": "0"
+        }
+      },
+      {
+        "id": "s2",
+        "person": "p1",
+        "type": "T4AP",
+        "issuer": "Service Canada",
+        "boxes": {
+          "14": "11500",
+          "20": "11500",
+          "22": "500"
+        }
+      },
+      {
+        "id": "s3",
+        "person": "p1",
+        "type": "T4A",
+        "issuer": "Lakeview Pension Plan",
+        "boxes": {
+          "016": "32000",
+          "022": "4800"
+        }
+      },
+      {
+        "id": "s4",
+        "person": "p1",
+        "type": "T4RIF",
+        "issuer": "Northwind Bank",
+        "boxes": {
+          "16": "6000",
+          "28": "600"
+        }
+      }
+    ]
+  },
+  "expected": {
+    "p1": {
+      "T1.10100": "0",
+      "T1.10400": "0",
+      "T1.11300": "8800",
+      "T1.11400": "11500",
+      "T1.11500": "38000",
+      "T1.11900": "0",
+      "T1.12010": "0",
+      "T1.12000": "0",
+      "T1.12100": "0",
+      "T1.12600": "0",
+      "S3.13800": "0",
+      "S3.15800": "0",
+      "S3.19900": "0",
+      "T1.12700": "0",
+      "T1.13000": "0",
+      "T1.13500": "0",
+      "T1.13700": "0",
+      "T1.13900": "0",
+      "T1.15000": "58300",
+      "T1.22215": "0",
+      "T1.42100": "0",
+      "T1.31000": "0",
+      "T1.22200": "0",
+      "T1.21900": "0",
+      "T1.22900": "0",
+      "T1.23200": "0",
+      "T1.21400": "0",
+      "T1.23300": "0",
+      "T1.23400": "58300",
+      "T1.23500": "0",
+      "T1.42200": "0",
+      "T1.23600": "58300",
+      "T1.26000": "58300",
+      "T1.40400": "8509.01",
+      "T1.30000": "16129",
+      "T1.30100": "7111.3",
+      "T1.30800": "0",
+      "T1.31200": "0",
+      "T1.31260": "0",
+      "T1.31400": "2000",
+      "ON428.8": "3166.12",
+      "ON428.10": "4427.5",
+      "ON428.27": "1762",
+      "T1.30300": "0",
+      "T1.30400": "0",
+      "T1.32300": "0",
+      "S11.24": "0",
+      "T1.32600": "0",
+      "T1.33200": "0",
+      "T1.33500": "25240.3",
+      "T1.33800": "3659.84",
+      "T1.34900": "0",
+      "T1.34990": "0",
+      "T1.35000": "3659.84",
+      "T1.40425": "0",
+      "T1.42900": "4849.17",
+      "T1.40500": "0",
+      "T1.40600": "4849.17",
+      "T1.42000": "4849.17",
+      "ON428.50": "956.29",
+      "ON428.57": "0",
+      "ON428.68": "0",
+      "ON428.90": "2809.83",
+      "ON428.13": "0",
+      "ON428.16": "0",
+      "ON428.34": "0",
+      "ON428.75": "0",
+      "ON428.80": "0",
+      "ON428.85": "0",
+      "ON428.89": "600",
+      "ON428.82": "0",
+      "T1.42800": "2809.83",
+      "T1.43500": "7659",
+      "T1.43700": "5900",
+      "T1.48400": "0",
+      "T1.48500": "1759"
+    }
+  }
+}

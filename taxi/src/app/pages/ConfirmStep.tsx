@@ -11,7 +11,7 @@ import { Banner, ResourceView } from "../components/Feedback.tsx";
 import { OriginalFile, SlipForm } from "../components/SlipForm.tsx";
 import { StepLayout } from "../components/StepLayout.tsx";
 import { stepPath, useReturn, useYear } from "../components/YearFrame.tsx";
-import { byBox, formatMoney } from "../lib/format.ts";
+import { byBox, formatBox } from "../lib/format.ts";
 import { useSlips } from "../lib/useYearData.ts";
 import { documentName } from "../shared/engine/rules.ts";
 import { rulesFor } from "../shared/rules/index.ts";
@@ -67,7 +67,7 @@ function ReturnSlips({ data }: { data: SlipList }) {
           </Button>
         ) : null}
         <Button asChild>
-          <Link to={stepPath(year.year, person.id, "deductions")}>Next: deductions</Link>
+          <Link to={stepPath(year.year, person.id, "finish")}>Next: finish</Link>
         </Button>
       </div>
     </>
@@ -113,7 +113,7 @@ function PersonSlips({ personId, slips, editable }: { personId: string; slips: S
                       <span key={box} className={slip.unsure.includes(box) && slip.status !== "confirmed" ? "font-medium text-amber-700 dark:text-amber-400" : undefined}>
                         {index > 0 ? " · " : ""}
                         {types.get(slip.type)?.receipt ? "" : `Box ${box} `}
-                        {types.get(slip.type)?.boxes[box] ?? ""}: {formatMoney(amount)}
+                        {types.get(slip.type)?.boxes[box] ?? ""}: {formatBox(types.get(slip.type), box, amount)}
                         {slip.unsure.includes(box) && slip.status !== "confirmed" ? " (check)" : ""}
                       </span>
                     ))}

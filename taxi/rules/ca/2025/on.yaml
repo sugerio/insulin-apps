@@ -108,6 +108,10 @@ params:
     label: LIFT credit reduction rate
     source: "ON428-A line 18: 5%"
     value: 5%
+  onPensionAmountMax:
+    label: Most Ontario pension income amount
+    source: "ON428 line 27 (58360): maximum $1,762"
+    value: 1762
 
 lines:
   # Part A – Ontario tax on taxable income
@@ -132,8 +136,12 @@ lines:
     source: "ON428 lines 14 to 16. The app assumes the child had no income"
   ON428.24:
     label: CPP and EI credit amounts
-    formula: "line.T1.30800 + line.T1.31200"
-    source: "ON428 lines 19 to 24: the federal amounts from lines 30800 and 31200"
+    formula: "line.T1.30800 + line.T1.31000 + line.T1.31200"
+    source: "ON428 lines 19 to 24: lines 30800, 31000 and 31200 of your return"
+  ON428.27:
+    label: Ontario pension income amount
+    formula: "min(param.onPensionAmountMax, line.T1.11500)"
+    source: "ON428 line 27 (58360): eligible pension income, up to $1,762"
   ON428.36:
     label: Medical expenses
     formula: "line.T1.33099"
@@ -143,11 +151,11 @@ lines:
     source: "ON428 lines 36 to 41: expenses over whichever is less, $2,885 or 3% of net income"
   ON428.34:
     label: Ontario amounts transferred from your spouse or common-law partner
-    formula: 'if(line.HH.partner == 1 and household.partnerInYear, if(spouse.line.ON428.10 == 0, 0, if(spouse.person.province == "ON", line.ONS2.11, unsupported("Your spouse lives in another province: transferring their Ontario age amount isn''t handled by this app"))), 0)'
-    source: "Schedule ON(S2): their unused Ontario age amount"
+    formula: 'if(line.HH.partner == 1 and household.partnerInYear, if(spouse.line.ON428.10 + spouse.line.ON428.27 == 0, 0, if(spouse.person.province == "ON", line.ONS2.11, unsupported("Your spouse lives in another province: transferring their Ontario age or pension amount isn''t handled by this app"))), 0)'
+    source: "Schedule ON(S2): their unused Ontario age and pension income amounts"
   ON428.44:
     label: Ontario credit amounts
-    formula: "line.ON428.9 + line.ON428.10 + line.ON428.13 + line.ON428.16 + line.ON428.24 + line.ON428.34 + line.ON428.41"
+    formula: "line.ON428.9 + line.ON428.10 + line.ON428.13 + line.ON428.16 + line.ON428.24 + line.ON428.27 + line.ON428.34 + line.ON428.41"
   ON428.46:
     label: Ontario credit amounts at the credit rate
     formula: "round(line.ON428.44 * param.onCreditRate, 2)"
@@ -190,9 +198,26 @@ lines:
     label: Low-income individuals and families tax (LIFT) credit
     formula: "if(line.HH.partner == 1, line.ON428A.41, line.ON428A.20)"
     source: "ON428-A Part A when single, Part B with a spouse or partner"
+  # Form T2036 – the provincial foreign tax credit: the foreign tax left after the federal credit, up to the share of
+  # the province's tax otherwise payable on the foreign income.
+  ON.taxOtherwise:
+    label: Ontario tax otherwise payable, for the foreign tax credit
+    formula: >-
+      max(0, line.ON428.53 + line.ON428.68 - if(line.ON428.53 + line.ON428.68 == 0, 0,
+      max(0, 2 * (param.onTaxReductionBasic + line.ON428.75) - (line.ON428.53 + line.ON428.68))))
+    source: "Form T2036, note 4: ON428 line 81 worked out with lines 70 and 72 at zero"
+  ON428.82:
+    label: Provincial foreign tax credit
+    formula: >-
+      if(line.FTC.left > 0 and line.T1.23600 > 0, min(line.FTC.left,
+      round(min(line.FTC.netForeign, line.T1.23600) * line.ON.taxOtherwise / line.T1.23600, 2), line.ON.taxOtherwise), 0)
+    source: "Form T2036, line 5"
+  ON428.83:
+    label: Ontario tax after the foreign tax credit
+    formula: "max(0, line.ON428.81 - line.ON428.82)"
   ON428.86:
     label: Ontario tax after the LIFT credit
-    formula: "max(0, line.ON428.81 - line.ON428.85)"
+    formula: "max(0, line.ON428.83 - line.ON428.85)"
   ON428.89:
     label: Ontario health premium
     formula: >-
@@ -209,11 +234,12 @@ lines:
   # Schedule ON428-A – LIFT credit, Part A (single individuals; couples use Part B, which comes with couples)
   ON428A.5:
     label: LIFT credit before the income test
-    formula: "min(param.liftMax, round(line.T1.10100 * param.liftRate, 2))"
+    formula: "min(param.liftMax, round((line.T1.10100 + line.T1.10400) * param.liftRate, 2))"
+    source: "ON428-A lines 1 to 5: lines 10100 and 10400 at 5.05%, up to $875"
   ON428A.13:
     label: Adjusted net income
-    formula: "max(0, line.T1.23400)"
-    source: "ON428-A lines 6 to 13: net income before it was floored at zero"
+    formula: "max(0, line.T1.23400 - line.T1.23500)"
+    source: "ON428-A lines 6 to 13: net income (line 23600) before it was floored at zero"
   ON428A.19:
     label: LIFT credit reduction
     formula: "round(max(0, line.ON428A.13 - param.liftThreshold) * param.liftReductionRate, 2)"
@@ -243,4 +269,5 @@ lines:
     source: "ON(S2) lines 6 to 10"
   ONS2.11:
     label: Ontario amounts transferred from your spouse
-    formula: "max(0, spouse.line.ON428.10 - line.ONS2.10)"
+    formula: "max(0, spouse.line.ON428.10 + spouse.line.ON428.27 - line.ONS2.10)"
+    source: "ON(S2) lines 1, 2, 4 and 11"

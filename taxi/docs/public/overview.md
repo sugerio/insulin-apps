@@ -23,7 +23,8 @@ Each return has seven steps:
 2. **Upload documents.** Slips and receipts, read by AI. A slip with the other person's name goes to their return.
 3. **Income.** Employment, investments and the rest: the slips found, box by box to check and change, and what else
    to add.
-4. **Deductions.** RRSP and FHSA contributions, and what your slips already deduct.
+4. **Deductions.** RRSP and FHSA contributions, working from home, child care and moving expenses, and what your
+   slips already deduct.
 5. **Credits.** Tuition, medical expenses, donations, and what your slips already claim.
 6. **Confirm.** Every number AI read, to check against the papers.
 7. **Finish.** The refund or balance owing, what to check before filing, and hints: ways to pay less, such as claiming
@@ -32,8 +33,8 @@ Each return has seven steps:
    a worksheet that shows how each amount was worked out.
 
 A step that isn't done says at its top what is left. In Income, Deductions and Credits, add what you have; what you
-don't add counts as none. Something the app doesn't
-handle yet, such as self-employment or working from home, can be added too: the return then says it isn't included.
+don't add counts as none. Some items are groups: add self-employment, for example, and its card asks the kind of
+income, what you earned and your expenses.
 
 > [!NOTE]
 > The forms are filled in from Step 2 on. Fill in Step 1 of the T1 (your name, address, social insurance number and
@@ -42,11 +43,12 @@ handle yet, such as self-employment or working from home, can be added too: the 
 
 ## Who it is for
 
-Residents of Ontario, British Columbia and Alberta who lived in Canada all year. The returns it will prepare cover
-employment income, investment slips, RRSP contributions, donations and medical expenses.
+Residents of Ontario, British Columbia and Alberta who lived in Canada all year. The returns it prepares cover
+employment income, pensions (OAS, CPP, workplace pensions and annuities, RRIFs), EI benefits, investment slips, self-employment and rental income, income earned abroad with its foreign tax credit, and the sale of real estate; RRSP and FHSA contributions, child care, moving and home-office expenses; tuition, donations and
+medical expenses.
 
-It doesn't handle self-employment, rental income, income from outside Canada, or Quebec returns. The app says so when
-one of these applies.
+It doesn't handle Quebec returns, farming or fishing income, capital cost allowance, or pension income splitting. The
+app says so when a case it doesn't handle applies.
 
 ## What it stores
 

@@ -60,12 +60,26 @@ describe("an adult's answers", () => {
     expect((await estimate()).input.answers).toEqual({ [alex.id]: { hasSelfEmployment: false } });
   });
 
-  it("name what the app doesn't handle once answered yes", async () => {
+  it("name what the app doesn't handle once answered so", async () => {
     const { alex, revision } = await year();
-    await json<TaxYear>(server.call("PUT", "/api/years/2025/answers", { body: { revision, personId: alex.id, answers: { hasRentalIncome: true } } }));
+    await json<TaxYear>(
+      server.call("PUT", "/api/years/2025/answers", { body: { revision, personId: alex.id, answers: { soldProperty: true, propertyUse: "flipped" } } }),
+    );
     const result = await estimate();
-    expect(result.result.people[0]!.unhandled).toContain("Rental income (T776) isn't handled by this app yet");
+    expect(result.result.people[0]!.unhandled).toContain("A home owned less than 12 months (a flipped property) is business income, which this app doesn't handle yet");
     expect(lineOf(result, alex.id, "T1.15000").status).toBe("missing");
+  });
+
+  it("ask a group's parts once it applies, and take a percent from 0 to 100", async () => {
+    const { alex, revision } = await year();
+    const saved = await json<TaxYear>(server.call("PUT", "/api/years/2025/answers", { body: { revision, personId: alex.id, answers: { hasRentalIncome: true } } }));
+    // The rents and expenses are now needed, so the total income waits for them.
+    const result = await estimate();
+    expect(result.result.people[0]!.missing.map((item) => item.question)).toEqual(expect.arrayContaining(["rentalGross", "rentalExpenses"]));
+    expect(lineOf(result, alex.id, "T1.15000").status).toBe("missing");
+    const wrong = await server.call("PUT", "/api/years/2025/answers", { body: { revision: saved.revision, personId: alex.id, answers: { homeOfficeShare: "120" } } });
+    expect(wrong.status).toBe(400);
+    await json<TaxYear>(server.call("PUT", "/api/years/2025/answers", { body: { revision: saved.revision, personId: alex.id, answers: { homeOfficeShare: "12.5" } } }));
   });
 
   it("refuse a stale revision, someone outside the year, and a viewer", async () => {
@@ -136,9 +150,13 @@ describe("the steps", () => {
       hasSoldInvestments: false,
       hasSelfEmployment: false,
       hasRentalIncome: false,
+      hasOasPension: false,
+      hasCppBenefits: false,
       hasPensionIncome: false,
+      hasRrifIncome: false,
       hasEiBenefits: false,
       hasForeignIncome: false,
+      hasForeignProperty: false,
       soldProperty: false,
     };
     let current = await put(revision, income);
@@ -165,7 +183,18 @@ describe("the steps", () => {
 
   it("count a slip found as the answer to its question, and a yes without the slip as missing", async () => {
     const { alex, revision } = await year();
-    const notHandled = { hasSelfEmployment: false, hasRentalIncome: false, hasPensionIncome: false, hasEiBenefits: false, hasForeignIncome: false, soldProperty: false };
+    const notHandled = {
+      hasSelfEmployment: false,
+      hasRentalIncome: false,
+      hasOasPension: false,
+      hasCppBenefits: false,
+      hasPensionIncome: false,
+      hasRrifIncome: false,
+      hasEiBenefits: false,
+      hasForeignIncome: false,
+      hasForeignProperty: false,
+      soldProperty: false,
+    };
     let current = await json<TaxYear>(
       server.call("PUT", "/api/years/2025/answers", {
         body: { revision, personId: alex.id, answers: { ...notHandled, hasInvestmentIncome: false, hasTrustIncome: false, hasSoldInvestments: false, hasEmploymentIncome: true } },

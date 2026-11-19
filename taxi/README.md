@@ -36,8 +36,9 @@ uploaded slips read by AI (or typed in), income, deductions, credits, the result
   unconfirmed. A file can be deleted with the slips read from it, and one
   that couldn't be read can be read again.
 - **Steps 3 to 7.** Income, Deductions and Credits, each a part of the return: what is on it (the slips found, each
-  opening into its boxes to change; amounts; what the app doesn't handle yet, such as self-employment or working from
-  home, named, never ignored), what can be added, and what the slips already claim. Then Confirm (each slip entered box
+  opening into its boxes to change; amounts; groups such as self-employment or working from home, whose parts are
+  asked in their card), what can be added, and what the slips already claim. A case the app doesn't handle (a home
+  that was your residence only some years, CPP for part of a year) is named, never ignored. Then Confirm (each slip entered box
   by box, then confirmed, or moved to the other return) and Finish (the refund or balance owing, the key lines with why,
   what to check before filing, hints, and the forms).
 - **Hints.** Finish checks each return, like a tax program's "check and optimize": claiming both spouses' donations on
@@ -57,9 +58,9 @@ uploaded slips read by AI (or typed in), income, deductions, credits, the result
 
 ## Who it's for
 
-Residents of Ontario, British Columbia and Alberta who lived in Canada all year, with employment income, investment
-slips, RRSP contributions, donations and medical expenses. Not yet: self-employment, rental income, income from outside
-Canada, and Quebec.
+Residents of Ontario, British Columbia and Alberta who lived in Canada all year, with employment income, pensions (OAS, CPP, workplace pensions and annuities, RRIFs), EI benefits, investment slips, self-employment and rental income, income earned abroad with its foreign tax credit, and the sale of real estate; RRSP and
+FHSA contributions, child care, moving and home-office expenses; tuition, donations and medical expenses. Not yet:
+Quebec, farming and fishing income, capital cost allowance, and pension income splitting.
 
 ## Good to know
 

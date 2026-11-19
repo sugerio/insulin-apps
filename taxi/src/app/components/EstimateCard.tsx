@@ -195,7 +195,9 @@ function showValue(explanation: Explanation, rules: RuleSet): string {
   }
   if (path.startsWith("answer.")) {
     const question = rules.questions.get(path.slice("answer.".length));
-    return question?.type === "money" ? formatMoney(value) : value;
+    if (question?.type === "money") return formatMoney(value);
+    if (question?.type === "percent") return `${value}%`;
+    return question?.optionLabels?.[value] ?? value;
   }
   if (path.startsWith("person.")) return value;
   return formatMoney(value);

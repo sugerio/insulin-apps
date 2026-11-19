@@ -22,8 +22,9 @@ export const gettingStarted: DocTopic = {
             copy the numbers into certified tax software.
           </p>
           <p>
-            <b>Who it is for:</b> residents of Ontario, British Columbia and Alberta who lived in Canada all year. It doesn't handle self-employment,
-            rental income, income from outside Canada, or Quebec returns yet.
+            <b>Who it is for:</b> residents of Ontario, British Columbia and Alberta who lived in Canada all year, with income from work,
+            pensions, EI, investments, self-employment, rent or abroad. It doesn't handle Quebec returns, farming or fishing income, or pension
+            income splitting yet.
           </p>
         </>
       ),
@@ -55,16 +56,16 @@ export const gettingStarted: DocTopic = {
               with the slips read from it. You can also type slips in at Confirm.
             </li>
             <li>
-              <b>Income.</b> What is on your return: the slips found (employment, interest and dividends, mutual funds, sales of
-              investments), each opening into its boxes to check and change (a changed slip is confirmed again at Confirm). Under{" "}
-              <b>Add to your return</b>, add the other kinds of income you had. One added without its slip is missing, to upload or enter right
-              there. What the app doesn't handle yet, such as self-employment or rent, can be added too: the return then
-              says it isn't included. What you don't add counts as none.
+              <b>Income.</b> What is on your return: the slips found (employment, pensions and benefits, EI, interest and dividends, mutual
+              funds, sales of investments), each opening into its boxes to check and change (a changed slip is confirmed again at Confirm).
+              Under <b>Add to your return</b>, add the other kinds of income you had. One added without its slip is missing, to upload or enter
+              right there. Self-employment, rental income, income earned abroad and a sale of real estate are groups: their card asks what
+              they need. What you don't add counts as none.
             </li>
             <li>
               <b>Deductions.</b> RRSP and FHSA contributions (RRSP receipts and your notice of assessment give a starting amount, up to
-              your deduction limit), and what the app doesn't handle yet (working from home, child care,
-              moving). <b>From your slips</b> shows what your slips already deduct, such as union dues.
+              your deduction limit), working from home (with a T2200 from your employer), child care (claimed by the spouse with the lower
+              income) and moving expenses. <b>From your slips</b> shows what your slips already deduct, such as union dues.
             </li>
             <li>
               <b>Credits.</b> Tuition (T2202, and unused tuition from last year), medical expenses and donations, and what your slips

@@ -8,7 +8,7 @@ import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select.
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table.tsx";
 import { cn } from "@/lib/utils.ts";
 import { ApiError, apiRequest, describeError } from "../api/client.ts";
-import { byBox, formatMoney } from "../lib/format.ts";
+import { byBox, formatBox } from "../lib/format.ts";
 import { rulesFor } from "../shared/rules/index.ts";
 import type { SlipType } from "../shared/engine/rules.ts";
 import { Banner } from "./Feedback.tsx";
@@ -70,7 +70,7 @@ export function SlipBoxTable({
                     aria-invalid={issue ? true : undefined}
                   />
                 ) : boxes[box] !== undefined ? (
-                  formatMoney(boxes[box])
+                  formatBox(slipType, box, boxes[box])
                 ) : (
                   <span className="text-muted-foreground">—</span>
                 )}

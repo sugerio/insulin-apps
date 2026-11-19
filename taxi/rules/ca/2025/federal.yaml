@@ -133,6 +133,74 @@ params:
     label: Most current-year tuition a student can transfer
     source: "Schedule 11 line 21: maximum $5,000"
     value: 5000
+  pensionIncomeAmountMax:
+    label: Most pension income amount
+    source: "Federal Worksheet, line 31400: whichever is less, line 8 or $2,000"
+    value: 2000
+  oasRecoveryThreshold:
+    label: Net income where OAS starts to be repaid
+    source: "Federal Worksheet, line 23500, line 16: OAS benefits base amount $93,454"
+    value: 93454
+  oasRecoveryRate:
+    label: OAS repayment rate
+    source: "Federal Worksheet, line 23500, line 18: 15%"
+    value: 15%
+  eiRepaymentThreshold:
+    label: Net income where EI benefits may be repaid
+    source: "Federal Worksheet, line 23500: line 23400 more than $82,125 with EI on line 11900"
+    value: 82125
+  cppMaxPensionableEarnings:
+    label: Maximum pensionable earnings (YMPE)
+    source: "Schedule 8, Part 2, line B: $71,300 for 12 months"
+    value: 71300
+  cppAdditionalMaxPensionableEarnings:
+    label: Additional maximum pensionable earnings (YAMPE)
+    source: "Schedule 8, Part 2, line D: $81,200 for 12 months"
+    value: 81200
+  cppBasicExemption:
+    label: CPP basic exemption
+    source: "Schedule 8, Part 2, line E: $3,500 for 12 months"
+    value: 3500
+  cppMaxContributoryEarnings:
+    label: Most earnings subject to base and first additional contributions
+    source: "Schedule 8, Part 5, line 19: line B minus line E (maximum $67,800)"
+    value: 67800
+  cpp2MaxEarnings:
+    label: Most earnings subject to second additional contributions
+    source: "Schedule 8, Part 2, line C: $9,900 for 12 months"
+    value: 9900
+  cppEarningsPerContribution:
+    label: Earnings that a dollar of employee base and first additional contributions covers
+    source: "Schedule 8, Part 5, line 20: 16.80672 (1 ÷ 5.95%)"
+    value: "16.80672"
+  cpp2EmployeeRate:
+    label: Second additional CPP rate for employees
+    source: "Schedule 8, Part 5, line 35: line 16 ÷ 4%"
+    value: 4%
+  cppSelfEmployedBaseRate:
+    label: Base CPP rate on self-employment earnings
+    source: "Schedule 8, Part 5, line 43: 9.9%"
+    value: 9.9%
+  cppSelfEmployedFirstRate:
+    label: First additional CPP rate on self-employment earnings
+    source: "Schedule 8, Part 5, line 44: 2%"
+    value: 2%
+  cppSelfEmployedSecondRate:
+    label: Second additional CPP rate on self-employment earnings
+    source: "Schedule 8, Part 5, line 45: 8%"
+    value: 8%
+  childCareUnder7:
+    label: Child care limit for a child born in 2019 or later
+    source: "Form T778, Part B, line 1: $8,000"
+    value: 8000
+  childCare7to16:
+    label: Child care limit for a child born in 2009 to 2018
+    source: "Form T778, Part B, line 3: $5,000"
+    value: 5000
+  foreignPropertyTaxRate:
+    label: Most foreign tax on property income that counts for the credit
+    source: "Income Tax Act 20(11) and Form T2209: foreign tax on property income above 15% is deducted on line 23200 instead"
+    value: 15%
   capitalGainsInclusionRate:
     label: Capital gains inclusion rate
     source: "Schedule 3 line 23: 50%"
@@ -157,6 +225,26 @@ lines:
   T1.10100:
     label: Employment income
     formula: "sum(T4.box14)"
+  T1.10400:
+    label: Other employment income
+    formula: "if(answer.hasForeignIncome, answer.foreignEmploymentIncome, 0)"
+    source: "Employment income earned outside Canada, in Canadian dollars"
+  T1.11300:
+    label: Old age security pension
+    formula: "sum(T4AOAS.box18)"
+    source: "Box 18 of the T4A(OAS) slip"
+  T1.11400:
+    label: CPP or QPP benefits
+    formula: "sum(T4AP.box20)"
+    source: "Box 20 of the T4A(P) slip"
+  T1.11500:
+    label: Other pensions and superannuation
+    formula: "sum(T4A.box016) + if(person.age >= 65, sum(T4A.box024) + sum(T4RIF.box16), 0)"
+    source: "T4A box 016; annuities (T4A box 024) and RRIF payments (T4RIF box 16) at 65 or older, else on line 13000"
+  T1.11900:
+    label: Employment insurance and other benefits
+    formula: "sum(T4E.box14)"
+    source: "Box 14 of the T4E slip"
   T1.12000:
     label: Taxable amount of dividends (eligible and other than eligible)
     formula: "sum(T5.box11) + sum(T5.box25) + sum(T3.box32) + sum(T3.box50)"
@@ -167,36 +255,60 @@ lines:
     source: "Federal Worksheet, line 12010"
   T1.12100:
     label: Interest and other investment income
-    formula: "sum(T5.box13) + sum(T3.box25)"
-    source: "Federal Worksheet, line 12100: box 13 of T5 slips, box 25 of T3 slips"
+    formula: "sum(T5.box13) + sum(T3.box25) + if(answer.hasForeignIncome, answer.foreignInvestmentIncome, 0)"
+    source: "Federal Worksheet, line 12100: box 13 of T5 slips, box 25 of T3 slips, and foreign interest and dividends"
+  T1.12599:
+    label: Gross rental income
+    formula: "if(answer.hasRentalIncome, answer.rentalGross, 0)"
+    source: "Form T776, line 8299"
+  T1.12600:
+    label: Net rental income
+    formula: "if(answer.hasRentalIncome, answer.rentalGross - answer.rentalExpenses, 0)"
+    source: "Form T776, line 9369: rents less expenses. Capital cost allowance isn't claimed"
   T1.12700:
     label: Taxable capital gains
     formula: "max(0, line.S3.19900)"
     source: "Schedule 3. A net capital loss isn't entered here; it carries forward"
   T1.13000:
     label: Other income
-    formula: "sum(T3.box26)"
-    source: "Box 26 of T3 slips"
+    formula: "sum(T3.box26) + if(person.age < 65, sum(T4A.box024) + sum(T4RIF.box16), 0)"
+    source: "Box 26 of T3 slips; annuities and RRIF payments before 65"
+  SE.net:
+    label: Net self-employment income
+    formula: "if(answer.hasSelfEmployment, answer.selfEmploymentGross - answer.selfEmploymentExpenses, 0)"
+    source: "Form T2125, line 9369: gross income less expenses. Capital cost allowance isn't claimed"
+  T1.13499:
+    label: Gross business income
+    formula: 'if(answer.hasSelfEmployment, if(answer.selfEmploymentKind == "business", answer.selfEmploymentGross, 0), 0)'
+  T1.13500:
+    label: Net business income
+    formula: 'if(answer.hasSelfEmployment, if(answer.selfEmploymentKind == "business", line.SE.net, 0), 0)'
+  T1.13699:
+    label: Gross professional income
+    formula: 'if(answer.hasSelfEmployment, if(answer.selfEmploymentKind == "professional", answer.selfEmploymentGross, 0), 0)'
+  T1.13700:
+    label: Net professional income
+    formula: 'if(answer.hasSelfEmployment, if(answer.selfEmploymentKind == "professional", line.SE.net, 0), 0)'
+  T1.13899:
+    label: Gross commission income
+    formula: 'if(answer.hasSelfEmployment, if(answer.selfEmploymentKind == "commission", answer.selfEmploymentGross, 0), 0)'
+  T1.13900:
+    label: Net commission income
+    formula: 'if(answer.hasSelfEmployment, if(answer.selfEmploymentKind == "commission", line.SE.net, 0), 0)'
   T1.15000:
     label: Total income
-    formula: "line.T1.10100 + line.T1.12000 + line.T1.12100 + line.T1.12700 + line.T1.13000 + line.SCOPE.income"
+    formula: >-
+      line.T1.10100 + line.T1.10400 + line.T1.11300 + line.T1.11400 + line.T1.11500 + line.T1.11900 + line.T1.12000
+      + line.T1.12100 + line.T1.12600 + line.T1.12700 + line.T1.13000 + line.T1.13500 + line.T1.13700 + line.T1.13900
+      + line.SCOPE.income
 
-  # Income and deductions this app doesn't handle yet. Answering yes makes the return say so.
+  # Cases this app doesn't handle. Answering so makes the return say so.
   SCOPE.income:
     label: Income this app doesn't handle
     formula: >-
-      if(answer.hasSelfEmployment, unsupported("Self-employment income (T2125) isn't handled by this app yet"), 0)
-      + if(answer.hasRentalIncome, unsupported("Rental income (T776) isn't handled by this app yet"), 0)
-      + if(answer.hasPensionIncome, unsupported("Pension income and government benefits aren't handled by this app yet"), 0)
-      + if(answer.hasEiBenefits, unsupported("Employment insurance benefits (T4E) aren't handled by this app yet"), 0)
-      + if(answer.hasForeignIncome, unsupported("Foreign income and foreign property (T1135) aren't handled by this app yet"), 0)
-      + if(answer.soldProperty, unsupported("The sale of a home or other real estate isn't handled by this app yet"), 0)
-  SCOPE.deductions:
-    label: Deductions this app doesn't handle
-    formula: >-
-      if(answer.hasWorkFromHome, unsupported("Home-office expenses (T777) aren't handled by this app yet"), 0)
-      + if(answer.hasChildCare, unsupported("Child care expenses (T778) aren't handled by this app yet"), 0)
-      + if(answer.hasMovingExpenses, unsupported("Moving expenses (T1-M) aren't handled by this app yet"), 0)
+      if(answer.soldProperty, if(answer.propertyUse == "principal_residence_some_years",
+      unsupported("A home that was your principal residence for only some of the years you owned it (Form T2091) isn't handled by this app yet"),
+      if(answer.propertyUse == "flipped", unsupported("A home owned less than 12 months (a flipped property) is business income, which this app doesn't handle yet"), 0)), 0)
 
   # Step 3 – Net income
   T1.20700:
@@ -213,20 +325,125 @@ lines:
     label: Annual union, professional, or like dues
     module: deductions
     formula: "sum(T4.box44)"
+  # Form T778: the spouse or partner with the lower net income (without this deduction) claims it.
+  CC.expenses:
+    label: Child care expenses paid
+    formula: "answer.childCareExpenses + sum(CHILDCARE.box1)"
+    source: "Form T778, line 67950: receipts, and the amount entered that isn't on one"
+  CC.limit:
+    label: Basic limit for child care expenses
+    formula: "param.childCareUnder7 * household.childrenUnder7 + param.childCare7to16 * (household.childrenUnder17 - household.childrenUnder7)"
+    source: "Form T778, Part B, lines 1 to 4. Children with a disability ($11,000) aren't handled"
+  CC.earned:
+    label: Earned income
+    formula: "line.T1.10100 + line.T1.10400 + max(0, line.SE.net)"
+    source: "Form T778, line 6: employment income and net self-employment income"
+  CC.netIncome:
+    label: Net income without the child care deduction
+    formula: "line.T1.15000 - line.DED.other"
+  CC.spouseNetIncome:
+    label: Your spouse's or partner's net income without it
+    formula: "if(household.partnerInYear, spouse.line.CC.netIncome, answer.spouseNetIncome)"
+  T1.21400:
+    label: Child care expenses
+    formula: >-
+      if(answer.hasChildCare, if(line.HH.partner == 1 and line.CC.netIncome > line.CC.spouseNetIncome,
+      unsupported("Only the spouse or partner with the lower net income claims child care expenses, except in the cases of Form T778, Part C. Enter them on the other return"),
+      min(line.CC.expenses, line.CC.limit, round(line.CC.earned * 2 / 3, 2))), 0)
+    source: "Form T778, Part B, line 7: whichever is least, the basic limit, the expenses, or 2/3 of earned income"
+  T1.21900:
+    label: Moving expenses
+    formula: "if(answer.hasMovingExpenses, min(answer.movingExpenses, answer.movingIncome), 0)"
+    source: "Form T1-M, line 29: net moving expenses up to the net eligible income at the new location"
+  T1.22200:
+    label: Deduction for CPP contributions on self-employment income
+    formula: >-
+      if(line.CPP.employed > 0,
+      round(line.CPP.base * 0.5, 2) + 2 * round(line.CPP.first * 0.5, 2) + 2 * round(line.CPP.second * 0.5, 2),
+      round(line.CPP.base * 0.5, 2) + line.CPP.first + line.CPP.second)
+    source: "Schedule 8, Part 4 line 17 or Part 5 line 88: half the base contributions, and the additional contributions"
   T1.22215:
     label: Deduction for CPP enhanced contributions on employment income
     module: deductions
     formula: "min(param.enhancedCppDeductionMax, round(sum(T4.box16) * (param.cppTotalRate - param.cppBaseRate) / param.cppTotalRate, 2) + sum(T4.box16A))"
     source: "Schedule 8 for employees: the first enhancement (1% of 5.95%) and all second CPP contributions are deducted"
+  T1.22900:
+    label: Other employment expenses
+    formula: >-
+      if(answer.hasWorkFromHome, min(round(answer.homeOfficeExpenses * answer.homeOfficeShare / 100, 2),
+      max(0, line.T1.10100 + line.T1.10400 - line.T1.20700 - line.T1.21200)), 0)
+    source: "Form T777, lines 48 to 54: home expenses times the employment-use share, up to employment income"
+  T1.23200:
+    label: Other deductions
+    formula: "if(answer.hasForeignIncome, max(0, answer.foreignInvestmentTax - round(answer.foreignInvestmentIncome * param.foreignPropertyTaxRate, 2)), 0)"
+    source: "Foreign tax on foreign interest and dividends above 15% of them (Income Tax Act 20(11))"
+  DED.other:
+    label: Deductions other than child care
+    formula: >-
+      line.T1.20700 + line.T1.20800 + line.T1.20805 + line.T1.21200 + line.T1.21900 + line.T1.22200 + line.T1.22215
+      + line.T1.22900 + line.T1.23200
   T1.23300:
     label: Total deductions
-    formula: "line.T1.20700 + line.T1.20800 + line.T1.20805 + line.T1.21200 + line.T1.22215 + line.SCOPE.deductions"
+    formula: "line.DED.other + line.T1.21400"
   T1.23400:
     label: Net income before adjustments
     formula: "line.T1.15000 - line.T1.23300"
+  T1.23500:
+    label: Social benefits repayment
+    formula: >-
+      if(line.T1.11900 > 0 and sum(T4E.box15) > 0 and line.T1.23400 > param.eiRepaymentThreshold,
+      unsupported("Repaying EI benefits (the chart on your T4E) isn't handled by this app yet"),
+      min(max(0, line.T1.11300 - sum(T4AOAS.box20)), round(max(0, line.T1.23400 - param.oasRecoveryThreshold) * param.oasRecoveryRate, 2)))
+    source: "Federal Worksheet, line 23500: 15% of net income over $93,454, up to the OAS received"
   T1.23600:
     label: Net income
-    formula: "max(0, line.T1.23400)"
+    formula: "max(0, line.T1.23400 - line.T1.23500)"
+
+  # Schedule 8 – CPP contributions on self-employment income (Part 5; with no employment it gives Part 4). Twelve
+  # months, and the employment contributions on the T4 slips are the ones required (Part 3, line 24 is zero).
+  CPP.seEarnings:
+    label: Pensionable net self-employment earnings
+    formula: >-
+      if(line.SE.net > 0, if(person.age <= 17 or person.age > 70, 0, if(person.age == 18 or person.age == 70,
+      unsupported("CPP contributions for part of the year (the year you turned 18 or 70) aren't handled by this app yet"), line.SE.net)), 0)
+    source: "Schedule 8, Part 5, line 4"
+  CPP.employed:
+    label: CPP pensionable earnings from employment
+    formula: "if(sum(T4.box26) > 0, sum(T4.box26), sum(T4.box14))"
+    source: "Schedule 8, Part 3, line 1: box 26 of T4 slips (box 14 if blank)"
+  CPP.covered:
+    label: Earnings already covered by employment contributions
+    formula: "round(sum(T4.box16) * param.cppEarningsPerContribution, 2)"
+    source: "Schedule 8, Part 5, line 20"
+  CPP.exemptionLeft:
+    label: Basic exemption not used by employment
+    formula: "max(0, param.cppBasicExemption - line.CPP.employed)"
+    source: "Schedule 8, Part 5, line 25"
+  CPP.baseEarnings:
+    label: Self-employment earnings subject to base and first additional contributions
+    formula: >-
+      max(0, min(line.CPP.seEarnings, max(0, param.cppMaxContributoryEarnings - line.CPP.covered))
+      - max(0, line.CPP.exemptionLeft - max(0, line.CPP.seEarnings - param.cppMaxContributoryEarnings)))
+    source: "Schedule 8, Part 5, lines 19 to 30"
+  CPP.secondEarnings:
+    label: Self-employment earnings subject to second additional contributions
+    formula: >-
+      if(line.CPP.seEarnings + min(param.cppAdditionalMaxPensionableEarnings, line.CPP.employed) > param.cppMaxPensionableEarnings,
+      max(0, min(param.cpp2MaxEarnings - round(sum(T4.box16A) / param.cpp2EmployeeRate, 2),
+      line.CPP.seEarnings - line.CPP.exemptionLeft - line.CPP.baseEarnings)), 0)
+    source: "Schedule 8, Part 5, lines 31 to 42"
+  CPP.base:
+    label: Base CPP contributions on self-employment earnings
+    formula: "round(line.CPP.baseEarnings * param.cppSelfEmployedBaseRate, 2)"
+    source: "Schedule 8, Part 5, line 43: 9.9%"
+  CPP.first:
+    label: First additional CPP contributions on self-employment earnings
+    formula: "round(line.CPP.baseEarnings * param.cppSelfEmployedFirstRate, 2)"
+    source: "Schedule 8, Part 5, line 44: 2%"
+  CPP.second:
+    label: Second additional CPP contributions on self-employment earnings
+    formula: "round(line.CPP.secondEarnings * param.cppSelfEmployedSecondRate, 2)"
+    source: "Schedule 8, Part 5, line 45: 8%"
 
   # Step 4 – Taxable income
   T1.26000:
@@ -259,6 +476,10 @@ lines:
     module: credits
     formula: "min(param.cppBaseMax, round(sum(T4.box16) * param.cppBaseRate / param.cppTotalRate, 2))"
     source: "Schedule 8 for employees: the base part (4.95% of 5.95%) is a credit"
+  T1.31000:
+    label: CPP contributions on self-employment income
+    formula: "round(line.CPP.base * 0.5, 2)"
+    source: "Schedule 8, Part 5, line 70: half the base contributions"
   T1.31200:
     label: Employment insurance premiums through employment
     module: credits
@@ -266,10 +487,16 @@ lines:
   T1.31260:
     label: Canada employment amount
     module: credits
-    formula: "min(param.canadaEmploymentAmount, line.T1.10100)"
+    formula: "min(param.canadaEmploymentAmount, line.T1.10100 + line.T1.10400)"
+  T1.31400:
+    label: Pension income amount
+    formula: "min(param.pensionIncomeAmountMax, line.T1.11500)"
+    source: "Federal Worksheet, line 31400: eligible pension income on line 11500, up to $2,000"
   T1.T101:
     label: Credit amounts before tuition (T1 line 101)
-    formula: "line.T1.30000 + line.T1.30100 + line.T1.30300 + line.T1.30400 + line.T1.30800 + line.T1.31200 + line.T1.31260"
+    formula: >-
+      line.T1.30000 + line.T1.30100 + line.T1.30300 + line.T1.30400 + line.T1.30800 + line.T1.31000 + line.T1.31200
+      + line.T1.31260 + line.T1.31400
   T1.32300:
     label: Federal tuition amount
     formula: "line.S11.17"
@@ -317,9 +544,34 @@ lines:
   T1.42900:
     label: Basic federal tax
     formula: "max(0, line.T1.40400 - line.T1.35000 - line.T1.40425)"
+  # Form T2209 – federal foreign tax credit on non-business income
+  FTC.netForeign:
+    label: Net foreign non-business income
+    formula: "if(answer.hasForeignIncome, answer.foreignInvestmentIncome + answer.foreignEmploymentIncome - line.T1.23200, 0)"
+    source: "Form T2209, note 2: the foreign income less the foreign tax deducted under 20(11) (line 23200)"
+  FTC.eligibleTax:
+    label: Non-business income tax paid to a foreign country
+    formula: >-
+      if(answer.hasForeignIncome, min(answer.foreignInvestmentTax, round(answer.foreignInvestmentIncome * param.foreignPropertyTaxRate, 2))
+      + answer.foreignEmploymentTax, 0)
+    source: "Form T2209, line 1: foreign tax on interest and dividends counts up to 15% of them"
+  FTC.basicFederalTax:
+    label: Basic federal tax, for the foreign tax credit
+    formula: "line.T1.42900 + line.T1.40425"
+    source: "Form T2209, note 4: line 42900 plus the federal dividend tax credit"
+  T1.40500:
+    label: Federal foreign tax credit
+    formula: >-
+      if(line.FTC.eligibleTax > 0 and line.T1.23600 > 0, min(line.FTC.eligibleTax,
+      round(min(line.FTC.netForeign, line.T1.23600) * line.FTC.basicFederalTax / line.T1.23600, 2), line.T1.42900), 0)
+    source: "Form T2209, line 3: the foreign tax, up to the share of basic federal tax on the foreign income"
+  FTC.left:
+    label: Foreign tax left for the provincial credit
+    formula: "line.FTC.eligibleTax - line.T1.40500"
+    source: "Form T2036, line 3"
   T1.40600:
     label: Federal tax
-    formula: "line.T1.42900"
+    formula: "line.T1.42900 - line.T1.40500"
   T1.42000:
     label: Net federal tax
     formula: "line.T1.40600"
@@ -328,12 +580,20 @@ lines:
   T1.42800:
     label: Provincial tax
     formula: 'if(person.province == "ON", line.ON428.90, if(person.province == "BC", line.BC428.91, if(person.province == "AB", line.AB428.75, unsupported("Provincial tax for this province isn''t handled by this app"))))'
+  T1.42100:
+    label: CPP contributions payable on self-employment income
+    formula: "line.CPP.base + line.CPP.first + line.CPP.second"
+    source: "Schedule 8, Part 5, line 49"
+  T1.42200:
+    label: Social benefits repayment
+    formula: "line.T1.23500"
   T1.43500:
     label: Total payable
-    formula: "line.T1.42000 + line.T1.42800"
+    formula: "line.T1.42000 + line.T1.42100 + line.T1.42200 + line.T1.42800"
   T1.43700:
     label: Total income tax deducted
-    formula: "sum(T4.box22)"
+    formula: "sum(T4.box22) + sum(T4A.box022) + sum(T4AP.box22) + sum(T4AOAS.box22) + sum(T4E.box22) + sum(T4RIF.box28)"
+    source: "The income tax deducted on all slips"
   T1.44800:
     label: CPP overpayment
     formula: 'if(sum(T4.box16) > param.cppEmployeeMax or sum(T4.box16A) > param.cpp2EmployeeMax, unsupported("More CPP was deducted than the 2025 maximum. The overpayment (Schedule 8) isn''t handled by this app yet"), 0)'
@@ -352,15 +612,16 @@ lines:
 
   # Schedule 2 – Federal amounts transferred from your spouse or common-law partner (read from their return)
   S2.6:
-    label: Their age amount and the tuition they designate to you
-    formula: "spouse.line.T1.30100 + spouse.line.S11.24"
+    label: Their age amount, pension income amount, and the tuition they designate to you
+    formula: "spouse.line.T1.30100 + spouse.line.T1.31400 + spouse.line.S11.24"
+    source: "Schedule 2 lines 1, 3 and 5"
   S2.7:
     label: Their taxable income, for the transfer
     formula: "if(spouse.line.T1.26000 <= param.tuitionIncomeThreshold, spouse.line.T1.26000, round(spouse.line.T1.40400 / param.creditRate, 2))"
     source: "Schedule 2 line 7"
   S2.11:
     label: Their basic personal amount, CPP, EI and employment amounts, and tuition
-    formula: "spouse.line.T1.30000 + spouse.line.T1.30800 + spouse.line.T1.31200 + spouse.line.T1.31260 + spouse.line.T1.32300"
+    formula: "spouse.line.T1.30000 + spouse.line.T1.30800 + spouse.line.T1.31000 + spouse.line.T1.31200 + spouse.line.T1.31260 + spouse.line.T1.32300"
     source: "Schedule 2 lines 8 to 11: their lines 30000, 96 and 32300"
   S2.12:
     label: Their adjusted taxable income
@@ -380,9 +641,20 @@ lines:
   S3.17600:
     label: Capital gains from T3 slips
     formula: "sum(T3.box21)"
+  S3.13599:
+    label: Real estate sold, proceeds
+    formula: 'if(answer.soldProperty, if(answer.propertyUse == "rental_or_investment", answer.propertyProceeds, 0), 0)'
+  S3.13800:
+    label: Gain or loss on real estate
+    formula: 'if(answer.soldProperty, if(answer.propertyUse == "rental_or_investment", answer.propertyProceeds - answer.propertyCost - answer.propertyOutlays, 0), 0)'
+    source: "Schedule 3 line 5: proceeds less the adjusted cost base and selling costs. A home that was your principal residence every year has no gain (Form T2091)"
+  S3.15800:
+    label: Gain on personal-use property
+    formula: 'if(answer.soldProperty, if(answer.propertyUse == "personal_use", max(0, answer.propertyProceeds - answer.propertyCost - answer.propertyOutlays), 0), 0)'
+    source: "Schedule 3 line 8: a cottage or other property for your own use. A loss on it isn't allowed"
   S3.19700:
     label: Total capital gains or losses
-    formula: "line.S3.13200 + line.S3.17400 + line.S3.17600"
+    formula: "line.S3.13200 + line.S3.13800 + line.S3.15800 + line.S3.17400 + line.S3.17600"
   S3.19900:
     label: Taxable capital gains or net capital loss
     formula: "round(line.S3.19700 * param.capitalGainsInclusionRate, 2)"

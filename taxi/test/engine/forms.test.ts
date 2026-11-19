@@ -8,7 +8,7 @@ import { fillForms, formAmount } from "../../src/app/shared/engine/forms.ts";
 import { rulesFor } from "../../src/app/shared/rules/index.ts";
 
 // The CRA forms a return is printed on (rules/ca/2025/forms.yaml): every amount written on a form for three golden
-// households, one per province, against their expected lines, and the bracket tables against the tax lines.
+// households, against their expected lines, and the bracket tables against the tax lines.
 
 const rules = rulesFor(2025)!;
 const GOLDEN = resolve(import.meta.dirname, "../golden/ca-2025");
@@ -24,6 +24,12 @@ describe("2025 forms", () => {
     ["on-couple-kids", "ON428"],
     ["bc-employee", "BC428"],
     ["ab-couple", "AB428"],
+    ["pensioner-on", "ON428"],
+    ["oas-clawback-bc", "BC428"],
+    ["young-family-on", "ON428"],
+    ["consultant-ab", "AB428"],
+    ["shop-owner-bc", "BC428"],
+    ["sales-rep-on", "ON428"],
   ] as const) {
     it(`${name}: the T1 and ${province} hold the household's expected lines`, () => {
       const household = golden(name);

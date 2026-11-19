@@ -128,7 +128,7 @@ function worksheetOf(rules: RuleSet, evaluation: Evaluation, view: TaxYear, inpu
     const type = rules.slips.get(slip.type);
     return {
       text: `${documentName(type, slip.type)} from ${slip.issuer}`,
-      notes: Object.entries(slip.boxes).map(([box, amount]) => `${type?.receipt ? "" : `Box ${box} `}${type?.boxes[box] ?? ""}: ${money(Dec.from(amount))}`),
+      notes: Object.entries(slip.boxes).map(([box, amount]) => `${type?.receipt ? "" : `Box ${box} `}${type?.boxes[box] ?? ""}: ${type?.counts.includes(box) ? amount : money(Dec.from(amount))}`),
     };
   });
 
@@ -136,7 +136,19 @@ function worksheetOf(rules: RuleSet, evaluation: Evaluation, view: TaxYear, inpu
     .filter((question) => question.id in input.answers)
     .map((question) => {
       const value = input.answers[question.id]!;
-      return { text: question.ask, amount: typeof value === "boolean" ? (value ? "Yes" : "No") : question.type === "money" ? money(Dec.from(value)) : value };
+      const shown =
+        typeof value === "boolean"
+          ? value
+            ? "Yes"
+            : "No"
+          : question.type === "money"
+            ? money(Dec.from(value))
+            : question.type === "percent"
+              ? `${value}%`
+              : (question.optionLabels?.[value] ?? value);
+      // A group's part is named with its group: "Self-employment or business income: Gross income".
+      const parent = question.parent ? rules.questions.get(question.parent) : undefined;
+      return { text: parent ? `${parent.ask}: ${question.ask}` : question.ask, amount: shown };
     });
 
   const hints: WorksheetRow[] = input.hints.flatMap(({ hint, effect }) => {

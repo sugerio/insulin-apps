@@ -17,12 +17,26 @@ forms:
     fields:
       # Step 2 – Total income
       "1": line.T1.10100
+      "2": line.T1.10400
+      "3": line.T1.11300
+      "4": line.T1.11400
+      "5": line.T1.11500
+      "8": line.T1.11900
       "9": line.T1.12000
       "12010": line.T1.12010
       "10": line.T1.12100
+      "12599": line.T1.12599
+      "13": line.T1.12600
       "14": line.T1.12700
       "19": line.T1.13000
-      "21": line.T1.15000
+      "21": line.T1.15000 - line.T1.13500 - line.T1.13700 - line.T1.13900
+      "13499": line.T1.13499
+      "22": line.T1.13500
+      "13699": line.T1.13699
+      "23": line.T1.13700
+      "13899": line.T1.13899
+      "24": line.T1.13900
+      "27": line.T1.13500 + line.T1.13700 + line.T1.13900
       "28": line.T1.15000
       "33": line.T1.15000
       # Step 3 – Net income
@@ -31,9 +45,15 @@ forms:
       "36": line.T1.20800
       "37": line.T1.20805
       "39": line.T1.21200
+      "41": line.T1.21400
+      "44": line.T1.21900
+      "47": line.T1.22200
       "48": line.T1.22215
+      "50": line.T1.22900
+      "52": line.T1.23200
       "53": line.T1.23300
       "54": line.T1.23400
+      "55": line.T1.23500
       "56": line.T1.23600
       # Step 4 – Taxable income
       "57": line.T1.23600
@@ -46,9 +66,11 @@ forms:
       "84": line.T1.30000 + line.T1.30100 + line.T1.30300 + line.T1.30400
       "85": line.T1.30000 + line.T1.30100 + line.T1.30300 + line.T1.30400
       "86": line.T1.30800
+      "87": line.T1.31000
       "88": line.T1.31200
       "92": line.T1.31260
-      "96": line.T1.30800 + line.T1.31200 + line.T1.31260
+      "96": line.T1.30800 + line.T1.31000 + line.T1.31200 + line.T1.31260
+      "97": line.T1.31400
       "98": line.T1.T101
       "101": line.T1.T101
       "103": line.T1.32300
@@ -72,13 +94,16 @@ forms:
       "125": line.T1.35000 + line.T1.40425
       "126": line.T1.42900
       "128": line.T1.42900
-      "130": line.T1.42900
-      "132": line.T1.42900
+      "129": line.T1.40500
+      "130": line.T1.40600
+      "132": line.T1.40600
       "134": line.T1.40600
       "139": line.T1.40600
       "142": line.T1.42000
       # Step 6 – Refund or balance owing
       "143": line.T1.42000
+      "144": line.T1.42100
+      "146": line.T1.42200
       "147": line.T1.42800
       "148": line.T1.43500
       "149": line.T1.43500
@@ -110,14 +135,16 @@ forms:
       "16": line.ON428.16
       "18": line.ON428.9 + line.ON428.10 + line.ON428.13 + line.ON428.16
       "19": line.T1.30800
+      "20": line.T1.31000
       "21": line.T1.31200
       "24": line.ON428.24
       "25": line.ON428.9 + line.ON428.10 + line.ON428.13 + line.ON428.16 + line.ON428.24
       "26": line.ON428.9 + line.ON428.10 + line.ON428.13 + line.ON428.16 + line.ON428.24
-      "28": line.ON428.9 + line.ON428.10 + line.ON428.13 + line.ON428.16 + line.ON428.24
-      "31": line.ON428.9 + line.ON428.10 + line.ON428.13 + line.ON428.16 + line.ON428.24
+      "27": line.ON428.27
+      "28": line.ON428.9 + line.ON428.10 + line.ON428.13 + line.ON428.16 + line.ON428.24 + line.ON428.27
+      "31": line.ON428.9 + line.ON428.10 + line.ON428.13 + line.ON428.16 + line.ON428.24 + line.ON428.27
       "34": line.ON428.34
-      "35": line.ON428.9 + line.ON428.10 + line.ON428.13 + line.ON428.16 + line.ON428.24 + line.ON428.34
+      "35": line.ON428.9 + line.ON428.10 + line.ON428.13 + line.ON428.16 + line.ON428.24 + line.ON428.27 + line.ON428.34
       "36": line.ON428.36
       "37": line.T1.23600
       "39": round(line.T1.23600 * param.medicalThresholdRate, 2)
@@ -156,8 +183,9 @@ forms:
       "79": { value: "line.ON428.73", when: "line.ON428.73 > 0" }
       "80": line.ON428.80
       "81": line.ON428.81
-      "83": line.ON428.81
-      "84": line.ON428.81
+      "82": line.ON428.82
+      "83": line.ON428.83
+      "84": line.ON428.83
       "85": line.ON428.85
       "86": line.ON428.86
       "88": line.ON428.86
@@ -185,13 +213,15 @@ forms:
       "25": line.BC428.16 + line.BC428.17 + line.BC428.20 + line.BC428.23
       "26": line.BC428.16 + line.BC428.17 + line.BC428.20 + line.BC428.23
       "27": line.T1.30800
+      "28": line.T1.31000
       "29": line.T1.31200
       "33": line.BC428.33
       "35": line.BC428.16 + line.BC428.17 + line.BC428.20 + line.BC428.23 + line.BC428.33
-      "37": line.BC428.16 + line.BC428.17 + line.BC428.20 + line.BC428.23 + line.BC428.33
-      "40": line.BC428.16 + line.BC428.17 + line.BC428.20 + line.BC428.23 + line.BC428.33
+      "36": line.BC428.36
+      "37": line.BC428.16 + line.BC428.17 + line.BC428.20 + line.BC428.23 + line.BC428.33 + line.BC428.36
+      "40": line.BC428.16 + line.BC428.17 + line.BC428.20 + line.BC428.23 + line.BC428.33 + line.BC428.36
       "44": line.BC428.44
-      "45": line.BC428.16 + line.BC428.17 + line.BC428.20 + line.BC428.23 + line.BC428.33 + line.BC428.44
+      "45": line.BC428.16 + line.BC428.17 + line.BC428.20 + line.BC428.23 + line.BC428.33 + line.BC428.36 + line.BC428.44
       "46": line.T1.33099
       "47": line.T1.23600
       "49": round(line.T1.23600 * param.medicalThresholdRate, 2)
@@ -211,7 +241,8 @@ forms:
       "67": line.BC428.60 + line.BC428.65
       "68": line.BC428.68
       "70": line.BC428.68
-      "72": line.BC428.68
+      "71": line.BC428.71
+      "72": line.BC428.72
       # The British Columbia tax reduction: worked out only below the income where it ends.
       "73": { value: "param.bcTaxReductionBasic", when: "line.T1.23600 < param.bcTaxReductionLimit" }
       "74": { value: "line.T1.23600", when: "line.T1.23600 < param.bcTaxReductionLimit" }
@@ -246,13 +277,15 @@ forms:
       "25": line.AB428.16 + line.AB428.17 + line.AB428.20 + line.AB428.23
       "26": line.AB428.16 + line.AB428.17 + line.AB428.20 + line.AB428.23
       "27": line.T1.30800
+      "28": line.T1.31000
       "29": line.T1.31200
       "32": line.AB428.32
       "33": line.AB428.16 + line.AB428.17 + line.AB428.20 + line.AB428.23 + line.AB428.32
-      "36": line.AB428.16 + line.AB428.17 + line.AB428.20 + line.AB428.23 + line.AB428.32
-      "39": line.AB428.16 + line.AB428.17 + line.AB428.20 + line.AB428.23 + line.AB428.32
+      "34": line.AB428.34
+      "36": line.AB428.16 + line.AB428.17 + line.AB428.20 + line.AB428.23 + line.AB428.32 + line.AB428.34
+      "39": line.AB428.16 + line.AB428.17 + line.AB428.20 + line.AB428.23 + line.AB428.32 + line.AB428.34
       "42": line.AB428.42
-      "43": line.AB428.16 + line.AB428.17 + line.AB428.20 + line.AB428.23 + line.AB428.32 + line.AB428.42
+      "43": line.AB428.16 + line.AB428.17 + line.AB428.20 + line.AB428.23 + line.AB428.32 + line.AB428.34 + line.AB428.42
       "44": line.T1.33099
       "45": line.T1.23600
       "47": round(line.T1.23600 * param.medicalThresholdRate, 2)
@@ -273,8 +306,9 @@ forms:
       "65": line.AB428.58 + line.AB428.63
       "66": line.AB428.66
       "68": line.AB428.66
-      "70": line.AB428.66
-      "73": line.AB428.66
+      "69": line.AB428.69
+      "70": line.AB428.70
+      "73": line.AB428.70
       "74": line.AB428.74
       "75": line.AB428.75
     tables:

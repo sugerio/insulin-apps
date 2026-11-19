@@ -5,6 +5,8 @@ import { canPrepare, leftInModule, type Estimate, type Slip, type SlipList, type
 import { Badge } from "@/components/ui/badge.tsx";
 import { Button } from "@/components/ui/button.tsx";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card.tsx";
+import { Label } from "@/components/ui/label.tsx";
+import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select.tsx";
 import { cn } from "@/lib/utils.ts";
 import { ApiError, describeError } from "../api/client.ts";
 import { useMe } from "../auth/AuthProvider.tsx";
@@ -36,13 +38,15 @@ const MODULE_PAGES: Record<ReturnModule, { title: string; about: string; next: S
   credits: { title: "Credits", about: "Amounts that lower the tax on your income.", next: "confirm" },
 };
 
-type ItemKind = "slip" | "amount" | "unhandled";
+/** slip: shown by its slips. amount: an amount to enter. group: yes/no, then its parts. fact: yes/no, with a note. */
+type ItemKind = "slip" | "amount" | "group" | "fact";
 interface Item {
   question: Question;
   kind: ItemKind;
 }
 
-const kindOf = (question: Question): ItemKind => (question.type === "money" ? "amount" : question.slip ? "slip" : "unhandled");
+const kindOf = (question: Question, parts: Question[]): ItemKind =>
+  question.type === "money" ? "amount" : question.slip ? "slip" : parts.length > 0 ? "group" : "fact";
 
 export function ModuleStep({ module }: { module: ReturnModule }) {
   const { year } = useYear();
@@ -102,10 +106,12 @@ function ModuleForm({
   };
   const receiptsOf = (question: Question) => (question.receipts ? slipsOf(question.receipts) : []);
   // An amount is asked only when the return reads it (tuition to transfer needs a T2202 and a spouse), or was entered.
+  const partsOf = (question: Question) => [...rules.questions.values()].filter((part) => part.parent === question.id);
   const items: Item[] = [...rules.questions.values()]
-    .filter((question) => question.module === module)
+    .filter((question) => question.module === module && question.parent === undefined)
     .filter((question) => question.type !== "money" || reached.has(question.id) || question.id in given)
-    .map((question) => ({ question, kind: kindOf(question) }));
+    .map((question) => ({ question, kind: kindOf(question, partsOf(question)) }));
+  const parts = items.filter((item) => item.kind === "group").flatMap((item) => partsOf(item.question));
 
   const [added, setAdded] = useState<Record<string, boolean>>(() =>
     Object.fromEntries(
@@ -118,8 +124,8 @@ function ModuleForm({
     ),
   );
   const [amounts, setAmounts] = useState<Record<string, string>>(() =>
-    Object.fromEntries(
-      items
+    Object.fromEntries([
+      ...items
         .filter((item) => item.kind === "amount")
         .map(({ question }) => {
           const answer = given[question.id];
@@ -127,7 +133,13 @@ function ModuleForm({
           if (answer === undefined) return [question.id, suggestionOf(question) ?? ""];
           return [question.id, typeof answer === "string" && Number(answer) !== 0 ? answer : ""];
         }),
-    ),
+      // A group's parts: an amount or percent as entered (0 shown empty), a choice as chosen.
+      ...parts.map((part) => {
+        const answer = given[part.id];
+        if (typeof answer !== "string") return [part.id, ""];
+        return [part.id, part.type === "choice" || Number(answer) !== 0 ? answer : ""];
+      }),
+    ]),
   );
   const [state, setState] = useState<{ status: "idle" | "saving" } | { status: "error"; error: unknown }>({ status: "idle" });
 
@@ -137,6 +149,17 @@ function ModuleForm({
       items.flatMap(({ question, kind }): [string, string | boolean][] => {
         if (kind === "slip") return slipsOf(question.slip!).length > 0 ? [] : [[question.id, added[question.id] === true]];
         if (kind === "amount") return [[question.id, added[question.id] ? cleanAmount(amounts[question.id] ?? "") || "0" : "0"]];
+        if (kind === "group" && added[question.id]) {
+          // Its parts are saved with it; a choice not made is left unanswered, so the step says so.
+          return [
+            [question.id, true],
+            ...partsOf(question).flatMap((part): [string, string][] => {
+              const value = amounts[part.id] ?? "";
+              if (part.type === "choice") return value ? [[part.id, value]] : [];
+              return [[part.id, cleanAmount(value) || "0"]];
+            }),
+          ];
+        }
         return [[question.id, added[question.id] === true]];
       }),
     ),
@@ -198,7 +221,7 @@ function ModuleForm({
               </span>
             ) : null}
             {waiting.length > 0 ? (
-              <span>Waiting for a slip: {waiting.map((item) => `the ${item.slip} (${item.ask})`).join(", ")}. Upload or enter it below, or remove the item.</span>
+              <span>Waiting for a slip: {waiting.map((item) => `the ${slipName(year.year, item.slip!)} (${item.ask})`).join(", ")}. Upload or enter it below, or remove the item.</span>
             ) : null}
           </span>
         </Banner>
@@ -243,9 +266,54 @@ function ModuleForm({
                 onFile={(file) => void upload(file)}
                 before={saveModule}
               />
-            ) : (
-              <p className="text-sm text-amber-700 dark:text-amber-400">This app doesn't handle this yet, so the result leaves it out. Prepare this part of the return another way.</p>
-            )}
+            ) : kind === "group" ? (
+              <div className="flex flex-col gap-4">
+                {partsOf(question).map((part) =>
+                  part.type === "choice" ? (
+                    <ChoiceField
+                      key={part.id}
+                      question={part}
+                      value={amounts[part.id] ?? ""}
+                      disabled={!editable}
+                      issue={issues.find((issue) => issue.path === `answers.${part.id}`)?.message}
+                      onChange={(value) => setAmounts((current) => ({ ...current, [part.id]: value }))}
+                    />
+                  ) : part.receipts ? (
+                    <div key={part.id} className="flex flex-col gap-1">
+                      <p className="text-sm font-medium">{part.ask}</p>
+                      {part.help ? <p className="text-xs text-muted-foreground">{part.help}</p> : null}
+                      <AmountItem
+                        question={part}
+                        receipts={receiptsOf(part)}
+                        suggestion={null}
+                        value={amounts[part.id] ?? ""}
+                        editable={editable}
+                        busy={busy}
+                        issue={issues.find((issue) => issue.path === `answers.${part.id}`)?.message}
+                        onChange={(value) => setAmounts((current) => ({ ...current, [part.id]: value }))}
+                        open={open}
+                        onToggle={onToggle}
+                        onFile={(file) => void upload(file)}
+                        before={saveModule}
+                      />
+                    </div>
+                  ) : (
+                    <AmountField
+                      key={part.id}
+                      label={part.ask}
+                      help={part.help}
+                      unit={part.type === "percent" ? "%" : "$"}
+                      value={amounts[part.id] ?? ""}
+                      disabled={!editable}
+                      issue={issues.find((issue) => issue.path === `answers.${part.id}`)?.message}
+                      onChange={(value) => setAmounts((current) => ({ ...current, [part.id]: value }))}
+                    />
+                  ),
+                )}
+              </div>
+            ) : question.note ? (
+              <p className="text-sm text-muted-foreground">{question.note}</p>
+            ) : null}
           </ItemCard>
         ))}
       </section>
@@ -266,7 +334,6 @@ function ModuleForm({
                   <span className="flex min-w-0 flex-col gap-0.5">
                     <span className="flex flex-wrap items-center gap-2 text-sm font-medium">
                       {question.ask}
-                      {kind === "unhandled" ? <Badge variant="outline">Not handled yet</Badge> : null}
                     </span>
                     {question.help ? <span className="text-xs text-muted-foreground">{question.help}</span> : null}
                   </span>
@@ -308,6 +375,7 @@ function ModuleForm({
 
 /** One thing on the return: its name, what it is, and what it holds. */
 function ItemCard({ question, kind, editable, onRemove, children }: { question: Question; kind: ItemKind; editable: boolean; onRemove?: () => void; children: ReactNode }) {
+  const { year } = useYear();
   return (
     <Card size="sm">
       <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-2">
@@ -315,8 +383,7 @@ function ItemCard({ question, kind, editable, onRemove, children }: { question: 
           <CardTitle>
             <h3 className="flex flex-wrap items-center gap-2 text-sm font-semibold">
               {question.ask}
-              {kind === "slip" ? <Badge variant="secondary">{question.slip}</Badge> : null}
-              {kind === "unhandled" ? <Badge variant="outline">Not handled yet</Badge> : null}
+              {kind === "slip" ? <Badge variant="secondary">{slipName(year.year, question.slip!)}</Badge> : null}
             </h3>
           </CardTitle>
           {question.help ? <p className="text-xs text-muted-foreground">{question.help}</p> : null}
@@ -355,6 +422,8 @@ function SlipItem({
   before: () => Promise<TaxYear>;
 }) {
   const { person } = useReturn();
+  const { year } = useYear();
+  const name = slipName(year.year, type);
   const [entering, setEntering] = useState(false);
   return (
     <div className="flex flex-col gap-2">
@@ -366,7 +435,7 @@ function SlipItem({
         </ul>
       ) : (
         <p className="rounded-md border border-amber-300/70 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-700/50 dark:bg-amber-950/30 dark:text-amber-200">
-          No {type} yet. Upload it, or enter its boxes.
+          No {name} yet. Upload it, or enter its boxes.
         </p>
       )}
       {entering ? (
@@ -375,10 +444,10 @@ function SlipItem({
         </div>
       ) : editable ? (
         <div className="flex flex-wrap items-center gap-2">
-          <UploadSlip label={slips.length > 0 ? `Upload another ${type}` : `Upload the ${type}`} busy={busy} onFile={onFile} />
+          <UploadSlip label={slips.length > 0 ? `Upload another ${name}` : `Upload the ${name}`} busy={busy} onFile={onFile} />
           <Button variant="ghost" size="sm" onClick={() => setEntering(true)} disabled={busy}>
             <PencilLine aria-hidden="true" />
-            {slips.length > 0 ? `Enter another ${type}` : `Enter the ${type}`}
+            {slips.length > 0 ? `Enter another ${name}` : `Enter the ${name}`}
           </Button>
         </div>
       ) : null}
@@ -547,4 +616,29 @@ function FromYourSlips({ module, estimate }: { module: ReturnModule; estimate: E
       </ul>
     </section>
   );
+}
+
+/** A choice among a question's options, by their words on screen. */
+function ChoiceField({ question, value, disabled, issue, onChange }: { question: Question; value: string; disabled: boolean; issue?: string; onChange: (value: string) => void }) {
+  const id = useId();
+  return (
+    <div className="flex flex-col gap-1">
+      <Label htmlFor={id}>{question.ask}</Label>
+      {question.help ? <p className="text-xs text-muted-foreground">{question.help}</p> : null}
+      <NativeSelect id={id} className="w-full max-w-md" value={value} disabled={disabled} onChange={(event) => onChange(event.target.value)} aria-invalid={issue ? true : undefined}>
+        <NativeSelectOption value="">Choose…</NativeSelectOption>
+        {question.options!.map((option) => (
+          <NativeSelectOption key={option} value={option}>
+            {question.optionLabels?.[option] ?? option}
+          </NativeSelectOption>
+        ))}
+      </NativeSelect>
+      {issue ? <p className="text-xs text-destructive">{issue}</p> : null}
+    </div>
+  );
+}
+
+/** How a slip type is named on screen: T4A(OAS) for T4AOAS. */
+function slipName(year: number, type: string): string {
+  return rulesFor(year)?.slips.get(type)?.name ?? type;
 }

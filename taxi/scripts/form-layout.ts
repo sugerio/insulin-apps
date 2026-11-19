@@ -25,6 +25,8 @@ const STANDARD_FONTS = new URL("../node_modules/pdfjs-dist/standard_fonts/", imp
 const CENTS_LINE_OFFSET = 24;
 /** From a line code's x to the line between dollars and cents of the box right of it. */
 const CODE_CENTS_LINE_OFFSET = 88;
+/** From a row number's x back to its own line code's x. */
+const ROW_CODE_OFFSET = 112;
 /** Helvetica widths, per 1000 em, of what a preprinted amount holds. */
 const WIDTH: Record<string, number> = { ",": 278, ".": 278 };
 const widthOf = (char: string) => WIDTH[char] ?? 556;
@@ -59,19 +61,21 @@ for (const spec of specs) {
   const rows: Record<string, [number, number, number]> = {};
   const seen = new Set<string>();
   for (const item of items.sort((a, b) => a.page - b.page || b.y - a.y)) {
-    const column = ROW_COLUMNS.find((x) => Math.abs(item.x - x) < 1.5);
+    // Row numbers are set exactly at these columns; a number nearby is something else (Step 1's question numbers).
+    const column = ROW_COLUMNS.find((x) => Math.abs(item.x - x) < 0.5);
     if (column === undefined || !/^\d{1,3}$/.test(item.text)) continue;
     const key = seen.has(item.text) ? `p${item.page}:${item.text}` : item.text;
     seen.add(item.text);
     rows[key] = [item.page, column - CENTS_LINE_OFFSET, round(item.y)];
   }
-  // A box with a five-digit line code at its left and no row number (inner columns, the refund and balance owing): its
-  // cents line is 88 points right of the code. Keyed by the code.
+  // A box with a five-digit line code at its left and no row number of its own (inner columns, the gross amount left of
+  // a net one, the refund and balance owing): its cents line is 88 points right of the code. Keyed by the code. A
+  // numbered row's own code sits 112 points left of the row number; that box is already the row's.
   const numberedRows = Object.values(rows);
   for (const item of items) {
     if (!/^\d{5}$/.test(item.text) || Math.abs(item.width - 22.8) > 0.6) continue;
-    const numbered = numberedRows.some(([page, , y]) => page === item.page && Math.abs(y - item.y) < 3);
-    if (!numbered && !(item.text in rows)) rows[item.text] = [item.page, round(item.x + CODE_CENTS_LINE_OFFSET), round(item.y)];
+    const ownCode = numberedRows.some(([page, x, y]) => page === item.page && Math.abs(y - item.y) < 3 && Math.abs(x + CENTS_LINE_OFFSET - ROW_CODE_OFFSET - item.x) < 2);
+    if (!ownCode && !(item.text in rows)) rows[item.text] = [item.page, round(item.x + CODE_CENTS_LINE_OFFSET), round(item.y)];
   }
   // A bracket table: a row with preprinted amounts ("57,375.00") in two or more columns.
   const columns: Record<string, number[]> = {};

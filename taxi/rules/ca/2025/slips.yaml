@@ -1,5 +1,5 @@
 # Slip types: what each one is, for the screens and for AI reading, and its boxes as printed. `informational` boxes
-# never change a return. Any other box no formula reads is kept on the slip and shown as not handled by this app.
+# never change a return; `counts` boxes hold a number (months), not money. Any other box no formula reads is kept on the slip and shown as not handled by this app.
 
 slips:
   T4:
@@ -63,6 +63,62 @@ slips:
       25: Number of months full-time
       26: Eligible tuition fees
     informational: [24, 25]
+    counts: [24, 25]       # months, not dollars
+
+  # Pensions and government benefits. An id is a name formulas can use; `name` is how the slip is printed.
+  T4AOAS:
+    name: T4A(OAS)
+    title: T4A(OAS) Statement of Old Age Security
+    about: Old Age Security pension paid in the year by Service Canada, and the tax deducted from it
+    boxes:
+      18: Taxable pension paid
+      19: Gross pension paid
+      20: Overpayment recovered
+      21: Net supplements paid
+      22: Income tax deducted
+    informational: [19]          # 18 is the taxable part of it
+  T4AP:
+    name: T4A(P)
+    title: T4A(P) Statement of Canada Pension Plan Benefits
+    about: Canada Pension Plan benefits paid in the year (retirement, survivor, disability), and the tax deducted from them
+    boxes:
+      14: Retirement benefit
+      15: Survivor benefit
+      16: Disability benefit
+      17: Child benefit
+      18: Death benefit
+      20: Taxable CPP benefits
+      22: Income tax deducted
+    informational: [14, 15, 16, 17, 18]   # parts of box 20, which holds the taxable total
+  T4A:
+    title: T4A Statement of Pension, Retirement, Annuity, and Other Income
+    about: A workplace pension, an annuity or other income from a pension plan or payer, and the tax deducted from it
+    boxes:
+      "016": Pension or superannuation
+      "018": Lump-sum payments
+      "020": Self-employed commissions
+      "022": Income tax deducted
+      "024": Annuities
+      "028": Other income
+      "105": Scholarships, bursaries, fellowships, artists' project grants and prizes
+  T4RIF:
+    title: T4RIF Statement of Income from a Registered Retirement Income Fund
+    about: Payments from a registered retirement income fund (RRIF), and the tax deducted from them
+    boxes:
+      16: Taxable amounts
+      18: Amounts deemed received on death
+      24: Excess amount
+      28: Income tax deducted
+  T4E:
+    title: T4E Statement of Employment Insurance and Other Benefits
+    about: Employment insurance benefits paid in the year, and the tax deducted from them
+    boxes:
+      7: Repayment rate
+      14: Total benefits paid
+      15: Regular and other benefits paid
+      22: Income tax deducted
+    informational: [7]
+    counts: [7]                  # a rate, not dollars
 
   # Receipts and notices: amounts with no box number printed beside them. The numbers below are this app's, so the
   # amounts can be read and stored like a slip's boxes.
@@ -80,6 +136,12 @@ slips:
     receipt: true
     boxes:
       1: Eligible amount of the gift
+  CHILDCARE:
+    title: Child care receipt
+    about: A receipt from a daycare, day camp, school program or caregiver for looking after a child in 2025
+    receipt: true
+    boxes:
+      1: Amount paid
   MEDICAL:
     title: Medical expense receipt
     about: A receipt for medical or dental care, prescriptions or devices paid for in 2025, for you, your spouse or your children

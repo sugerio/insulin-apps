@@ -65,6 +65,10 @@ params:
     label: Alberta supplemental tax credit rate
     source: "Worksheet AB428, line 61545, line 8: 25%"
     value: 25%
+  abPensionAmountMax:
+    label: Most Alberta pension income amount
+    source: "AB428 line 34 (58360): maximum $1,719"
+    value: 1719
 
 lines:
   # Part A – Alberta tax on taxable income
@@ -89,17 +93,22 @@ lines:
     source: "AB428 lines 21 to 23. The app assumes the child had no income"
   AB428.32:
     label: CPP and EI credit amounts
-    formula: "line.T1.30800 + line.T1.31200"
+    formula: "line.T1.30800 + line.T1.31000 + line.T1.31200"
+    source: "AB428 lines 27 to 32: lines 30800, 31000 and 31200 of your return"
+  AB428.34:
+    label: Alberta pension income amount
+    formula: "min(param.abPensionAmountMax, line.T1.11500)"
+    source: "AB428 line 34 (58360): eligible pension income, up to $1,719"
   AB428.42:
     label: Amounts transferred from your spouse or common-law partner
-    formula: 'if(line.HH.partner == 1 and household.partnerInYear and spouse.person.age >= 65, unsupported("Transferring your spouse''s unused Alberta age amount (Schedule AB(S2)) isn''t handled by this app yet"), 0)'
+    formula: 'if(line.HH.partner == 1 and household.partnerInYear, if(spouse.person.age >= 65 or spouse.line.AB428.34 > 0, unsupported("Transferring your spouse''s unused Alberta age or pension amount (Schedule AB(S2)) isn''t handled by this app yet"), 0), 0)'
   AB428.49:
     label: Allowable medical expenses
     formula: "max(0, line.T1.33099 - min(param.abMedicalThresholdMax, round(line.T1.23600 * param.medicalThresholdRate, 2)))"
     source: "AB428 lines 44 to 49: expenses over whichever is less, $2,884 or 3% of net income"
   AB428.52:
     label: Alberta credit amounts
-    formula: "line.AB428.16 + line.AB428.17 + line.AB428.20 + line.AB428.23 + line.AB428.32 + line.AB428.42 + line.AB428.49"
+    formula: "line.AB428.16 + line.AB428.17 + line.AB428.20 + line.AB428.23 + line.AB428.32 + line.AB428.34 + line.AB428.42 + line.AB428.49"
   AB428.54:
     label: Alberta credit amounts at the credit rate
     formula: "round(line.AB428.52 * param.abCreditRate, 2)"
@@ -123,6 +132,21 @@ lines:
     label: Alberta supplemental tax credit
     formula: "round(max(0, round(line.AB428.52 * param.abCreditRate, 2) - param.abSupplementalBase) * param.abSupplementalRate, 2)"
     source: "Worksheet AB428, line 61545: credit amounts (less unused tuition) at 8%, over $4,800, at 25%"
+  # Form T2036 – the provincial foreign tax credit: the foreign tax left after the federal credit, up to the share of
+  # the province's tax otherwise payable on the foreign income.
+  AB.taxOtherwise:
+    label: Alberta tax otherwise payable, for the foreign tax credit
+    formula: "line.AB428.63 + line.AB428.66"
+    source: "Form T2036, note 4: AB428 line 63 plus line 68"
+  AB428.69:
+    label: Provincial foreign tax credit
+    formula: >-
+      if(line.FTC.left > 0 and line.T1.23600 > 0, min(line.FTC.left,
+      round(min(line.FTC.netForeign, line.T1.23600) * line.AB.taxOtherwise / line.T1.23600, 2), line.AB.taxOtherwise), 0)
+    source: "Form T2036, line 5"
+  AB428.70:
+    label: Alberta tax after the foreign tax credit
+    formula: "max(0, line.AB428.66 - line.AB428.69)"
   AB428.75:
     label: Alberta tax
-    formula: "max(0, line.AB428.66 - line.AB428.74)"
+    formula: "max(0, line.AB428.70 - line.AB428.74)"

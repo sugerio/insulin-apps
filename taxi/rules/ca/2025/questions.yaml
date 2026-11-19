@@ -3,7 +3,8 @@
 # from these entries, in this order. In a module:
 # - a yes/no question with a `slip` is a kind of income or expense shown by that slip: finding the slip adds it to the
 #   return, and a yes without the slip is missing;
-# - a yes/no question without one names something the app doesn't handle: never ignored, the return says so;
+# - a yes/no question without one is a group: its parts (questions with `parent`) are asked in its card once it applies,
+#   or, with a `note`, something to know (a form to file separately);
 # - a money question is an amount to enter. Its `receipts` are shown with it; a line that adds them makes the amount
 #   what isn't on an uploaded receipt, and a `suggest` line works out the amount from the receipts to start from.
 # A question without a module and with `decision: true` is a choice the app makes (its default) until a hint, accepted,
@@ -35,42 +36,149 @@ questions:
     slip: T5008
     ask: Sold shares, bonds or fund units
     help: A T5008 from each broker, for sales outside an RRSP or TFSA.
+  hasOasPension:
+    type: boolean
+    module: income
+    slip: T4AOAS
+    ask: Old Age Security pension
+    help: A T4A(OAS) from Service Canada.
+  hasCppBenefits:
+    type: boolean
+    module: income
+    slip: T4AP
+    ask: Canada Pension Plan benefits
+    help: A T4A(P) from Service Canada, for a CPP retirement, survivor or disability pension.
+  hasPensionIncome:
+    type: boolean
+    module: income
+    slip: T4A
+    ask: A workplace pension or an annuity
+    help: A T4A from each pension plan or payer.
+  hasRrifIncome:
+    type: boolean
+    module: income
+    slip: T4RIF
+    ask: RRIF payments
+    help: A T4RIF from each registered retirement income fund you were paid from.
+  hasEiBenefits:
+    type: boolean
+    module: income
+    slip: T4E
+    ask: Employment insurance benefits
+    help: A T4E from Service Canada, for EI regular, sickness, maternity or parental benefits.
   hasSelfEmployment:
     type: boolean
     module: income
     ask: Self-employment or business income
-    help: Income from your own business, freelancing or gig work (T2125).
+    help: Income from your own business, freelancing or gig work (Form T2125). Attach a T2125 to a paper return.
     default: false
+  selfEmploymentKind:
+    type: choice
+    module: income
+    parent: hasSelfEmployment
+    ask: Kind of income
+    options: [business, professional, commission]
+    optionLabels:
+      business: Business (a shop, trade or gig work)
+      professional: Professional (a consultant, accountant, designer…)
+      commission: Commission sales
+  selfEmploymentGross:
+    type: money
+    module: income
+    parent: hasSelfEmployment
+    ask: Gross income
+    help: What you were paid in 2025, without GST/HST you collected.
+  selfEmploymentExpenses:
+    type: money
+    module: income
+    parent: hasSelfEmployment
+    ask: Business expenses
+    help: Supplies, rent, phone, travel, fees and other costs of earning it. Capital cost allowance isn't claimed.
   hasRentalIncome:
     type: boolean
     module: income
     ask: Rental income
-    help: Rent from a property you own (T776).
+    help: Rent from a property you own (Form T776). If you own it with someone, enter your share.
     default: false
-  hasPensionIncome:
-    type: boolean
+  rentalGross:
+    type: money
     module: income
-    ask: Pension or government benefits
-    help: A workplace pension, RRIF withdrawals, Old Age Security or CPP benefits.
-    default: false
-  hasEiBenefits:
-    type: boolean
+    parent: hasRentalIncome
+    ask: Rents received
+  rentalExpenses:
+    type: money
     module: income
-    ask: Employment insurance benefits
-    help: EI regular, sickness, maternity or parental benefits (T4E).
-    default: false
+    parent: hasRentalIncome
+    ask: Rental expenses
+    help: Mortgage interest, property tax, insurance, repairs, utilities you paid, and fees. Capital cost allowance isn't claimed.
   hasForeignIncome:
     type: boolean
     module: income
-    ask: Income or property outside Canada
-    help: Foreign income, or foreign property that cost more than $100,000 in total (T1135).
+    ask: Income from outside Canada
+    help: Interest, dividends or employment income earned abroad, in Canadian dollars. Foreign tax paid on it gives a foreign tax credit (Form T2209).
+    default: false
+  foreignInvestmentIncome:
+    type: money
+    module: income
+    parent: hasForeignIncome
+    ask: Foreign interest and dividends
+  foreignInvestmentTax:
+    type: money
+    module: income
+    parent: hasForeignIncome
+    ask: Foreign tax withheld on them
+  foreignEmploymentIncome:
+    type: money
+    module: income
+    parent: hasForeignIncome
+    ask: Employment income earned abroad
+  foreignEmploymentTax:
+    type: money
+    module: income
+    parent: hasForeignIncome
+    ask: Foreign tax paid on it
+  hasForeignProperty:
+    type: boolean
+    module: income
+    ask: Property outside Canada that cost more than $100,000
+    help: Foreign bank accounts, shares or real estate (not a home you use) that cost more than $100,000 in total at any time in 2025.
+    note: File Form T1135, Foreign Income Verification Statement, with your return. It reports the property; it doesn't change your tax. This app doesn't prepare it.
     default: false
   soldProperty:
     type: boolean
     module: income
     ask: Sold your home or other real estate
-    help: The sale of a home, cottage or rental property (Schedule 3, T2091).
+    help: The sale of a home, cottage or rental property in 2025 (Schedule 3; Form T2091 for a home).
     default: false
+  propertyUse:
+    type: choice
+    module: income
+    parent: soldProperty
+    ask: What the property was
+    options: [principal_residence, principal_residence_some_years, rental_or_investment, personal_use, flipped]
+    optionLabels:
+      principal_residence: Your home, every year you owned it
+      principal_residence_some_years: Your home, but only some of the years
+      rental_or_investment: A rental or investment property
+      personal_use: A cottage or other property for your own use
+      flipped: Owned less than 12 months
+  propertyProceeds:
+    type: money
+    module: income
+    parent: soldProperty
+    ask: Selling price
+  propertyCost:
+    type: money
+    module: income
+    parent: soldProperty
+    ask: What you paid for it, with improvements
+    help: "The adjusted cost base: the purchase price, the costs of buying, and the cost of improvements."
+  propertyOutlays:
+    type: money
+    module: income
+    parent: soldProperty
+    ask: Selling costs
+    help: Real estate commission, legal fees and other costs of selling.
 
   # Deductions
   rrspDeduction:
@@ -90,20 +198,51 @@ questions:
     type: boolean
     module: deductions
     ask: Working from home
-    help: Home-office expenses as an employee, with a T2200 from your employer (T777).
+    help: Home-office expenses as an employee who worked from home more than half the time for at least 4 weeks in a row (Form T777). Your employer must sign Form T2200; keep it.
     default: false
+  homeOfficeExpenses:
+    type: money
+    module: deductions
+    parent: hasWorkFromHome
+    ask: Home expenses for 2025
+    help: Electricity, heat, water, home internet, maintenance and rent for your whole home. Mortgage interest and property tax don't count.
+  homeOfficeShare:
+    type: percent
+    module: deductions
+    parent: hasWorkFromHome
+    ask: Share used for work
+    help: The workspace's share of your home's area, times its share of the week's hours used for work. 12% of the area for 40 of 168 hours is 2.86%.
   hasChildCare:
     type: boolean
     module: deductions
     ask: Child care expenses
-    help: Daycare, before- and after-school programs or day camps (T778).
+    help: Daycare, before- and after-school programs or day camps, so you could work (Form T778). For a couple, the one with the lower net income claims it.
     default: false
+  childCareExpenses:
+    type: money
+    module: deductions
+    parent: hasChildCare
+    receipts: CHILDCARE
+    ask: Child care paid
+    help: Uploaded receipts are added; enter what isn't on one.
   hasMovingExpenses:
     type: boolean
     module: deductions
     ask: Moving expenses
-    help: A move at least 40 km closer to a new job or school (T1-M).
+    help: A move at least 40 km closer to a new job or business (Form T1-M).
     default: false
+  movingExpenses:
+    type: money
+    module: deductions
+    parent: hasMovingExpenses
+    ask: Moving expenses
+    help: Movers, travel, up to 15 days of temporary living, and the costs of selling your old home and buying the new one, less what your employer paid back.
+  movingIncome:
+    type: money
+    module: deductions
+    parent: hasMovingExpenses
+    ask: Income earned at the new location
+    help: Employment or self-employment income from the new job or business in 2025, less its deductions (union dues, CPP).
 
   # Credits
   hasTuition:

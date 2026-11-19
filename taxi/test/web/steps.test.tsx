@@ -12,11 +12,15 @@ const APPLIES = [
   "hasInvestmentIncome",
   "hasTrustIncome",
   "hasSoldInvestments",
+  "hasOasPension",
+  "hasCppBenefits",
+  "hasPensionIncome",
+  "hasRrifIncome",
+  "hasEiBenefits",
   "hasSelfEmployment",
   "hasRentalIncome",
-  "hasPensionIncome",
-  "hasEiBenefits",
   "hasForeignIncome",
+  "hasForeignProperty",
   "soldProperty",
   "hasWorkFromHome",
   "hasChildCare",
@@ -152,13 +156,25 @@ describe("Income", () => {
     expect((screen.getByRole("button", { name: "Save and continue" }) as HTMLButtonElement).disabled).toBe(true);
     fireEvent.click(screen.getByRole("button", { name: "Remove Employment income" }));
     expect(screen.queryByText("No T4 yet. Upload it, or enter its boxes.")).toBeNull();
+    // A group: its parts are asked in its card, and saved with it.
     fireEvent.click(within(screen.getByRole("region", { name: "Add to your return" })).getByRole("button", { name: "Add Self-employment or business income" }));
-    expect(screen.getByText(/This app doesn't handle this yet/)).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("Kind of income"), { target: { value: "professional" } });
+    fireEvent.change(screen.getByLabelText("Gross income"), { target: { value: "90,000" } });
+    fireEvent.change(screen.getByLabelText("Business expenses"), { target: { value: "20000" } });
     const deductions = stepOf(router, "deductions");
     fireEvent.click(screen.getByRole("button", { name: "Save and continue" }));
     await waitFor(() => expect(router.state.location.pathname).toBe(deductions));
     const answers = Object.values((await estimate(server)).input.answers)[0]!;
-    expect(answers).toMatchObject({ hasSelfEmployment: true, hasEmploymentIncome: false, hasRentalIncome: false, soldProperty: false });
+    expect(answers).toMatchObject({
+      hasSelfEmployment: true,
+      selfEmploymentKind: "professional",
+      selfEmploymentGross: "90000",
+      selfEmploymentExpenses: "20000",
+      hasEmploymentIncome: false,
+      hasRentalIncome: false,
+      soldProperty: false,
+    });
+    expect(answers).not.toHaveProperty("rentalGross");
   });
 
   it("enters a missing slip by hand right there, keeping what was added", async () => {
@@ -211,6 +227,21 @@ describe("Confirm", () => {
     expect((await estimate(server)).input.slips).toEqual([expect.objectContaining({ type: "T4", boxes: { 14: "60000", 22: "9000" } })]);
   });
 
+  it("goes on to Finish, and shows months of study as months, not dollars", async () => {
+    const { router } = await renderApp("/returns/2025/confirm", { seed: (s) => seed(s, { applies: true }).then(() => undefined) });
+    fireEvent.click(await screen.findByRole("button", { name: "Add a slip" }));
+    const form = screen.getByRole("form", { name: "Add a slip" });
+    fireEvent.change(within(form).getByLabelText("Slip"), { target: { value: "T2202" } });
+    fireEvent.change(within(form).getByLabelText("Issued by"), { target: { value: "Lakeshore College" } });
+    fireEvent.change(within(form).getByLabelText(/Box 25/), { target: { value: "8" } });
+    fireEvent.change(within(form).getByLabelText(/Box 26/), { target: { value: "6000" } });
+    fireEvent.click(within(form).getByRole("button", { name: "Add" }));
+    const item = (await screen.findByText("T2202 · Lakeshore College")).closest("li")!;
+    expect(item.textContent).toContain("Box 25 Number of months full-time: 8 · Box 26 Eligible tuition fees: $6,000.00");
+    fireEvent.click(screen.getByRole("link", { name: "Next: finish" }));
+    await waitFor(() => expect(router.state.location.pathname).toMatch(/\/finish$/));
+  });
+
   it("lists the boxes in the order printed", async () => {
     await renderApp("/returns/2025/confirm", { seed: (s) => seed(s, { applies: true }).then(() => undefined) });
     fireEvent.click(await screen.findByRole("button", { name: "Add a slip" }));
@@ -248,6 +279,23 @@ describe("Confirm", () => {
     expect(await screen.findByText("T4 · Maple Corp")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Add a slip" })).toBeNull();
     expect(screen.queryByRole("button", { name: /^Confirm/ })).toBeNull();
+  });
+});
+
+describe("Groups and notes", () => {
+  it("asks a share used for work as a percent, and shows what else to file for foreign property", async () => {
+    await renderApp("/returns/2025/deductions", { seed: (s) => seed(s, { applies: true }).then(() => undefined) });
+    fireEvent.click(await screen.findByRole("button", { name: "Add Working from home" }));
+    const share = screen.getByLabelText("Share used for work");
+    expect(share.parentElement!.textContent).toContain("%");
+    expect(screen.getByLabelText("Home expenses for 2025").parentElement!.textContent).toContain("$");
+  });
+
+  it("shows a note once a yes/no fact is added", async () => {
+    await renderApp("/returns/2025/income", { seed: (s) => seed(s, { applies: true }).then(() => undefined) });
+    fireEvent.click(await screen.findByRole("button", { name: "Add Property outside Canada that cost more than $100,000" }));
+    expect(screen.getByText(/File Form T1135, Foreign Income Verification Statement/)).toBeTruthy();
+    expect(screen.queryByText("Not handled yet")).toBeNull();
   });
 });
 

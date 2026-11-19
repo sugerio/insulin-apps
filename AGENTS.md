@@ -205,6 +205,13 @@ workflows: the merge would start no push workflow and be neither checked on `mai
 commit doesn't stop, and never runs the pull request's code (the repository needs an Actions event policy allowing
 that event for this workflow alone: `.github/hosting/README.md`, "Owner setup").
 
+## Agent tools
+
+Every coding agent gets Playwright MCP from the repository, driving a Chrome on CDP port 9335 with a profile of its
+own (`/e2e-test` starts it): `.mcp.json` (Claude Code, turned on by `.claude/settings.json`), `.codex/config.toml`,
+`.gemini/settings.json`, `opencode.json`, `.cursor/mcp.json` and `.vscode/mcp.json`. Codex and Gemini CLI load it once
+the folder is trusted. Change all six together, with the same pinned version.
+
 ## Before you finish
 
 From the app's directory: `npm run typecheck`, `npm test` and `npm run build`, and for an app with an engine the

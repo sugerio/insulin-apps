@@ -38,11 +38,11 @@ type Editor = { sessionId: string; url: string; ready: boolean; requestId: strin
 type Open = { kind: 'edit'; id: string; tab: 'details' | 'fields' } | { kind: 'tags' | 'share' | 'delete'; id: string }
 type Draft = { name: string; people: { name: string; email: string }[] }
 
-/** The roles a template form names, or the problem with them (the server's rule: letters, digits, - and _, unique). */
+/** The roles a template form names, or the problem with them (the server's rule: English letters, digits, hyphens and underscores, unique). */
 export function checkRoles(roles: string[]): string {
   const names = roles.map((r) => r.trim())
   if (!names.length || names.some((r) => !r)) return 'Name every role.'
-  if (names.some((r) => !ROLE.test(r))) return 'Use letters, digits, - and _ in role names (no spaces), at most 64 characters.'
+  if (names.some((r) => !ROLE.test(r))) return 'Use English letters, digits, hyphens (-) and underscores (_) in role names, with no spaces, at most 64 characters.'
   if (new Set(names.map((r) => r.toLowerCase())).size !== names.length) return 'Give each role a different name.'
   return ''
 }

@@ -26,12 +26,12 @@ const EMPTY: Person = { role: '', name: '', email: '', title: '', company: '' }
 type Editor = { sessionId: string; url: string; ready: boolean; requestId: string; asDraft: boolean }
 const STEPS = ['Document and signers', 'Fields', 'Review and send'] as const
 
-/** The problem with the signers as typed, if any: a role of letters, digits, - and _, once each; a name and an email. */
+/** The problem with the signers as typed, if any: a role of English letters, digits, hyphens and underscores, once each; a name and an email. */
 export function checkSigners(people: Person[]): string {
   if (!people.length) return 'Add a signer.'
   for (const [i, p] of people.entries()) {
     const n = `Signer ${i + 1}`
-    if (!ROLE.test(p.role.trim())) return `${n}: give a role of letters, digits, - and _ (no spaces), such as partner.`
+    if (!ROLE.test(p.role.trim())) return `${n}: give a role of English letters, digits, hyphens (-) and underscores (_), with no spaces, such as partner or co-signer.`
     if (!p.name.trim()) return `${n}: enter their name.`
     if (!EMAIL.test(p.email.trim())) return `${n}: enter their email address.`
   }
@@ -224,7 +224,7 @@ export function SendDocumentPage({ me }: { me: Me }) {
             h(Button, { type: 'button', size: 'icon-sm', variant: 'ghost', 'aria-label': `Move signer ${i + 1} up`, disabled: i === 0, onClick: () => move(i, -1) }, h(ArrowUp, { 'aria-hidden': true })),
             h(Button, { type: 'button', size: 'icon-sm', variant: 'ghost', 'aria-label': `Move signer ${i + 1} down`, disabled: i === people.length - 1, onClick: () => move(i, 1) }, h(ArrowDown, { 'aria-hidden': true })),
             h(Button, { type: 'button', size: 'icon-sm', variant: 'ghost', 'aria-label': `Remove signer ${i + 1}`, disabled: people.length === 1, onClick: () => setPeople((old) => old.filter((_, j) => j !== i)) }, h(Trash2, { 'aria-hidden': true }))),
-          h(Field, { label: 'Role', htmlFor: `send-${i}-role`, hint: 'Letters, digits, - and _, such as partner.' },
+          h(Field, { label: 'Role', htmlFor: `send-${i}-role`, hint: 'English letters, digits, hyphens (-) and underscores (_), with no spaces, such as co-signer.' },
             h(Input, { id: `send-${i}-role`, value: p.role, maxLength: 64, placeholder: 'partner', onChange: (e: React.ChangeEvent<HTMLInputElement>) => setPerson(i, { role: e.target.value }) })),
           h('div', { className: 'hidden sm:block' }),
           h(ContactField, { id: `send-${i}-name`, label: 'Name', value: p.name, onChange: (v) => setPerson(i, { name: v }), onChoose: (c: Contact) => setPerson(i, { name: c.name, email: c.email, title: c.title ?? '', company: c.company ?? '' }) }),

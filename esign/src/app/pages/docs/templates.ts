@@ -16,7 +16,7 @@ export const templates: DocTopic = {
         p('A template is a PDF and the ', b('roles'), ' that sign it, in signing order. A role is a name for a part in the document, such as ', code('partner'), ' or ', code('seller'), '; when you send an envelope, you name the person for each role.'),
         ul(
           ['The PDF can be up to 5 MB and 100 pages. Esign prepares it for signing when you upload it: see ', h(DocLink, { to: 'templates', section: 'the-pdf' }, 'What Esign does to a PDF'), '.'],
-          'A template has 1 to 20 roles. Role names use letters, digits, - and _ (no spaces), up to 64 characters, and each is different.',
+          'A template has 1 to 20 roles. Role names use English letters, digits, hyphens (-) and underscores (_), with no spaces, up to 64 characters, and each is different.',
         ),
       ],
     },

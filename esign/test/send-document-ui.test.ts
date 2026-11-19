@@ -10,11 +10,14 @@ const ID = '55555555-5555-4555-8555-555555555555', SESSION = 'c'.repeat(64);
 const OWNER = { id: 'u1', kind: 'person', name: 'Sam Example', email: 'sam@example.com' };
 const pdf = () => new File(['%PDF-1.7 synthetic'], 'Reseller agreement.pdf', { type: 'application/pdf' });
 
-test('signers need a role of letters, digits, - and _, once each, a name and an email', () => {
+test('signers need a role of English letters, digits, hyphens and underscores, once each, a name and an email', () => {
   const ok = { role: 'partner', name: 'Pat', email: 'pat@partner.example', title: '', company: '' };
   assert.equal(checkSigners([ok, { ...ok, role: 'seller', email: 'sam@seller.example' }]), '');
   assert.equal(checkSigners([]), 'Add a signer.');
-  assert.match(checkSigners([{ ...ok, role: 'the partner' }]), /Signer 1: give a role/);
+  assert.equal(checkSigners([{ ...ok, role: 'co-signer_2' }]), '');
+  assert.match(checkSigners([{ ...ok, role: 'the partner' }]), /Signer 1: give a role of English letters, digits, hyphens \(-\) and underscores \(_\), with no spaces/);
+  // A dash that only looks like a hyphen (en dash, full-width hyphen) is not one.
+  for (const role of ['co\u2013signer', 'co\uFF0Dsigner']) assert.match(checkSigners([{ ...ok, role }]), /Signer 1: give a role/);
   assert.match(checkSigners([{ ...ok, name: ' ' }]), /Signer 1: enter their name/);
   assert.match(checkSigners([{ ...ok, email: 'pat@' }]), /Signer 1: enter their email/);
   assert.equal(checkSigners([ok, { ...ok, role: 'Partner' }]), 'Give each signer a different role.');
@@ -38,6 +41,7 @@ test('upload and send: the document and signers, the fields in the editor, the r
   const reply = (requestId: string) => app.dispatch({ origin: ORIGIN, source: app.frameWindow, data: { type: 'esign.editor.saved', requestId, templateId: ID } });
   try {
     assert.equal(app.byLabel('Steps').children.length, 3);
+    assert.match(app.text(), /English letters, digits, hyphens \(-\) and underscores \(_\), with no spaces, such as co-signer\./, 'the role hint names the hyphen');
     // Step 1: a PDF and checked signers first.
     await app.click(app.button('Next: place fields'), 'Next');
     assert.match(app.text(), /Choose the PDF to send/);

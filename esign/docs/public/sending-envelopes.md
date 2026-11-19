@@ -63,8 +63,9 @@ To send a PDF of your own without making a template, choose **New envelope** ›
 1. **Document and signers.** Choose the PDF (up to 5 MiB and 100 pages; Esign prepares it for signing as
    [What Esign does to a PDF](/docs/esign/templates#what-esign-does-to-a-pdf) says, and tells you what it changed) and
    its **Document name**. Add the signers in signing order (**Add signer**, and the arrows to reorder), each
-   with a **Role** you name, such as `partner` (letters, digits, `-` and `_`, different for each), their **Name** and
-   **Email**, and an optional title and company. A message and a sign-by day are optional. **Next: place fields**.
+   with a **Role** you name, such as `partner` or `co-signer` (English letters, digits, hyphens `-` and underscores
+   `_`, no spaces, different for each), their **Name** and **Email**, and an optional title and company. A message and
+   a sign-by day are optional. **Next: place fields**.
 2. **Fields.** The field editor opens on the PDF, with a role for each signer ("partner — Pat Partner"). Place each
    signer's fields as on a template (see [Place fields](/docs/esign/templates#place-fields)): at least one required
    **Signature** each. **Next: review**.

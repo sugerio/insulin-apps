@@ -18,7 +18,7 @@ or `seller`. When you send an envelope, you name one person for each role, and t
 | PDF size | Up to 5 MB |
 | Pages | 1 to 100 |
 | Roles | 1 to 20, each different |
-| Role names | Letters, digits, `-` and `_`, no spaces, up to 64 characters |
+| Role names | English letters, digits, hyphens (`-`) and underscores (`_`), no spaces, up to 64 characters |
 
 The PDF must be a valid PDF; a file Esign can't read is refused.
 

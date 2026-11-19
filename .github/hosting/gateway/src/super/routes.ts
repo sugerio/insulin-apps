@@ -13,6 +13,7 @@ import { orgCreatedForYouMail } from '../mail/templates.ts'
 import { sendMail } from '../mail/transport.ts'
 import { auditPage } from '../pages/super/audit.tsx'
 import { appDetailPage, appsPage } from '../pages/super/apps.tsx'
+import { appLimitsPage, type OrgAppLimits } from '../pages/super/limits.tsx'
 import { cloudflarePage } from '../pages/super/cloudflare.tsx'
 import { superMessage } from '../pages/super/layout.tsx'
 import { newOrgPage, orgDetailPage, orgsPage } from '../pages/super/orgs.tsx'
@@ -27,6 +28,11 @@ import {
   setOrgStatus, setUserStatus, signals, snapshots, userDetail, type OrgSort, type Status, type UserSort,
 } from './db.ts'
 import { CLOUDFLARE_JOB } from './jobs.ts'
+import { parseEndDate, parseLimitValue } from './limits.ts'
+import {
+  allCatalogs, allDefaults, appCatalog, appDefaults, limitWatch, orgOverrides, removeLimitOverride, resetLimitDefault, setLimitDefault,
+  setLimitOverride,
+} from '../db/limits.ts'
 
 export const REASON_MIN = 3
 export const REASON_MAX = 500
@@ -65,6 +71,9 @@ const ROUTES: Route[] = [
   route('POST', `/users/(${USER})/status`, userStatusRoute, { admin: true }),
   route('GET', '/apps', appsRoute),
   route('GET', `/apps/(${APP})`, appRoute),
+  route('GET', `/apps/(${APP})/limits`, appLimitsRoute),
+  route('POST', `/apps/(${APP})/limits`, appLimitsChangeRoute, { admin: true }),
+  route('POST', `/orgs/(${ORG})/limits`, orgLimitsChangeRoute, { admin: true }),
   route('GET', '/cloudflare', cloudflareRoute),
   route('GET', '/audit', auditRoute),
 ]
@@ -119,17 +128,19 @@ function query(ctx: Context): string {
 async function overviewRoute(ctx: Context, session: OperatorSession): Promise<Response> {
   const db = ctx.config.db
   const since = Math.floor((ctx.now - 29 * DAY_MS) / DAY_MS) * DAY_MS
-  const [counts, daily, watch, reports, recent] = await Promise.all([
+  const [counts, daily, watch, reports, recent, limits] = await Promise.all([
     overview(db, ctx.now),
     dailyNew(db, since),
     signals(db, ctx.now),
     latestReports(db),
     snapshots(db, ctx.now - 2 * 60 * 60 * 1000),
+    limitWatch(db, ctx.now),
   ])
   const latest = recent.length ? parseSnapshot(recent[recent.length - 1]!.data) : null
   return overviewPage(ctx, session, {
     counts, daily, since, signals: watch, reports, headroom: latest ? headroom(latest) : null, snapshotAt: latest?.takenAt ?? null,
     snapshotProblems: latest?.problems ?? [],
+    limits: limits.map((row) => ({ ...row, appTitle: appOf(ctx, row.app).title })),
   })
 }
 
@@ -152,8 +163,27 @@ async function orgRoute(ctx: Context, session: OperatorSession, [orgId]: string[
   const detail = await orgDetail(db, orgId!, ctx.now)
   if (!detail) return superMessage(ctx, session, 404, 'No such organization', 'There is no organization with that id.')
   const since = ctx.now - 30 * DAY_MS
-  const [latest, history] = await Promise.all([latestForOrg(db, orgId!), listAudit(db, { target: { type: 'org', id: orgId! }, limit: 50 })])
+  const [latest, history, catalogs, defaults, overrides] = await Promise.all([
+    latestForOrg(db, orgId!),
+    listAudit(db, { target: { type: 'org', id: orgId! }, limit: 50 }),
+    allCatalogs(db),
+    allDefaults(db),
+    orgOverrides(db, orgId!),
+  ])
   const series = await Promise.all(latest.map(async (row) => ({ app: row.app, days: await dailySeries(db, row.app, orgId!, since) })))
+  // Each app with a limit catalog, the usage it last reported beside each limit (DESIGN.md §11.7).
+  const limits: OrgAppLimits[] = ctx.config.apps.flatMap((app) => {
+    const catalog = catalogs.filter((row) => row.app === app.name)
+    if (!catalog.length) return []
+    const report = latest.find((row) => row.app === app.name)
+    return [{
+      app: { name: app.name, title: app.title },
+      catalog,
+      defaults: defaults.filter((row) => row.app === app.name),
+      overrides: overrides.filter((row) => row.app === app.name),
+      usage: report ? parseMetrics(report.metrics) : null,
+    }]
+  })
   return orgDetailPage(ctx, session, {
     ...detail,
     usage: detail.usage,
@@ -163,6 +193,7 @@ async function orgRoute(ctx: Context, session: OperatorSession, [orgId]: string[
       metrics: parseMetrics(row.metrics),
       days: (series.find((entry) => entry.app === row.app)?.days ?? []).map((day) => ({ day: day.day, metrics: parseMetrics(day.metrics) })),
     })),
+    limits,
     history,
   }, problem, problem ? 400 : 200)
 }
@@ -317,3 +348,78 @@ async function auditRoute(ctx: Context, session: OperatorSession): Promise<Respo
   return auditPage(ctx, session, rows)
 }
 
+
+async function appLimitsRoute(ctx: Context, session: OperatorSession, [name]: string[], problem?: string): Promise<Response> {
+  const app = ctx.config.apps.find((candidate) => candidate.name === name)
+  if (!app) return superMessage(ctx, session, 404, 'No such app', 'There is no app with that name.')
+  const db = ctx.config.db
+  const [catalog, defaults, history] = await Promise.all([
+    appCatalog(db, app.name),
+    appDefaults(db, app.name),
+    listAudit(db, { target: { type: 'app', id: app.name }, limit: 50 }),
+  ])
+  return appLimitsPage(ctx, session, { app: { name: app.name, title: app.title }, catalog, defaults, history }, problem, problem ? 400 : 200)
+}
+
+/**
+ * POST /super/apps/<app>/limits: an admin sets an app's default for one limit (`action=set`, a value or "unlimited") or
+ * puts the catalog's back (`action=reset`), with a reason. The app reads it at its next tick (GET /__insulin/limits).
+ */
+async function appLimitsChangeRoute(ctx: Context, session: OperatorSession, [name]: string[]): Promise<Response> {
+  const app = ctx.config.apps.find((candidate) => candidate.name === name)
+  if (!app) return superMessage(ctx, session, 404, 'No such app', 'There is no app with that name.')
+  const again = (problem: string) => appLimitsRoute(ctx, session, [app.name], problem)
+  const action = field(ctx.form, 'action')
+  const limit = (await appCatalog(ctx.config.db, app.name)).find((row) => row.key === field(ctx.form, 'key'))
+  if (!limit) return again('Choose a limit.')
+  const reason = checkReason(field(ctx.form, 'reason'))
+  if ('problem' in reason) return again(reason.problem)
+  const change = { app: app.name, key: limit.key, reason: reason.reason, operator: session.operator, label: `${app.title}: ${limit.label}`, now: ctx.now }
+  let notice: string
+  if (action === 'set') {
+    const value = parseLimitValue(limit.unit, field(ctx.form, 'value').slice(0, 40))
+    if ('problem' in value) return again(value.problem)
+    notice = (await setLimitDefault(ctx.config.db, { ...change, value: value.value })) ? 'default_set' : 'unchanged'
+  } else if (action === 'reset') {
+    notice = (await resetLimitDefault(ctx.config.db, change)) ? 'default_reset' : 'unchanged'
+  } else {
+    return again('Choose what to do.')
+  }
+  log('super_limit_default', { operator: session.operator.id, app: app.name, key: limit.key, action, changed: notice !== 'unchanged' })
+  return redirect(apexUrl(ctx, `/super/apps/${app.name}/limits?notice=${notice}`), 303)
+}
+
+/**
+ * POST /super/orgs/<id>/limits: an admin overrides one of an app's limits for the organization (`action=set`: a value or
+ * "unlimited", an optional last day) or removes the override (`action=remove`), with a reason.
+ */
+async function orgLimitsChangeRoute(ctx: Context, session: OperatorSession, [orgId]: string[]): Promise<Response> {
+  const db = ctx.config.db
+  const org = await db.prepare('SELECT name FROM orgs WHERE id = ?1').bind(orgId).first<{ name: string }>()
+  if (!org) return superMessage(ctx, session, 404, 'No such organization', 'There is no organization with that id.')
+  const again = (problem: string) => orgRoute(ctx, session, [orgId!], problem)
+  const action = field(ctx.form, 'action')
+  const app = ctx.config.apps.find((candidate) => candidate.name === field(ctx.form, 'app'))
+  const limit = app ? (await appCatalog(db, app.name)).find((row) => row.key === field(ctx.form, 'key')) : undefined
+  if (!app || !limit) return again('Choose a limit.')
+  const reason = checkReason(field(ctx.form, 'reason'))
+  if ('problem' in reason) return again(reason.problem)
+  const change = {
+    orgId: orgId!, app: app.name, key: limit.key, reason: reason.reason, operator: session.operator,
+    label: `${org.name}: ${app.title}, ${limit.label}`, now: ctx.now,
+  }
+  let notice: string
+  if (action === 'set') {
+    const value = parseLimitValue(limit.unit, field(ctx.form, 'value').slice(0, 40))
+    if ('problem' in value) return again(value.problem)
+    const until = parseEndDate(field(ctx.form, 'until').slice(0, 20), ctx.now)
+    if ('problem' in until) return again(until.problem)
+    notice = (await setLimitOverride(db, { ...change, value: value.value, until: until.until })) ? 'limit_set' : 'limit_unchanged'
+  } else if (action === 'remove') {
+    notice = (await removeLimitOverride(db, change)) ? 'limit_removed' : 'limit_unchanged'
+  } else {
+    return again('Choose what to do.')
+  }
+  log('super_limit_override', { operator: session.operator.id, org: orgId, app: app.name, key: limit.key, action, changed: notice !== 'limit_unchanged' })
+  return redirect(apexUrl(ctx, `/super/orgs/${orgId}?notice=${notice}#limits`), 303)
+}

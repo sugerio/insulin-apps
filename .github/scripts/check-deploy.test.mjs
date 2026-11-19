@@ -1,20 +1,24 @@
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
+import { readFileSync, readdirSync } from 'node:fs'
 import { chmod, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { dirname, join } from 'node:path'
+import { dirname, join, relative } from 'node:path'
 import { after, test } from 'node:test'
-import { checkDeploy as check, githubLatestCheck, pushPaths } from './check-deploy.mjs'
+import { fileURLToPath } from 'node:url'
+import { checkDeploy as check, githubLastDeploy, githubLatestCheck, pushPaths } from './check-deploy.mjs'
 
 const temporary = []
 
 // Every part passed its latest check, on the release's own commit, unless a test says otherwise: `checks` maps a
-// workflow file to its result, or to `{ result, sha }` for a run on another commit.
-const checkDeploy = ({ checks = {}, ...options }) => check({
+// workflow file to its result, or to `{ result, sha }` for a run on another commit. `deployed` maps an app to the last
+// release whose deploy of it succeeded.
+const checkDeploy = ({ checks = {}, deployed = {}, ...options }) => check({
   latestCheck: async ({ workflow, commit }) => {
     const given = checks[workflow] ?? 'success'
     return typeof given === 'string' ? { result: given, sha: given === 'none' ? null : commit } : given
   },
+  lastDeploy: async ({ app }) => deployed[app] ?? null,
   ...options,
 })
 after(async () => Promise.all(temporary.map((directory) => rm(directory, { recursive: true, force: true }))))
@@ -82,7 +86,7 @@ async function repository() {
 test('deploys the named apps of a release, every app with all, and the gateway as asked', async () => {
   const { root, commits } = await repository()
   assert.deepEqual(await checkDeploy({ root, version: 'v0.1.4', apps: 'alpha' }), {
-    version: 'v0.1.4', commit: commits['v0.1.4'], latest: 'v0.1.4', apps: ['alpha'], gateway: true, held: [],
+    version: 'v0.1.4', commit: commits['v0.1.4'], latest: 'v0.1.4', apps: ['alpha'], gateway: true, images: [], held: [],
   })
   assert.deepEqual((await checkDeploy({ root, version: 'v0.1.4', apps: 'all' })).apps, ['alpha', 'beta', 'gamma'])
   assert.deepEqual((await checkDeploy({ root, version: 'v0.1.4', apps: ' gamma, alpha alpha ' })).apps, ['alpha', 'gamma'])
@@ -214,4 +218,105 @@ test("reads a workflow's push paths: a list, none for a push without paths, or n
   assert.deepEqual(pushPaths('on:\n  push:\n    branches: [main]\n  pull_request:\n    paths:\n      - x\n'), [])
   assert.equal(pushPaths('on:\n  workflow_dispatch:\n  pull_request:\n'), null)
   assert.equal(pushPaths(''), null)
+})
+
+// --- Engines (DESIGN.md §10.1) ------------------------------------------------------------------------------------
+
+/** The synthetic engine (fixtures/engine) as the files of an app `kappa`'s engine/, for a repository. */
+function engineApp() {
+  const fixture = join(dirname(fileURLToPath(import.meta.url)), 'fixtures', 'engine')
+  const files = {
+    'kappa/package.json': JSON.stringify({ insulin: { engine: 'engine/', engineApi: 1 } }),
+    'kappa/src/api.ts': 'export default {}\n',
+    'kappa/src/app/db/migrations/0000_init.sql': 'CREATE TABLE records (id TEXT);\n',
+  }
+  const walk = (directory) => {
+    for (const entry of readdirSync(directory, { withFileTypes: true })) {
+      const path = join(directory, entry.name)
+      if (entry.isDirectory()) walk(path)
+      else files[`kappa/engine/${relative(fixture, path)}`] = readFileSync(path, 'utf8').replaceAll('insulin-apps-alpha-engine', 'insulin-apps-kappa-engine')
+    }
+  }
+  walk(fixture)
+  return files
+}
+
+// Main with releases of kappa: v0.1.1 adds it; v0.1.2 changes only its engine's Worker code; v0.1.3 changes a file its
+// image copies; v0.1.4 adds a Durable Object migration.
+async function engineRepository() {
+  const root = await mkdtemp(join(tmpdir(), 'check-deploy-engine-'))
+  temporary.push(root)
+  git(root, 'init', '--quiet', '--initial-branch=main')
+  await write(root, { ...engineApp(), '.github/hosting/gateway/migrations/0001_init.sql': 'CREATE TABLE users (id TEXT);\n' })
+  const commits = { 'v0.1.1': release(root, 'v0.1.1') }
+  await write(root, { 'kappa/engine/src/index.ts': 'export default { changed: true }\n' })
+  commits['v0.1.2'] = release(root, 'v0.1.2')
+  await write(root, { 'kappa/engine/container/server/main.py': 'print("changed")\n' })
+  commits['v0.1.3'] = release(root, 'v0.1.3')
+  const config = readFileSync(join(root, 'kappa/engine/wrangler.jsonc'), 'utf8')
+  await write(root, { 'kappa/engine/wrangler.jsonc': config.replace('{ "tag": "v1", "new_sqlite_classes": ["CollectionEngine", "Capacity"] },', '{ "tag": "v1", "new_sqlite_classes": ["CollectionEngine", "Capacity"] },\n    { "tag": "v2", "new_sqlite_classes": ["Outbox"] },') })
+  commits['v0.1.4'] = release(root, 'v0.1.4')
+  git(root, 'update-ref', 'refs/remotes/origin/main', 'HEAD')
+  return { root, commits }
+}
+
+test("an engine's Durable Object migrations only move forward: a rollback past one is refused, as for D1", async () => {
+  const { root } = await engineRepository()
+  await assert.rejects(
+    () => checkDeploy({ root, version: 'v0.1.3', apps: 'kappa', gateway: false, rollback: true }),
+    /v0\.1\.3 is older than v0\.1\.4, and its kappa\/engine\/wrangler\.jsonc Durable Object migrations differ\. Going back past a migration needs the database restored first/,
+  )
+  // v0.1.4 itself, and going back to it from nothing newer, is fine; so is a release with the same migrations.
+  assert.deepEqual((await checkDeploy({ root, version: 'v0.1.4', apps: 'kappa', gateway: false })).apps, ['kappa'])
+  await write(root, { 'kappa/engine/src/index.ts': 'export default { later: true }\n' })
+  git(root, 'add', '-A')
+  git(root, 'commit', '--quiet', '-m', 'Release v0.1.5')
+  git(root, 'tag', 'v0.1.5')
+  git(root, 'update-ref', 'refs/remotes/origin/main', 'HEAD')
+  assert.deepEqual((await checkDeploy({ root, version: 'v0.1.4', apps: 'kappa', gateway: false, rollback: true })).apps, ['kappa'])
+})
+
+test('PLT-04: a release builds the engine image only when its inputs changed since the last release that deployed the app; by hand, always', async () => {
+  const { root } = await engineRepository()
+  const images = async (version, deployed, options = {}) => (await checkDeploy({ root, version, apps: 'all', gateway: false, deployed: { kappa: deployed }, ...options })).images
+  // v0.1.2 changed only the engine's Worker: an unchanged engine keeps its image (and so its digest).
+  git(root, 'tag', '-d', 'v0.1.3', 'v0.1.4')
+  git(root, 'update-ref', 'refs/remotes/origin/main', 'v0.1.2')
+  assert.deepEqual(await images('v0.1.2', 'v0.1.1', { release: true }), [], 'unchanged since v0.1.1')
+  assert.deepEqual(await images('v0.1.2', null, { release: true }), ['kappa'], 'never deployed: build it')
+  assert.deepEqual(await images('v0.1.2', 'v0.1.1'), ['kappa'], 'a deploy by hand always builds it')
+  const { root: later } = await engineRepository()
+  const laterImages = async (version, deployed, options = {}) => (await checkDeploy({ root: later, version, apps: 'all', gateway: false, deployed: { kappa: deployed }, ...options })).images
+  assert.deepEqual(await laterImages('v0.1.4', 'v0.1.2', { release: true }), ['kappa'], 'v0.1.3 changed a file the image copies')
+  assert.deepEqual(await laterImages('v0.1.4', 'v0.1.3', { release: true }), [], 'a migration is the Worker\'s, not the image\'s')
+  // An app held back builds nothing.
+  assert.deepEqual(await laterImages('v0.1.4', 'v0.1.2', { release: true, checks: { 'kappa.yml': 'failure' } }), [])
+})
+
+test("reads the last release whose deploy of an app succeeded from the deploy jobs' names, through gh", async () => {
+  const bin = await mkdtemp(join(tmpdir(), 'check-deploy-gh-'))
+  temporary.push(bin)
+  // Runs: release.yml's and deploy.yml's, each a page; jobs by run id.
+  await writeFile(join(bin, 'gh'), [
+    '#!/bin/sh',
+    'case "$*" in',
+    '  *workflows/release.yml/runs*) printf "%s\\n" "2026-11-03T10:00:00Z 30" "2026-11-01T10:00:00Z 10" ;;',
+    '  *workflows/deploy.yml/runs*) printf "%s\\n" "2026-11-02T10:00:00Z 20" ;;',
+    '  *runs/30/jobs*) printf "%s\\n" "success deploy / Check the release" "failure deploy / Deploy kappa v0.1.3" "success deploy / Deploy kappa-two v0.1.3" ;;',
+    '  *runs/20/jobs*) printf "%s\\n" "success deploy / Deploy kappa v0.1.2" ;;',
+    '  *runs/10/jobs*) printf "%s\\n" "success deploy / Deploy kappa v0.1.1" ;;',
+    'esac',
+    '',
+  ].join('\n'))
+  await chmod(join(bin, 'gh'), 0o755)
+  const path = process.env.PATH
+  process.env.PATH = `${bin}:${path}`
+  try {
+    const last = (app) => githubLastDeploy({ root: bin, repository: 'example/insulin-apps', app })
+    assert.equal(await last('kappa'), 'v0.1.2', "v0.1.3's deploy failed; a deploy by hand of v0.1.2 is the latest that succeeded")
+    assert.equal(await last('kappa-two'), 'v0.1.3')
+    assert.equal(await last('lambda'), null)
+  } finally {
+    process.env.PATH = path
+  }
 })

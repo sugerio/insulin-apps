@@ -43,8 +43,10 @@ async function bindings(request: Request): Promise<Bindings> {
     // Where the hourly usage report goes (usage-metrics.ts); without it, nothing is reported.
     SUGER_METRICS_URL: secret('SUGER_METRICS_URL'),
     SUGER_APP_TOKEN: secret('SUGER_APP_TOKEN'),
-    // Who in an organization can use Esign (directory.ts); without it, the people Esign has seen.
+    // Who in an organization can use Esign (directory.ts): the member lookup, without which people to share with are
+    // those Esign has seen, and member status, without which a scheduled send goes out as whoever scheduled it was.
     SUGER_MEMBERS_URL: secret('SUGER_MEMBERS_URL'),
+    SUGER_MEMBER_STATUS_URL: secret('SUGER_MEMBER_STATUS_URL'),
     // The relay and the usage reports are called through the gateway's service binding when the deploy gave the app
     // one (gateway-fetch.ts).
     ...(gatewayFetch ? { MAIL_FETCH: gatewayFetch, METRICS_FETCH: gatewayFetch, MEMBERS_FETCH: gatewayFetch } : {}),

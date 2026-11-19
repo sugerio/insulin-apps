@@ -51,9 +51,44 @@ seals the finished envelope and emails each signer a link to their copy.
   `POST /api/process-due` (manage permission) does the same work at once, for the caller's
   organization only. Its first part is send later (`scheduled-send.ts`): up to 25 drafts whose
   `schedule.at` has come are sent by the very send a member's Send runs, as whoever scheduled them
-  (kept in the draft; they must still be an editor of it); one refused stays a draft, unscheduled,
-  with the reason in `schedule.error`. After the due work, whatever its outcome, the tick sends the hour's usage
-  report (below), after its response when the request has a `waitUntil`.
+  (kept in the draft; they must still be an editor of it, and, as the gateway's member status
+  says by their id, `SUGER_MEMBER_STATUS_URL` in `directory.ts`, someone who may still send: a
+  member with Manage and an active account, or a live API client; while the organization is
+  suspended, or the gateway can't be asked, it waits); one refused stays a draft, unscheduled,
+  with the reason in `schedule.error`. Organizations take turns, round robin, across runs: a
+  run starts after the organization the last one reached (`app_settings.scheduled_cursor`), in id
+  order and round again, and goes in waves of ten organizations with a draft due (due drafts are
+  read through the partial index on `schedule.at`). All of a wave's organizations are asked about
+  at once (`organizationNow`, each with the full 5-second wait, for every scheduler of its drafts),
+  and each is handled by its own answer: active, it is served; one the gateway can't vouch for yet
+  (404 `unknown_organization`: an organization it hasn't recorded Esign's use in, DESIGN.md §8.9)
+  has every due draft rest at once, still scheduled, with `schedule.waiting:
+  "organization_unconfirmed"` (readers see `sendWaiting`) and `schedule.retryAt` ten minutes on;
+  suspended, its drafts step back four minutes and wait; no answer in time, its drafts are left as
+  they are. Each organization served gets its first send (or refusal) before any gets a second:
+  waves follow while places remain and the budget leaves a question's 5 seconds, and only then do
+  the organizations reached send more, one draft of each a pass, in turn, until the run's 25 places
+  or its 10-second budget run out (after at least one send or refusal); the budget is checked
+  before a draft is taken, so an organization not reached keeps its drafts and its turn. The
+  cursor moves past every organization handled (served its first turn, resting, suspended or not
+  answered for), up to the first one the run didn't serve. One run at a time: the tick's run first
+  takes the run lease (`app_settings.scheduled_lease`, written only while no unexpired lease is
+  held) for its budget and 20 seconds more, past the 25 seconds the platform gives the tick, and
+  releases it at the end; a tick that can't take it skips the scheduled sends (its other due work
+  still runs), and the lease of a run that crashed lapses and is taken over. A run writes the
+  cursor only while it still holds its lease (one conditional statement on the lease's id): one
+  that outlived it leaves the cursor to the run that took it over. Process-due, for one
+  organization, takes no turn and no lease. **The bound:** with N organizations with a draft due,
+  every one is asked about and served within N runs at worst (each run serves at least the next
+  one in turn, however slow its sends). A wave starts only while the budget leaves a question's 5
+  seconds, so when each wave (its questions and first sends) takes at most 5 seconds, the first
+  ends in time for a second, which ends within the 10, and a third is certain only when the first
+  two ended within 5 seconds: within ceil(N / 20) runs then, and ceil(N / 25) when the first two
+  waves take at most 5 seconds together. Only runs that keep their lease count: a tick that finds
+  another run under way, or a run that outlives its lease, moves no cursor. Sending claims a draft
+  in the batch that sends it, so even a run that outlives its lease, or a process-due beside it,
+  never sends one twice. After the due work, whatever its outcome, the tick sends the hour's usage report
+  (below), after its response when the request has a `waitUntil`.
 - **Mail.** There is no email binding: codes and completion notices go through the platform's mail
   relay (`mail.ts`), `POST $SUGER_MAIL_URL` with `SUGER_APP_TOKEN` and the organization, over the
   `SUGER_GATEWAY` service binding when the deploy gave one (`gateway-fetch.ts`). Only a 202
@@ -540,7 +575,7 @@ is enabled.
 | `POST /api/contacts`, `POST /api/contacts/:id`, `POST /api/contacts/:id/delete` | Add a contact (or change the one with that email), change one, delete one |
 | `GET`/`POST /api/{templates,envelopes}/:id/shares`, `POST .../shares/delete` | Who sees it; share it or change a role (admin); stop sharing (admin, or oneself) |
 | `POST /api/{templates,envelopes}/:id/tags`, `GET /api/tags` | Replace one's own tags on it; one's tags, most used first |
-| `GET /api/members` | The organization's people who can use Esign, from the gateway's `GET /__insulin/members` (`directory.ts`, `SUGER_MEMBERS_URL`); without it, the members Esign has seen. An API client's people must be among them (`422 not_members`) |
+| `GET /api/members` | People to share with. In the browser, the organization's people who can use Esign whose name or email contains `q`, from the gateway's member lookup with the request's `x-suger-member-lookup` header (`directory.ts`, `SUGER_MEMBERS_URL`, DESIGN.md §8.9); otherwise (an AI agent or API client, no `q`, or the gateway can't be asked), the members Esign has seen. An API client's people must be among them, each address looked up (`422 not_members`) |
 | `GET /api/owners`, `POST /api/owners/:id/transfer` | Organization owners: everyone who owns something; take over all of it |
 | `GET`/`POST /api/client-settings/:id` | Organization owners and admins, in the browser (the page `/client-settings/:id`, linked from API access): who sees what an API client owns, `{id, name?, people}`; replacing the list, `{people: [email]}` |
 | `GET /api/test-mail/:messageId` † | dev only: `{to, otp}` of a code sent to one of the organization's recipients |

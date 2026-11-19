@@ -1,0 +1,1 @@
+Not copied into the image: changing it keeps the image's tag.

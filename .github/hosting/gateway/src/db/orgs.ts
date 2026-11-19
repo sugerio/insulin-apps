@@ -1,5 +1,5 @@
 import { owner, type GrantInput } from './grants.ts'
-import { ownerDomainOf, registrableDomain, subdomainPattern } from '../owner-domain.ts'
+import { ownerDomainOf, registrableDomain, subdomainSuffix } from '../owner-domain.ts'
 import type { Role } from '../roles.ts'
 
 export interface OrgRow {
@@ -21,8 +21,6 @@ export interface MemberRow {
   email: string
   role: Role
   created_at: number
-  /** The account's standing (DESIGN.md §11.3): a suspended or disabled one stays a member but uses no app. */
-  status: string
 }
 
 const ROLE_ORDER = `CASE m.role WHEN 'OWNER' THEN 0 WHEN 'ADMIN' THEN 1 WHEN 'EDITOR' THEN 2 WHEN 'VIEWER' THEN 3 ELSE 4 END`
@@ -42,7 +40,7 @@ export const ORGS_PER_DOMAIN = 2
 /**
  * The forms the organizations of the owner domain of `email` (owner-domain.ts ownerDomainOf) may be recorded in, as
  * the parameters ?1 to ?4 of OWNED: the owner domain itself; the form migrations 0007 and 0009 wrote for a non-ASCII
- * domain (SQL can't write punycode, so it stayed as typed); and LIKE patterns for the subdomains of both, as those
+ * domain (SQL can't write punycode, so it stayed as typed); and the endings of the subdomains of both, as those
  * migrations, and the gateway before 0009, recorded the creator's whole domain.
  */
 function ownedForms(email: string): [string, string, string | null, string | null] {
@@ -50,13 +48,13 @@ function ownedForms(email: string): [string, string, string | null, string | nul
   if (ownerDomain.includes('@')) return [ownerDomain, ownerDomain, null, null]
   const typed = email.slice(email.lastIndexOf('@') + 1).toLowerCase()
   const legacy = registrableDomain(typed) ?? typed
-  return [ownerDomain, legacy, subdomainPattern(ownerDomain), legacy === ownerDomain ? null : subdomainPattern(legacy)]
+  return [ownerDomain, legacy, subdomainSuffix(ownerDomain), legacy === ownerDomain ? null : subdomainSuffix(legacy)]
 }
 
 // The organizations of an owner domain (ownedForms: ?1 to ?4), and how many it may have (?5 by default). A subdomain
-// pattern applies to domains only, never to an address at a provider.
+// ending applies to domains only, never to an address at a provider; lower() keeps the case-blind match LIKE made.
 const OWNED = `(o.owner_domain IN (?1, ?2)
-  OR (instr(o.owner_domain, '@') = 0 AND (o.owner_domain LIKE ?3 ESCAPE '\\' OR o.owner_domain LIKE ?4 ESCAPE '\\')))`
+  OR (instr(o.owner_domain, '@') = 0 AND (substr(lower(o.owner_domain), -length(?3)) = ?3 OR substr(lower(o.owner_domain), -length(?4)) = ?4)))`
 const ALLOWED = 'COALESCE((SELECT a.max_orgs FROM org_domain_allowances a WHERE a.owner_domain = ?1), ?5)'
 
 /** The owner domain of someone with this address, its organizations now, and how many it may have. */
@@ -154,7 +152,7 @@ export async function listUnavailableOrgs(db: D1Database, userId: string): Promi
 
 export async function listMembers(db: D1Database, orgId: string): Promise<MemberRow[]> {
   const { results } = await db.prepare(
-    `SELECT m.user_id, u.name, u.email, m.role, m.created_at, u.status FROM memberships m JOIN users u ON u.id = m.user_id
+    `SELECT m.user_id, u.name, u.email, m.role, m.created_at FROM memberships m JOIN users u ON u.id = m.user_id
      WHERE m.org_id = ?1 ORDER BY ${ROLE_ORDER}, u.name COLLATE NOCASE, u.email`,
   ).bind(orgId).all<MemberRow>()
   return results
@@ -195,12 +193,13 @@ export async function deleteOrg(db: D1Database, orgId: string, actorId: string):
 /**
  * Changes a member's role if it is still `current` (so a concurrent change is never overwritten); when an OWNER loses
  * the role, another OWNER remains; and `actorId` may still make the change: an OWNER, or an ADMIN when neither the
- * current nor the new role is OWNER. Returns false otherwise.
+ * current nor the new role is OWNER. Never to specific apps: that is `setAppAccess`, which writes the grants and closes
+ * the move's member event in the same batch. Returns false otherwise.
  */
 export async function changeRole(db: D1Database, change: { orgId: string; userId: string; current: Role; next: Role; actorId: string; now: number }): Promise<boolean> {
   const result = await db.prepare(
     `UPDATE memberships SET role = ?4, updated_at = ?5
-     WHERE org_id = ?1 AND user_id = ?2 AND role = ?3
+     WHERE org_id = ?1 AND user_id = ?2 AND role = ?3 AND ?4 <> 'APPS'
        AND (?3 <> 'OWNER' OR ?4 = 'OWNER' OR ${ANOTHER_OWNER})
        AND EXISTS (SELECT 1 FROM memberships a JOIN orgs ao ON ao.id = a.org_id AND ao.status = 'active' WHERE a.org_id = ?1 AND a.user_id = ?6
          AND (a.role = 'OWNER' OR (a.role = 'ADMIN' AND ?3 <> 'OWNER' AND ?4 <> 'OWNER')))`,
@@ -211,7 +210,7 @@ export async function changeRole(db: D1Database, change: { orgId: string; userId
 /**
  * Gives a member access to specific apps instead of an organization role, or changes which apps and roles they have,
  * in one batch: the role becomes APPS if it is still `current` (never the last OWNER), grants for apps left out go, and
- * the given grants are written. Every statement requires `actorId` still to be an OWNER, or an ADMIN when the member
+ * the given grants are written, joining the move's member event (migration 0012), which the batch then closes. Every statement requires `actorId` still to be an OWNER, or an ADMIN when the member
  * was not an OWNER. Moving from an organization role, the grant statements also require that this batch's own role
  * change applied (its `updated_at`), so a decision someone else made meanwhile is never overwritten. False when nothing
  * was written.
@@ -241,6 +240,8 @@ export async function setAppAccess(db: D1Database, change: { orgId: string; user
        ON CONFLICT (org_id, user_id, app) DO UPDATE SET role = excluded.role, custom_role_id = excluded.custom_role_id,
          updated_at = excluded.updated_at`,
     ).bind(change.orgId, change.userId, change.actorId, change.current, grants, change.now),
+    // Closed before the batch commits, so a grant in any later transaction is an event of its own.
+    db.prepare('DELETE FROM member_event_moves WHERE org_id = ?1 AND user_id = ?2').bind(change.orgId, change.userId),
   ]
   const [moved, , written] = await db.batch(statements)
   return (change.current === 'APPS' || (moved?.meta.changes ?? 0) > 0) && (written?.meta.changes ?? 0) > 0

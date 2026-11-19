@@ -49,9 +49,12 @@ as if you sent it now, and stays a draft until then; Esign sends it, as you, wit
 another time, and **Save draft** cancels the scheduled send. **Discard** deletes it.
 
 If it can't be sent then (its template was made a draft, a signer no longer matches it, or you can no longer send it:
-you left the organization or Esign, or your role there no longer sends), it stays a draft, no longer scheduled, and
-**Envelopes** says **Not sent** and why. Fix it, then send or schedule it again. Esign asks the platform who can use it
-at that time; while the platform can't be asked, the envelope waits for the next try.
+you left the organization or Esign, your role there no longer sends, or your account was suspended), it stays a draft,
+no longer scheduled, and **Envelopes** says **Not sent** and why. Fix it, then send or schedule it again. Esign asks the
+platform who can use it at that time; while the platform can't be asked, or your organization is suspended, the
+envelope waits for the next try. If Insulin Apps hasn't yet confirmed that your organization uses Esign (rare, and only
+just after an upgrade of the platform), **Envelopes** says **Waiting since** its time, and the draft says why. Opening
+Esign confirms it; Esign tries again every ten minutes, and sends it then.
 
 ## Upload and send
 

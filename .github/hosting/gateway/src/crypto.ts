@@ -128,7 +128,7 @@ export async function burnPasswordCheck(password: string): Promise<void> {
 // also the additional data: a value sealed for one purpose never opens as another.
 const SEALED_PREFIX = 'v1.'
 
-async function purposeKey(master: Uint8Array, purpose: string, usage: 'AES-GCM' | 'HMAC'): Promise<CryptoKey> {
+export async function purposeKey(master: Uint8Array, purpose: string, usage: 'AES-GCM' | 'HMAC'): Promise<CryptoKey> {
   const base = await crypto.subtle.importKey('raw', master as Uint8Array<ArrayBuffer>, 'HKDF', false, ['deriveKey'])
   const params = { name: 'HKDF', hash: 'SHA-256', salt: new Uint8Array(0), info: utf8(`insulin-apps:${purpose}`) as Uint8Array<ArrayBuffer> }
   return usage === 'AES-GCM'

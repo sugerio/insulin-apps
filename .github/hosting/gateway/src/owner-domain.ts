@@ -82,13 +82,14 @@ export function ownerDomainOf(email: string): string {
 }
 
 /**
- * A LIKE pattern (escape character `\`) for the subdomains of owner domain `ownerDomain`, whose organizations count
- * with it: rows written before migration 0009 hold the creator's whole domain. Null for an address, or a domain that
- * isn't registrable (an IP address, a public suffix), which counts only as itself.
+ * The ending (`.` and the domain) of the subdomains of owner domain `ownerDomain`, whose organizations count with it:
+ * rows written before migration 0009 hold the creator's whole domain. Compared as a suffix, not with LIKE: D1 refuses
+ * a LIKE pattern over 50 bytes, and a domain may be 253. Null for an address, or a domain that isn't registrable (an
+ * IP address, a public suffix), which counts only as itself.
  */
-export function subdomainPattern(ownerDomain: string): string | null {
+export function subdomainSuffix(ownerDomain: string): string | null {
   if (ownerDomain.includes('@') || registrableDomain(ownerDomain) !== ownerDomain) return null
-  return `%.${ownerDomain.replace(/[\\%_]/g, '\\$&')}`
+  return `.${ownerDomain}`
 }
 
 const HOSTNAME = /^(?=.{1,253}$)[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$/

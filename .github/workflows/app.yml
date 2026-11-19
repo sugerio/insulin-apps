@@ -2,6 +2,8 @@ name: App pipeline
 
 # An app's checks, which its own workflow (<app>.yml) runs on pull requests and pushes to main. Nothing deploys here:
 # once every workflow a push started has passed, release.yml tags it as a release and deploy-release.yml deploys it.
+# An app with an engine (`insulin.engine`, .github/hosting/DESIGN.md §8.7) also has its engine installed, built and
+# bundled as a release bundles it, typechecked and tested; check-insulin-app.mjs checks it with its own rules.
 on:
   workflow_call:
     inputs:
@@ -36,6 +38,57 @@ jobs:
       - name: Insulin compatibility (source)
         working-directory: .
         run: node .github/scripts/check-insulin-app.mjs ${{ inputs.app }}
+      - name: Find the engine
+        id: engine
+        working-directory: .
+        env:
+          APP: ${{ inputs.app }}
+        # Its directory, and which of the scripts check-insulin-app.mjs asks for when they apply it declares:
+        # test:python (an image that runs Python) and test:container (an engine with a container).
+        run: |
+          dir=$(node .github/scripts/list-apps.mjs --engine "$APP")
+          echo "dir=$dir" >> "$GITHUB_OUTPUT"
+          [ -n "$dir" ] || exit 0
+          node -e 'const scripts = require(`./${process.argv[1]}/package.json`).scripts ?? {}
+            console.log(`python=${Boolean(scripts["test:python"])}\ncontainer=${Boolean(scripts["test:container"])}`)' "$dir" >> "$GITHUB_OUTPUT"
+      - name: Install, build and bundle the engine
+        if: steps.engine.outputs.dir != ''
+        working-directory: .
+        env:
+          APP: ${{ inputs.app }}
+        # As a release builds it: its exact lockfile without scripts, its build if any, and its Worker bundled.
+        run: node .github/scripts/deploy-apps.mjs --build-engine --only "$APP"
+      - name: Typecheck the engine
+        if: steps.engine.outputs.dir != ''
+        working-directory: ${{ steps.engine.outputs.dir }}
+        run: npm run typecheck
+      - name: Test the engine
+        if: steps.engine.outputs.dir != ''
+        working-directory: ${{ steps.engine.outputs.dir }}
+        run: npm test
+      - name: Check the engine's Wrangler config
+        if: steps.engine.outputs.dir != ''
+        working-directory: ${{ steps.engine.outputs.dir }}
+        # Its own `check`, which every engine has: a dry run given its --config, since Wrangler would otherwise follow
+        # the app's generated .wrangler/deploy/config.json.
+        run: npm run check
+      - name: Test the engine's Python
+        if: steps.engine.outputs.python == 'true'
+        working-directory: ${{ steps.engine.outputs.dir }}
+        # In a virtual environment, with what the tests install pinned by version and hash in
+        # test/python/requirements.lock (check-insulin-app.mjs checks it), so no test is skipped for a missing package.
+        run: |
+          venv="$RUNNER_TEMP/engine-venv"
+          python3 -m venv "$venv"
+          if grep -qv '^[[:space:]]*\(#.*\)\?$' test/python/requirements.lock; then
+            "$venv/bin/pip" install --require-hashes -r test/python/requirements.lock
+          fi
+          PATH="$venv/bin:$PATH" npm run test:python
+      - name: Test the engine's container
+        if: steps.engine.outputs.container == 'true'
+        working-directory: ${{ steps.engine.outputs.dir }}
+        # Its control server in the image's base image, with Docker; the full image only runs on Cloudflare.
+        run: npm run test:container
       - name: Typecheck
         run: npm run typecheck
       - name: Test
@@ -85,4 +138,7 @@ jobs:
         run: npm ci --ignore-scripts --no-audit --no-fund
       - name: Build, migrate, and run in workerd
         working-directory: .github/scripts/workerd-smoke
-        run: node smoke.mjs
+        env:
+          APP: ${{ inputs.app }}
+        # An app with an engine runs with its in-memory stub engine bound as SUGER_ENGINE.
+        run: node smoke.mjs --app "$APP"

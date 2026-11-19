@@ -1,10 +1,11 @@
 // /__insulin/* on every host: reserved for the gateway and never forwarded to an app. The account bar calls these from
 // inside app pages with same-origin fetch, so the app's CSP (connect-src 'self') allows them.
-import { appMembers } from './integrations/members.ts'
 import { appAccess } from './access.ts'
 import { integrationProxy } from './integrations/proxy.ts'
 import { appMailRelay } from './mail/relay.ts'
 import { appMetricsReport } from './metrics/report.ts'
+import { appLimits } from './limits/endpoint.ts'
+import { memberEvents, memberLookup, memberStatus } from './members/endpoints.ts'
 import type { Context } from './context.ts'
 import { apexUrl, appSettingsPath, originOf } from './context.ts'
 import { listCapturedMail } from './db/mail.ts'
@@ -31,10 +32,16 @@ export async function reservedRoutes(ctx: Context): Promise<Response> {
     // Usage reports (metrics/report.ts), sent by app Workers every hour with their own token: POST, apex only.
     case '/__insulin/metrics':
       return appMetricsReport(ctx)
-    // The people of an organization who can use the app (integrations/members.ts), asked by app Workers with their own
-    // token: GET, apex only.
+    // What apps read with their own token on the apex (DESIGN.md §8.8, §8.9): their limits (limits/endpoint.ts), and
+    // the people of the organizations where they are used (members/endpoints.ts).
+    case '/__insulin/limits':
+      return appLimits(ctx)
     case '/__insulin/members':
-      return appMembers(ctx)
+      return memberLookup(ctx)
+    case '/__insulin/members/status':
+      return memberStatus(ctx)
+    case '/__insulin/member-events':
+      return memberEvents(ctx)
     case '/__insulin/me':
       return method === 'GET' || method === 'HEAD' ? me(ctx) : methodNotAllowed(ctx, ['GET', 'HEAD'])
     case '/__insulin/switch-org':

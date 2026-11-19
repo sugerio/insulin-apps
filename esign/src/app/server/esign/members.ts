@@ -2,7 +2,7 @@ import type { Hono } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import type { Env } from './app.ts';
 import { can, type Caller } from './identity.ts';
-import { DIRECTORY_MAX, directoryMembers } from './directory.ts';
+import { LOOKUP_QUERY_MAX, MEMBER_LOOKUP_HEADER, lookupMembers } from './directory.ts';
 import { emailKey, isClient, ownerSummary, shareableEmail } from './ownership.ts';
 import { unknownKeys } from './metadata.ts';
 
@@ -35,7 +35,6 @@ export function recordMember(db: D1Database, tenantId: string, caller: Caller, n
     .bind(tenantId, caller.userId, client ? 'client' : 'person', email, email ? emailKey(email) : null, caller.name, caller.role, now, now - TOUCH_INTERVAL_MS).run();
 }
 
-const likeContaining = (text: string) => `%${text.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
 /**
  * An organization owner, or owner or admin (x-suger-org-role, identity.ts: an Admin of Esign by grant is neither), who
  * may also manage Esign (a custom role that only views may not).
@@ -44,19 +43,21 @@ export const orgOwner = (caller: Caller) => caller.orgRole === 'OWNER' && can(ca
 const orgAdmin = (caller: Caller) => (caller.orgRole === 'OWNER' || caller.orgRole === 'ADMIN') && can(caller, 'esign.manage');
 
 export function mountMemberRoutes(app: Hono<Env>) {
-  // People to share with: the organization's people who can use Esign, as the platform says (directory.ts), whose name
-  // or email contains `q`; else, when the platform can't be asked, those Esign has seen, most recently seen first.
+  // People to share with: the organization's people who can use Esign whose name or email contains `q`, as the
+  // platform finds them for the person of this browser request (directory.ts, at most 20); else (no `q`, an AI agent's
+  // or API client's request, or the platform can't be asked) those Esign has seen, most recently seen first.
   app.get('/api/members', async (context) => {
     const limit = context.req.query('limit') === undefined ? 20 : Number(context.req.query('limit'));
     const q = (context.req.query('q') ?? '').trim();
     if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100 || q.length > MAX_QUERY) return context.json({ error: 'invalid_query' }, 400);
-    const directory = await directoryMembers(context.env, context.get('tenantId'), { q, limit });
-    // Who they are, not their roles, which only the scheduled sends' check reads (scheduled-send.ts).
-    if (directory) return context.json({ members: directory.map(({ id, email, name }) => ({ id, email, ...(name ? { name } : {}) })) });
-    const pattern = q ? likeContaining(q.toLowerCase()) : null;
-    const { results } = await context.env.DB.prepare(`SELECT user_id, email, name FROM members WHERE tenant_id = ? AND kind = 'person' AND email IS NOT NULL
-        AND (? IS NULL OR email_key LIKE ? ESCAPE '\\' OR lower(name) LIKE ? ESCAPE '\\') ORDER BY last_seen_at DESC, user_id LIMIT ?`)
-      .bind(context.get('tenantId'), pattern, pattern, pattern, limit).all<{ user_id: string; email: string; name: string | null }>();
+    const directory = q ? await lookupMembers(context.env, context.req.header(MEMBER_LOOKUP_HEADER), q) : null;
+    if (directory) return context.json({ members: directory.slice(0, limit).map(({ id, email, name }) => ({ id, email, ...(name ? { name } : {}) })) });
+    // The text as typed, found with instr(), not LIKE: D1 refuses a LIKE pattern over 50 bytes, and the text may be 100
+    // characters (or a search the platform found too varied to fold, which comes here).
+    const text = q ? q.toLowerCase() : null;
+    const { results } = await context.env.DB.prepare(`SELECT user_id, email, name FROM members WHERE tenant_id = ?1 AND kind = 'person' AND email IS NOT NULL
+        AND (?2 IS NULL OR instr(email_key, ?2) > 0 OR instr(lower(COALESCE(name, '')), ?2) > 0) ORDER BY last_seen_at DESC, user_id LIMIT ?3`)
+      .bind(context.get('tenantId'), text, limit).all<{ user_id: string; email: string; name: string | null }>();
     return context.json({ members: results.map((row) => ({ id: row.user_id, email: row.email, ...(row.name ? { name: row.name } : {}) })) });
   });
 
@@ -135,19 +136,18 @@ export function mountMemberRoutes(app: Hono<Env>) {
     const people = (body as { people?: unknown }).people;
     if (!Array.isArray(people) || people.length > MAX_CLIENT_PEOPLE || people.some((email) => !shareableEmail(email))) return context.json({ error: 'invalid_people' }, 422);
     if (!await db.prepare("SELECT 1 FROM members WHERE tenant_id = ? AND user_id = ? AND kind = 'client'").bind(tenantId, id).first()) return context.json({ error: 'not_found' }, 404);
-    // Only people who can use Esign, as the platform says (directory.ts); when it can't be asked, people Esign has seen.
+    // Only people who can use Esign, as the platform finds them for this owner or admin (directory.ts), each address
+    // asked for on its own (the platform puts a person whose address it is first, however many others contain it);
+    // when it can't be asked, or any one lookup isn't answered, people Esign has seen.
     let outside = people as string[], answered = false;
-    const directory = outside.length ? await directoryMembers(context.env, tenantId) : null;
-    if (directory) {
-      const allowed = new Set(directory.map((m) => emailKey(m.email)));
+    const asked = new Map<string, string>();
+    for (const email of outside) if (!asked.has(emailKey(email))) asked.set(emailKey(email), email.trim());
+    const keys = [...asked.entries()];
+    const found = await Promise.all(keys.map(([, email]) => lookupMembers(context.env, context.req.header(MEMBER_LOOKUP_HEADER), email.slice(0, LOOKUP_QUERY_MAX))));
+    if (keys.length && found.every((members) => members !== null)) {
+      const allowed = new Set(keys.filter(([key], i) => found[i]!.some((m) => emailKey(m.email) === key)).map(([key]) => key));
       outside = outside.filter((email) => !allowed.has(emailKey(email)));
       answered = true;
-      // An organization larger than one answer: those it left out, asked for by email.
-      if (outside.length && directory.length >= DIRECTORY_MAX) {
-        const found = await Promise.all(outside.map((email) => directoryMembers(context.env, tenantId, { q: email.trim().slice(0, 100), limit: 20 })));
-        if (found.some((members) => members === null)) answered = false;
-        else outside = outside.filter((email, i) => !found[i]!.some((m) => emailKey(m.email) === emailKey(email)));
-      }
     }
     if (outside.length && !answered) {
       const { results } = await db.prepare("SELECT email_key FROM members WHERE tenant_id = ? AND kind = 'person' AND email_key IN (SELECT value FROM json_each(?))")

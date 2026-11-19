@@ -64,7 +64,22 @@ test('a scheduled draft says when it sends; Send later picks another time, check
   } finally { await app.unmount(); }
 });
 
-test('the list: a scheduled draft says when it sends, one not sent says why; drafts are continued', async () => {
+test('a scheduled draft past its time that waits for the platform says so, and that it sends soon', async () => {
+  const app = await renderMember(`/envelopes/new?draft=${DRAFT_ID}`, (c) => {
+    if (c.path === '/api/me') return json(EDITOR);
+    if (c.path === '/api/templates' || c.path.startsWith('/api/templates?')) return json({ templates: [TEMPLATE] });
+    if (c.path.startsWith('/api/contacts')) return json({ contacts: [] });
+    if (c.path.startsWith('/api/tags?')) return json({ tags: [] });
+    if (c.path === `/api/envelopes/${DRAFT_ID}`) return json({ id: DRAFT_ID, templateId: 'tpl-1', status: 'DRAFT', tasks: [], draft: REQUEST, sendAt: '2026-01-02T03:04:00.000Z', sendWaiting: 'organization_unconfirmed', owner: OWNER, myRole: 'owner', tags: [] });
+    if (c.path.startsWith(`/api/envelopes/${DRAFT_ID}/`)) return json(c.path.endsWith('/audit') ? { events: [] } : { id: DRAFT_ID, myRole: 'owner', owner: OWNER, shares: [] });
+  });
+  try {
+    assert.match(app.text(), /Scheduled for .+, and not sent yet: Insulin Apps hasn't yet confirmed that your organization uses Esign, which it does when someone opens Esign, as you have now\. Esign tries again every ten minutes, and sends it then\./);
+    assert.doesNotMatch(app.text(), /Scheduled to send on/);
+  } finally { await app.unmount(); }
+});
+
+test('the list: a scheduled draft says when it sends, one not sent says why, one waiting says so; drafts are continued', async () => {
   const base = { templateId: 'tpl-1', status: 'DRAFT', createdAt: 0, signers: [], progress: { signed: 0, total: 1 }, owner: OWNER, myRole: 'owner', tags: [] };
   const app = await renderMember('/envelopes?status=draft', (c) => {
     if (c.path === '/api/me') return json(EDITOR);
@@ -72,12 +87,14 @@ test('the list: a scheduled draft says when it sends, one not sent says why; dra
     if (c.path.startsWith('/api/envelopes?')) return json({ envelopes: [
       { ...base, id: DRAFT_ID, documentName: 'Later agreement', sendAt: '2030-01-02T03:04:00.000Z' },
       { ...base, id: '66666666-6666-4666-8666-666666666666', documentName: 'Failed agreement', sendError: 'template_draft' },
+      { ...base, id: '77777777-7777-4777-8777-777777777777', documentName: 'Waiting agreement', sendAt: '2026-01-02T03:04:00.000Z', sendWaiting: 'organization_unconfirmed' },
     ] });
   });
   try {
     assert.match(app.text(), /Sends .*2030/);
     assert.match(app.text(), /Not sent: its template is a draft/);
-    assert.equal(app.renderer.root.findAll((n: any) => n.type === 'a' && visibleText(n.children).trim() === 'Continue').length, 2);
+    assert.match(app.text(), /Waiting since .*2026.*: Insulin Apps is confirming your organization/, 'past its time, still scheduled, and why');
+    assert.equal(app.renderer.root.findAll((n: any) => n.type === 'a' && visibleText(n.children).trim() === 'Continue').length, 3);
   } finally { await app.unmount(); }
 });
 

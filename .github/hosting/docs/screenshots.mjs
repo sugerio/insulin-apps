@@ -21,8 +21,9 @@
 // The run is local and offline except for Cloudflare's Turnstile widget, which the sign-up and sign-in forms load (the
 // local config uses Cloudflare's always-passing test keys). It serves the stack over https, with wrangler's
 // self-signed certificate: Esign accepts its own origin for the embedded field editor only over https. Esign sends
-// signing codes through the gateway's mail relay, which it reaches through a small proxy on 127.0.0.1: the app accepts
-// a relay URL over https or plain http on a loopback host, and wrangler's certificate isn't one the Worker trusts.
+// signing codes through the gateway's mail relay as it does when deployed: startDev gives each app the SUGER_GATEWAY
+// binding, the gateway's URLs on this local origin and an app token derived from the gateway key below, and the
+// request goes over the binding, so wrangler's certificate never comes into it.
 //
 // One screenshot can't be taken here: Esign seals a finished envelope with its seal key, a Cloudflare secret_key
 // binding `wrangler dev` can't provide, and an RFC 3161 timestamp from an outside service, so an envelope never reaches
@@ -36,7 +37,6 @@
 import { createHash, randomBytes } from 'node:crypto'
 import { mkdtemp, mkdir, rm, stat, writeFile } from 'node:fs/promises'
 import { request as httpsRequest } from 'node:https'
-import { createServer } from 'node:http'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
@@ -48,7 +48,6 @@ const repositoryDir = resolve(docsDir, '..', '..', '..')
 const gatewayDir = join(repositoryDir, '.github', 'hosting', 'gateway')
 const OUT = join(docsDir, 'assets', 'screenshots')
 const { startDev } = await import(pathToFileURL(join(gatewayDir, 'scripts', 'dev.mjs')).href)
-const { appToken } = await import(pathToFileURL(join(repositoryDir, '.github', 'scripts', 'deploy-apps.mjs')).href)
 
 const argument = (name, fallback) => {
   const at = process.argv.indexOf(name)
@@ -79,26 +78,6 @@ const ESIGN_OTP_KEY = 'local-screenshots-code-pepper-0123456789abcdef'
 const ESIGN_SEAL_KEY = 'local-screenshots-no-seal-key'
 
 const log = (message) => process.stdout.write(`${message}\n`)
-
-/** Forwards POST /__insulin/mail to the local gateway over https, as the apex. */
-function startRelayProxy() {
-  const server = createServer((incoming, answer) => {
-    if (incoming.method !== 'POST' || incoming.url !== '/__insulin/mail') {
-      answer.writeHead(404).end()
-      return
-    }
-    const outgoing = httpsRequest({
-      host: '127.0.0.1', port: PORT, method: 'POST', path: incoming.url, rejectUnauthorized: false,
-      headers: { ...incoming.headers, host: `${DOMAIN}:${PORT}` },
-    }, (response) => {
-      answer.writeHead(response.statusCode ?? 502, response.headers)
-      response.pipe(answer)
-    })
-    outgoing.on('error', () => answer.writeHead(502).end())
-    incoming.pipe(outgoing)
-  })
-  return new Promise((accept) => server.listen(0, '127.0.0.1', () => accept(server)))
-}
 
 /** GET on the local stack, as `hostname`, ignoring the self-signed certificate. */
 function probe(path, hostname = DOMAIN) {
@@ -297,7 +276,6 @@ async function placeholder(context, name, title, lines) {
 
 async function main() {
   await mkdir(OUT, { recursive: true })
-  const relay = await startRelayProxy()
   const state = await mkdtemp(join(tmpdir(), 'insulin-docs-screenshots-'))
   log(`Starting the gateway, Cap Table and Esign at ${APEX} (state in ${state})`)
   const child = await startDev({
@@ -317,14 +295,11 @@ async function main() {
         ESIGN_OTP_KEY,
         ESIGN_SEAL_KEY,
         ESIGN_FRAME_ANCESTORS: host('esign'),
-        SUGER_APP_TOKEN: appToken(GATEWAY_SECRET_KEY, 'esign'),
-        SUGER_MAIL_URL: `http://127.0.0.1:${relay.address().port}/__insulin/mail`,
       },
     },
   })
   const stop = async () => {
     child.kill('SIGINT')
-    relay.close()
     await new Promise((accept) => setTimeout(accept, 1500))
     await rm(state, { recursive: true, force: true })
   }

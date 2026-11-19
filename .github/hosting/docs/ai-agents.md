@@ -191,7 +191,11 @@ for each new change, and the same key again only when you retry that same change
   access, stored credentials, single sign-on and organization settings are browser-only. Apps also refuse their own changes of
   that kind unless they come from a browser.
 - **The app knows it's an agent.** The app receives `x-suger-access-via: mcp` and a `User-Agent` of
-  `Insulin Apps MCP: <the agent's name>`, so its audit trail can record that the agent did it on your behalf.
+  `Insulin Apps MCP: <the agent's name>`, so its audit trail can record that the agent did it on your behalf. It also
+  gets your organization role (`x-suger-org-role`), as it does from your browser.
+- **When an app says no.** An error from the app comes back as a failed tool call with the app's answer, its message
+  included: for example an app's limit, `429 quota_exceeded`, with a message saying whom to ask for more. The agent can
+  tell you what happened.
 - **Limits.** Every MCP request, and every tool call inside a batch, counts against your request rate in apps; past it,
   calls get "Too many requests. Try again in a minute." A JSON-RPC batch holds at most 10 messages. A request body is at
   most 1 MB.

@@ -1,0 +1,85 @@
+{
+  "about": "20 questions nothing in the corpus covers. At least 19 of 20 must get \"I won't guess\" (covered: false) and none may be answered with a citation (ASK-02). They set the calibrated threshold in container/calibration.json in Phase 0.",
+  "questions": [
+    {
+      "id": "u01",
+      "query": "What is the dress code in the office?"
+    },
+    {
+      "id": "u02",
+      "query": "How many days of paid vacation does a new employee get?"
+    },
+    {
+      "id": "u03",
+      "query": "Who is the company's chief executive?"
+    },
+    {
+      "id": "u04",
+      "query": "What is the company's stock ticker symbol?"
+    },
+    {
+      "id": "u05",
+      "query": "How do I book a meeting room?"
+    },
+    {
+      "id": "u06",
+      "query": "What is the employer pension contribution?"
+    },
+    {
+      "id": "u07",
+      "query": "Which holidays are company-wide days off?"
+    },
+    {
+      "id": "u08",
+      "query": "What is the guest Wi-Fi network called?"
+    },
+    {
+      "id": "u09",
+      "query": "How much paternity bonus do employees receive in shares?"
+    },
+    {
+      "id": "u10",
+      "query": "What programming languages are approved for new services?"
+    },
+    {
+      "id": "u11",
+      "query": "Where is the company's headquarters located?"
+    },
+    {
+      "id": "u12",
+      "query": "How often are performance reviews held?"
+    },
+    {
+      "id": "u13",
+      "query": "What is the policy on working from abroad?"
+    },
+    {
+      "id": "u14",
+      "query": "Which coffee machine brand is in the kitchen?"
+    },
+    {
+      "id": "u15",
+      "query": "How do I request a second monitor?"
+    },
+    {
+      "id": "u16",
+      "query": "What is the parking policy at the office?"
+    },
+    {
+      "id": "u17",
+      "query": "How many employees does the company have?"
+    },
+    {
+      "id": "u18",
+      "query": "What is the referral bonus for hiring a friend?"
+    },
+    {
+      "id": "u19",
+      "query": "Which cloud provider hosts the data warehouse?"
+    },
+    {
+      "id": "u20",
+      "query": "What is the procedure for a fire drill?"
+    }
+  ]
+}

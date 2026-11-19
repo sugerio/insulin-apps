@@ -1,0 +1,6 @@
+{
+  "about": "The \"won't guess\" threshold: a passage is used only when its similarity to the question (1 minus Cognee's cosine distance, from 0 to 1) is at least this. When no passage passes, the collection doesn't cover the question (covered: false). Set to 0.68 from the first Engine-lane run on Cloudflare (2026-11-17, run g1117a, standard-4), from the top scores of the question sets in test/fixtures/questions (harness/run.mjs --calibrate, plans ASK-01 and ASK-02): answerable questions 0.637-0.895, questions nothing covers 0.466-0.701. The two ranges overlap, so no threshold passes both plans in full; at 0.68 ASK-02 declines 19 of the 20 uncovered questions (its bar) and ASK-01 answers 37 of its 40. Calibrate again whenever the embedding model or the passages change.",
+  "threshold": 0.68,
+  "model": "BAAI/bge-small-en-v1.5",
+  "calibratedAt": "2026-11-17"
+}

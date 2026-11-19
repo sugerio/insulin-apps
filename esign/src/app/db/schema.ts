@@ -232,9 +232,12 @@ export const editorSessions = sqliteTable('editor_sessions', {
 })
 
 /**
- * Settings the deployment gives every organization, kept where SQL can read them: `editor_origins`
- * (a JSON array) are the host origins that may embed the editor and the signing page, from
- * ESIGN_FRAME_ANCESTORS (access.ts `syncEditorOrigins`).
+ * Settings of the deployment, kept where SQL can read them: `editor_origins` (a JSON array) are
+ * the host origins that may embed the editor and the signing page, from ESIGN_FRAME_ANCESTORS
+ * (access.ts `syncEditorOrigins`); `scheduled_cursor` (a JSON string) is the last organization the
+ * tick's scheduled sends reached, where the next run starts its round; `scheduled_lease` (`{"id", "until"}`)
+ * is held by the run sending them, so two never overlap, and taken over once `until` passes; only the run holding it
+ * moves the cursor (scheduled-send.ts).
  */
 export const appSettings = sqliteTable('app_settings', {
   name: text('name').primaryKey().notNull(),

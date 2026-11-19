@@ -48,7 +48,7 @@ export function NewEnvelopePage({ me }: { me: Me }) {
   })
   const [saved, setSaved] = useState<Record<string, unknown> | null>(null)
   // A scheduled draft: when it sends, or why it didn't (Send later).
-  const [schedule, setSchedule] = useState<{ sendAt?: string; sendError?: string }>({})
+  const [schedule, setSchedule] = useState<{ sendAt?: string; sendError?: string; sendWaiting?: string }>({})
   const [picking, setPicking] = useState(false)
   useEffect(() => {
     if (!draftId || saved) return
@@ -59,7 +59,7 @@ export function NewEnvelopePage({ me }: { me: Me }) {
       if (!envelope.templateId) { navigate(`/envelopes/send?draft=${envelope.id}`, { replace: true }); return }
       setTemplateId(envelope.templateId)
       setSaved(envelope.draft ?? {})
-      setSchedule({ sendAt: envelope.sendAt, sendError: envelope.sendError })
+      setSchedule({ sendAt: envelope.sendAt, sendError: envelope.sendError, sendWaiting: envelope.sendWaiting })
     }).catch((error) => setMessage({ text: describeError(error), error: true }))
   }, [])
 

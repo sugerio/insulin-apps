@@ -69,7 +69,8 @@ once) or post their forms as you.
 
 Apps can't use these paths, because the gateway answers them first:
 
-- `/__insulin/*`: the gateway's stylesheet, icon, account bar, and its sign-out and organization switch;
+- `/__insulin/*`: the gateway's stylesheet, icon, account bar, and its sign-out and organization switch (and, on
+  `insulinapps.com`, what apps call with their platform token: mail, usage reports, limits and members);
 - `/settings/users`, `/settings/integrations`, `/settings/api` and `/settings/connect-ai` (and everything below them);
 - `/mcp` and `/.well-known/oauth-*`.
 
@@ -105,14 +106,22 @@ These headers reach the app on every request from a person, an AI agent or an OA
 | `x-suger-app-role` | `ADMIN`, `EDITOR` or `VIEWER`. For a custom role, the least built-in role that covers its permissions |
 | `x-suger-app-permissions` | Apps with a permission catalog only: the effective permissions, space-separated |
 | `x-suger-access-via` | `browser`, `mcp` (an AI agent) or `api` (an OAuth client); `public` and `schedule` are described below |
-| `x-suger-org-role` | A person's organization role: `OWNER`, `ADMIN`, `EDITOR`, `VIEWER`, or `APPS` for specific apps. Never sent for an OAuth client |
+| `x-suger-org-role` | A person's organization role: `OWNER`, `ADMIN`, `EDITOR`, `VIEWER`, or `APPS` for access to specific apps. In a browser and through an AI agent; never for an OAuth client |
+| `x-suger-member-lookup` | Browser requests only: the organization, the person and an expiry five minutes ahead, signed for this app. The app passes it back to [look up members](#members-and-member-events) |
 
 User and organization ids are random UUIDs. An app reads these with `getCurrentUser(request)` from `@fours/app/server`.
 
 Apps treat `x-suger-app-permissions` as a narrowing of the role, never a widening: what a caller may do is the role's
-permissions that are also in the header. `x-suger-org-role` lets an app give organization owners or admins something
-no app role gives (in Esign, taking over what someone owns); an Admin of an app by specific-apps access is `APPS` there. Apps also refuse changes to their own people, roles, billing or integrations
+permissions that are also in the header. Apps also refuse changes to their own people, roles, billing or integrations
 unless `x-suger-access-via` is `browser`.
+
+`x-suger-org-role` is the one header that can give a power rather than take one away: an app may let organization
+owners or admins do something no app role allows (Knowledge lets owners see every collection's name and delete one;
+Esign lets owners take over what someone owns). An Admin of an app by specific-apps access is `APPS` there, not an
+organization admin. So an app honours it only when its deploy says to (`SUGER_TRUST_ORG_ROLE`, which Insulin Apps
+sets), treats a missing or unknown value as no organization role, and still checks everything on the server. Like
+every `x-suger-*` header, both are removed from what the caller sends, so nobody can claim a role or another person's
+lookup.
 
 AI agents and OAuth clients also send a `User-Agent` that names them: `Insulin Apps MCP: <client name>` or
 `Insulin Apps API: <OAuth client name>`, for the app's audit trail.
@@ -228,6 +237,65 @@ database's size) and for each organization (how many records of each kind, how m
 Counts and sizes only: never a name, an address, an amount or a document. At most 20 numbers per organization and 500
 organizations a request; a report sent twice changes nothing. Each app's own docs list what it sends.
 
+## Limits
+
+An app with real running costs may limit how much each organization uses. It lists its limits in its `package.json`
+(`insulin.limits`: a key, a label, a unit of `count`, `bytes`, `hours` or `days`, and a default), the deploy writes
+that list to the gateway's database, and Insulin Apps staff set the limits in the [operator console](#the-operator-console):
+a default for everyone, or an override for one organization (a number or unlimited, with an optional last day).
+
+The app reads them on its scheduled work with its platform token: `GET https://insulinapps.com/__insulin/limits?since=<cursor>`
+answers
+
+```json
+{ "defaults": { "questions_month": 5000, "storage_bytes": null },
+  "organizations": [ { "id": "<organization id>", "limits": { "questions_month": { "value": 9000, "until": "2026-12-01T00:00:00.000Z" } } } ],
+  "cursor": "42", "more": false }
+```
+
+- `defaults` holds every limit's default in force; `null` means unlimited.
+- `organizations` lists those whose overrides changed after the cursor (without `since`, every organization with an
+  override), each with all its current overrides, so `{}` means it has none any more. After `until` the default applies
+  again.
+- At most 500 organizations a page, oldest change first. The app saves `cursor` after each page and asks again while
+  `more` is true. A change applies within five minutes.
+- Only organizations where the app is used are listed. Without the platform's key the endpoint answers `503`, and the
+  app keeps what it stored, or its own defaults.
+
+The app enforces them. Past one, API and MCP callers get `429` with `{ "error": "quota_exceeded", "limit", "resets_at",
+"message" }`, and an AI assistant gets that message as a failed tool call, so it can tell the person. The app reports its
+usage under the same keys, so the console shows usage beside each limit.
+
+## Members and member events
+
+Apps that let people share their own records (Knowledge's collections, Esign's templates and envelopes) need to know
+who is in the organization: an app has no directory of its own. Three endpoints, called by the app with its platform
+token over the gateway's service binding, answer only about organizations where the app is used: where someone opened
+it or called it (an OAuth client, a grant or a usage report alone isn't use):
+
+- **Member lookup**, `GET https://insulinapps.com/__insulin/members?q=<text>` with the `x-suger-member-lookup` header of
+  the browser request the app is serving: at most 20 people who can use the app (id, name, e-mail address and role in
+  the app) and the app's OAuth clients (id and name) whose name or address contains the text, in any case, someone
+  whose address is the text first. The organization and the person come from the signed header, never from the app,
+  and the person must still be able to use the app. It fills a sharing dialog (or checks the people someone typed, as
+  Esign does for an OAuth client's people), and is limited per person. Requests from AI agents and OAuth clients carry
+  no header, so there an app uses the people it has seen.
+- **Member status**, `POST https://insulinapps.com/__insulin/members/status` with `{ "org", "ids" }` (at most 100):
+  for each person or OAuth client, whether it can still use the app (`member`, with its roles), has left (`left`, or
+  `revoked` for an OAuth client) or no longer exists (`gone`), and the organization's owners and since when; `404
+  org_deleted` for a deleted organization. No names or addresses. A suspended account or organization still counts as a
+  member: suspension isn't a departure. But each member's `standing` (`active`, `suspended` or `disabled`) and the
+  organization's are given, so an app acting for someone later can hold back: Esign sends a scheduled envelope only
+  while whoever scheduled it may still send, with an active account in an active organization.
+- **Member events**, `GET https://insulinapps.com/__insulin/member-events?since=<cursor>`: what changed, oldest first, at
+  most 1,000 a page with `cursor` and `more`. `left` (removed from the organization or the app, or the account deleted),
+  `returned` (joined or given the app), `role_changed` (with the new app and organization roles), `owners` (the owners
+  and since when), `client_revoked` (an OAuth client revoked, deleted, or revoked with its organization disabled) and
+  `org_deleted`. Each event is written in the same database transaction as the change, whichever way it was made: the
+  people pages, invitations, single sign-on, SCIM, removing a domain, deleting an account, the operator console. Without
+  `since` it returns the current cursor and no events. Events are kept 90 days; an older cursor gets `410
+  cursor_expired`, and the app checks everyone it holds with member status before reading events again.
+
 ## The operator console
 
 A few Insulin Apps staff use an operator console at `insulinapps.com/super`, separate from everything customers use.
@@ -241,8 +309,9 @@ do is recorded with the reason they give.
   tokens, stored credentials or what any e-mail said.
 - **What they can do:** suspend an organization or account that breaks the terms (access paused, everything kept),
   disable it (access ended, with an account's sessions and AI agents, or an organization's AI agents, API clients,
-  invitations and SCIM tokens), lift either, and create an organization for someone whose e-mail domain has used its
-  two.
+  invitations and SCIM tokens), lift either, create an organization for someone whose e-mail domain has used its
+  two, and set apps' [limits](#limits): a default for every organization, or an override for one, each with a reason.
+  An organization at 80% or more of a limit, by its app's latest usage report, shows on their watch list.
 - **What suspension does:** a suspended or disabled account can't sign in and is signed out everywhere. Nobody can use a
   suspended or disabled organization in any way: apps, settings, AI agents, API clients, single sign-on and SCIM all
   stop, and its members' home page says so. Data is kept.
@@ -273,8 +342,10 @@ do is recorded with the reason they give.
 
 - The gateway's database holds accounts, sessions, organizations, memberships, roles, invitations, AI agent grants,
   OAuth clients (hashed secrets), stored credentials (encrypted), single sign-on settings, a short mail log, when each
-  account and organization was last active, the apps' usage reports and the operator console's audit log.
+  account and organization was last active, the apps' usage reports and limits, which apps each organization uses, 90
+  days of member events, and the operator console's audit log.
 - Each app's database holds what you enter in that app, for every organization, each organization's rows marked with its
   id.
-- Nothing is reset. Data stays until you delete it. Deleting an organization removes it from sign-in; the apps keep its
-  data, but nobody can reach it again, because its id is never issued again.
+- Nothing is reset. Data stays until you delete it. Deleting an organization removes it from sign-in, and each app it
+  used is told (`org_deleted`): an app may then delete the organization's data, as Knowledge does; data an app keeps can't
+  be reached again, because the organization's id is never issued again.

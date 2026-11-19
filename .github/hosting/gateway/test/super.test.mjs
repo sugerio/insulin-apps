@@ -11,7 +11,7 @@ import { insertGrantWithCode, redeemCode, touchGrant, touchServiceAccount } from
 import { changeRole, deleteOrg, leaveOrg, removeMember, renameOrg, setAppAccess } from '../src/db/orgs.ts'
 import { insertInvitation, revokeInvitation } from '../src/db/invitations.ts'
 import { joinOrg, joinOrgByScim } from '../src/db/sso.ts'
-import { PLAN, headroom, isWarning } from '../src/super/cloudflare.ts'
+import { PLAN, headroom, isWarning, parseSnapshot } from '../src/super/cloudflare.ts'
 import { base32Decode, hotp, timeStep } from '../src/auth/totp.ts'
 import { authorizeUrl, form, openConsent, pkce } from './helpers/oauth.mjs'
 import { setOrgStatus, setUserStatus } from '../src/super/db.ts'
@@ -362,6 +362,19 @@ test('lists search by name, id, owner domain and address; pages show people, usa
   assert.equal((await reader.get(h.url('apex', '/super/orgs/00000000-0000-4000-8000-000000000000'))).status, 404)
   const users = await reader.get(h.url('apex', `/super/users?q=${encodeURIComponent(member.email)}`))
   assert.match(users.text, /Mo Member/)
+  // A long address, whole and in capitals, and the longest search (200 characters). Must catch: past 48 characters
+  // the search was a LIKE pattern over D1's 50 bytes, and the page failed.
+  const long = await h.user({ name: 'Lou Longaddress', email: `lou.with_a_rather_long_address.${'q'.repeat(30)}@example.test` })
+  await h.join(owner, orgId, long, 'VIEWER')
+  assert.ok(long.email.length > 60)
+  for (const path of ['/super/orgs', '/super/users']) {
+    const found = await reader.get(h.url('apex', `${path}?q=${encodeURIComponent(long.email.toUpperCase())}`))
+    assert.equal(found.status, 200, path)
+    assert.match(found.text, path === '/super/orgs' ? /Zebra Findable Co/ : /Lou Longaddress/, path)
+    const longest = await reader.get(h.url('apex', `${path}?q=${'x'.repeat(200)}`))
+    assert.equal(longest.status, 200, path)
+    assert.match(longest.text, path === '/super/orgs' ? /No organization matches\./ : /No account matches\./, path)
+  }
   const person = await reader.get(h.url('apex', `/super/users/${member.id}`))
   assert.match(person.text, /Zebra Findable Co/)
   assert.doesNotMatch(person.text, /password|google_sub|totp/i, 'nothing of the account but who it is')
@@ -499,25 +512,74 @@ test('five hundred organizations are stored in one report; the console ranks the
 const GATEWAY_DB = '00000000-0000-4000-8000-0000000000d1'
 const CAPTABLE_DB = '00000000-0000-4000-8000-0000000000d2'
 
+// An app's engine (DESIGN.md §8.7), its Durable Object namespace and its container applications, all synthetic.
+const ENGINE = 'insulin-apps-knowledge-engine'
+const ENGINE_NAMESPACE = '00000000000000000000000000000ab1'
+const GIB = 1024 ** 3
+
 /**
- * Answers Cloudflare's API like the account would, counting the calls; `fail` makes one part answer 500, and `sized`
- * lists the databases the storage analytics know.
+ * Answers Cloudflare's API like the account would, counting the calls; `fail` makes one part answer 500, `sized`
+ * lists the databases the storage analytics know, and `engine` adds an app's engine Worker with its containers, R2
+ * buckets and Durable Objects (and someone else's, which the console leaves out).
  */
-function cloudflareApi({ fail = null, sized = [GATEWAY_DB, CAPTABLE_DB] } = {}) {
+function cloudflareApi({ fail = null, sized = [GATEWAY_DB, CAPTABLE_DB], engine = false } = {}) {
   const calls = []
   const answer = (part, body) => (fail === part ? new Response('{}', { status: 500 }) : body)
   const settings = { 'insulin-apps-gateway': GATEWAY_DB, 'insulin-apps-captable': CAPTABLE_DB }
   const stop = h.outbound.on('https://api.cloudflare.com/client/v4/', (request, url, params, body) => {
-    calls.push({ path: url.pathname, auth: request.headers.get('authorization'), body })
+    calls.push({ path: url.pathname, query: url.search, auth: request.headers.get('authorization'), body })
     if (url.pathname.endsWith('/workers/scripts')) {
-      return answer('workers', { success: true, result: [{ id: 'insulin-apps-gateway' }, { id: 'insulin-apps-captable' }, { id: 'someone-elses-worker' }] })
+      return answer('workers', { success: true, result: [
+        { id: 'insulin-apps-gateway' }, { id: 'insulin-apps-captable' }, { id: 'someone-elses-worker' }, ...(engine ? [{ id: ENGINE }] : []),
+      ] })
     }
     const script = /\/workers\/scripts\/([^/]+)\/settings$/.exec(url.pathname)?.[1]
+    if (script === ENGINE) {
+      return answer('settings', { success: true, result: { bindings: [
+        { type: 'durable_object_namespace', name: 'COLLECTIONS', class_name: 'CollectionEngine', namespace_id: ENGINE_NAMESPACE },
+        { type: 'r2_bucket', name: 'FILES', bucket_name: `${ENGINE}-files` },
+      ] } })
+    }
     if (script) {
       return answer('settings', { success: true, result: { bindings: [
         { type: 'd1', name: 'DB', id: settings[script] },
         { type: 'service', name: 'SUGER_GATEWAY', service: 'insulin-apps-gateway' },
       ] } })
+    }
+    if (url.pathname.endsWith('/containers/applications')) {
+      // Two pages: one application found by its Durable Object namespace, one by its name, and someone else's.
+      return answer('containers', url.searchParams.get('page_token') === 'second' ? { success: true, result: [
+        { id: 'app-by-name', name: `${ENGINE}-collectionengine`, health: { instances: { active: 1, assigned: 1 } } },
+      ], result_info: {} } : { success: true, result: [
+        { id: 'app-by-namespace', name: 'cc-application', durable_objects: { namespace_id: ENGINE_NAMESPACE }, health: { instances: { active: 2, starting: 1 } } },
+        { id: 'someone-elses-app', name: 'someone-elses-container', health: { instances: { active: 9 } } },
+      ], result_info: { next_page_token: 'second' } })
+    }
+    if (url.pathname === '/client/v4/graphql' && body.includes('r2StorageAdaptiveGroups')) {
+      return answer('r2', { data: { viewer: { accounts: [{
+        r2Storage: [
+          { dimensions: { bucketName: `${ENGINE}-files` }, max: { payloadSize: 3e9, metadataSize: 1e6, objectCount: 1200 } },
+          { dimensions: { bucketName: `${ENGINE}-backups` }, max: { payloadSize: 1e9, metadataSize: 0, objectCount: 30 } },
+          { dimensions: { bucketName: 'someone-elses-bucket' }, max: { payloadSize: 99e9, metadataSize: 0, objectCount: 5 } },
+        ],
+        r2Operations: [
+          { dimensions: { bucketName: `${ENGINE}-files`, actionType: 'PutObject' }, sum: { requests: 400_000 } },
+          { dimensions: { bucketName: `${ENGINE}-files`, actionType: 'GetObject' }, sum: { requests: 2_000_000 } },
+          { dimensions: { bucketName: `${ENGINE}-files`, actionType: 'DeleteObject' }, sum: { requests: 50 } },
+          { dimensions: { bucketName: `${ENGINE}-backups`, actionType: 'ListObjects' }, sum: { requests: 1000 } },
+          { dimensions: { bucketName: 'someone-elses-bucket', actionType: 'PutObject' }, sum: { requests: 9_000_000 } },
+        ],
+      }] } } })
+    }
+    if (url.pathname === '/client/v4/graphql' && body.includes('durableObjectsInvocationsAdaptiveGroups')) {
+      return answer('durable_objects', { data: { viewer: { accounts: [{ durableObjects: [{ sum: { requests: 600_000 } }, { sum: { requests: 250_000 } }] }] } } })
+    }
+    if (url.pathname === '/client/v4/graphql' && body.includes('containersUsageAdaptiveGroups')) {
+      return answer('container_usage', { data: { viewer: { accounts: [{ containers: [
+        { dimensions: { applicationId: 'app-by-namespace' }, sum: { cpuTimeSec: 15_000, allocatedMemory: 40_000 * GIB, allocatedDisk: 100_000 * 1e9 } },
+        { dimensions: { applicationId: 'app-by-name' }, sum: { cpuTimeSec: 5000, allocatedMemory: 10_000 * GIB, allocatedDisk: 0 } },
+        { dimensions: { applicationId: 'someone-elses-app' }, sum: { cpuTimeSec: 1000, allocatedMemory: 0, allocatedDisk: 0 } },
+      ] }] } } })
     }
     if (url.pathname === '/client/v4/graphql' && body.includes('d1StorageAdaptiveGroups')) {
       return answer('storage', { data: { viewer: { accounts: [{ storage: [
@@ -643,6 +705,136 @@ test('a part of Cloudflare that fails is named, and the rest is kept', async () 
     assert.equal(JSON.parse(rows[0].data).workers.find((worker) => worker.name === 'insulin-apps-gateway').requestsMonth, 9_000_000)
   } finally {
     healthy.stop()
+  }
+})
+
+test("the hourly snapshot reads each app's engine: its container instances and time, its R2 buckets, and the account's Durable Object requests", async () => {
+  await h.sql('DELETE FROM super_jobs')
+  await h.sql('DELETE FROM super_cloudflare_snapshots')
+  const api = cloudflareApi({ engine: true })
+  try {
+    await tick()
+    const [job] = await waitFor(async () => (await h.sql("SELECT outcome FROM super_jobs WHERE name = 'cloudflare' AND finished_at IS NOT NULL")).length ? h.sql("SELECT outcome FROM super_jobs WHERE name = 'cloudflare'") : null)
+    assert.equal(job.outcome, 'ok')
+    assert.deepEqual(api.calls.map((call) => `${call.path}${call.query}`).filter((path) => !path.endsWith('/graphql')).sort(), [
+      `/client/v4/accounts/${CLOUDFLARE_ACCOUNT}/containers/applications`,
+      `/client/v4/accounts/${CLOUDFLARE_ACCOUNT}/containers/applications?page_token=second`,
+      `/client/v4/accounts/${CLOUDFLARE_ACCOUNT}/workers/scripts`,
+      `/client/v4/accounts/${CLOUDFLARE_ACCOUNT}/workers/scripts/insulin-apps-captable/settings`,
+      `/client/v4/accounts/${CLOUDFLARE_ACCOUNT}/workers/scripts/insulin-apps-gateway/settings`,
+      `/client/v4/accounts/${CLOUDFLARE_ACCOUNT}/workers/scripts/${ENGINE}/settings`,
+    ], 'no R2 endpoint: Workers R2 Storage: Read would read every object; sizes and operations come from the analytics')
+    assert.equal(api.calls.filter((call) => call.path.endsWith('/graphql')).length, 5)
+    for (const dataset of ['r2StorageAdaptiveGroups', 'r2OperationsAdaptiveGroups', 'durableObjectsInvocationsAdaptiveGroups', 'containersUsageAdaptiveGroups']) {
+      assert.ok(api.calls.some((call) => call.body.includes(dataset)), dataset)
+    }
+    assert.ok(api.calls.every((call) => call.auth === `Bearer ${CLOUDFLARE_TOKEN}`))
+    const snapshot = JSON.parse((await h.sql('SELECT data FROM super_cloudflare_snapshots'))[0].data)
+    assert.deepEqual(snapshot.problems, [])
+    assert.deepEqual(snapshot.engines, [{
+      name: ENGINE,
+      containerApplications: 2,
+      containerInstances: 5,
+      vcpuSecondsMonth: 20_000,
+      memoryGibSecondsMonth: 50_000,
+      diskGbSecondsMonth: 100_000,
+      r2Bytes: 4_001_000_000,
+      r2Objects: 1230,
+      r2ClassAMonth: 401_000,
+      r2ClassBMonth: 2_000_000,
+    }], "its own applications (by Durable Object namespace or by name) and buckets, never someone else's; deleting is no class")
+    assert.deepEqual(snapshot.engineTotals, {
+      durableObjectRequestsMonth: 850_000,
+      durableObjectDurationGbSecondsMonth: null,
+      vcpuSecondsMonth: 21_000,
+      memoryGibSecondsMonth: 50_000,
+      diskGbSecondsMonth: 100_000,
+      r2Bytes: 4_001_000_000,
+      r2ClassAMonth: 401_000,
+      r2ClassBMonth: 2_000_000,
+      workersAiNeuronsMonth: null,
+    }, "the account's containers, the platform's buckets; duration and neurons have no documented source, so they are unknown")
+    assert.ok(snapshot.workers.some((worker) => worker.name === ENGINE), 'and its Worker with the others')
+
+    const reader = await operator()
+    const page = await reader.get(h.url('apex', '/super/cloudflare'))
+    assert.match(page.text, /App engines/)
+    assert.match(page.text, new RegExp(`${ENGINE}</td>`))
+    assert.match(page.text, /2 applications/)
+    assert.match(page.text, /Durable Object requests this month/)
+    assert.match(page.text, /850,000 of 1,000,000 \(85%\)/)
+    assert.match(page.text, /Containers vCPU-seconds this month/)
+    assert.match(page.text, /21,000 of 22,500/)
+    assert.match(page.text, /R2 Class A operations this month/)
+    assert.match(page.text, /R2 storage, all engine buckets/)
+    assert.doesNotMatch(page.text, /Durable Object duration this month|Workers AI neurons this month/, 'no meter from a figure never read')
+    assert.match(page.text, /Not measured: Durable Objects(?:&#x27;|')s? duration \(GB-s\) and Workers AI(?:&#x27;|')s neurons/)
+    assert.match(page.text, /Engine Worker/, 'in the inventory')
+    assert.doesNotMatch(page.text, /someone-elses/)
+    const overview = await reader.get(h.url('apex', '/super'))
+    assert.match(overview.text, /Durable Object requests this month<\/a>: 850,000 of 1,000,000/, 'past 80%: on the watch list')
+    assert.match(overview.text, /Containers vCPU-seconds this month<\/a>: 21,000 of 22,500/)
+  } finally {
+    api.stop()
+  }
+})
+
+test("an engine part that fails is named, its figures unknown, never zero, and the rest is kept", async () => {
+  for (const [part, check] of [
+    ['containers', (snapshot) => {
+      assert.equal(snapshot.engines[0].containerInstances, null)
+      assert.equal(snapshot.engines[0].vcpuSecondsMonth, null, "without the applications, the engine's share of the time is unknown")
+      assert.equal(snapshot.engineTotals.vcpuSecondsMonth, 21_000, "the account's total is still known")
+      assert.equal(snapshot.engines[0].r2Bytes, 4_001_000_000)
+    }],
+    ['r2', (snapshot) => {
+      assert.equal(snapshot.engines[0].r2Bytes, null)
+      assert.equal(snapshot.engineTotals.r2ClassAMonth, null)
+      assert.equal(snapshot.engines[0].containerInstances, 5)
+    }],
+    ['durable_objects', (snapshot) => assert.equal(snapshot.engineTotals.durableObjectRequestsMonth, null)],
+    ['container_usage', (snapshot) => {
+      assert.equal(snapshot.engineTotals.memoryGibSecondsMonth, null)
+      assert.equal(snapshot.engines[0].containerInstances, 5)
+    }],
+  ]) {
+    await h.sql('DELETE FROM super_jobs')
+    await h.sql('DELETE FROM super_cloudflare_snapshots')
+    const api = cloudflareApi({ engine: true, fail: part })
+    try {
+      await tick()
+      await waitFor(async () => (await h.sql("SELECT 1 FROM super_jobs WHERE name = 'cloudflare' AND finished_at IS NOT NULL")).length)
+      assert.equal((await h.sql("SELECT outcome FROM super_jobs WHERE name = 'cloudflare'"))[0].outcome, 'partial', part)
+      const snapshot = JSON.parse((await h.sql('SELECT data FROM super_cloudflare_snapshots'))[0].data)
+      assert.deepEqual(snapshot.problems, [`${part}:http_500`])
+      check(snapshot)
+      assert.equal(snapshot.workers.length, 3, `${part}: the Workers are kept`)
+    } finally {
+      api.stop()
+    }
+  }
+  const reader = await operator()
+  const page = await reader.get(h.url('apex', '/super/cloudflare'))
+  assert.match(page.text, /couldn(?:&#x27;|')t be read: container_usage:http_500/)
+  assert.doesNotMatch(page.text, /Containers memory this month/, 'no meter from an unknown')
+  assert.match(page.text, /Durable Object requests this month/, 'the other meters stay')
+})
+
+test('without an engine Worker the snapshot asks nothing of Containers, R2 or Durable Objects', async () => {
+  await h.sql('DELETE FROM super_jobs')
+  await h.sql('DELETE FROM super_cloudflare_snapshots')
+  const api = cloudflareApi()
+  try {
+    await tick()
+    await waitFor(async () => (await h.sql("SELECT 1 FROM super_jobs WHERE name = 'cloudflare' AND outcome = 'ok'")).length)
+    assert.ok(!api.calls.some((call) => call.path.includes('/containers/') || /r2|durableObjects|containersUsage/.test(call.body)))
+    const snapshot = JSON.parse((await h.sql('SELECT data FROM super_cloudflare_snapshots'))[0].data)
+    assert.deepEqual(snapshot.engines, [])
+    assert.equal(snapshot.engineTotals, null)
+    const page = await (await operator()).get(h.url('apex', '/super/cloudflare'))
+    assert.doesNotMatch(page.text, /App engines|Not measured/)
+  } finally {
+    api.stop()
   }
 })
 
@@ -974,6 +1166,20 @@ test('the meters against the plan: right, or left out, whatever the snapshot cou
   assert.deepEqual(keys(headroom(snapshot(may + day, [], []))), [], 'no Worker, no database: no meter at all, never zeros')
   assert.deepEqual(keys(headroom(snapshot(may + day, [gateway(null)], [db('a', 1, null)]))), ['storage', 'largest_db'], 'rows unknown')
   assert.deepEqual(keys(headroom(snapshot(may + day, [{ ...gateway(5), name: 'insulin-apps-captable' }], [db('a', null, 5), db('b', 2, 5)]))), ['rows_read', 'rows_written'], 'a size unknown, and no gateway')
+
+  // The engines' meters, from what was read only; an older snapshot without engine figures makes none.
+  const totals = {
+    durableObjectRequestsMonth: 10, durableObjectDurationGbSecondsMonth: null, vcpuSecondsMonth: 10, memoryGibSecondsMonth: null,
+    diskGbSecondsMonth: 10, r2Bytes: 10, r2ClassAMonth: null, r2ClassBMonth: 10, workersAiNeuronsMonth: null,
+  }
+  const engine = headroom({ ...snapshot(may + 10 * day, null, null), engineTotals: totals })
+  assert.deepEqual(keys(engine), ['do_requests', 'container_vcpu', 'container_disk', 'r2_storage', 'r2_class_b'])
+  assert.equal(engine.find((row) => row.key === 'r2_storage').projected, null, 'stored bytes are a level, not a month')
+  assert.equal(engine.find((row) => row.key === 'do_requests').projected, 31)
+  const neurons = headroom({ ...snapshot(may + 10 * day, null, null), engineTotals: { ...totals, workersAiNeuronsMonth: 155_000 } }).find((row) => row.key === 'ai_neurons')
+  assert.equal(neurons.limit, PLAN.workersAiNeuronsPerDay * 31, 'a daily allowance, over the month')
+  assert.deepEqual(keys(headroom(parseSnapshot(JSON.stringify(snapshot(may + day, null, null))))), [], 'an older snapshot')
+  assert.equal(parseSnapshot(JSON.stringify(snapshot(may + day, null, null))).engines, null)
 })
 
 // Last in the file: the gateway stops reading a body past its limit, and the connection it came on may not be usable

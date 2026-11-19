@@ -17,6 +17,7 @@ import { ROLE_LABELS } from "../../roles.ts"
 import type { OperatorSession } from "../../super/auth.ts"
 import { PAGE_SIZE, type AuditRow, type OrgDetail, type OrgListRow, type OrgMemberRow, type OrgSort, type OrgUsage, type Status } from "../../super/db.ts"
 import { AuditTable } from "./audit.tsx"
+import { LIMIT_NOTICES, OrgLimits, type OrgAppLimits } from "./limits.tsx"
 import { superPage } from "./layout.tsx"
 import { Bars, Pagination, SearchForm, Section, SortLink, StandingForm, StatusBadge, ago, count, day, metricLabel, metricValue, when } from "./parts.tsx"
 
@@ -90,6 +91,8 @@ export interface OrgDetailData {
   members: OrgMemberRow[]
   usage: OrgUsage
   apps: OrgAppUsage[]
+  /** Each app with a limit catalog, as its limits stand for this organization (DESIGN.md §11.7). */
+  limits: OrgAppLimits[]
   history: AuditRow[]
 }
 
@@ -99,6 +102,7 @@ const NOTICES: Record<string, string> = {
   active: "The organization is reinstated.",
   created: "The organization was created, and its owner was told by e-mail.",
   unchanged: "Nothing changed: the organization already had that standing.",
+  ...LIMIT_NOTICES,
 }
 
 /** One app's 30 days of one metric, as columns. */
@@ -192,6 +196,8 @@ export function orgDetailPage(ctx: Context, session: OperatorSession, data: OrgD
           <p className="text-sm text-muted-foreground">No app has reported this organization in the last three days.</p>
         </Section>
       )}
+
+      <OrgLimits orgId={org.id} apps={data.limits} admin={session.admin} now={ctx.now} />
 
       {session.admin ? (
         <Section title="Standing" description="Suspending or disabling applies at once: to its people's pages, the apps, AI agents, API clients, SCIM and the mail relay.">

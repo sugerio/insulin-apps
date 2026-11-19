@@ -24,3 +24,17 @@ test('accepts only members rooted in the selected app output', () => {
   )
   assert.throws(() => checkBuildArchiveMembers('', 'captable/.output'), /empty/)
 })
+
+test("an app with an engine carries the engine's bundle too, and nothing else of the app", () => {
+  const roots = ['knowledge/.output', 'knowledge/engine/.output']
+  assert.doesNotThrow(() => checkBuildArchiveMembers([
+    'knowledge/.output/',
+    'knowledge/.output/server/index.mjs',
+    'knowledge/engine/.output/',
+    'knowledge/engine/.output/worker/index.js',
+  ].join('\n'), roots))
+  for (const member of ['knowledge/engine/', 'knowledge/engine/src/index.ts', 'knowledge/engine/wrangler.jsonc', 'knowledge/engine', 'knowledge/package.json', 'knowledge/engine/.output/../x']) {
+    assert.throws(() => checkBuildArchiveMembers(`${member}\n`, roots), /outside|unsafe path/, member)
+  }
+  assert.throws(() => checkBuildArchiveMembers('knowledge/.output/x\n', []), /Expected archive roots/)
+})

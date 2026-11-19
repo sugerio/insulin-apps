@@ -89,7 +89,7 @@ export const gettingStarted: DocTopic = {
       title: 'Where to find things',
       body: (
         <ul>
-          <li><b>Home</b>: ask across the collections you pick, and see your collections.</li>
+          <li><b>Home</b>: before you have a collection, a picture of how Knowledge works and your next step (<b>New collection</b>, or for a Viewer, asking a colleague to share one); then ask across the collections you pick, and see your collections.</li>
           <li><b>Collections</b>: your collections with your role in each; the second column lists them, with <b>+ New collection</b> for those who can start one.</li>
           <li><b>A collection</b>: <b>Overview</b> (what it covers and its state), <b>Ask</b>, <b>Sources</b> (files, web pages and notes), <b>What it knows</b> (facts as sentences), <b>Sharing</b> and <b>History</b>.</li>
           <li><b>Needs attention</b> (Editors and Admins): files Insulin couldn't read, values hidden before learning, reported answers waiting for someone, and corrections to check.</li>

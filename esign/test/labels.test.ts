@@ -9,7 +9,6 @@ import { readFile, readdir } from 'node:fs/promises';
 import { Miniflare } from 'miniflare';
 import { PDFDocument } from 'pdf-lib';
 import { MIGRATIONS_DIR, splitSql } from './helpers/platform.ts';
-import { setEditorOrigins } from './helpers/editor-origins.ts';
 import app from './helpers/gateway.ts';
 import { parseMetadata, parseTemplateName, storedMetadata } from '../src/app/server/esign/metadata.ts';
 
@@ -26,7 +25,6 @@ async function harness() {
   const hash = Buffer.from(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(SECRET))).toString('hex');
   await db.prepare("INSERT INTO tenants (id) VALUES ('a')").run();
   await db.prepare("INSERT INTO api_keys (key_hash,tenant_id) VALUES (?,'a')").bind(hash).run();
-  await setEditorOrigins(db, 'a', [HOST]);
   const env = { DB: db, ARTIFACTS: await blobStore(mf, 'artifacts'), ASSETS: { fetch: async () => new Response('<html>editor</html>', { headers: { 'content-type': 'text/html' } }) } };
   const auth = { authorization: `Bearer ${SECRET}` };
   const req = (path: string, init: RequestInit = {}) => app.fetch(new Request('https://esign.example.com' + path, init), env);

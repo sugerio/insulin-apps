@@ -53,8 +53,6 @@ export type Bindings = Omit<EnvironmentEnv, 'TEST_MAIL'> & SealEnv & MailEnv & M
    * envelope then runs after the signer's response instead of before it.
    */
   WAIT_UNTIL?: (work: Promise<unknown>) => void;
-  /** Space-separated host origins that may embed the signing page and the editor (ESIGN_FRAME_ANCESTORS). */
-  SIGNING_PAGE_FRAME_ANCESTORS?: string;
   /** dev only: other origins the signing page may run on, for local UI development. */
   SIGNING_PAGE_ORIGINS?: string;
   /** The app's own origin, which signed-copy links point to (the router sets it per request). */

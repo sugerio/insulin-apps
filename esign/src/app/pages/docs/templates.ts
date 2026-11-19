@@ -77,7 +77,7 @@ export const templates: DocTopic = {
       id: 'in-a-host-product',
       title: 'The editor in a host product',
       body: [
-        p('A host product can show the same field editor inside its own pages. It opens an editing session for its own origin, which must be one the deployment allows; the editor refuses to work inside any other page. See ', h(DocLink, { to: 'roles', section: 'service-accounts-and-ai-agents' }, 'Service accounts and AI agents'), '.'),
+        p('A host product can show the same field editor inside its own pages. It opens an editing session for its own origin, and the editor refuses to work inside any other page. See ', h(DocLink, { to: 'roles', section: 'service-accounts-and-ai-agents' }, 'Service accounts and AI agents'), '.'),
       ],
     },
   ],

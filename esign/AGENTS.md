@@ -85,9 +85,12 @@ secret in source.
 - **Public paths** (`insulin.publicPaths`): `/sign`, `/editor/`, `/copy`, `/assets/`, `/api/public/`. They carry a
   one-time code or token, never an identity; a request the gateway marks public never reaches a management route.
   At most 10, and never `/`, `/api`, `/settings*`, `/mcp*`, `/.well-known*` or `/__insulin*`.
-- **Embedding:** the pages report every origin that frames them (`ancestorOrigins`) at their code exchange, and the
-  exchange refuses any that is neither the app nor in `ESIGN_FRAME_ANCESTORS` (the session's parent for the editor).
-  Behind the gateway, the pages' CSP `frame-ancestors` says the same; member pages can't be framed.
+- **Embedding:** there is no list of origins allowed to embed Esign. The host that asks for a page's code names the
+  origin that will frame it (`allowedParentOrigin`, on recipient-view and on the editing session; https, or http on a
+  loopback host outside prod), and the code is bound to it. The pages report every origin that frames them
+  (`ancestorOrigins`) at their code exchange, and the exchange refuses any that is neither the app nor the code's
+  parent. Behind the gateway, the pages' CSP `frame-ancestors` says the same (the signing link carries its parent as
+  `?host=`); member pages can't be framed. Never add a deployment-wide list of embedding origins back.
 - **The tick** (`insulin.scheduled`: `/api/scheduled`): the gateway POSTs there every five minutes with only
   `x-suger-app-id` and `x-suger-access-via: schedule`. The route refuses (403) anything else, a member's or service
   account's identity included, and runs every organization's due work; `readCaller` treats a request marked
@@ -120,8 +123,7 @@ secret in source.
 
 ## Secrets
 
-`insulin.secrets` declares them (`ESIGN_` prefix, at most 30): the code pepper and the origins that may embed the
-pages. What a seal is verified against (seal keys, the timestamp authority) is in the code, never a secret. The HMAC
+`insulin.secrets` declares them (`ESIGN_` prefix, at most 30): the code pepper. What a seal is verified against (seal keys, the timestamp authority) is in the code, never a secret. The HMAC
 test seal exists only in the local preview.
 
 The managed seal's private key is not among them and never in GitHub: it is the Worker's `ESIGN_SEAL_KEY` binding,

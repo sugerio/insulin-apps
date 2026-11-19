@@ -236,7 +236,7 @@ test('the page talks to its own origin only, and tells the exchange how it is fr
     throw new Error(path);};
    let renderer:any;await act(async()=>{renderer=Renderer.create(React.createElement(page.RecipientPage));});await settle(act);
    assert.equal(removed,true,'the code leaves the address bar');
-   assert.deepEqual(urls,[`${origin}/api/public/signing-page`,`${origin}/api/public/page-sessions/exchange`],`${origin} ${fragment}`);
+   assert.deepEqual(urls,[`${origin}/api/public/page-sessions/exchange`],`${origin} ${fragment}`);
    assert.deepEqual(exchange,{code:'test-code',...expected});
    assert.match(JSON.stringify(renderer.toJSON()),/unavailable/i);
    await act(async()=>renderer.unmount());

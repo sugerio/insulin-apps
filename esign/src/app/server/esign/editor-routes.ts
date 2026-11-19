@@ -1,11 +1,11 @@
-import {embedderAllowed,frameAncestors} from './signing-page.ts';
+import {embedderAllowed} from './signing-page.ts';
 import { sessionToken } from './session-header.ts';
-import {isProd} from './environment.ts';
 import type {Env} from './app.ts';
 import {bodyLimit} from 'hono/body-limit';
 import {PDFDocument} from 'pdf-lib';
 import {issueEditorPage,editorPageParent,exchangeEditorPage,editorPageContext,editorCodeOpen} from './editor-session.ts';
-import {editorOriginAllowed,syncEditorOrigins} from './access.ts';
+import {validParentOrigin} from './access.ts';
+import {isProd} from './environment.ts';
 import {validateTemplateFields,assertNoOverlappingFields,assertEditorSigningFields,parsePrefillCatalog} from './fields.ts';
 import type {Hono} from 'hono';
 import type { BlobStore } from './blob-store.ts';
@@ -19,20 +19,15 @@ const limit=5*1024*1024;
 const sha256=async(bytes:Uint8Array)=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new Uint8Array(bytes))),n=>n.toString(16).padStart(2,'0')).join('');
 async function stagedBytes(bucket:BlobStore,key:string,hash:string){const object=await bucket.get(key);if(!object||object.size<1||object.size>limit)throw new Error('Source unavailable');const bytes=new Uint8Array(await object.arrayBuffer());if(await sha256(bytes)!==hash)throw new Error('Source changed');return bytes;}
 function rolesValid(value:unknown,caseSensitive=false):value is string[]{return Array.isArray(value)&&value.length>0&&value.length<=20&&value.every(r=>typeof r==='string'&&r===r.trim()&&r.length>0&&r.length<=64)&&new Set(value.map(r=>caseSensitive?r:r.toLowerCase())).size===value.length;}
-/** The origins that may host the editor: the app's own first, then ESIGN_FRAME_ANCESTORS, without repeats. */
-export function editorOrigins(own:string,frameAncestorsSetting:string|undefined,prod:boolean):string[]{return [...new Set([own,...frameAncestors(frameAncestorsSetting,prod)])];}
 function sameOrigin(request:Request){const origin=request.headers.get('origin');return !origin||origin===new URL(request.url).origin;}
 async function contextFor(c:import('hono').Context<Env>){const token=sessionToken(name=>c.req.header(name));if(!token)throw new Error('unauthorized');return editorPageContext(c.env.DB,token,Date.now());}
 /**
  * The embedded field editor. The host (through the management API, as its organization) starts an
- * editing session for one of the deployment's editor origins and frames `/editor/page/:id#<code>`;
- * the page exchanges the code for an editor token and uses `/api/public/editor/*` with it.
+ * editing session for the origin of the page that will frame it (`allowedParentOrigin`) and frames
+ * `/editor/page/:id#<code>`; only that origin may frame the page, which exchanges the code for an editor
+ * token and uses `/api/public/editor/*` with it.
  */
 export function mountEditorRoutes(app:Hono<Env>){
- // The editor origins the deployment allows, where the editor's SQL reads them: the app's own origin,
- // whose Templates page hosts the editor, and the hosts in ESIGN_FRAME_ANCESTORS.
- const syncOrigins=async(c:import('hono').Context<Env>,next:import('hono').Next)=>{await syncEditorOrigins(c.env.DB,editorOrigins(new URL(c.req.url).origin,c.env.SIGNING_PAGE_FRAME_ANCESTORS,isProd(c.env)));await next();};
- app.use('/api/template-editing-sessions',syncOrigins);app.use('/api/template-editing-sessions/*',syncOrigins);app.use('/api/public/editor/*',syncOrigins);
  app.post('/api/template-editing-sessions',bodyLimit({maxSize:32768}),async c=>{
   let input:{allowedParentOrigin?:unknown;sourceTemplateId?:unknown;roles?:unknown;name?:unknown;metadata?:unknown;tags?:unknown;share?:unknown;replace?:unknown;envelopeId?:unknown;prefill?:unknown};try{input=await c.req.json();}catch{return c.json({error:'invalid_json'},400);}
   if(input&&typeof input==='object'&&!Array.isArray(input)){const unknown=unknownKeys(input,['allowedParentOrigin','sourceTemplateId','roles','name','metadata','tags','share','replace','envelopeId','prefill']);if(unknown.length)return c.json({error:'unknown_field',fields:unknown},422);}
@@ -40,6 +35,8 @@ export function mountEditorRoutes(app:Hono<Env>){
   // admins and owner: its roles are its signers', its document the one uploaded, and saving writes the draft's fields.
   if(input&&typeof input==='object'&&input.envelopeId!==undefined){
    if(typeof input.envelopeId!=='string'||typeof input.allowedParentOrigin!=='string'||['sourceTemplateId','roles','name','metadata','tags','share','replace','prefill'].some(k=>(input as Record<string,unknown>)[k]!==undefined))return c.json({error:'invalid_session'},422);
+   // The page that will frame the editor: an https origin (http on a loopback host outside prod). The session is bound to it.
+   if(!validParentOrigin(input.allowedParentOrigin,isProd(c.env)))return c.json({error:'invalid_origin'},422);
    const tenant=c.get('tenantId'),envelopeId=input.envelopeId;
    const found=await documentRole(c.env.DB,tenant,c.get('caller'),'envelope',envelopeId);
    if(!found)return c.json({error:'not_found'},404);
@@ -49,7 +46,7 @@ export function mountEditorRoutes(app:Hono<Env>){
    if(!draft.has_document)return c.json({error:'document_required'},409);
    const roles=draftRoles(draft.draft_json);
    if(!roles)return c.json({error:'invalid_roles'},422);
-   let issued:{pageId:string;code:string};try{issued=await issueEditorPage(c.env.DB,tenant,input.allowedParentOrigin,Date.now(),{roles,ownerUserId:c.get('caller').userId,envelopeId});}catch{return c.json({error:'origin_not_allowed'},403);}
+   let issued:{pageId:string;code:string};try{issued=await issueEditorPage(c.env.DB,tenant,input.allowedParentOrigin,Date.now(),{roles,ownerUserId:c.get('caller').userId,envelopeId});}catch{return c.json({error:'editor_unavailable'},503);}
    const url=new URL(`/editor/page/${issued.pageId}`,c.req.url);url.hash=issued.code;
    c.header('Cache-Control','no-store');c.header('Referrer-Policy','no-referrer');return c.json({sessionId:issued.pageId,url:url.toString()},201);
   }
@@ -61,6 +58,7 @@ export function mountEditorRoutes(app:Hono<Env>){
   const tags=parseTags(input?.tags),shares=parseShares(input?.share),prefillCatalog=parsePrefillCatalog(input?.prefill);
   if(templateName==='invalid'||templateMetadata==='invalid'||tags==='invalid'||shares==='invalid'||prefillCatalog==='invalid')return c.json({error:'invalid_session'},422);
   if(!input||typeof input.allowedParentOrigin!=='string'||(input.sourceTemplateId!==undefined&&(typeof input.sourceTemplateId!=='string'||!/^[A-Za-z0-9_-]{1,128}$/.test(input.sourceTemplateId)))||(input.roles!==undefined&&!rolesValid(input.roles)))return c.json({error:'invalid_session'},422);
+  if(!validParentOrigin(input.allowedParentOrigin,isProd(c.env)))return c.json({error:'invalid_origin'},422);
   const tenant=c.get('tenantId'),caller=c.get('caller');
   let sourceHash:string|null=null;
   // A copy of a template the caller sees only. `replace`: the saved template is the source's new version, which takes
@@ -80,14 +78,14 @@ export function mountEditorRoutes(app:Hono<Env>){
   }
   const given=sharesFor(shares,caller);
   const allTags=mergeTags(tags,input.sourceTemplateId?await tagsOf(c.env.DB,tenant,caller.userId,'template',input.sourceTemplateId as string):[]);
-  let issued:{pageId:string;code:string};try{issued=await issueEditorPage(c.env.DB,tenant,input.allowedParentOrigin,Date.now(),{sourceTemplateId:(input.sourceTemplateId as string|undefined)??null,sourceSha256:sourceHash,roles:(input.roles as string[]|undefined)??[],templateName,templateMetadata,ownerUserId:caller.userId,shares:replace?[]:given,tags:replace?[]:allTags,replacesSource:replace,prefillCatalog});}catch{return c.json({error:'origin_not_allowed'},403);}
+  let issued:{pageId:string;code:string};try{issued=await issueEditorPage(c.env.DB,tenant,input.allowedParentOrigin,Date.now(),{sourceTemplateId:(input.sourceTemplateId as string|undefined)??null,sourceSha256:sourceHash,roles:(input.roles as string[]|undefined)??[],templateName,templateMetadata,ownerUserId:caller.userId,shares:replace?[]:given,tags:replace?[]:allTags,replacesSource:replace,prefillCatalog});}catch{return c.json({error:'editor_unavailable'},503);}
   const url=new URL(`/editor/page/${issued.pageId}`,c.req.url);url.hash=issued.code;
   c.header('Cache-Control','no-store');c.header('Referrer-Policy','no-referrer');return c.json({sessionId:issued.pageId,url:url.toString()},201);
  });
  app.post('/api/template-editing-sessions/:id/source',bodyLimit({maxSize:limit}),async c=>{
   const pageId=c.req.param('id'),tenant=c.get('tenantId'),owner=c.get('caller').userId;
   // A source can be staged only before the page is opened: while the session's code is unused and unexpired; by whoever opened the session.
-  const row=await c.env.DB.prepare(`SELECT x.source_template_id,x.staged_object_key,x.envelope_id,${editorCodeOpen('x')} AS open FROM editor_sessions x WHERE x.id=? AND x.tenant_id=? AND x.owner_user_id=? AND ${editorOriginAllowed('x.tenant_id','x.parent_origin')}`).bind(Date.now(),pageId,tenant,owner).first<{source_template_id:string|null;staged_object_key:string|null;envelope_id:string|null;open:number}>();
+  const row=await c.env.DB.prepare(`SELECT x.source_template_id,x.staged_object_key,x.envelope_id,${editorCodeOpen('x')} AS open FROM editor_sessions x WHERE x.id=? AND x.tenant_id=? AND x.owner_user_id=?`).bind(Date.now(),pageId,tenant,owner).first<{source_template_id:string|null;staged_object_key:string|null;envelope_id:string|null;open:number}>();
   if(!row)return c.json({error:'not_found'},404);
   if(row.source_template_id||row.staged_object_key||row.envelope_id||!row.open)return c.json({error:'source_immutable'},409);
   if(c.req.header('content-type')!=='application/pdf')return c.json({error:'invalid_file'},422);
@@ -95,7 +93,7 @@ export function mountEditorRoutes(app:Hono<Env>){
   try{const pdf=await PDFDocument.load(bytes,{throwOnInvalidObject:true});if(!pdf.getPageCount()||pdf.getPageCount()>100)throw new Error('pages');}catch{return c.json({error:'invalid_file'},422);}
   const hash=await sha256(bytes),key=`editor-sources/${pageId}/${crypto.randomUUID()}.pdf`;
   const stored=await c.env.ARTIFACTS.put(key,bytes,{onlyIf:{etagDoesNotMatch:'*'},httpMetadata:{contentType:'application/pdf'}});if(!stored)return c.json({error:'storage_conflict'},503);
-  const result=await c.env.DB.prepare(`UPDATE editor_sessions AS x SET staged_object_key=?,staged_sha256=? WHERE x.id=? AND x.tenant_id=? AND x.owner_user_id=? AND x.source_template_id IS NULL AND x.staged_object_key IS NULL AND ${editorCodeOpen('x')} AND ${editorOriginAllowed('x.tenant_id','x.parent_origin')}`).bind(key,hash,pageId,tenant,owner,Date.now()).run();
+  const result=await c.env.DB.prepare(`UPDATE editor_sessions AS x SET staged_object_key=?,staged_sha256=? WHERE x.id=? AND x.tenant_id=? AND x.owner_user_id=? AND x.source_template_id IS NULL AND x.staged_object_key IS NULL AND ${editorCodeOpen('x')}`).bind(key,hash,pageId,tenant,owner,Date.now()).run();
   if(result.meta.changes!==1)return c.json({error:'source_immutable'},409);return c.json({ok:true},201);
  });
  app.get('/api/template-editing-sessions/:id',async c=>{const row=await c.env.DB.prepare('SELECT result_template_id,envelope_id FROM editor_sessions WHERE id=? AND tenant_id=? AND owner_user_id=?').bind(c.req.param('id'),c.get('tenantId'),c.get('caller').userId).first<{result_template_id:string|null;envelope_id:string|null}>();if(!row)return c.json({error:'not_found'},404);c.header('Cache-Control','no-store');return c.json({templateId:row.result_template_id,...(row.envelope_id?{envelopeId:row.envelope_id}:{})});});
@@ -151,7 +149,7 @@ export function mountEditorRoutes(app:Hono<Env>){
    const documentHash=await sha256(document);
    const saved=await c.env.DB.prepare(`UPDATE envelopes SET roles_json=?,fields_json=? WHERE id=? AND tenant_id=? AND status='DRAFT' AND template_id IS NULL
      AND (SELECT a.sha256 FROM artifacts a WHERE a.id=? AND a.envelope_id=envelopes.id)=?
-     AND EXISTS (SELECT 1 FROM editor_sessions x JOIN access_sessions s ON s.subject_id=x.id AND s.tenant_id=x.tenant_id AND s.origin=x.parent_origin WHERE x.id=? AND x.tenant_id=? AND x.envelope_id=envelopes.id AND ${editorOriginAllowed('x.tenant_id','x.parent_origin')} AND s.scope='editor' AND s.token_hash=? AND s.expires_at>?)`)
+     AND EXISTS (SELECT 1 FROM editor_sessions x JOIN access_sessions s ON s.subject_id=x.id AND s.tenant_id=x.tenant_id AND s.origin=x.parent_origin WHERE x.id=? AND x.tenant_id=? AND x.envelope_id=envelopes.id AND s.scope='editor' AND s.token_hash=? AND s.expires_at>?)`)
      .bind(JSON.stringify(roles),JSON.stringify(placed),session.envelopeId,session.tenantId,initialDocumentId(session.envelopeId),documentHash,session.pageId,session.tenantId,session.tokenHash,Date.now()).run();
    if(saved.meta.changes!==1)return c.json({error:'not_draft'},409);
    return c.json({id:session.envelopeId,status:draft?'draft':'ready'},200);
@@ -172,7 +170,7 @@ export function mountEditorRoutes(app:Hono<Env>){
    if(row?.status!=='draft')return c.json({error:'already_saved'},409);
    // The draft as edited: its roles and fields, its default signers for the roles it keeps, and its status. Only while
    // it is a draft, and while this session's editor token is live.
-   const live=`EXISTS (SELECT 1 FROM editor_sessions x JOIN access_sessions s ON s.subject_id=x.id AND s.tenant_id=x.tenant_id AND s.origin=x.parent_origin WHERE x.id=? AND x.tenant_id=? AND (x.result_template_id IS NULL OR x.result_template_id=?) AND ${editorOriginAllowed('x.tenant_id','x.parent_origin')} AND s.scope='editor' AND s.token_hash=? AND s.expires_at>?)`;
+   const live=`EXISTS (SELECT 1 FROM editor_sessions x JOIN access_sessions s ON s.subject_id=x.id AND s.tenant_id=x.tenant_id AND s.origin=x.parent_origin WHERE x.id=? AND x.tenant_id=? AND (x.result_template_id IS NULL OR x.result_template_id=?) AND s.scope='editor' AND s.token_hash=? AND s.expires_at>?)`;
    const now=Date.now();
    let updated:D1Result;
    try{[updated]=await c.env.DB.batch([
@@ -203,7 +201,7 @@ export function mountEditorRoutes(app:Hono<Env>){
   let saved:D1Result;
   try{[,saved]=await c.env.DB.batch([
    c.env.DB.prepare('INSERT INTO templates (id,tenant_id,object_key,roles_json,fields_json,created_at,name,metadata_json,default_signers_json,owner_user_id,status) VALUES (?,?,?,?,?,?,?,?,?,?,?)').bind(id,session.tenantId,key,JSON.stringify(roles),JSON.stringify(fields),Date.now(),labels.name,labels.metadata??'{}',JSON.stringify(signers),owner,status),
-   c.env.DB.prepare(`UPDATE editor_sessions AS x SET result_template_id=? WHERE x.id=? AND x.tenant_id=? AND x.result_template_id IS NULL AND ${editorOriginAllowed('x.tenant_id','x.parent_origin')} AND EXISTS (SELECT 1 FROM access_sessions s WHERE s.scope='editor' AND s.token_hash=? AND s.subject_id=x.id AND s.tenant_id=x.tenant_id AND s.origin=x.parent_origin AND s.expires_at>?)`).bind(id,session.pageId,session.tenantId,session.tokenHash,Date.now()),
+   c.env.DB.prepare(`UPDATE editor_sessions AS x SET result_template_id=? WHERE x.id=? AND x.tenant_id=? AND x.result_template_id IS NULL AND EXISTS (SELECT 1 FROM access_sessions s WHERE s.scope='editor' AND s.token_hash=? AND s.subject_id=x.id AND s.tenant_id=x.tenant_id AND s.origin=x.parent_origin AND s.expires_at>?)`).bind(id,session.pageId,session.tenantId,session.tokenHash,Date.now()),
    // Owned by whoever opened the session, shared and tagged as they asked; or, for a new version, shared and tagged as
    // its source was, which it replaces.
    ...(session.replacesSource?[

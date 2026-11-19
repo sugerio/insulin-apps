@@ -19,24 +19,17 @@ const APP_MIGRATIONS = new URL('../../src/app/db/migrations/', import.meta.url);
 
 /**
  * The test gateway's own tables (gateway.ts): a host's key in `api_keys` stands for a service account
- * of the organization in `tenants`, and `editor_origins_json` for the origins the deployment lets
- * embed the editor (ESIGN_FRAME_ANCESTORS); the triggers keep `app_settings.editor_origins` their
- * union, as the app's sync does from the setting. Never part of the app.
+ * of the organization in `tenants`. Never part of the app.
  */
 const TEST_GATEWAY_SQL = `CREATE TABLE tenants (
-  id TEXT PRIMARY KEY NOT NULL,
-  editor_origins_json TEXT NOT NULL DEFAULT '[]' CHECK (json_valid(editor_origins_json) AND json_type(editor_origins_json) = 'array')
+  id TEXT PRIMARY KEY NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE api_keys (
   key_hash TEXT PRIMARY KEY NOT NULL,
   tenant_id TEXT NOT NULL REFERENCES tenants(id),
   revoked_at INTEGER
-);
---> statement-breakpoint
-CREATE TRIGGER tenants_editor_origins_inserted AFTER INSERT ON tenants BEGIN INSERT INTO app_settings (name, value) VALUES ('editor_origins', (SELECT COALESCE(json_group_array(DISTINCT o.value), '[]') FROM tenants t, json_each(t.editor_origins_json) o)) ON CONFLICT (name) DO UPDATE SET value = excluded.value; END;
---> statement-breakpoint
-CREATE TRIGGER tenants_editor_origins_updated AFTER UPDATE OF editor_origins_json ON tenants BEGIN INSERT INTO app_settings (name, value) VALUES ('editor_origins', (SELECT COALESCE(json_group_array(DISTINCT o.value), '[]') FROM tenants t, json_each(t.editor_origins_json) o)) ON CONFLICT (name) DO UPDATE SET value = excluded.value; END;`;
+);`;
 
 /**
  * A directory with the app's migrations and, last, the test gateway's tables, for tests that apply

@@ -148,7 +148,7 @@ test('prod signs nothing until it is fully configured, and never with a test mai
     const otp=await w.req('/api/public/signing/otp',w.json({},{origin:ORIGIN,'x-esign-session':'a'.repeat(64)}));
     assert.equal(otp.status,404,JSON.stringify(Object.entries(extra).map(([k,v])=>[k,typeof v==='string'?v:typeof v])));
     assert.deepEqual(await otp.json(),{error:'signing_disabled'});
-    assert.deepEqual(await (await w.req('/api/public/signing-page')).json(),{hosts:[ORIGIN],signingEnabled:false});
+    assert.deepEqual(await (await w.req('/api/public/signing-page')).json(),{signingEnabled:false});
    } finally {await w.mf.dispose();}
   }
  } finally {await mf.dispose();}

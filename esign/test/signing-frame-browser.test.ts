@@ -1,7 +1,8 @@
 // The signing page in a host's frame, in Chrome, served as the platform serves it: the built page, with the headers
 // page-headers.ts gives it behind the gateway (its frame-ancestors from the link's ?host=). Reloaded in its frame after
-// its code was used, the page is still allowed there and says so itself; and "Confirm it's you" fits a phone, framed
-// 280 to 320 px wide or on its own, light and dark, without scrolling sideways. Synthetic data only.
+// its code was used, the page is still allowed there and says so itself; "Confirm it's you" fits a phone, framed 280 to
+// 320 px wide or on its own, light and dark, without scrolling sideways; and the emailed code can be typed into its six
+// boxes one key at a time, with Chrome's own key events. Synthetic data only.
 import {after,test} from 'node:test';
 import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
@@ -16,6 +17,7 @@ import {Miniflare} from 'miniflare';
 import {PDFDocument} from 'pdf-lib';
 import {applyMigrations,blobStore} from './helpers/platform.ts';
 import app from './helpers/gateway.ts';
+import {withLocalTestOtp} from './helpers/local-otp-display.ts';
 import {pageHeaders} from '../src/app/server/page-policy.ts';
 
 const chrome=process.env.ESIGN_TEST_CHROME??['/Applications/Google Chrome.app/Contents/MacOS/Google Chrome','/usr/bin/google-chrome','/usr/bin/chromium','/usr/bin/chromium-browser'].find(existsSync);
@@ -52,6 +54,9 @@ async function start(){
 
   // What Chrome asked the app for: every page (its query and the CSP it was sent with) and every code exchange.
   const pages:{path:string;search:string;csp:string}[]=[],counts={exchanges:0};
+  // While `codeFirst` is set, the document is refused (401) to a page session until its code is verified, as by a server
+  // that shows the document only after the code: the page then asks for the code before Review.
+  const gate={codeFirst:false,verified:new Set<string>()};
   const asset=async(path:string)=>{try{const data=await readFile(join(output,path));return new Response(data,{headers:{'content-type':path.endsWith('.html')?'text/html; charset=utf-8':path.endsWith('.css')?'text/css':path.endsWith('.js')||path.endsWith('.mjs')?'text/javascript':'application/octet-stream'}});}catch{return new Response(null,{status:404});}};
   const proxy=createServer(async(rq,rs)=>{try{
    const url=new URL(rq.url!);let response:Response;
@@ -63,7 +68,12 @@ async function start(){
     const parts:Buffer[]=[];for await(const part of rq)parts.push(Buffer.from(part));const body=Buffer.concat(parts);
     const headers=new Headers();for(const [k,v] of Object.entries(rq.headers))if(v!==undefined&&k!=='host'&&k!=='connection')headers.set(k,Array.isArray(v)?v.join(','):v);
     if(url.pathname==='/api/public/page-sessions/exchange')counts.exchanges++;
-    response=await app.fetch(new Request(url,{method:rq.method,headers,...(body.length?{body}:{})}),env);
+    const session=headers.get('x-esign-session')??'';
+    if(gate.codeFirst&&url.pathname==='/api/public/signing/current'&&!gate.verified.has(session))response=Response.json({error:'unavailable'},{status:401});
+    else response=await app.fetch(new Request(url,{method:rq.method,headers,...(body.length?{body}:{})}),env);
+    if(url.pathname==='/api/public/signing/otp/verify'&&response.ok)gate.verified.add(session);
+    // The code the page asks for, shown on the page as in the local preview (helpers/local-otp-display.ts).
+    if(url.pathname==='/api/public/signing/otp'&&rq.method==='POST')response=await withLocalTestOtp(response,env.TEST_MAIL);
    }else if(url.origin===APP){
     // The built pages as the platform serves them (index.html for every page path), with the headers the app's page
     // middleware adds behind the gateway: the signing page's frame-ancestors comes from its address's ?host=.
@@ -91,7 +101,7 @@ async function start(){
   const waitFor=async(read:()=>Promise<any>,label:string,ms=30000)=>{const end=Date.now()+ms;let last:unknown;while(Date.now()<end){try{last=await read();if(last)return last;}catch(error){last=String(error);}await sleep(100);}throw new Error(`Timed out: ${label} (${JSON.stringify(last)})`);};
   /** Opens a link in the host's frame `width` px wide, on a fresh page. */
   const openFramed=async(url:string,width:number)=>{await call('Page.navigate',{url:'about:blank'});await call('Page.navigate',{url:`${HOST}/host.html?w=${width}&src=${encodeURIComponent(url)}`});await waitFor(()=>inFrame(`Boolean(${button('Continue')})`),'the framed page opens');};
-  return {view,pages,counts,call,evaluate,signingFrame,inFrame,waitFor,openFramed,stop};
+  return {view,pages,counts,gate,call,evaluate,signingFrame,inFrame,waitFor,openFramed,stop};
  }catch(error){await stop();throw error;}
 }
 let shared:ReturnType<typeof start>|undefined;
@@ -161,4 +171,86 @@ test('"Confirm it\'s you" fits a phone: framed 280 to 320 px wide or on its own,
    check(await s.evaluate(measure),`on its own ${width} px wide, ${value}`,width>=390);
   }
  }
+});
+
+test('the code is typed one key at a time: each box in turn, Backspace and the arrows move back, a paste fills them, Enter verifies',{skip:!chrome,timeout:180000},async()=>{
+ const s=await stack();
+ await s.call('Emulation.clearDeviceMetricsOverride');await s.call('Emulation.setEmulatedMedia',{features:[{name:'prefers-color-scheme',value:'light'}]});
+ const mac=process.platform==='darwin';
+ /** Chrome's own key events, as a keyboard sends them (with the editing command macOS adds to Backspace). */
+ const press=async(key:string)=>{
+  if(/^\d$/.test(key)){const k={key,code:`Digit${key}`,windowsVirtualKeyCode:48+Number(key)};await s.call('Input.dispatchKeyEvent',{type:'keyDown',...k,text:key,unmodifiedText:key});await s.call('Input.dispatchKeyEvent',{type:'keyUp',...k});}
+  else{const k={key,code:key,windowsVirtualKeyCode:{Backspace:8,Enter:13,ArrowLeft:37,ArrowRight:39}[key]!};
+   await s.call('Input.dispatchKeyEvent',{type:key==='Enter'?'keyDown':'rawKeyDown',...k,...(key==='Enter'?{text:'\r',unmodifiedText:'\r'}:{}),...(mac&&key==='Backspace'?{commands:['deleteBackward']}:{})});
+   await s.call('Input.dispatchKeyEvent',{type:'keyUp',...k});}
+ };
+ /** The page's code boxes (in the host's frame, or the page on its own): what each holds, and which has the focus. */
+ const codeBoxes=(read:(e:string)=>Promise<any>)=>async()=>read(`(async()=>{await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));const boxes=[...document.querySelectorAll('.esign-code-boxes input')];return {values:boxes.map(b=>b.value),focused:boxes.indexOf(document.activeElement)+1};})()`);
+ /** A mouse click on box `n` (1 to 6), in the frame `offset` (the frame's place on the host's page) or on the page. */
+ const clickBox=async(read:(e:string)=>Promise<any>,n:number,offset={x:0,y:0})=>{
+  const r=await read(`(()=>{const r=document.querySelectorAll('.esign-code-boxes input')[${n-1}].getBoundingClientRect();return {x:r.left+r.width/2,y:r.top+r.height/2};})()`);
+  for(const type of ['mousePressed','mouseReleased'])await s.call('Input.dispatchMouseEvent',{type,x:offset.x+r.x,y:offset.y+r.y,button:'left',clickCount:1});
+ };
+ const boxesOf=(code:string)=>Array.from({length:6},(_,i)=>code[i]??'');
+ /** Types `digits` key by key, checking after each key that it went into the next box and the focus moved on. */
+ const typeCode=async(state:()=>Promise<any>,digits:string,before='',label='')=>{
+  for(const [i,digit] of [...digits].entries()){
+   await press(digit);const now=await state(),typed=before+digits.slice(0,i+1);
+   assert.deepEqual(now,{values:boxesOf(typed),focused:Math.min(typed.length+1,6)},`${label}: after typing ${JSON.stringify(typed)}`);
+  }
+ };
+ const sentCode=(read:(e:string)=>Promise<any>)=>s.waitFor(()=>read(`document.body.innerText.match(/Local test verification code: (\\d{6})/)?.[1]`),'the code is sent') as Promise<string>;
+
+ // Confirm it's you, in a host's frame 300 px wide (a phone).
+ await s.openFramed((await s.view({allowedParentOrigin:HOST})).url,300);
+ await s.inFrame(`${button('Continue')}.click()`);
+ const code=await sentCode(s.inFrame),framed=codeBoxes(s.inFrame);
+ const frame=await s.evaluate(`(()=>{const r=document.getElementById('esign').getBoundingClientRect();return {x:r.left,y:r.top};})()`);
+ await clickBox(s.inFrame,1,frame);
+ assert.deepEqual(await framed(),{values:boxesOf(''),focused:1});
+ await typeCode(framed,code,'','framed');
+ // Backspace empties the last box, then (in an empty box) the one before, moving back to it.
+ await press('Backspace');assert.deepEqual(await framed(),{values:boxesOf(code.slice(0,5)),focused:6},'Backspace in the last box');
+ await press('Backspace');assert.deepEqual(await framed(),{values:boxesOf(code.slice(0,4)),focused:5},'Backspace in an empty box');
+ await typeCode(framed,code.slice(4),code.slice(0,4),'typed again');
+ // The arrows move between boxes; a digit typed into a box in the middle replaces its digit there.
+ await press('ArrowLeft');await press('ArrowLeft');assert.equal((await framed()).focused,4,'two boxes back');
+ const other=code[3]==='9'?'8':'9';
+ await press(other);assert.deepEqual(await framed(),{values:boxesOf(code.slice(0,3)+other+code.slice(4)),focused:4},'a box in the middle retyped');
+ await press(code[3]!);assert.deepEqual(await framed(),{values:boxesOf(code),focused:4},'and typed back');
+ await press('ArrowRight');assert.equal((await framed()).focused,5,'one box on');
+ // A paste into the first box (the code as an email shows it, spaced) fills all six.
+ await clickBox(s.inFrame,1,frame);
+ await s.inFrame(`(()=>{const data=new DataTransfer();data.setData('text/plain',' ${code.slice(0,3)} ${code.slice(3)} ');document.activeElement.dispatchEvent(new ClipboardEvent('paste',{clipboardData:data,bubbles:true,cancelable:true}));})()`);
+ assert.deepEqual(await framed(),{values:boxesOf(code),focused:6},'a paste');
+ // Backspace, again and again, empties every box back to the first.
+ for(let left=5;left>=0;left--){await press('Backspace');assert.deepEqual(await framed(),{values:boxesOf(code.slice(0,left)),focused:Math.min(left+1,6)},`Backspace down to ${left}`);}
+ // The phone's autofill of the one-time code (autocomplete on the first box) comes as one input of all six digits.
+ assert.equal(await s.inFrame(`document.querySelector('.esign-code-boxes input').autocomplete`),'one-time-code');
+ await s.call('Input.insertText',{text:code});
+ assert.deepEqual(await framed(),{values:boxesOf(code),focused:6},'the one-time code filled in at once');
+ // Enter verifies the typed code: on to Sign.
+ await press('Enter');
+ await s.waitFor(()=>s.inFrame(`Boolean(document.querySelector('input[aria-label="Full name"]'))`),'the code is accepted');
+
+ // The same boxes before declining, on the page on its own: typed key by key, then Verify code.
+ const own=codeBoxes(s.evaluate);
+ await s.call('Page.navigate',{url:'about:blank'});await s.call('Page.navigate',{url:(await s.view({})).url});
+ await s.waitFor(()=>s.evaluate(`Boolean(${button('Decline to sign')})`),'the page opens on its own');await s.evaluate(`${button('Decline to sign')}.click()`);
+ await s.evaluate(`(()=>{const x=document.querySelector('textarea[aria-label="Reason for declining"]');Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(x,'Synthetic reason');x.dispatchEvent(new Event('input',{bubbles:true}));})()`);
+ await s.waitFor(()=>s.evaluate(`Boolean(${button('Decline')})`),'the reason is taken');await s.evaluate(`${button('Decline')}.click()`);
+ const declineCode=await sentCode(s.evaluate);assert.match(await s.evaluate('document.body.innerText'),/Confirm it's you to decline\./);
+ await clickBox(s.evaluate,1);await typeCode(own,declineCode,'','before declining');
+ await s.evaluate(`${button('Verify code')}.click()`);
+ await s.waitFor(async()=>/You declined to sign\./.test(await s.evaluate('document.body.innerText')),'the decline goes through');
+
+ // And before a document that needs the code first.
+ s.gate.codeFirst=true;
+ try{
+  await s.call('Page.navigate',{url:'about:blank'});await s.call('Page.navigate',{url:(await s.view({})).url});
+  const firstCode=await sentCode(s.evaluate);assert.equal(await s.evaluate(`document.querySelector('.esign-document')===null&&!${button('Continue')}`),true,'no document before the code');
+  await clickBox(s.evaluate,1);await typeCode(own,firstCode,'','before the document');
+  await press('Enter');
+  await s.waitFor(()=>s.evaluate(`Boolean(${button('Continue')})`),'the document opens once the code is verified');
+ }finally{s.gate.codeFirst=false;}
 });

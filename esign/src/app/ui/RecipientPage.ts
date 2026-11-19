@@ -121,21 +121,26 @@ const CODE_BOX='h-12 w-11 px-0 text-center text-xl md:text-xl font-semibold tabu
 /** Six boxes, one digit each; typing moves on, Backspace moves back, a paste fills them all. */
 function CodeBoxes({value,onChange,disabled,onEnter,focusSignal}:{value:string;onChange:(code:string)=>void;disabled:boolean;onEnter:()=>void;focusSignal:number}){
   const boxes=useRef<(HTMLInputElement|null)[]>([]);
+  // The code as the boxes hold it now. A handler moves the focus before the page has drawn the code it just changed, and
+  // the box given the focus decides where the focus belongs: it reads this, never the value it was drawn with, which
+  // would still be one digit short and send the focus back (typing would then refill the first box key after key).
+  const latest=useRef(value);latest.current=value;
+  const change=(next:string)=>{latest.current=next;onChange(next);};
   const focus=(i:number)=>{const box=boxes.current[Math.max(0,Math.min(CODE_LENGTH-1,i))];if(typeof box?.focus==='function')box.focus();};
   // A code was just sent, or the last one was refused: the next digit goes in without a click.
   // biome-ignore lint/correctness/useExhaustiveDependencies: focuses on the signal only
-  useEffect(()=>{if(focusSignal&&!disabled)focus(value.length);},[focusSignal,disabled]);
+  useEffect(()=>{if(focusSignal&&!disabled)focus(latest.current.length);},[focusSignal,disabled]);
   return h('div',{className:'esign-code-boxes',role:'group','aria-label':'Verification code'},...Array.from({length:CODE_LENGTH},(_,i)=>h(Input,{
     key:i,ref:(el:HTMLInputElement|null)=>{boxes.current[i]=el;},className:CODE_BOX,'aria-label':`Digit ${i+1} of ${CODE_LENGTH}`,value:value[i]??'',disabled,
     inputMode:'numeric',autoComplete:i===0?'one-time-code':'off',
-    onFocus:(e:React.FocusEvent<HTMLInputElement>)=>{if(i>value.length){focus(value.length);return;}e.target.select();},
-    onChange:(e:React.ChangeEvent<HTMLInputElement>)=>{const next=nextCode(value,i,e.target.value);onChange(next);if(next.length>value.length)focus(next.length);},
-    onPaste:(e:React.ClipboardEvent<HTMLInputElement>)=>{e.preventDefault();const next=(value.slice(0,Math.min(i,value.length))+codeDigits(e.clipboardData.getData('text'))).slice(0,CODE_LENGTH);onChange(next);focus(next.length);},
-    onKeyDown:(e:React.KeyboardEvent<HTMLInputElement>)=>{
-      if(e.key==='Backspace'&&!value[i]&&i>0){e.preventDefault();onChange(value.slice(0,i-1));focus(i-1);}
+    onFocus:(e:React.FocusEvent<HTMLInputElement>)=>{const code=latest.current;if(i>code.length){focus(code.length);return;}e.target.select();},
+    onChange:(e:React.ChangeEvent<HTMLInputElement>)=>{const code=latest.current,next=nextCode(code,i,e.target.value);change(next);if(next.length>code.length)focus(next.length);},
+    onPaste:(e:React.ClipboardEvent<HTMLInputElement>)=>{e.preventDefault();const code=latest.current,next=(code.slice(0,Math.min(i,code.length))+codeDigits(e.clipboardData.getData('text'))).slice(0,CODE_LENGTH);change(next);focus(next.length);},
+    onKeyDown:(e:React.KeyboardEvent<HTMLInputElement>)=>{const code=latest.current;
+      if(e.key==='Backspace'&&!code[i]&&i>0){e.preventDefault();change(code.slice(0,i-1));focus(i-1);}
       else if(e.key==='ArrowLeft'){e.preventDefault();focus(i-1);}
-      else if(e.key==='ArrowRight'){e.preventDefault();focus(Math.min(i+1,value.length));}
-      else if(e.key==='Enter'&&value.length===CODE_LENGTH){e.preventDefault();onEnter();}},
+      else if(e.key==='ArrowRight'){e.preventDefault();focus(Math.min(i+1,code.length));}
+      else if(e.key==='Enter'&&code.length===CODE_LENGTH){e.preventDefault();onEnter();}},
   })));
 }
 /** Shown inside a host's frame: the host's dialog already titles it, so the page heading is for screen readers only. */

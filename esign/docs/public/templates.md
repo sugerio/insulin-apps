@@ -18,7 +18,7 @@ or `seller`. When you send an envelope, you name one person for each role, and t
 | PDF size | Up to 5 MB |
 | Pages | 1 to 100 |
 | Roles | 1 to 20, each different |
-| Role names | Letters, digits, `-` and `_`, no spaces, up to 64 characters |
+| Role names | English letters, digits, hyphens (`-`) and underscores (`_`), no spaces, up to 64 characters |
 
 The PDF must be a valid PDF; a file Esign can't read is refused.
 
@@ -87,8 +87,32 @@ Rules the editor and the server check:
 - every role has at least one required Signature field, and only these three field types are used;
 - at most 20 fields per template can be signed, and fields don't overlap;
 - each field is at least 20 by 10 points and stays on its page;
-- the PDF's pages are not rotated or cropped, and the PDF has no form fields or annotations. A PDF that breaks these rules
-  can still be uploaded through the API with a signature page, but an envelope sent from it with placed fields is refused.
+- the PDF has no form fields or annotations, and its pages are upright and uncropped. Esign makes it so when the PDF is
+  uploaded (below). A template uploaded before Esign did, or one uploaded through the API that Esign couldn't prepare
+  (it is kept as uploaded), can break these rules: it can still be signed on a signature page, but an envelope sent
+  from it with placed fields is refused.
+
+## What Esign does to a PDF
+
+Fields are drawn into the page itself, where the page shows them. So when a PDF is uploaded, for a template or with
+**Upload and send**, Esign changes what would get in the way, and keeps how the page looks:
+
+- **form fields** are flattened into the page: their values stay as shown, and they can no longer be edited;
+- **comments, highlights and stamps** are flattened into the page the same way;
+- **links** are removed: their text stays, it no longer opens anything;
+- **rotated or cropped pages** are redrawn upright, at the size they are shown;
+- **pages that share their content** in the file each get their own copy, so a signature drawn on one never shows on
+  another (nothing you see changes).
+
+Esign says what it changed. Signers see and sign the PDF as it is then, and the certificate of completion also records
+the SHA-256 of the file as uploaded, with what was changed (a database record, not bound by the seal). A PDF that needed
+no change is kept exactly as uploaded.
+
+Some PDFs can't be prepared, and the upload says why: a password-protected or encrypted PDF, a damaged one, more than
+100 pages, a dynamic (XFA) form, a filled-in form field or a comment that doesn't say how it looks, or a page in unusual units, at an
+odd angle or larger than 200 inches, more than 10,000 form fields and comments, or one that would be over 5 MiB
+once prepared. Printing it to PDF (Save as PDF) usually makes one Esign can use. The API's reasons
+are listed in [Uploaded PDFs](/docs/esign/api#uploaded-pdfs).
 
 ## Pre-filled fields
 
@@ -124,7 +148,7 @@ Each template's row has **Use** (send an envelope from it), or **Edit** for a dr
 
 - **View** (anyone who sees it), or a click on its name: its page, read only. **Details** shows its name, id, owner,
   your role in it, when it was uploaded, its signer roles in signing order with their default signers and fields, your
-  tags and its metadata; below, **Document** shows its PDF as uploaded, with the box of each placed field, in its role's
+  tags and its metadata; below, **Document** shows its PDF as stored (prepared for signing when it was uploaded), with the box of each placed field, in its role's
   colour and named by role and type (dashed when optional). Those who manage find **Use** there too.
 - **Edit** (its editors, admins and owner): on **Details**, its **Name** and its default signers; on **Fields**, the field
   editor. Saving the fields makes a new version of the template, which takes its place in the list with the same name,
@@ -158,9 +182,7 @@ chip that removes it, and **Clear all**; below it, pages. An envelope sent from 
 ## The editor on the Templates page
 
 The **Templates** page hosts the editor exactly as a host product would: it opens an editing session for its own address,
-stages the PDF, frames the editor and confirms the save with the server. The deployment's list of origins allowed to
-embed Esign's pages must therefore include Esign's own address for **Upload and place fields** and **Place fields** to
-work.
+stages the PDF, frames the editor and confirms the save with the server.
 
 ## Embed the editor in a host product
 
@@ -183,8 +205,9 @@ A host product can show the field editor inside its own pages. Its backend calls
 
 Rules for embedding:
 
-- `allowedParentOrigin` must be one of the origins the deployment allows to embed Esign (https). The editor refuses to
-  open inside any other page, and stops working at its next request if that origin is removed.
+- `allowedParentOrigin` is the origin of the host page that frames the editor (https; anything else answers
+  `422 invalid_origin`). There is no list of origins to register: the session is bound to it, and the editor refuses
+  to open inside any other page.
 - One session saves once. For another version, open a new session.
 - `prefill`, `[{"name": "partner.name", "label": "Partner name"}, …]` (1 to 30): the [pre-filled fields](#pre-filled-fields)
   your product fills in when it sends. The editor offers those, to drag onto the page, and the author can't add their

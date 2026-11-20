@@ -1,0 +1,27 @@
+// A synthetic engine for the checks' tests (check-insulin-app.test.mjs, engine.test.mjs, deploy-apps.test.mjs). The
+// tests copy it into an app named alpha and change one thing at a time.
+{
+  "name": "insulin-apps-alpha-engine",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-10-13",
+  "compatibility_flags": ["nodejs_compat"],
+  "durable_objects": {
+    "bindings": [
+      { "name": "COLLECTIONS", "class_name": "CollectionEngine" },
+      { "name": "CAPACITY", "class_name": "Capacity" },
+    ],
+  },
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["CollectionEngine", "Capacity"] },
+  ],
+  /* One container class, built from the Dockerfile next to it. */
+  "containers": [
+    { "class_name": "CollectionEngine", "image": "./container/Dockerfile", "instance_type": "standard-4", "max_instances": 20 },
+  ],
+  "r2_buckets": [{ "binding": "FILES" }, { "binding": "BACKUPS" }],
+  "ai": { "binding": "AI" },
+  "observability": { "enabled": true },
+  "vars": { "ANSWER_MODEL": "@cf/example/model" },
+  "workers_dev": false,
+  "preview_urls": false,
+}

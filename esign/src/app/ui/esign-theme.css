@@ -71,11 +71,12 @@
 }
 .esign-recipient.esign-embedded h1 { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .esign-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
-/* Stepper: numbered circles joined by lines; done steps show a check. */
+/* Stepper: numbered circles joined by lines; done steps show a check. A label wraps only where the three don't fit on
+   one line (a phone, with "Confirm it's you" in bold), never pushing the page sideways. */
 .esign-steps { display: flex; align-items: center; gap: 8px; list-style: none; margin: 0; padding: 0; font-size: .875rem; color: var(--muted-foreground); }
-.esign-steps li { display: flex; align-items: center; gap: 8px; white-space: nowrap; }
+.esign-steps li { display: flex; align-items: center; gap: 8px; line-height: 1.25; text-wrap: balance; }
 .esign-steps .esign-step-line { flex: 1; height: 1px; min-width: 16px; background: var(--border); }
-.esign-step-number { display: inline-flex; width: 24px; height: 24px; border-radius: 999px; align-items: center; justify-content: center; font-size: .75rem; font-weight: 600; border: 1px solid var(--border); }
+.esign-step-number { flex: none; display: inline-flex; width: 24px; height: 24px; border-radius: 999px; align-items: center; justify-content: center; font-size: .75rem; font-weight: 600; border: 1px solid var(--border); }
 .esign-steps li.esign-step-current, .esign-steps li.esign-step-done { color: var(--foreground); }
 .esign-steps li.esign-step-current { font-weight: 600; }
 .esign-steps li.esign-step-current .esign-step-number, .esign-steps li.esign-step-done .esign-step-number { background: var(--primary); border-color: var(--primary); color: var(--primary-foreground); }
@@ -125,8 +126,9 @@
 .esign-check-meta { font-size: .75rem; color: var(--muted-foreground); margin-top: 2px !important; }
 .esign-code { width: 100%; }
 .esign-code-label { font-weight: 500; font-size: .875rem; }
+/* Six boxes 44 px wide (their size is on the Input, RecipientPage.ts); where the card is narrower than the six and their
+   gaps, they shrink with it (min-width: 0), to about 34 px at 280 px wide. */
 .esign-code-boxes { display: flex; gap: 8px; margin: 12px 0 8px; }
-.esign-code-boxes input { width: 44px; height: 48px; padding: 0; text-align: center; font-size: 1.25rem; font-weight: 600; font-variant-numeric: tabular-nums; }
 .esign-code-meta, .esign-code-note { font-size: .75rem; color: var(--muted-foreground); }
 .esign-code-error { margin: 8px 0 0 !important; font-size: .8125rem; color: var(--destructive); }
 .esign-why { border-radius: var(--radius); background: var(--muted); border: 1px solid var(--border); padding: 12px 16px; font-size: .8125rem; color: var(--muted-foreground); display: flex; flex-direction: column; gap: 6px; }
@@ -164,6 +166,13 @@
   .esign-adopt-inputs { grid-template-columns: 1fr; }
   .esign-steps { font-size: .75rem; }
   .esign-actions { flex-wrap: wrap; }
+}
+/* A phone 360 px wide or less, or a host's frame as narrow: tighter steps, code boxes and card, down to 280 px. */
+@media (max-width: 360px) {
+  .esign-steps, .esign-steps li { gap: 6px; }
+  .esign-steps .esign-step-line { min-width: 8px; }
+  .esign-check-card { padding: 12px; }
+  .esign-code-boxes { gap: 4px; }
 }
 /* The sender's message on Review: its line breaks kept, long text scrolled. */
 .esign-message-subject { font-weight: 600; margin: 0 0 4px; }

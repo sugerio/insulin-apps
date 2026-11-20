@@ -49,18 +49,23 @@ as if you sent it now, and stays a draft until then; Esign sends it, as you, wit
 another time, and **Save draft** cancels the scheduled send. **Discard** deletes it.
 
 If it can't be sent then (its template was made a draft, a signer no longer matches it, or you can no longer send it:
-you left the organization or Esign, or your role there no longer sends), it stays a draft, no longer scheduled, and
-**Envelopes** says **Not sent** and why. Fix it, then send or schedule it again. Esign asks the platform who can use it
-at that time; while the platform can't be asked, the envelope waits for the next try.
+you left the organization or Esign, your role there no longer sends, or your account was suspended), it stays a draft,
+no longer scheduled, and **Envelopes** says **Not sent** and why. Fix it, then send or schedule it again. Esign asks the
+platform who can use it at that time; while the platform can't be asked, or your organization is suspended, the
+envelope waits for the next try. If Insulin Apps hasn't yet confirmed that your organization uses Esign (rare, and only
+just after an upgrade of the platform), **Envelopes** says **Waiting since** its time, and the draft says why. Opening
+Esign confirms it; Esign tries again every ten minutes, and sends it then.
 
 ## Upload and send
 
 To send a PDF of your own without making a template, choose **New envelope** › **Upload and send** on **Envelopes**. Three steps:
 
-1. **Document and signers.** Choose the PDF (up to 5 MiB and 100 pages, with no form fields or annotations, pages not
-   rotated) and its **Document name**. Add the signers in signing order (**Add signer**, and the arrows to reorder), each
-   with a **Role** you name, such as `partner` (letters, digits, `-` and `_`, different for each), their **Name** and
-   **Email**, and an optional title and company. A message and a sign-by day are optional. **Next: place fields**.
+1. **Document and signers.** Choose the PDF (up to 5 MiB and 100 pages; Esign prepares it for signing as
+   [What Esign does to a PDF](/docs/esign/templates#what-esign-does-to-a-pdf) says, and tells you what it changed) and
+   its **Document name**. Add the signers in signing order (**Add signer**, and the arrows to reorder), each
+   with a **Role** you name, such as `partner` or `co-signer` (English letters, digits, hyphens `-` and underscores
+   `_`, no spaces, different for each), their **Name** and **Email**, and an optional title and company. A message and
+   a sign-by day are optional. **Next: place fields**.
 2. **Fields.** The field editor opens on the PDF, with a role for each signer ("partner — Pat Partner"). Place each
    signer's fields as on a template (see [Place fields](/docs/esign/templates#place-fields)): at least one required
    **Signature** each. **Next: review**.
@@ -70,7 +75,8 @@ To send a PDF of your own without making a template, choose **New envelope** ›
 It is a draft from the first step on: **Save draft**, on any step, keeps it (with the fields placed so far), and it is
 listed on **Envelopes** as a draft, where **Continue** opens it again on this page. **Send later** on the review step
 schedules it, as above; saving it as a draft again (also by going back to its fields) cancels that. Choosing another PDF replaces the one
-uploaded and clears the fields placed on it. The envelope has no template: its document and fields are its own.
+uploaded and clears the fields placed on it; an editor still open on the earlier PDF, in another tab, saves nothing and says
+to open it again. The envelope has no template: its document and fields are its own.
 
 To send the same document again, make it a template. Tick **Also save as a template** on the review step (it is
 named as the document, with the same roles), or, once it is sent, choose **Save as template** on the envelope's page or

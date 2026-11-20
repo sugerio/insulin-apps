@@ -76,7 +76,7 @@ test('envelope creation is tenant-isolated, role-bound, idempotent and prepares 
     assert.equal((await prepare(result.id)).status, 204);
     assert.equal((await prepare('missing')).status, 404);
     await db.prepare("INSERT INTO envelopes (id, tenant_id, template_id, status, created_at, request_sha256) VALUES ('other-envelope', 'tenant-b', 'template-b', 'IN_PROGRESS', 1, 'hash')").run();
-    await db.prepare("INSERT INTO artifacts VALUES ('d0:other-envelope', 'other-envelope', 'envelopes/other-envelope/d0.pdf', 'hash')").run();
+    await db.prepare("INSERT INTO artifacts (id, envelope_id, object_key, sha256) VALUES ('d0:other-envelope', 'other-envelope', 'envelopes/other-envelope/d0.pdf', 'hash')").run();
     assert.equal((await prepare('other-envelope')).status, 404);
     assert.equal((await db.prepare('SELECT status FROM envelopes WHERE id = ?').bind(result.id).first())!.status, 'IN_PROGRESS');
     assert.equal((await db.prepare('SELECT count(*) AS n FROM artifacts WHERE envelope_id = ?').bind(result.id).first())!.n, 1);

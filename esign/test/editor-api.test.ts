@@ -4,9 +4,8 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile,readdir} from 'node:fs/promises';
 import {Miniflare} from 'miniflare';
-import {PDFDocument} from 'pdf-lib';
+import {PDFDocument,PDFName,PDFNumber} from 'pdf-lib';
 import app from './helpers/gateway.ts';
-import {setEditorOrigins} from './helpers/editor-origins.ts';
 
 test('editor sessions enforce scope and persist immutable template versions with field signing blocked',async()=>{
  const mf=new Miniflare({modules:true,script:'export default {fetch(){return new Response("ok")}}',d1Databases:['DB']});
@@ -19,11 +18,12 @@ test('editor sessions enforce scope and persist immutable template versions with
   const digest=async(s:string)=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(s))),n=>n.toString(16).padStart(2,'0')).join('');
   await db.prepare("INSERT INTO tenants(id) VALUES ('a'),('b')").run();
   await db.prepare("INSERT INTO api_keys(key_hash,tenant_id) VALUES (?, 'a'), (?, 'b')").bind(await digest(a),await digest(b)).run();
-  await setEditorOrigins(db,'a',['https://host.example.com']);await setEditorOrigins(db,'b',['https://other.example.com']);
   const env={DB:db,ARTIFACTS:await blobStore(mf,'artifacts'),ASSETS:{fetch:async()=>new Response('<html>editor</html>',{headers:{'content-type':'text/html'}})}};
   const req=(path:string,options:RequestInit={})=>app.fetch(new Request('https://esign.example.com'+path,options),env);
   const management=(key:string,body:unknown)=>({method:'POST',headers:{authorization:`Bearer ${key}`,'content-type':'application/json'},body:JSON.stringify(body)});
-  assert.equal((await req('/api/template-editing-sessions',management(a,{allowedParentOrigin:'https://evil.example.com'}))).status,403);
+  // Any origin the host names gets a session bound to it (no list); what isn't an origin is refused.
+  assert.equal((await req('/api/template-editing-sessions',management(a,{allowedParentOrigin:'https://elsewhere.example.com'}))).status,201);
+  assert.equal((await req('/api/template-editing-sessions',management(a,{allowedParentOrigin:'https://host.example.com/'}))).status,422);
   assert.equal((await req('/api/template-editing-sessions',management(a,{allowedParentOrigin:'https://host.example.com',sourceTemplateId:''}))).status,422);
   const created=await req('/api/template-editing-sessions',management(a,{allowedParentOrigin:'https://host.example.com',roles:['Partner','Seller']}));
   assert.equal(created.status,201,await created.clone().text());const first=await created.json() as any;
@@ -77,15 +77,18 @@ test('editor sessions enforce scope and persist immutable template versions with
   assert.deepEqual(await db.prepare('SELECT object_key,roles_json,fields_json FROM templates WHERE id=?').bind(legacy).first(),legacyBefore);
   for(const id of [legacy,legacyVersion]){const row=await db.prepare('SELECT roles_json,object_key FROM templates WHERE id=?').bind(id).first() as any;assert.deepEqual(JSON.parse(row.roles_json),['Signer','signer']);const object=await env.ARTIFACTS.get(row.object_key);assert.deepEqual(new Uint8Array(await object!.arrayBuffer()),bytes);}
   const emptyEnvelope=await req('/api/envelopes',{...management(a,{templateId:two,recipients:[{role:'Partner',name:'Ana',email:'ana@example.com'},{role:'Seller',name:'Bo',email:'bo@example.com'},{role:'Legal',name:'Cam',email:'cam@example.com'}]}),headers:{...management(a,{}).headers,'idempotency-key':'empty-1'}});assert.equal(emptyEnvelope.status,201,await emptyEnvelope.clone().text());
-  const rotated=await PDFDocument.create();rotated.addPage().setRotation((await import('pdf-lib')).degrees(90));
+  // Turned by an angle that isn't a quarter turn, which Esign can't redraw upright (a quarter turn is: editor-prepared-pdf.test.ts).
+  const rotated=await PDFDocument.create();rotated.addPage().node.set(PDFName.of('Rotate'),PDFNumber.of(45));
   const rotateSession=await req('/api/template-editing-sessions',management(a,{allowedParentOrigin:'https://host.example.com',roles:['Partner']}));const rotateData=await rotateSession.json() as any;const rotateUrl=new URL(rotateData.url);
   const rotateExchange=await req('/api/public/editor/exchange',{method:'POST',headers:{'content-type':'application/json',origin:'https://esign.example.com'},body:JSON.stringify({pageId:rotateData.sessionId,code:rotateUrl.hash.slice(1)})});const rotateToken=(await rotateExchange.json() as any).token;
   const sameRoleForm=new FormData();sameRoleForm.set('file',new File([bytes],'synthetic.pdf'));sameRoleForm.set('roles','["Partner","Seller"]');sameRoleForm.set('fields',JSON.stringify([field,{...field,id:'field-2',rect:{...field.rect,x:.15}}]));
   assert.equal((await req('/api/public/editor/save',{method:'POST',headers:{'x-esign-session':rotateToken,origin:'https://esign.example.com'},body:sameRoleForm})).status,422,'overlapping same-role fields cannot be saved');
   const overlappingForm=new FormData();overlappingForm.set('file',new File([bytes],'synthetic.pdf'));overlappingForm.set('roles','["Partner","Seller"]');overlappingForm.set('fields',JSON.stringify([field,{...field,id:'field-2',role:'Seller',rect:{...field.rect,x:.15}}]));
   assert.equal((await req('/api/public/editor/save',{method:'POST',headers:{'x-esign-session':rotateToken,origin:'https://esign.example.com'},body:overlappingForm})).status,422,'overlapping cross-role fields cannot be saved');
-  const rotateForm=new FormData();rotateForm.set('file',new File([await rotated.save()],'rotated.pdf'));rotateForm.set('roles','["Partner"]');rotateForm.set('fields','[]');
-  assert.equal((await req('/api/public/editor/save',{method:'POST',headers:{'x-esign-session':rotateToken,origin:'https://esign.example.com'},body:rotateForm})).status,422);
+  // Refused for the page's rotation, with the role's Signature placed: the save is otherwise valid.
+  const rotateForm=new FormData();rotateForm.set('file',new File([await rotated.save()],'rotated.pdf'));rotateForm.set('roles','["Partner"]');rotateForm.set('fields',JSON.stringify([field]));
+  const warn=console.warn;console.warn=()=>{};let rotatedSave:Response;try{rotatedSave=await req('/api/public/editor/save',{method:'POST',headers:{'x-esign-session':rotateToken,origin:'https://esign.example.com'},body:rotateForm});}finally{console.warn=warn;}
+  assert.deepEqual([rotatedSave.status,await rotatedSave.json()],[422,{error:'invalid_pdf_or_fields',reason:'pdf_page_rotation',page:1}]);
   assert.equal((await req('/api/me',{headers:{'x-esign-session':rotateToken}})).status,401);
   assert.equal((await req('/api/public/editor/current',{headers:{authorization:`Bearer ${a}`}})).status,401);
   const before=(await env.ARTIFACTS.list()).objects.length;

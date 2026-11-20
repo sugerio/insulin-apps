@@ -10,16 +10,15 @@ import { renderToStaticMarkup } from 'react-dom/server';
 const CONSOLE = 'https://console.example.test';
 const APP = 'https://esign.example.test';
 
-test('the page reports only to a framing host the Worker allows, and that framed it', () => {
-  const allowed = `${APP} ${CONSOLE}`;
-  assert.equal(signingHost(CONSOLE, allowed, true), CONSOLE);
-  assert.equal(signingHost(CONSOLE, allowed, true, CONSOLE), CONSOLE, 'the framing page is that host');
-  assert.equal(signingHost(CONSOLE, allowed, true, 'https://other.example.test'), '', 'another page frames it');
-  assert.equal(signingHost(CONSOLE, allowed, false), '', 'not framed');
-  assert.equal(signingHost(null, allowed, true), '', 'the link names no host');
-  assert.equal(signingHost('https://evil.example.test', allowed, true), '', 'not allowed to frame the page');
-  assert.equal(signingHost(`${CONSOLE}/path`, `${CONSOLE}/path`, true), '', 'an origin, not a URL');
-  assert.equal(signingHost('*', '*', true), '', 'never every origin');
+test('the page reports only to the host the exchange names, while that host frames it', () => {
+  assert.equal(signingHost(CONSOLE, true), CONSOLE);
+  assert.equal(signingHost(CONSOLE, true, CONSOLE), CONSOLE, 'the framing page is that host');
+  assert.equal(signingHost(CONSOLE, true, 'https://other.example.test'), '', 'another page frames it');
+  assert.equal(signingHost(CONSOLE, false), '', 'not framed');
+  assert.equal(signingHost(undefined, true), '', 'the exchange names no host');
+  assert.equal(signingHost(`${CONSOLE}/path`, true), '', 'an origin, not a URL');
+  assert.equal(signingHost('*', true), '', 'never every origin');
+  assert.equal(signingHost(7, true), '');
 });
 
 test('a host reads only the signing page\'s own messages, from its frame and origin', () => {
@@ -64,19 +63,21 @@ test('After you sign: the copy, who signs next (or that nobody does), then the h
   ]);
 });
 
-/** The signing page, served by the app and framed by the console, through all three steps. */
+/**
+ * The signing page, served by the app and framed by the console, through all three steps. `host` is the origin the
+ * exchange names (the one the code is bound to, as the server checked it).
+ */
 async function framedPage(current: Record<string, unknown>, opts: { host?: string; ancestor?: string } = {}) {
   const { default: Renderer, act } = await import('react-test-renderer');
   (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
   const posted: { message: unknown; target: string }[] = [];
   const requests: { path: string; body: any }[] = [];
   const parent = { postMessage: (message: unknown, target: string) => posted.push({ message, target }) };
-  (globalThis as any).window = { location: { origin: APP, hash: `#code=test${opts.host ? `&host=${encodeURIComponent(opts.host)}` : ''}`, pathname: '/sign', ...(opts.ancestor ? { ancestorOrigins: { length: 1, 0: opts.ancestor } } : {}) }, history: { replaceState() {} }, parent };
+  (globalThis as any).window = { location: { origin: APP, hash: '#code=test', pathname: '/sign', ...(opts.ancestor ? { ancestorOrigins: { length: 1, 0: opts.ancestor } } : {}) }, history: { replaceState() {} }, parent };
   globalThis.fetch = (async (input: any, init?: RequestInit) => {
     const path = new URL(String(input)).pathname;
     requests.push({ path, body: init?.body ? JSON.parse(String(init.body)) : undefined });
-    if (path === '/api/public/signing-page') return Response.json({ hosts: [APP, CONSOLE], signingEnabled: true });
-    if (path === '/api/public/page-sessions/exchange') return Response.json({ token: 'token' });
+    if (path === '/api/public/page-sessions/exchange') return Response.json({ token: 'token', ...(opts.host ? { host: opts.host } : {}) });
     if (path === '/api/public/signing/otp') return Response.json({ messageId: 'm', emailed: true });
     if (path === '/api/public/signing/otp/verify') return new Response(null, { status: 204 });
     if (path === '/api/public/signing/current') return Response.json(current);
@@ -173,9 +174,9 @@ test('the page tells its host when the signer cancels, signs or declines', async
   } finally { globalThis.fetch = oldFetch; restore(); }
 });
 
-test('a host the Worker does not allow, or that does not frame the page, is told nothing', async () => {
+test('without a host from the exchange, or framed by another origin, the page tells nobody', async () => {
   try {
-    for (const opts of [{ host: 'https://evil.example.test' }, { host: CONSOLE, ancestor: 'https://evil.example.test' }, {}]) {
+    for (const opts of [{}, { host: CONSOLE, ancestor: 'https://evil.example.test' }, { host: `${CONSOLE}/path` }]) {
       const p = await framedPage({ ...CURRENT, fields: undefined }, opts);
       assert.equal(p.button('Cancel'), undefined, `no Cancel without a host: ${JSON.stringify(opts)}`);
       await p.act(async () => { p.labelled('Authorized to sign').props.onChange({ target: { checked: true } }); });

@@ -150,8 +150,8 @@ someone else an owner first, or remove the other members.
 A few Insulin Apps staff run an operator console to keep the service healthy and fair. They see each organization's
 name, when it was created and last used, its owner domain and its members, and each person's name, e-mail address and
 when they joined and were last active (to within an hour). From the apps they see only the usage report each app sends
-every hour: counts of records and bytes of storage per organization. They can't see what you enter in an app, and
-never see passwords, tokens or stored credentials. See [How it works](/docs/platform/how-it-works#the-operator-console).
+every hour: counts of records and bytes of storage per organization, which they compare with the app's limits when an
+app has them. They can't see what you enter in an app, and never see passwords, tokens or stored credentials. See [How it works](/docs/platform/how-it-works#the-operator-console).
 
 ### What happens if Insulin Apps suspends my organization or account?
 

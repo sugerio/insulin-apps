@@ -10,7 +10,6 @@ import { Miniflare } from 'miniflare';
 import { PDFDocument } from 'pdf-lib';
 import { blobStore, identity, MIGRATIONS_DIR, splitSql, type Identity } from './helpers/platform.ts';
 import app from './helpers/gateway.ts';
-import { setEditorOrigins } from './helpers/editor-origins.ts';
 
 const ORIGIN = 'https://esign.example.test';
 const KEY = 'k'.repeat(64);
@@ -26,7 +25,6 @@ async function setup() {
   await db.prepare("INSERT INTO tenants(id) VALUES ('tenant')").run();
   const hash = Buffer.from(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(KEY))).toString('hex');
   await db.prepare("INSERT INTO api_keys(key_hash,tenant_id) VALUES (?,'tenant')").bind(hash).run();
-  await setEditorOrigins(db, 'tenant', [HOST]);
   const env = { DB: db, ARTIFACTS: await blobStore(mf, 'artifacts'), TRUST_ORG_ROLE: true };
   // People of the organization, in the browser; and the host's API client, by its key.
   const person = (name: string, options: Identity = {}) => identity('tenant', { userId: `user-${name}`, email: `${name}@example.test`, role: 'EDITOR', ...options });

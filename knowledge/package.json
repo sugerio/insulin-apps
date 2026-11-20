@@ -1,0 +1,86 @@
+{
+  "name": "insulin-knowledge",
+  "displayName": "Knowledge",
+  "version": "0.1.0",
+  "description": "Your team's knowledge, answered with sources: collections of files, web pages and notes that people and AI assistants ask",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "insulin": {
+    "navigation": [
+      { "key": "home", "label": "Home", "icon": "house", "path": "/" },
+      { "key": "collections", "label": "Collections", "icon": "book-open", "path": "/collections" },
+      { "key": "attention", "label": "Needs attention", "icon": "bell", "path": "/attention", "role": "EDITOR" },
+      { "key": "rules", "label": "Rules and data", "icon": "shield", "path": "/rules", "group": "Admin", "role": "ADMIN" },
+      { "key": "health", "label": "Health", "icon": "activity", "path": "/health", "group": "Admin", "role": "ADMIN" }
+    ],
+    "permissions": [
+      { "key": "knowledge.use", "label": "Ask and read", "description": "Ask and read the collections shared with them, and report a wrong answer.", "role": "VIEWER" },
+      { "key": "knowledge.collections.create", "label": "Start collections", "description": "Start new collections, which they then own.", "role": "EDITOR" },
+      { "key": "knowledge.collections.edit", "label": "Change content", "description": "Add sources, fix answers and go back; without it, every collection role acts as Viewer.", "role": "EDITOR" },
+      { "key": "knowledge.collections.share", "label": "Share collections", "description": "Share collections, change their settings and remove files for good, as owner or admin.", "role": "EDITOR" },
+      { "key": "knowledge.collections.export", "label": "Export collections", "description": "Export a collection where they are its owner or an admin.", "role": "EDITOR" },
+      { "key": "knowledge.rules.manage", "label": "Rules and data", "description": "Set what is hidden and who writes answers, see usage beside the limits, and Health.", "role": "ADMIN" }
+    ],
+    "scheduled": "/api/scheduled",
+    "limits": [
+      { "key": "collections", "label": "Collections", "unit": "count", "default": 20 },
+      { "key": "documents", "label": "Documents", "unit": "count", "default": 500 },
+      { "key": "file_bytes", "label": "Largest file", "unit": "bytes", "default": 26214400 },
+      { "key": "storage_bytes", "label": "Stored files", "unit": "bytes", "default": 2147483648 },
+      { "key": "learned_month", "label": "Documents learned a month", "unit": "count", "default": 1000 },
+      { "key": "questions_month", "label": "Questions a month", "unit": "count", "default": 5000 },
+      { "key": "answers_month", "label": "Built-in answers a month", "unit": "count", "default": 2000 },
+      { "key": "awake_hours_month", "label": "Awake hours a month", "unit": "hours", "default": 100 },
+      { "key": "ready_collections", "label": "Collections kept ready", "unit": "count", "default": 1 },
+      { "key": "backup_days", "label": "Days of daily backups", "unit": "days", "default": 30 }
+    ],
+    "engine": "engine/",
+    "engineApi": 1
+  },
+  "imports": {
+    "#/*": "./src/*"
+  },
+  "scripts": {
+    "dev": "vite --configLoader native --host 0.0.0.0 --port 3000",
+    "build": "vite build --configLoader native && node scripts/check-no-stub.mjs",
+    "db:generate": "drizzle-kit generate",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@fours/app": "0.1.0-beta.0",
+    "class-variance-authority": "0.7.1",
+    "cn": "0.5.0",
+    "drizzle-orm": "0.45.3",
+    "hono": "4.13.13",
+    "lucide-react": "1.59.0",
+    "nitro": "3.0.260610-beta",
+    "radix-ui": "1.8.1",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "react-router": "8.4.0",
+    "tw-animate-css": "1.4.0",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "5.20260925.2",
+    "@rolldown/binding-wasm32-wasi": "1.2.14",
+    "@tailwindcss/postcss": "4.3.3",
+    "@testing-library/react": "16.3.3",
+    "@types/node": "22.20.4",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@vitejs/plugin-react": "6.1.1",
+    "jsdom": "30.1.2",
+    "lightningcss": "npm:lightningcss-wasm@1.33.0",
+    "tailwindcss": "4.3.3",
+    "typescript": "6.0.3",
+    "vite": "8.3.4",
+    "vitest": "5.0.3"
+  },
+  "overrides": {
+    "rolldown": "1.2.14",
+    "source-map-js": "1.2.2"
+  }
+}

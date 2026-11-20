@@ -21,7 +21,7 @@ import { dateLabels, DATES, FilterButton, FilterChips, Pager, SearchBox, SENDERS
 import { Notice, PageHeader, StatusBadge } from './parts.ts'
 import { Link, navigate } from './router.ts'
 import { SaveAsTemplateDialog } from './SaveAsTemplateDialog.ts'
-import { sendErrorText, sendTime } from './SendLater.ts'
+import { sendErrorText, sendTime, sendWaitingText } from './SendLater.ts'
 import { SharePanel } from './SharePanel.ts'
 import { TagList, TagsField } from './TagsField.ts'
 
@@ -44,7 +44,8 @@ function Progress({ envelope }: { envelope: EnvelopeSummary }) {
   // A draft to be sent later says when, or why it wasn't sent then (SendLater.ts).
   if (envelope.status === 'DRAFT' && (envelope.sendAt || envelope.sendError)) {
     return h('div', { className: 'flex flex-col items-start gap-1' }, h(StatusBadge, { status: envelope.status }),
-      envelope.sendAt ? h('span', { className: 'inline-flex items-center gap-1 text-xs text-muted-foreground' }, h(CalendarClock, { className: 'size-3.5', 'aria-hidden': true }), `Sends ${sendTime(envelope.sendAt)}`)
+      envelope.sendAt && envelope.sendWaiting ? h('span', { className: 'inline-flex items-center gap-1 text-xs text-muted-foreground', title: sendWaitingText(envelope.sendWaiting) }, h(CalendarClock, { className: 'size-3.5', 'aria-hidden': true }), `Waiting since ${sendTime(envelope.sendAt)}: Insulin Apps is confirming your organization`)
+      : envelope.sendAt ? h('span', { className: 'inline-flex items-center gap-1 text-xs text-muted-foreground' }, h(CalendarClock, { className: 'size-3.5', 'aria-hidden': true }), `Sends ${sendTime(envelope.sendAt)}`)
         : h('span', { className: 'text-xs text-destructive' }, `Not sent: ${sendErrorText(envelope.sendError!)}`))
   }
   if (envelope.status !== 'IN_PROGRESS' && envelope.status !== 'FINALIZING') return h(StatusBadge, { status: envelope.status })

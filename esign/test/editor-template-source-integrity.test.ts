@@ -6,14 +6,13 @@ import {readFile,readdir} from 'node:fs/promises';
 import {Miniflare} from 'miniflare';
 import {PDFDocument} from 'pdf-lib';
 import app from './helpers/gateway.ts';
-import {setEditorOrigins} from './helpers/editor-origins.ts';
 
 test('template source is fixed at session issue for preview and save',async()=>{
  const mf=new Miniflare({modules:true,script:'export default {fetch(){return new Response("ok")}}',d1Databases:['DB']});
  try{
   const db=await mf.getD1Database('DB');for(const name of (await readdir(MIGRATIONS_DIR)).filter(n=>n.endsWith('.sql')).sort()){const sql=await readFile(new URL(name,MIGRATIONS_DIR),'utf8');await db.batch(unstable_splitSqlQuery(sql).map(s=>db.prepare(s)));}
   const key='local-test-key-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',other='local-test-key-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';const hash=async(s:string)=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(s))),n=>n.toString(16).padStart(2,'0')).join('');
-  await db.prepare("INSERT INTO tenants(id) VALUES ('a'),('b')").run();await db.prepare("INSERT INTO api_keys(key_hash,tenant_id) VALUES (?,'a'),(?,'b')").bind(await hash(key),await hash(other)).run();await setEditorOrigins(db,'a',['https://host.example.com']);await setEditorOrigins(db,'b',['https://host.example.com']);
+  await db.prepare("INSERT INTO tenants(id) VALUES ('a'),('b')").run();await db.prepare("INSERT INTO api_keys(key_hash,tenant_id) VALUES (?,'a'),(?,'b')").bind(await hash(key),await hash(other)).run();
   const bucket=await blobStore(mf,'artifacts'),env={DB:db,ARTIFACTS:bucket};const req=(path:string,init:RequestInit={},custom=env)=>app.fetch(new Request('https://esign.example.com'+path,init),custom);
   const p=await PDFDocument.create();p.addPage();const bytes=await p.save();const replacement=await PDFDocument.create();replacement.addPage([400,400]);const changed=await replacement.save();
   const createForm=new FormData();createForm.set('file',new File([bytes],'synthetic.pdf'));createForm.set('roles','["Signer"]');const template=await req('/api/templates',{method:'POST',headers:{authorization:`Bearer ${key}`},body:createForm});assert.equal(template.status,201);const id=(await template.json() as any).id;const row=await db.prepare('SELECT object_key FROM templates WHERE id=?').bind(id).first<{object_key:string}>();

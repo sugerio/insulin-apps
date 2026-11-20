@@ -1,0 +1,125 @@
+{
+  "about": "20 near misses: each sounds like a document of the corpus but asks something it doesn't say. None may produce a confident wrong answer (ASK-02): either \"I won't guess\", or an answer that says the documents don't say.",
+  "questions": [
+    {
+      "id": "n01",
+      "query": "What port does the product search service listen on?",
+      "nearDoc": "07-marlin-search-service",
+      "missing": "the search page gives shards, rebuild time and reranking, no port"
+    },
+    {
+      "id": "n02",
+      "query": "How long are traces retained?",
+      "nearDoc": "19-osprey-observability",
+      "missing": "metrics and logs retention are given, traces are not"
+    },
+    {
+      "id": "n03",
+      "query": "What is the hotel cap in high-cost cities?",
+      "nearDoc": "20-travel-booking-policy",
+      "missing": "high-cost cities are excluded from the cap without a number"
+    },
+    {
+      "id": "n04",
+      "query": "How long are refresh tokens valid on the mobile apps?",
+      "nearDoc": "26-tern-auth-service",
+      "missing": "refresh token validity is general, nothing about mobile apps"
+    },
+    {
+      "id": "n05",
+      "query": "Who approves expenses above 10,000 US dollars?",
+      "nearDoc": "04-expense-reimbursement",
+      "missing": "only the 2,500 US dollar threshold is given"
+    },
+    {
+      "id": "n06",
+      "query": "How many interviews does the loop for sales roles have?",
+      "nearDoc": "30-hiring-interview-loop",
+      "missing": "the loop is described for engineering roles"
+    },
+    {
+      "id": "n07",
+      "query": "What is the visibility timeout of the dead-letter queue?",
+      "nearDoc": "21-pelican-queue-service",
+      "missing": "the timeout is for received messages, not the dead-letter queue"
+    },
+    {
+      "id": "n08",
+      "query": "What is the maximum size of a cached value?",
+      "nearDoc": "25-gannet-cache-layer",
+      "missing": "the cache page gives TTL, eviction and replicas, no size"
+    },
+    {
+      "id": "n09",
+      "query": "Which region stores customer file uploads?",
+      "nearDoc": "05-data-retention-policy",
+      "missing": "only database backups have a region"
+    },
+    {
+      "id": "n10",
+      "query": "How long is the canary for mobile releases?",
+      "nearDoc": "02-kestrel-deploy-pipeline",
+      "missing": "the canary belongs to backend deploys; mobile rolls out in phases"
+    },
+    {
+      "id": "n11",
+      "query": "What is the badge replacement fee in the Berlin office?",
+      "nearDoc": "11-office-access-badges",
+      "missing": "the page covers the Lisbon office only"
+    },
+    {
+      "id": "n12",
+      "query": "How many approvals does a DNS change in staging need?",
+      "nearDoc": "23-dns-change-process",
+      "missing": "the process covers production DNS"
+    },
+    {
+      "id": "n13",
+      "query": "Which team owns the billing gateway's database backups?",
+      "nearDoc": "01-hawser-billing-gateway",
+      "missing": "ownership of pages and schema changes only"
+    },
+    {
+      "id": "n14",
+      "query": "What contrast ratio applies to large text?",
+      "nearDoc": "24-accessibility-standards",
+      "missing": "one ratio for text, nothing specific to large text"
+    },
+    {
+      "id": "n15",
+      "query": "How many points of presence does the CDN have in Europe?",
+      "nearDoc": "29-cormorant-cdn",
+      "missing": "only the total number is given"
+    },
+    {
+      "id": "n16",
+      "query": "How long can an unused learning budget be carried over?",
+      "nearDoc": "22-learning-budget",
+      "missing": "it does not roll over at all, so there is no period"
+    },
+    {
+      "id": "n17",
+      "query": "What is the rate limit of the public API?",
+      "nearDoc": "12-api-versioning-guidelines",
+      "missing": "the API page covers versions; the rate limit is the gateway's"
+    },
+    {
+      "id": "n18",
+      "query": "How often is the warehouse's analytics role reviewed?",
+      "nearDoc": "13-quarry-data-warehouse",
+      "missing": "access is described, not its review"
+    },
+    {
+      "id": "n19",
+      "query": "Which approvals do tier-1 services need for a deploy during a freeze?",
+      "nearDoc": "02-kestrel-deploy-pipeline",
+      "missing": "freeze approvals are for emergency fixes by the incident commander, with no tiers"
+    },
+    {
+      "id": "n20",
+      "query": "What is the wellness stipend for part-time employees?",
+      "nearDoc": "27-wellness-stipend",
+      "missing": "one amount for every employee, nothing about part-time"
+    }
+  ]
+}

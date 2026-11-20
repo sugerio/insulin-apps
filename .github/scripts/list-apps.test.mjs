@@ -1,9 +1,12 @@
 import assert from 'node:assert/strict'
+import { spawnSync } from 'node:child_process'
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { after, test } from 'node:test'
-import { NAVIGATION_ICONS, listApps, navigationPathProblem, publicPathProblem, readClientSettings, readNavigation, scheduledProblem, validateAppName } from './list-apps.mjs'
+import { fileURLToPath } from 'node:url'
+import { limitsProblems } from '../hosting/gateway/scripts/limits-catalog.mjs'
+import { NAVIGATION_ICONS, listApps, navigationPathProblem, publicPathProblem, readClientSettings, readEngine, readLimits, readNavigation, scheduledProblem, validateAppName } from './list-apps.mjs'
 
 const temporary = []
 after(async () => Promise.all(temporary.map((directory) => rm(directory, { recursive: true, force: true }))))
@@ -27,8 +30,8 @@ test('discovers top-level apps in stable order with their public metadata', asyn
   await mkdir(join(root, 'not-an-app'))
 
   assert.deepEqual(await listApps(root), [
-    { name: 'alpha-app', title: 'Alpha App', summary: 'First app', permissions: [], publicPaths: [], scheduled: null, clientSettings: null, navigation: [], secrets: [] },
-    { name: 'zebra', title: 'zebra', summary: 'Last app', permissions: [], publicPaths: [], scheduled: null, clientSettings: null, navigation: [], secrets: [] },
+    { name: 'alpha-app', title: 'Alpha App', summary: 'First app', permissions: [], publicPaths: [], scheduled: null, clientSettings: null, navigation: [], secrets: [], engine: null, engineApi: null, limits: [] },
+    { name: 'zebra', title: 'zebra', summary: 'Last app', permissions: [], publicPaths: [], scheduled: null, clientSettings: null, navigation: [], secrets: [], engine: null, engineApi: null, limits: [] },
   ])
 })
 
@@ -61,6 +64,9 @@ test('rejects malformed and reserved app directory names clearly', async () => {
     assert.throws(() => validateAppName(name), /Invalid app directory name/)
   }
   for (const name of ['auth', 'www', 'support']) assert.throws(() => validateAppName(name), /is reserved/)
+  // insulin-apps-<app>-engine is an app's engine Worker: an app named knowledge-engine would collide with knowledge's.
+  for (const name of ['knowledge-engine', 'a-engine']) assert.throws(() => validateAppName(name), /ends in -engine/)
+  for (const name of ['engine', 'engines', 'engine-room', 'my-engines']) assert.doesNotThrow(() => validateAppName(name))
 
   const root = await repository({ auth: { displayName: 'Reserved' } })
   await assert.rejects(() => listApps(root), /App directory name "auth" is reserved/)
@@ -242,5 +248,110 @@ test("a navigation path stays on the app's host and off the gateway's paths", ()
     '/__INSULIN/bar.js', '/mcp', '/mcp/', '/.well-known/oauth-protected-resource', '/api/__suger/x', 42, null, ['/a'],
   ]) {
     assert.notEqual(navigationPathProblem(bad), null, String(bad))
+  }
+})
+
+test("reads an app's engine: a directory inside the app and the engine API version it calls", async () => {
+  const root = await repository({ knowledge: { insulin: { engine: 'engine/', engineApi: 1 } }, plain: {} })
+  const [knowledge, plain] = await listApps(root)
+  assert.deepEqual([knowledge.engine, knowledge.engineApi], ['engine', 1])
+  assert.deepEqual([plain.engine, plain.engineApi], [null, null])
+  assert.deepEqual(readEngine('knowledge', 'workers/engine', 3), { engine: 'workers/engine', engineApi: 3 })
+  for (const [engine, engineApi, message] of [
+    ['engine/', undefined, /insulin\.engineApi must be a positive integer/],
+    ['engine/', 0, /engineApi must be a positive integer/],
+    ['engine/', 1.5, /engineApi must be a positive integer/],
+    ['engine/', '1', /engineApi must be a positive integer/],
+    [undefined, 1, /insulin\.engineApi needs insulin\.engine/],
+    ['', 1, /insulin\.engine must be a directory inside the app/],
+    ['/engine', 1, /must be a directory inside the app/],
+    ['../engine', 1, /must be a directory inside the app/],
+    ['engine/../src', 1, /must be a directory inside the app/],
+    ['./engine', 1, /must be a directory inside the app/],
+    ['engine//x', 1, /must be a directory inside the app/],
+    ['Engine', 1, /must be a directory inside the app/],
+    ['eng ine', 1, /must be a directory inside the app/],
+    ['engine\\x', 1, /must be a directory inside the app/],
+    [['engine'], 1, /must be a directory inside the app/],
+    ['src/engine', 1, /must not be in the app's src\//],
+    ['public', 1, /must not be in the app's public\//],
+    ['node_modules/engine', 1, /must not be in the app's node_modules\//],
+  ]) {
+    assert.throws(() => readEngine('knowledge', engine, engineApi), message, `${JSON.stringify(engine)} ${engineApi}`)
+  }
+  const broken = await repository({ broken: { insulin: { engine: '../elsewhere', engineApi: 1 } } })
+  await assert.rejects(() => listApps(broken), /App "broken": insulin\.engine must be a directory inside the app/)
+})
+
+test("reads an app's limit catalog, which the deploy writes to the gateway's D1, and refuses a malformed one", async () => {
+  const limits = [
+    { key: 'collections', label: ' Collections ', unit: 'count', default: 20 },
+    { key: 'storage_bytes', label: 'Storage', unit: 'bytes', default: 2147483648 },
+    { key: 'awake_hours_month', label: 'Awake hours a month', unit: 'hours', default: 100 },
+    { key: 'backup_days', label: 'Backups kept', unit: 'days', default: 0 },
+  ]
+  const root = await repository({ knowledge: { insulin: { limits } } })
+  assert.deepEqual((await listApps(root))[0].limits, [{ ...limits[0], label: 'Collections' }, ...limits.slice(1)])
+  const limit = (extra = {}) => ({ key: 'a', label: 'A', unit: 'count', default: 1, ...extra })
+  for (const [raw, message] of [
+    [{}, /insulin\.limits must be a list/],
+    [Array.from({ length: 21 }, (_, i) => limit({ key: `k${i}` })), /insulin\.limits has 21 entries, at most 20/],
+    [['a'], /insulin\.limits\[0\] must be an object/],
+    [[limit({ key: 'Bad' })], /\[0\]\.key must match/],
+    [[limit({ key: '1a' })], /\[0\]\.key must match/],
+    [[limit({ key: 'a-b' })], /\[0\]\.key must match/],
+    [[limit({ key: `a${'b'.repeat(40)}` })], /\[0\]\.key must match/],
+    [[limit(), limit()], /\[1\]\.key a is listed twice/],
+    [[limit({ label: '' })], /\[0\]\.label must be 1 to 80 characters on one line/],
+    [[limit({ label: 'x'.repeat(81) })], /\[0\]\.label must be 1 to 80 characters on one line/],
+    [[limit({ label: 'Two\nlines' })], /\[0\]\.label must be 1 to 80 characters on one line/],
+    [[limit({ unit: 'minutes' })], /\[0\]\.unit must be one of count, bytes, hours, days/],
+    [[limit({ unit: undefined })], /\[0\]\.unit must be one of/],
+    [[limit({ default: -1 })], /\[0\]\.default must be a whole number from 0/],
+    [[limit({ default: 1.5 })], /\[0\]\.default must be a whole number/],
+    [[limit({ default: '5' })], /\[0\]\.default must be a whole number/],
+    [[limit({ default: null })], /\[0\]\.default must be a whole number/],
+    [[limit({ default: 10 ** 15 + 1 })], /\[0\]\.default must be a whole number/],
+    [[limit({ description: 'more' })], /\[0\] has unknown fields: description/],
+  ]) {
+    assert.throws(() => readLimits('knowledge', raw), message, JSON.stringify(raw).slice(0, 80))
+  }
+  assert.deepEqual(readLimits('knowledge', undefined), [])
+  assert.equal(readLimits('knowledge', Array.from({ length: 20 }, (_, i) => limit({ key: `k${i}` }))).length, 20)
+  const broken = await repository({ broken: { insulin: { limits: [limit({ unit: 'weeks' })] } } })
+  await assert.rejects(() => listApps(broken), /App "broken": insulin\.limits\[0\]\.unit must be one of/)
+})
+
+test("--engine names an app's engine directory for the workflows, reading only that app", () => {
+  const run = (...args) => spawnSync(process.execPath, [join(dirname(fileURLToPath(import.meta.url)), 'list-apps.mjs'), ...args], { encoding: 'utf8' })
+  assert.equal(run('--engine', 'captable').stdout, '\n', 'no engine: an empty line')
+  assert.equal(run('--engine', 'knowledge').stdout, 'knowledge/engine\n')
+  for (const [args, message] of [[['--engine', '../captable'], /Invalid app directory name/], [['--engine', 'missing'], /has no readable package\.json/], [['--engine'], /usage:/]]) {
+    const result = run(...args)
+    assert.equal(result.status, 1, args.join(' '))
+    assert.match(result.stderr, message)
+  }
+})
+
+test("one rule for a limit catalog: list-apps.mjs refuses exactly what the gateway's limits-catalog.mjs refuses, naming the same problems", () => {
+  const limit = (extra = {}) => ({ key: 'a', label: 'A', unit: 'count', default: 1, ...extra })
+  const cases = [
+    [limit()], [limit({ label: 'Line\nbreak' })], [limit({ label: 'Tab\there' })], [limit({ label: 'Delete\u007f' })],
+    [limit({ label: ` ${'x'.repeat(80)}` })], [limit({ label: 'x'.repeat(80) })], [limit({ label: 'x'.repeat(81) })], [limit({ label: '   ' })],
+    [limit({ label: 7 })], [limit({ key: 'Bad' })], [limit({ key: `a${'b'.repeat(40)}` })], [limit({ unit: 'weeks' })], [limit({ default: -1 })],
+    [limit({ default: 1.5 })], [limit({ default: 10 ** 15 })], [limit({ default: 10 ** 15 + 1 })], [limit({ description: 'more' })],
+    [limit(), limit()], {}, 'a list', [null], [[]], Array.from({ length: 20 }, (_, i) => limit({ key: `k${i}` })),
+    Array.from({ length: 21 }, (_, i) => limit({ key: `k${i}` })),
+  ]
+  for (const raw of cases) {
+    const gateway = limitsProblems('knowledge', raw)
+    let refused = null
+    try {
+      readLimits('knowledge', raw)
+    } catch (error) {
+      refused = error.message
+    }
+    assert.equal(Boolean(refused), gateway.length > 0, `${JSON.stringify(raw).slice(0, 60)}: ${refused ?? 'accepted'} / ${gateway.join('; ') || 'accepted'}`)
+    for (const problem of gateway) assert.ok(refused.includes(problem.replace(/^knowledge: /, '')), `${refused} names ${problem}`)
   }
 })

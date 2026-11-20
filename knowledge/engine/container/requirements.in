@@ -1,0 +1,5 @@
+# The engine image's direct dependencies. requirements.lock pins the whole resolved set with hashes; regenerate it
+# with the command in README.md ("The container image"), never by hand.
+cognee[gliner]==1.6.8
+# Text from PDFs (extract.py). Already in Cognee's own set; named here because the engine imports it directly.
+pypdf==6.21.4

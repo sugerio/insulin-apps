@@ -1,0 +1,186 @@
+{
+  "about": "30 answerable questions, one per document of the corpus. A question passes when its document is cited and the cited passage holds the fact (plan ASK-01). q01 to q10 are the PoC's ten fixed questions.",
+  "topK": 5,
+  "questions": [
+    {
+      "id": "q01",
+      "query": "What port does the billing gateway listen on?",
+      "expectDoc": "01-hawser-billing-gateway",
+      "expectFact": "8443"
+    },
+    {
+      "id": "q02",
+      "query": "What canary error rate triggers an automatic rollback of a deploy?",
+      "expectDoc": "02-kestrel-deploy-pipeline",
+      "expectFact": "2 percent"
+    },
+    {
+      "id": "q03",
+      "query": "How quickly must the primary on-call engineer acknowledge a page?",
+      "expectDoc": "03-oncall-rotation-policy",
+      "expectFact": "7 minutes"
+    },
+    {
+      "id": "q04",
+      "query": "What is the daily cap for meal expenses while travelling?",
+      "expectDoc": "04-expense-reimbursement",
+      "expectFact": "85 US dollars"
+    },
+    {
+      "id": "q05",
+      "query": "How long are audit logs retained?",
+      "expectDoc": "05-data-retention-policy",
+      "expectFact": "400 days"
+    },
+    {
+      "id": "q06",
+      "query": "How soon after a SEV1 is declared must the status page be updated?",
+      "expectDoc": "06-incident-severity-levels",
+      "expectFact": "20 minutes"
+    },
+    {
+      "id": "q07",
+      "query": "At what time is the product search index rebuilt every night?",
+      "expectDoc": "07-marlin-search-service",
+      "expectFact": "02:30 UTC"
+    },
+    {
+      "id": "q08",
+      "query": "After how many days does a feature flag expire?",
+      "expectDoc": "10-sparrow-feature-flags",
+      "expectFact": "60 days"
+    },
+    {
+      "id": "q09",
+      "query": "Which crash-free sessions threshold gates the mobile phased rollout?",
+      "expectDoc": "16-heron-mobile-release",
+      "expectFact": "99.6 percent"
+    },
+    {
+      "id": "q10",
+      "query": "How often are secrets in the vault rotated?",
+      "expectDoc": "17-secrets-management",
+      "expectFact": "90 days"
+    },
+    {
+      "id": "a11",
+      "query": "Which hardware key does every employee get for single sign-on?",
+      "expectDoc": "08-laptop-security-baseline",
+      "expectFact": "Tollgate 5C"
+    },
+    {
+      "id": "a12",
+      "query": "How recent must a vendor's SOC 2 Type II report be?",
+      "expectDoc": "09-vendor-onboarding",
+      "expectFact": "less than 12 months old"
+    },
+    {
+      "id": "a13",
+      "query": "How much does it cost to replace a lost office badge?",
+      "expectDoc": "11-office-access-badges",
+      "expectFact": "25 euros"
+    },
+    {
+      "id": "a14",
+      "query": "How long is an API version supported after its deprecation is announced?",
+      "expectDoc": "12-api-versioning-guidelines",
+      "expectFact": "180 days"
+    },
+    {
+      "id": "a15",
+      "query": "At what time does the warehouse's nightly ETL job load events?",
+      "expectDoc": "13-quarry-data-warehouse",
+      "expectFact": "04:00 UTC"
+    },
+    {
+      "id": "a16",
+      "query": "How many approvals do changes to tier-0 services need?",
+      "expectDoc": "14-code-review-standards",
+      "expectFact": "two approvals"
+    },
+    {
+      "id": "a17",
+      "query": "How long is parental leave?",
+      "expectDoc": "15-parental-leave-policy",
+      "expectFact": "20 weeks"
+    },
+    {
+      "id": "a18",
+      "query": "How quickly do Gold customers get a first response from support?",
+      "expectDoc": "18-customer-support-tiers",
+      "expectFact": "within 1 hour"
+    },
+    {
+      "id": "a19",
+      "query": "What share of requests are traced?",
+      "expectDoc": "19-osprey-observability",
+      "expectFact": "8 percent"
+    },
+    {
+      "id": "a20",
+      "query": "What is the nightly cap for hotels on business trips?",
+      "expectDoc": "20-travel-booking-policy",
+      "expectFact": "240 US dollars"
+    },
+    {
+      "id": "a21",
+      "query": "After how many failed deliveries does a message go to the dead-letter queue?",
+      "expectDoc": "21-pelican-queue-service",
+      "expectFact": "5 failed delivery attempts"
+    },
+    {
+      "id": "a22",
+      "query": "How large is the yearly learning budget?",
+      "expectDoc": "22-learning-budget",
+      "expectFact": "1,800 US dollars"
+    },
+    {
+      "id": "a23",
+      "query": "What TTL are DNS records lowered to before a migration?",
+      "expectDoc": "23-dns-change-process",
+      "expectFact": "300 seconds"
+    },
+    {
+      "id": "a24",
+      "query": "What contrast ratio must text have against its background?",
+      "expectDoc": "24-accessibility-standards",
+      "expectFact": "4.5:1"
+    },
+    {
+      "id": "a25",
+      "query": "Which eviction policy does the shared cache use when memory is full?",
+      "expectDoc": "25-gannet-cache-layer",
+      "expectFact": "allkeys-lfu"
+    },
+    {
+      "id": "a26",
+      "query": "When do access tokens expire?",
+      "expectDoc": "26-tern-auth-service",
+      "expectFact": "15 minutes"
+    },
+    {
+      "id": "a27",
+      "query": "How much is the monthly wellness stipend?",
+      "expectDoc": "27-wellness-stipend",
+      "expectFact": "75 US dollars"
+    },
+    {
+      "id": "a28",
+      "query": "What lock timeout does the migration tool set?",
+      "expectDoc": "28-database-migration-runbook",
+      "expectFact": "3 seconds"
+    },
+    {
+      "id": "a29",
+      "query": "How many URLs can one CDN purge call take?",
+      "expectDoc": "29-cormorant-cdn",
+      "expectFact": "500 URLs"
+    },
+    {
+      "id": "a30",
+      "query": "On which day does the hiring committee meet?",
+      "expectDoc": "30-hiring-interview-loop",
+      "expectFact": "every Thursday"
+    }
+  ]
+}

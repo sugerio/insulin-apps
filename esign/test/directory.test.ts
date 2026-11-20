@@ -1,6 +1,7 @@
-// Who in the organization can use Esign, as the platform says (directory.ts): GET /__insulin/members over the
-// gateway's binding, with the app's token and the organization. People to share with are its; an API client's people
-// must be among them; and without it (or when it fails), the people Esign has seen. Synthetic data, in-process.
+// Who in the organization can use Esign, as the platform says (directory.ts): the gateway's member lookup, over its
+// binding with the app's token and the x-suger-member-lookup header the gateway signed on the browser request Esign is
+// serving. People to share with are its; an API client's people must be among them, each address looked up; and
+// without it (no header, or when it fails), the people Esign has seen. Synthetic data, in-process.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile, readdir } from 'node:fs/promises';
@@ -9,11 +10,13 @@ import { identity, MIGRATIONS_DIR, splitSql } from './helpers/platform.ts';
 import app from './helpers/gateway.ts';
 
 const ORIGIN = 'https://esign.example.test';
+const LOOKUP = 'v1.tenant.user-signed.1900000000.synthetic-signature';
 const DIRECTORY = [
-  { id: 'user-ana', name: 'Ana Example', email: 'ana@example.test' },
-  // As the platform lists them, with their role and permissions in Esign, which only the scheduled sends' check reads.
-  { id: 'user-new', name: 'Nina Newcomer', email: 'nina@example.test', role: 'EDITOR', permissions: ['esign.manage', 'esign.view'] },
-  { id: 'user-olga', name: 'Olga Owner', email: 'olga@example.test' },
+  { type: 'person', id: 'user-ana', name: 'Ana Example', email: 'ana@example.test', appRole: 'EDITOR' },
+  { type: 'person', id: 'user-new', name: 'Nina Newcomer', email: 'nina@example.test', appRole: 'EDITOR' },
+  { type: 'person', id: 'user-olga', name: 'Olga Owner', email: 'olga@example.test', appRole: 'ADMIN' },
+  // The lookup also finds the app's API clients, which are no one to share with.
+  { type: 'client', id: 'sa-nightly', name: 'Nina nightly sync' },
 ];
 
 async function setup(answer: (url: URL, init: RequestInit) => Response | Promise<Response>) {
@@ -32,71 +35,118 @@ async function setup(answer: (url: URL, init: RequestInit) => Response | Promise
       return answer(url, init);
     }) as typeof fetch,
   };
-  const person = (name: string, role: 'EDITOR' | 'ADMIN' = 'EDITOR', orgRole = role) => identity('tenant', { userId: `user-${name}`, email: `${name}@example.test`, role, orgRole });
+  // A browser request, as the gateway forwards it: with the member lookup header it signed.
+  const person = (name: string, role: 'EDITOR' | 'ADMIN' = 'EDITOR', orgRole = role) => ({
+    ...identity('tenant', { userId: `user-${name}`, email: `${name}@example.test`, role, orgRole, via: 'browser' }), 'x-suger-member-lookup': LOOKUP,
+  });
   const req = (path: string, headers: Record<string, string>, init: RequestInit = {}) => app.fetch(new Request(ORIGIN + path, { ...init, headers: { ...headers, ...(init.headers as Record<string, string> ?? {}) } }), env);
   return { mf, db, calls, req, ana: person('ana'), owner: person('olga', 'ADMIN', 'OWNER') };
 }
-const directoryAnswer = (url: URL) => {
+// As the gateway answers: only with the header, whose name or email contains q, at most 20.
+const directoryAnswer = (url: URL, init: RequestInit) => {
+  if (new Headers(init.headers).get('x-suger-member-lookup') !== LOOKUP) return Response.json({ error: 'invalid_member_lookup' }, { status: 403 });
   const q = (url.searchParams.get('q') ?? '').toLowerCase();
-  return Response.json({ members: DIRECTORY.filter((m) => !q || m.email.includes(q) || m.name.toLowerCase().includes(q)).slice(0, Number(url.searchParams.get('limit'))) });
+  if (!q || q.length > 100) return Response.json({ error: 'invalid_request' }, { status: 400 });
+  return Response.json({ members: DIRECTORY.filter((m) => ('email' in m && m.email.includes(q)) || m.name.toLowerCase().includes(q)).slice(0, 20) });
 };
 
-test('people to share with are those the platform says can use Esign, someone who never opened it included', async () => {
+test('people to share with are those the platform finds for the person asking, someone who never opened Esign included', async () => {
   const h = await setup(directoryAnswer);
   try {
     const found = await (await h.req('/api/members?q=nina&limit=5', h.ana)).json() as { members: unknown[] };
-    assert.deepEqual(found.members, [{ id: 'user-new', name: 'Nina Newcomer', email: 'nina@example.test' }], 'who they are, not their roles');
+    assert.deepEqual(found.members, [{ id: 'user-new', name: 'Nina Newcomer', email: 'nina@example.test' }], 'who they are, not their roles; no API client');
     const call = h.calls.at(-1)!;
     assert.equal(call.url.pathname, '/__insulin/members');
-    assert.deepEqual([call.url.searchParams.get('q'), call.url.searchParams.get('limit')], ['nina', '5']);
+    assert.deepEqual([...call.url.searchParams], [['q', 'nina']]);
     assert.equal(call.headers.get('authorization'), 'Bearer app-token-for-esign');
-    assert.equal(call.headers.get('x-suger-organization-id'), 'tenant');
+    assert.equal(call.headers.get('x-suger-member-lookup'), LOOKUP, 'the header of the request Esign is serving');
+    assert.equal(call.headers.get('x-suger-organization-id'), null, 'the platform takes the organization from the header, never from Esign');
+    const capped = await (await h.req('/api/members?q=example&limit=2', h.ana)).json() as { members: unknown[] };
+    assert.equal(capped.members.length, 2, 'at most the limit asked for');
   } finally { await h.mf.dispose(); }
 });
 
-test('without an answer from the platform, the people Esign has seen', async () => {
+test('without an answer from the platform, or a request it can answer for, the people Esign has seen', async () => {
   const h = await setup(() => new Response('unavailable', { status: 503 }));
   try {
     await h.req('/api/me', h.ana);
     const found = await (await h.req('/api/members?q=ana', h.owner)).json() as { members: { email: string }[] };
     assert.deepEqual(found.members.map((m) => m.email), ['ana@example.test']);
   } finally { await h.mf.dispose(); }
+  const quiet = await setup(directoryAnswer);
+  try {
+    await quiet.req('/api/me', quiet.ana);
+    // An API client's request (and an AI agent's) carries no lookup header: the platform isn't asked.
+    const client = identity('tenant', { userId: 'sa-host', role: 'EDITOR', via: 'api' });
+    const found = await (await quiet.req('/api/members?q=nina', client)).json() as { members: { email: string }[] };
+    assert.deepEqual([found.members, quiet.calls.length], [[], 0], 'nobody by that name has used Esign');
+    const seen = (await (await quiet.req('/api/members', quiet.owner)).json() as { members: { email: string }[] }).members.map((m) => m.email);
+    assert.ok(seen.includes('ana@example.test'), 'without q, those seen');
+    assert.equal(quiet.calls.length, 0);
+  } finally { await quiet.mf.dispose(); }
 });
 
-test("an API client's people must be people who can use Esign", async () => {
+test('a search the platform finds too varied, or one of 49 characters and more, falls back on the people Esign has seen, never a 500', async () => {
+  const varied = 'αβγδεζηθικλμνξοπρστυφχψωабвгдежзийклмнопрстуфхцчшщъыьэюя';
+  const h = await setup((url, init) => (url.searchParams.get('q') ?? '') === varied ? Response.json({ error: 'search_too_varied' }, { status: 400 }) : directoryAnswer(url, init));
+  try {
+    await h.req('/api/me', h.ana);
+    const tooVaried = await h.req(`/api/members?q=${encodeURIComponent(varied)}`, h.ana);
+    assert.deepEqual([tooVaried.status, await tooVaried.json()], [200, { members: [] }], 'nobody Esign has seen holds it');
+    // An API client's search (no lookup header) of 49 characters and more: the people Esign has seen, by instr().
+    const client = identity('tenant', { userId: 'sa-host', role: 'EDITOR', via: 'api' });
+    const long = await h.req(`/api/members?q=${'x'.repeat(49)}`, client);
+    assert.deepEqual([long.status, await long.json()], [200, { members: [] }]);
+    const found = await h.req(`/api/members?q=${encodeURIComponent('ANA@EXAMPLE')}`, client);
+    assert.deepEqual((await found.json() as { members: { email: string }[] }).members.map((m) => m.email), ['ana@example.test'], 'still found by what it holds, in any case');
+    const literal = await h.req(`/api/members?q=${encodeURIComponent('a%a')}`, client);
+    assert.deepEqual((await literal.json() as { members: unknown[] }).members, [], 'as typed: % is no wildcard');
+  } finally { await h.mf.dispose(); }
+});
+
+test("an API client's people must be people who can use Esign, each address looked up", async () => {
   const h = await setup(directoryAnswer);
   try {
     assert.equal((await h.req('/api/client-settings/sa-1?name=Host', h.owner)).status, 200);
     const save = (people: string[]) => h.req('/api/client-settings/sa-1', h.owner, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ people }) });
     const refused = await save(['ana@example.test', 'stranger@example.test']);
     assert.deepEqual([refused.status, await refused.json()], [422, { error: 'not_members', emails: ['stranger@example.test'] }]);
-    const saved = await save(['NINA@example.test']);
+    h.calls.length = 0;
+    const saved = await save(['NINA@example.test', 'nina@example.test']);
     assert.equal(saved.status, 200, 'compared without regard to case; someone who never opened Esign is fine');
+    assert.deepEqual(h.calls.map((call) => call.url.searchParams.get('q')), ['NINA@example.test'], 'each address once');
+    h.calls.length = 0;
     assert.equal((await save([])).status, 200, 'nobody: the platform is not asked');
+    assert.equal(h.calls.length, 0);
+    // An address the lookup finds only inside a longer one is no match.
+    assert.equal((await save(['na@example.test'])).status, 422);
   } finally { await h.mf.dispose(); }
+  // A lookup the platform doesn't answer (too many at once, say) is no answer: the people Esign has seen, instead.
+  const busy = await setup((url, init) => url.searchParams.get('q') === 'nina@example.test' ? new Response('slow down', { status: 429 }) : directoryAnswer(url, init));
+  try {
+    await busy.req('/api/client-settings/sa-1?name=Host', busy.owner);
+    const unchecked = await busy.req('/api/client-settings/sa-1', busy.owner, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ people: ['ana@example.test', 'nina@example.test'] }) });
+    assert.deepEqual([unchecked.status, await unchecked.json()], [422, { error: 'not_members', emails: ['ana@example.test', 'nina@example.test'] }], 'neither has been seen');
+  } finally { await busy.mf.dispose(); }
 });
 
-test("an API client's people in an organization larger than one answer holds are looked up by email", async () => {
-  // 500 people come first in the platform's answer; Nina is found only when asked for.
-  const crowd = Array.from({ length: 500 }, (_, i) => ({ id: `user-${i}`, name: `Person ${i}`, email: `person${i}@example.test` }));
-  const h = await setup((url) => {
-    const q = url.searchParams.get('q');
-    return Response.json({ members: q ? DIRECTORY.filter((m) => m.email.includes(q.toLowerCase())) : crowd.slice(0, Number(url.searchParams.get('limit'))) });
+test("an API client's person is found by address however many others' addresses contain theirs", async () => {
+  // As the gateway answers (db/members.ts): an address that is the text itself first, then by name, at most 20.
+  const crowd = Array.from({ length: 20 }, (_, i) => ({ type: 'person', id: `user-crowd-${i}`, name: `Aaron Crowd ${String(i).padStart(2, '0')}`, email: `person${i}+eva@example.test` }));
+  const people = [...crowd, { type: 'person', id: 'user-eva', name: 'Zed Target', email: 'eva@example.test' }];
+  const h = await setup((url, init) => {
+    if (new Headers(init.headers).get('x-suger-member-lookup') !== LOOKUP) return Response.json({ error: 'invalid_member_lookup' }, { status: 403 });
+    const q = (url.searchParams.get('q') ?? '').toLowerCase();
+    const found = people.filter((m) => m.email.includes(q) || m.name.toLowerCase().includes(q));
+    found.sort((a, b) => Number(b.email === q) - Number(a.email === q) || a.name.localeCompare(b.name));
+    return Response.json({ members: found.slice(0, 20) });
   });
   try {
     await h.req('/api/client-settings/sa-1?name=Host', h.owner);
-    const save = (people: string[]) => h.req('/api/client-settings/sa-1', h.owner, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ people }) });
-    assert.equal((await save(['person7@example.test', 'nina@example.test'])).status, 200);
-    const refused = await save(['stranger@example.test']);
-    assert.deepEqual([refused.status, await refused.json()], [422, { error: 'not_members', emails: ['stranger@example.test'] }]);
+    const saved = await h.req('/api/client-settings/sa-1', h.owner, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ people: ['eva@example.test'] }) });
+    assert.equal(saved.status, 200, await saved.clone().text());
+    assert.deepEqual((await saved.json() as { people: { email: string }[] }).people.map((p) => p.email), ['eva@example.test']);
   } finally { await h.mf.dispose(); }
-  // A lookup the platform doesn't answer (too many at once, say) is no answer: the people Esign has seen, instead.
-  const busy = await setup((url) => url.searchParams.get('q') ? new Response('slow down', { status: 429 }) : Response.json({ members: crowd }));
-  try {
-    await busy.req('/api/client-settings/sa-1?name=Host', busy.owner);
-    const unchecked = await busy.req('/api/client-settings/sa-1', busy.owner, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ people: ['stranger@example.test'] }) });
-    assert.deepEqual([unchecked.status, await unchecked.json()], [422, { error: 'not_members', emails: ['stranger@example.test'] }]);
-  } finally { await busy.mf.dispose(); }
 });
 
 test("without an answer from the platform, an API client's people must be people Esign has seen", async () => {

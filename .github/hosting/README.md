@@ -10,7 +10,10 @@ is in [DESIGN.md](DESIGN.md).
 Cloudflare custom domains for the apex, `www` (redirected to the apex), `auth` (redirected to the apex, where sign-in
 moved), and every app hostname point to the `insulin-apps-gateway` Worker. The gateway owns accounts, sign-in,
 organization membership and roles in its D1 database, then calls the private `insulin-apps-<app>` Workers through
-service bindings, with the identity headers the Insulin console sends. Each app has its own D1 database. App Workers have neither a `workers.dev` address nor a public route. The
+service bindings, with the identity headers the Insulin console sends. Each app has its own D1 database. An app that
+owns an engine (Knowledge) also has a second private Worker, `insulin-apps-<app>-engine`, that only the app reaches,
+over its own service binding, with the R2 buckets the deploy creates for it and its container image in the account's
+registry (DESIGN.md §8.7). App and engine Workers have neither a `workers.dev` address nor a public route. The
 gateway deletes expired sessions, tokens and mail records after its writes and once a day on a cron trigger, and
 every five minutes, on a second cron trigger, it calls the scheduled path of each app that declares one (DESIGN.md
 §8.5). The deploy sets both triggers and the gateway's rate limits (`RL_AUTH`, `RL_APP`, `RL_PUBLIC`); none needs
@@ -19,7 +22,9 @@ setting up by hand.
 Each `.github/workflows/<app>.yml` file, named after its app, supplies its app name to the shared
 `.github/workflows/app.yml` pipeline. On a pull request or a push to `main` that touches that app, the pipeline
 installs it, checks its Insulin shape, typechecks, tests, verifies migration drift, builds for Cloudflare, and checks
-the build output. Cap Table also runs the local workerd smoke test. It never receives deployment settings and never
+the build output. For an app with an engine it also installs, builds and bundles the engine as a release does,
+typechecks and tests it, and runs its Wrangler dry run, Python tests and container test. Cap Table and Knowledge also
+run the local workerd smoke test, Knowledge with its stub engine. It never receives deployment settings and never
 deploys.
 
 Only releases are deployed. Once every workflow a push to `main` started has passed, `release.yml` tags it (below)
@@ -30,13 +35,27 @@ every app that passed, so anything an earlier release couldn't deploy goes out w
 keeps the version it runs, and while the gateway's latest check fails, nothing deploys. Each app is built from the
 release's commit in a job without secrets, and a separate `production` job treats the downloaded build as untrusted
 before applying that app's migrations and deploying only its private Worker.
-The archive is listed before extraction, may contain only regular files and directories under `<app>/.output`, and is
-extracted without its stored ownership or permissions. The deploy then walks the output without following links,
-rejects special files and hard links outside the output, and requires the Worker entry file and asset directory. A
-failed app deploy doesn't stop the others. Once every app has deployed, the gateway follows, so new hostnames and
-service bindings become live with them. Every Worker version is tagged with the release (`wrangler deploy --tag`).
-Deploys never overlap: Release runs, which deploy their releases, and deploys by hand (`deploy.yml`) wait in one
-queue, the `release` concurrency group, which keeps every waiting run.
+The archive is listed before extraction, may contain only regular files and directories under `<app>/.output` (and,
+for an app with an engine, the engine's `.output`), and is extracted without its stored ownership or permissions. The
+deploy then walks the output without following links, rejects special files and hard links outside the output, and
+requires the Worker entry file and asset directory. A failed app deploy doesn't stop the others. Once every app has
+deployed, the gateway follows, so new hostnames and service bindings become live with them. Every Worker version is
+tagged with the release (`wrangler deploy --tag`). Deploys never overlap: Release runs, which deploy their releases,
+and deploys by hand (`deploy.yml`) wait in one queue, the `release` concurrency group, which keeps every waiting run.
+
+An app with an engine has it built and bundled in the same build job and deployed by the same `production` job,
+before the app (DESIGN.md §10.1). That job creates the engine's R2 buckets when they are missing, and refuses an
+engine and an app that don't serve each other's engine API version, against what production runs. The engine's
+container image is tagged with a hash of its inputs. A release builds it only when that tag differs from the one at
+the last release that deployed the app, which the check finds by the deploy jobs' names, `Deploy <app> <version>`
+(don't rename them); a deploy by hand always builds it. The image goes to the `production` job as an artifact of the
+same run, never through a cache, and that job pushes it to the account's registry, with a credential of its own that
+lasts four hours, only when the registry lacks its tag, then deploys the engine by the image's digest. The build and
+deploy jobs of an app whose image is built allow two and three hours.
+
+Each app's catalog of limits (`insulin.limits`, DESIGN.md §8.8) is written to the gateway's database after its deploy,
+once the gateway's tables exist, and again by the gateway's step for every app its run deployed, so the operator
+console shows the limits of the version in production.
 
 To retry a failed deploy, run **Actions → Deploy → Run workflow** on `main` with the latest release, the apps (`all` or
 their names) and whether to deploy the gateway; it checks the release again. Re-running a deploy's failed jobs is refused,
@@ -84,7 +103,9 @@ tags" ruleset lets nobody else, org admins aside, create, move or delete a `v*` 
 ## Owner setup
 
 Workers Paid must be enabled for the Cloudflare account before the first deployment. The gateway runs with the
-`nodejs_compat` flag (for SAML's XML signature library); the deploy sets it.
+`nodejs_compat` flag (for SAML's XML signature library); the deploy sets it. An app with an engine (Knowledge) also
+uses R2 and Containers: enable R2 for the account (R2 Object Storage in the Cloudflare dashboard) before the first
+release that deploys one, since the deploy creates the engine's buckets through the API.
 
 1. Create a GitHub environment named `production` that only `main` can deploy to. Add these environment secrets:
 
@@ -92,8 +113,9 @@ Workers Paid must be enabled for the Cloudflare account before the first deploym
    - `GOOGLE_CLIENT_SECRET`
    - `TURNSTILE_SECRET_KEY`
    - `GATEWAY_SECRET_KEY`: 32 random bytes, base64 (`openssl rand -base64 32`). It seals what the gateway must read
-     back (authenticator-app secrets, stored integration credentials, OIDC client secrets) and derives each app's
-     `SUGER_APP_TOKEN`. Optional, but without it MFA, stored credentials and OIDC can't be set up. Keep a copy in the
+     back (authenticator-app secrets, stored integration credentials, OIDC client secrets), derives each app's
+     `SUGER_APP_TOKEN` and signs the member lookup header. Optional, but without it MFA, stored credentials and OIDC
+     can't be set up, and apps can't send mail or reports or read their limits and members. Keep a copy in the
      credential vault: replacing it makes everything sealed with the old key unreadable (people turn MFA on again and
      admins re-enter credentials), so don't rotate it casually. After replacing it, deploy the gateway and then every
      app, which gives each app its new `SUGER_APP_TOKEN`.
@@ -104,8 +126,9 @@ Workers Paid must be enabled for the Cloudflare account before the first deploym
    - `GOOGLE_CLIENT_ID`
    - `TURNSTILE_SITE_KEY`
    - `EMAIL_FROM`
-   - `SUPPORT_EMAIL`: the contact shown on the landing, privacy and terms pages (optional; without it those pages
-     point to the repository's issues)
+   - `SUPPORT_EMAIL`: the contact shown on the landing, privacy and terms pages, which app deploys also receive as
+     `SUGER_SUPPORT_EMAIL`, the support address an app's limit messages name (optional; without it those pages point
+     to the repository's issues, and limit messages name no address)
    - `ORG_REQUEST_EMAIL`: Insulin Apps support's address, which receives requests for more organizations from people
      whose email domain has all it may have (DESIGN.md §3.1), with Reply-To set to the requester. Optional; without it
      the page at the limit points to `SUPPORT_EMAIL` or the issues instead. Set it here only, never in the repository
@@ -120,6 +143,8 @@ Workers Paid must be enabled for the Cloudflare account before the first deploym
 
    - Account · Workers Scripts · Edit
    - Account · D1 · Edit
+   - Account · Workers R2 Storage · Edit (an engine's buckets)
+   - Account · Containers · Edit (an engine's containers, and the registry credential that pushes its image)
    - Account · Email Sending · Edit
    - Account · Account Settings · Read
    - Zone · Workers Routes · Edit
@@ -194,19 +219,22 @@ Workers Paid must be enabled for the Cloudflare account before the first deploym
      create organizations past an owner domain's limit. Keep these addresses in GitHub only, never in the repository.
 
    Without all of the first four variables the console isn't there (every `/super` path is a 404). For its Cloudflare
-   page, create a second, read-only account API token with **Account · Account Analytics · Read** and **Account ·
-   Workers Scripts · Read** only, and add it as the environment secret `SUPER_CLOUDFLARE_API_TOKEN`; the deploy gives the
-   gateway its own `CLOUDFLARE_ACCOUNT_ID` with it. Never give it a D1 permission: even D1 Read can query the apps'
-   databases, which the console must not reach. Signing in to the console also needs no change to Google's OAuth
-   client of step 3: the console never uses it.
+   page, create a second, read-only account API token with **Account · Account Analytics · Read**, **Account ·
+   Workers Scripts · Read** and **Account · Containers · Read** only (the last for the app engines' container
+   instances), and add it as the environment secret `SUPER_CLOUDFLARE_API_TOKEN`; the deploy gives the
+   gateway its own `CLOUDFLARE_ACCOUNT_ID` with it. Never give it a D1 or R2 permission: even D1 Read can query the
+   apps' databases, and Workers R2 Storage Read reads every file in an engine's buckets, which the console must not
+   reach. Signing in to the console also needs no change to Google's OAuth client of step 3: the console never uses it.
 
 Once setup is complete, run **Actions → Deploy → Run workflow** on `main` with the latest release, `all` apps and
 the gateway (the next green merge to `main` releases and deploys too). Step summaries link the affected public
 addresses. On a new Cloudflare account, leave `GATEWAY_SECRET_KEY` out of the environment for that first deploy, then
 add it and run Deploy the same way again. With the key, each app is deployed with a service binding to the gateway
-Worker (`SUGER_GATEWAY`, for the mail relay and the integration proxy), and Cloudflare refuses a binding to a Worker
-that doesn't exist yet; the gateway, deployed after the apps, binds every app. Without the key, the apps go first
-with no binding, and the gateway after them; the second deploy then binds each app to it.
+Worker (`SUGER_GATEWAY`, for the gateway's endpoints: mail, usage reports, limits, members and the integration
+proxy), and Cloudflare refuses a binding to a Worker that doesn't exist yet; the gateway, deployed after the apps,
+binds every app. Without the key, the apps go first with no binding, and the gateway after them; the second deploy
+then binds each app to it. An app's binding to its own engine is no such problem: the engine deploys first, in the
+app's job.
 
 ## Operations
 
@@ -265,10 +293,12 @@ Add a top-level directory with a `package.json` and `src/api.ts`. Its directory 
 rule and must not be reserved. Every organization shares one deployment of the app, so the app must keep each
 organization's data apart: scope everything by the console organization (`getCurrentUser().organizationId`), as Cap
 Table does. Set `displayName` and `description` in `package.json`, include D1 migrations under
-`src/app/db/migrations`, and make sure the normal checks pass. An app that needs public paths, mail, runtime secrets or
-scheduled work declares them under `insulin` in `package.json` (DESIGN.md §8); add its secrets to the `production`
-environment before its first deploy. A new `insulin.scheduled` path is ticked once the gateway has been deployed with
-it (a release deploys the gateway after its apps). Copy `.github/workflows/captable.yml` to
+`src/app/db/migrations`, and make sure the normal checks pass. An app that needs public paths, mail, runtime secrets,
+scheduled work, limits or an engine declares them under `insulin` in `package.json` (DESIGN.md §8); add its secrets to
+the `production` environment before its first deploy. A new `insulin.scheduled` path is ticked once the gateway has
+been deployed with it (a release deploys the gateway after its apps). An app with an engine needs R2 enabled and the
+deploy token's R2 and Containers permissions (owner setup) before its first release, which creates its buckets,
+builds and pushes its image and deploys the engine before the app. Copy `.github/workflows/captable.yml` to
 `.github/workflows/<app>.yml`, then change the workflow name to the app's directory name, the app path entries, and
 `with.app`, and add the workflow name to the `workflows` list in `.github/workflows/release.yml`. Repository-wide CI
 enforces that every discovered app has this workflow, named after it, that no app workflow names a missing app, that
@@ -282,13 +312,16 @@ all of them.
 
 To go back to an earlier release, run **Actions → Deploy → Run workflow** on `main` with its version, the apps to
 deploy and `rollback` set, and untick **Deploy the gateway too** unless the gateway should go back as well (it's on by
-default). It refuses when anything it would deploy has a migration since. Otherwise, Cloudflare
-keeps Worker versions, each tagged with its release. With the same account credentials used by the workflow, use the
-gateway package's pinned CLI to inspect deployments and run `wrangler rollback --name insulin-apps-<app>` for only the
-affected app. Roll back `insulin-apps-gateway` separately only when the gateway itself changed. When both need
-rollback, roll back the app Worker before the gateway. D1 migrations are forward-only and are not rolled back; confirm that the older Worker
-remains compatible with the migrated schema, and with the data the newer one wrote: Cap Table can't go back before its
-engine 1.1.0 once any company has recorded a repurchase (`captable/AGENTS.md`, "The ledger"), so roll it forward.
+default). It refuses when anything it would deploy has a migration since (an engine's Durable Object migrations
+included), and an app and engine that wouldn't serve each other's engine API version (DESIGN.md §10.1). Otherwise,
+Cloudflare keeps Worker versions, each tagged with its release. With the same account credentials used by the
+workflow, use the gateway package's pinned CLI to inspect deployments and run `wrangler rollback --name
+insulin-apps-<app>` for only the affected app. A `wrangler rollback` by hand checks none of that, so roll back an app
+with an engine, or the engine itself, only with the Deploy workflow. Roll back `insulin-apps-gateway` separately only
+when the gateway itself changed. When both need rollback, roll back the app Worker before the gateway. D1 migrations
+are forward-only and are not rolled back; confirm that the older Worker remains compatible with the migrated schema,
+and with the data the newer one wrote: Cap Table can't go back before its ledger engine 1.1.0 once any company has
+recorded a repurchase (`captable/AGENTS.md`, "The ledger"), so roll it forward.
 
 After a rollback, revert or fix the change on `main` before anything else merges: every release deploys every app
 whose latest check passed, so the next one, whatever it changes, would put the broken version back.
@@ -316,6 +349,14 @@ whose latest check passed, so the next one, whatever it changes, would put the b
   configure `SITE_ENV` on the production Worker.
 - **A migration fails:** stop. Fix it with a new forward migration; never edit or delete a migration that may already
   have been applied.
+- **An app deploy says the registry has no image for its engine** (an earlier push failed, and this release didn't
+  build one): run **Deploy** by hand with the same release and app; a deploy by hand always builds the image and
+  pushes it.
+- **An app or engine deploy refuses the engine API version:** the engine in production doesn't serve the version the
+  app calls, or the new engine doesn't serve the one the app in production calls. Ship the change in steps: first an
+  engine that serves both versions, then the app, then an engine that drops the old one.
+- **Creating an engine's R2 bucket, its registry credential or its containers fails:** check that R2 is enabled for the
+  account and that the deploy token has Workers R2 Storage and Containers edit permissions.
 - **Email fails:** confirm Email Service onboarding, the approved sender, and that `EMAIL_FROM` contains that address.
 - **Google redirects fail:** compare the registered redirect URI character-for-character with
   `https://<SITE_DOMAIN>/auth/google/callback` (the apex, not `auth.`).

@@ -1,5 +1,6 @@
 // What the member pages read and send: the app's own /api routes, on this origin, as the signed-in member (the
 // platform's identity; no key of our own).
+import { describePdfRefusal, type UploadChanges } from '../lib/upload-changes.ts'
 
 export type Permission = 'esign.manage' | 'esign.view'
 export type Me = { organizationId: string; user?: { id: string; email: string | null; name: string | null }; role?: string; orgRole?: string | null; permissions: Permission[]; signingEnabled?: boolean }
@@ -22,14 +23,17 @@ export type EnvelopeSummary = Owned & {
   id: string; templateId: string | null; status: string; createdAt: number; documentName?: string; metadata?: Metadata
   signers?: { role: string; name: string; email: string; status: string }[]; progress?: { signed: number; total: number }
   current?: { taskId: string; name: string; email: string; delivery: 'host' | 'email' }; lastChangeAt?: number
-  /** A draft to be sent later: when (ISO 8601), or why it wasn't sent then (server/esign/scheduled-send.ts). */
-  sendAt?: string; sendError?: string
+  /**
+   * A draft to be sent later: when (ISO 8601), or why it wasn't sent then, and why it still waits past its time
+   * (server/esign/scheduled-send.ts).
+   */
+  sendAt?: string; sendError?: string; sendWaiting?: string
 }
 export type Share = { email: string; name?: string; role: Exclude<DocumentRole, 'owner'>; sharedAt: number }
 /** `organization`: shared with everyone in the organization, as editor or viewer. */
 export type Sharing = { id: string; myRole: DocumentRole; owner: Owner; organization?: { role: 'editor' | 'viewer'; sharedAt: number }; client?: { people: { email: string; name?: string }[] }; shares: Share[] }
 export type Task = { id: string; role: string; recipientName: string; recipientEmail: string; routingOrder: number; status: string; expiresAt?: string; openedAt?: string; delivery?: 'host' | 'email'; invitedAt?: string; message?: { subject?: string; body?: string } }
-export type Envelope = Owned & { id: string; templateId: string | null; status: string; draft?: Record<string, unknown>; sendAt?: string; sendError?: string; upload?: { document: boolean; roles: string[]; fields: { role: string; type: string; required?: boolean }[] }; createdAt?: number; documentName?: string; metadata?: Metadata; message?: { subject?: string; body?: string }; tasks: Task[] }
+export type Envelope = Owned & { id: string; templateId: string | null; status: string; draft?: Record<string, unknown>; sendAt?: string; sendError?: string; sendWaiting?: string; upload?: { document: boolean; roles: string[]; fields: { role: string; type: string; required?: boolean }[]; changes?: UploadChanges | null }; createdAt?: number; documentName?: string; metadata?: Metadata; message?: { subject?: string; body?: string }; tasks: Task[] }
 /** A contact (server/esign/contacts.ts): someone the organization's envelopes named, or a member added. Never evidence. */
 export type Contact = { id: string; email: string; name: string; title?: string; company?: string; envelopeCount: number; lastUsedAt?: number; createdAt: number; updatedAt: number }
 export type ContactEnvelope = { id: string; status: string; createdAt: number; documentName?: string; role: string; taskStatus: string }
@@ -38,10 +42,15 @@ export type AuditEvent = { type: string; at: string; recipient?: { role: string;
 export class RequestError extends Error {
   readonly status: number
   readonly code: string
-  constructor(status: number, code: string) {
+  /** Why, when the API says more than its code: a refused PDF's reason, and the page it is on. */
+  readonly reason: string
+  readonly page?: number
+  constructor(status: number, code: string, reason = '', page?: number) {
     super(code ? `${status} ${code}` : `HTTP ${status}`)
     this.status = status
     this.code = code
+    this.reason = reason
+    if (page !== undefined) this.page = page
   }
 }
 
@@ -49,9 +58,10 @@ export class RequestError extends Error {
 export async function api(path: string, init: RequestInit = {}): Promise<Response> {
   const response = await fetch(path, { ...init, cache: 'no-store', credentials: 'same-origin', headers: { ...(init.headers as Record<string, string> | undefined) } })
   if (!response.ok) {
-    let code = ''
-    try { code = ((await response.json()) as { error?: string }).error ?? '' } catch { /* not JSON */ }
-    throw new RequestError(response.status, code)
+    let body: { error?: unknown; reason?: unknown; page?: unknown } = {}
+    try { body = (await response.json()) as typeof body } catch { /* not JSON */ }
+    const text = (value: unknown) => (typeof value === 'string' ? value : '')
+    throw new RequestError(response.status, text(body.error), text(body.reason), typeof body.page === 'number' ? body.page : undefined)
   }
   return response
 }
@@ -64,7 +74,6 @@ export async function apiJson<T>(path: string, init: RequestInit = {}): Promise<
 export function describeError(error: unknown): string {
   if (error instanceof RequestError) {
     if (error.status === 401) return 'Sign in to use Esign.'
-    if (error.status === 403 && error.code === 'origin_not_allowed') return 'Esign can\'t open the field editor on this page. Ask whoever runs Esign to check its ESIGN_FRAME_ANCESTORS setting.'
     if (error.status === 403) return 'Your role in Esign doesn\'t allow that.'
     if (error.status === 404 && error.code === 'signing_disabled') return 'Signing isn\'t set up on this deployment yet.'
     if (error.status === 404) return 'That isn\'t here any more, or belongs to another organization.'
@@ -73,6 +82,8 @@ export function describeError(error: unknown): string {
     if (error.status === 422 && error.code === 'prefill_too_long') return 'A pre-filled value is too long for its box on the document: shorten it.'
     if (error.status === 422 && error.code === 'prefill_missing') return 'Fill in every required pre-filled field.'
     if (error.status === 422 && error.code === 'invalid_prefill') return 'Pre-filled values can hold plain English letters, digits and punctuation, at most 128 characters.'
+    const refused = error.status === 422 ? describePdfRefusal(error.reason, error.page) : null
+    if (refused) return refused
     if (error.status === 409) return 'That changed meanwhile. Reload and try again.'
     if (error.status === 422 || error.status === 400) return `The request wasn't accepted (${error.code || 'invalid'}). Check the values and try again.`
     return `Request failed (${error.message}).`

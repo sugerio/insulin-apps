@@ -38,6 +38,7 @@ Run from `esign/` unless noted.
 | `src/app/server/esign/app.ts` | Management routes, the access middleware, `/api/me`, `/api/catalog`, `/api/process-due`, and the platform's tick `/api/scheduled` |
 | `src/app/server/esign/identity.ts` | The platform identity, the two permissions and `can()` |
 | `src/app/server/esign/ownership.ts`, `tags.ts`, `members.ts` | Who sees and changes each template and envelope (owners, shares, the one check `documentRole`/`requireRole`/`visibleIds`), each person's own tags, and the members and API clients seen (owners' names, taking over, who sees each API client's documents: `/api/client-settings`, set on `member/ClientSettingsPage.ts`) |
+| `src/app/server/esign/pdf-upload.ts`, `src/app/lib/upload-changes.ts` | Every uploaded PDF, prepared for placed fields (forms and annotations flattened, rotated or cropped pages redrawn upright) or refused with a reason and a log line; the words for both, shared by the pages and the certificate |
 | `src/app/server/esign/prefill.ts` | Pre-filled fields: a template's fields nobody signs (`fields.ts`, type `Prefill`), whose values are drawn on an envelope's initial document when it is sent |
 | `src/app/server/esign/signing-routes.ts`, `editor-routes.ts` | The public signing and editor APIs (`/api/public/*`); the page session travels in `x-esign-session` (`session-header.ts`) |
 | `src/app/server/esign/blob-store.ts` | Objects (PDFs, images, seals) as chunked rows in D1 |
@@ -85,9 +86,12 @@ secret in source.
 - **Public paths** (`insulin.publicPaths`): `/sign`, `/editor/`, `/copy`, `/assets/`, `/api/public/`. They carry a
   one-time code or token, never an identity; a request the gateway marks public never reaches a management route.
   At most 10, and never `/`, `/api`, `/settings*`, `/mcp*`, `/.well-known*` or `/__insulin*`.
-- **Embedding:** the pages report every origin that frames them (`ancestorOrigins`) at their code exchange, and the
-  exchange refuses any that is neither the app nor in `ESIGN_FRAME_ANCESTORS` (the session's parent for the editor).
-  Behind the gateway, the pages' CSP `frame-ancestors` says the same; member pages can't be framed.
+- **Embedding:** there is no list of origins allowed to embed Esign. The host that asks for a page's code names the
+  origin that will frame it (`allowedParentOrigin`, on recipient-view and on the editing session; https, or http on a
+  loopback host outside prod), and the code is bound to it. The pages report every origin that frames them
+  (`ancestorOrigins`) at their code exchange, and the exchange refuses any that is neither the app nor the code's
+  parent. Behind the gateway, the pages' CSP `frame-ancestors` says the same (the signing link carries its parent as
+  `?host=`); member pages can't be framed. Never add a deployment-wide list of embedding origins back.
 - **The tick** (`insulin.scheduled`: `/api/scheduled`): the gateway POSTs there every five minutes with only
   `x-suger-app-id` and `x-suger-access-via: schedule`. The route refuses (403) anything else, a member's or service
   account's identity included, and runs every organization's due work; `readCaller` treats a request marked
@@ -120,8 +124,7 @@ secret in source.
 
 ## Secrets
 
-`insulin.secrets` declares them (`ESIGN_` prefix, at most 30): the code pepper and the origins that may embed the
-pages. What a seal is verified against (seal keys, the timestamp authority) is in the code, never a secret. The HMAC
+`insulin.secrets` declares them (`ESIGN_` prefix, at most 30): the code pepper. What a seal is verified against (seal keys, the timestamp authority) is in the code, never a secret. The HMAC
 test seal exists only in the local preview.
 
 The managed seal's private key is not among them and never in GitHub: it is the Worker's `ESIGN_SEAL_KEY` binding,

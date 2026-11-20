@@ -1,0 +1,34 @@
+// The Knowledge engine Worker (.github/hosting/DESIGN.md §8.7). The deploy writes the deployed config itself: it
+// names the R2 buckets (insulin-apps-knowledge-engine-files, insulin-apps-knowledge-engine-backups), replaces the
+// image's Dockerfile with the pushed image pinned by digest, and keeps both public switches off. Nothing here
+// names an account, a bucket or an image in a registry.
+{
+  "name": "insulin-apps-knowledge-engine",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-11-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": false,
+  "preview_urls": false,
+  "observability": { "enabled": true },
+  "durable_objects": {
+    "bindings": [
+      { "name": "COLLECTIONS", "class_name": "CollectionEngine" },
+      { "name": "CAPACITY", "class_name": "Capacity" },
+      { "name": "OUTBOX", "class_name": "Outbox" },
+      { "name": "REGISTRY", "class_name": "Registry" }
+    ]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["CollectionEngine", "Capacity", "Outbox", "Registry"] }],
+  // One container per collection, managed by its Durable Object (needed for ctx.container.snapshotContainer). The
+  // instance type is chosen when the Durable Object starts it: standard-4 for learning, and for questions until
+  // Phase 0 shows a snapshot taken on standard-4 starts on standard-1 (src/settings.ts, ENGINE_QUESTIONS_INSTANCE).
+  "containers": [
+    {
+      "class_name": "CollectionEngine",
+      "scheduling_policy": "durable_object",
+      "images": { "base": { "dockerfile": "./container/Dockerfile" } }
+    }
+  ],
+  "r2_buckets": [{ "binding": "FILES" }, { "binding": "BACKUPS" }],
+  "ai": { "binding": "AI" }
+}

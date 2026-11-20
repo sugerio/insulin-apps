@@ -10,11 +10,14 @@ const ID = '55555555-5555-4555-8555-555555555555', SESSION = 'c'.repeat(64);
 const OWNER = { id: 'u1', kind: 'person', name: 'Sam Example', email: 'sam@example.com' };
 const pdf = () => new File(['%PDF-1.7 synthetic'], 'Reseller agreement.pdf', { type: 'application/pdf' });
 
-test('signers need a role of letters, digits, - and _, once each, a name and an email', () => {
+test('signers need a role of English letters, digits, hyphens and underscores, once each, a name and an email', () => {
   const ok = { role: 'partner', name: 'Pat', email: 'pat@partner.example', title: '', company: '' };
   assert.equal(checkSigners([ok, { ...ok, role: 'seller', email: 'sam@seller.example' }]), '');
   assert.equal(checkSigners([]), 'Add a signer.');
-  assert.match(checkSigners([{ ...ok, role: 'the partner' }]), /Signer 1: give a role/);
+  assert.equal(checkSigners([{ ...ok, role: 'co-signer_2' }]), '');
+  assert.match(checkSigners([{ ...ok, role: 'the partner' }]), /Signer 1: give a role of English letters, digits, hyphens \(-\) and underscores \(_\), with no spaces/);
+  // A dash that only looks like a hyphen (en dash, full-width hyphen) is not one.
+  for (const role of ['co\u2013signer', 'co\uFF0Dsigner']) assert.match(checkSigners([{ ...ok, role }]), /Signer 1: give a role/);
   assert.match(checkSigners([{ ...ok, name: ' ' }]), /Signer 1: enter their name/);
   assert.match(checkSigners([{ ...ok, email: 'pat@' }]), /Signer 1: enter their email/);
   assert.equal(checkSigners([ok, { ...ok, role: 'Partner' }]), 'Give each signer a different role.');
@@ -38,6 +41,7 @@ test('upload and send: the document and signers, the fields in the editor, the r
   const reply = (requestId: string) => app.dispatch({ origin: ORIGIN, source: app.frameWindow, data: { type: 'esign.editor.saved', requestId, templateId: ID } });
   try {
     assert.equal(app.byLabel('Steps').children.length, 3);
+    assert.match(app.text(), /English letters, digits, hyphens \(-\) and underscores \(_\), with no spaces, such as co-signer\./, 'the role hint names the hyphen');
     // Step 1: a PDF and checked signers first.
     await app.click(app.button('Next: place fields'), 'Next');
     assert.match(app.text(), /Choose the PDF to send/);
@@ -78,11 +82,49 @@ test('upload and send: the document and signers, the fields in the editor, the r
     const review = visibleText(app.byLabel('Review').children);
     assert.match(review, /1\. partner — Pat Partner \(pat@partner\.example\): 2 fields/);
     assert.match(review, /2\. seller — Sam Seller \(sam@seller\.example\): 1 field/);
+    // A long name or address with no space wraps inside the review on a phone instead of widening the page.
+    assert.match(String(app.byLabel('Review').props.className), /\[&>dd\]:min-w-0/);
+    assert.match(String(app.byLabel('Review').props.className), /\[&>dd\]:wrap-anywhere/);
     await app.click(app.button('Send for signature'), 'Send');
     const sent = JSON.parse(String(posts(`/api/envelopes/${ID}`).at(-1)!.body));
     assert.equal(sent.draft, undefined);
     assert.equal(Object.hasOwn(sent, 'templateId'), false);
     assert.equal(app.location.pathname, `/envelopes/${ID}`, app.text().slice(0, 400));
+  } finally { await app.unmount(); }
+});
+
+test('a signer\'s contact suggestions open only while the field has the focus: an answer after the focus moved on, or after Escape, leaves them closed', async () => {
+  // The contacts answer when the test says, as a slow network would.
+  const waiting: ((response: Response) => void)[] = [];
+  const CONTACT = { id: 'c1', name: 'Signer One', email: 'signer1@partner.example', title: '', company: '' };
+  const app = await renderMember('/envelopes/send', (c) => {
+    if (c.path === '/api/me') return json(EDITOR);
+    if (c.path.startsWith('/api/contacts?')) return new Promise<Response>((resolve) => waiting.push(resolve)) as unknown as Response;
+    if (c.path.startsWith('/api/tags?')) return json({ tags: [] });
+  });
+  const answer = async () => { for (const resolve of waiting.splice(0)) resolve(json({ contacts: [CONTACT] })); await app.settle(); };
+  const name = () => app.byId('send-0-name');
+  const shown = () => [name().props['aria-expanded'], Boolean(app.byLabel('Contacts matching name'))];
+  try {
+    // Answered while the field still has the focus: the suggestions open.
+    await app.type(name(), 'Si'); await answer();
+    assert.deepEqual(shown(), [true, true], 'open while typing');
+    // Typed on, then the focus moves to Email before the answer comes: the list stays closed (it would cover the form).
+    await app.type(name(), 'Sig');
+    await app.act(async () => { name().props.onBlur(); });
+    assert.deepEqual(shown(), [false, false], 'closed on leaving the field');
+    await answer();
+    assert.deepEqual(shown(), [false, false], 'and an answer after the focus moved on leaves it closed');
+    // Escape before the answer comes: closed too, and Escape is left to the page (nothing open to close).
+    await app.type(name(), 'Sign');
+    let prevented = false;
+    await app.act(async () => { name().props.onKeyDown({ key: 'Escape', preventDefault() { prevented = true; } }); });
+    await answer();
+    assert.deepEqual(shown(), [false, false], 'an answer after Escape leaves it closed');
+    assert.equal(prevented, false);
+    // Typing again asks again, and opens them.
+    await app.type(name(), 'Signe'); await answer();
+    assert.deepEqual(shown(), [true, true], 'open again on typing');
   } finally { await app.unmount(); }
 });
 
@@ -178,5 +220,25 @@ test('Upload and send: "Also save as a template" saves one once sent, and the en
     await app.click(app.button('Send for signature'), 'Send');
     assert.deepEqual(JSON.parse(String(app.calls.find((c) => c.path === '/api/templates')!.body)), { fromEnvelope: ID, name: 'Reseller agreement' });
     assert.equal(`${app.location.pathname}${app.location.search}`, `/envelopes/${ID}?savedAsTemplate=77777777-7777-4777-8777-777777777777`);
+  } finally { await app.unmount(); }
+});
+
+test('a PDF Esign prepared says what changed, where it is chosen; a PDF it can\'t prepare says why and what to do', async () => {
+  const draft = { recipients: [{ role: 'partner', name: 'Pat Partner', email: 'pat@partner.example', delivery: 'email' }], documentName: 'Reseller agreement' };
+  const app = await renderMember(`/envelopes/send?draft=${ID}`, (c) => {
+    if (c.path === '/api/me') return json(EDITOR);
+    if (c.path.startsWith('/api/contacts')) return json({ contacts: [] });
+    if (c.path.startsWith('/api/tags?')) return json({ tags: [] });
+    if (c.path === `/api/envelopes/${ID}/document`) return json({ error: 'unsupported_pdf', reason: 'pdf_annotation_without_appearance', page: 3 }, 422);
+    if (c.path === `/api/envelopes/${ID}` && c.method === 'POST') return json({ id: ID, status: 'DRAFT' });
+    if (c.path === `/api/envelopes/${ID}`) return json({ id: ID, templateId: null, status: 'DRAFT', tasks: [], draft, upload: { document: true, changes: { formFields: 2, annotations: 0, links: 1, pages: 1 }, roles: ['partner'], fields: [] }, owner: OWNER, myRole: 'owner', tags: [] });
+  });
+  try {
+    assert.match(app.text(), /Esign prepared this PDF for signing: 2 form fields flattened into the page: the values stay, they can't be edited; 1 link removed: the text stays, it no longer opens anything; 1 page redrawn upright, at the size shown \(it was rotated or cropped\)\. Signers see and sign it as it is now/);
+    // Another PDF chosen: the notice was about the one before.
+    await app.act(async () => { app.byId('send-pdf').props.onChange({ target: { files: [pdf()] } }); });
+    assert.doesNotMatch(app.text(), /Esign prepared this PDF/);
+    await app.click(app.button('Next: place fields'), 'Next');
+    assert.match(app.text(), /A comment or mark on page 3 doesn't say how it looks, so Esign can't flatten it as you see it\. Remove it, or open it, print it to PDF \(Save as PDF\), and upload the new file\./);
   } finally { await app.unmount(); }
 });

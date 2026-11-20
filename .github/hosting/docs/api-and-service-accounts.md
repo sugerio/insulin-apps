@@ -226,8 +226,9 @@ service account:
 | `x-suger-access-via` | `api` |
 | `User-Agent` | `Insulin Apps API: <the OAuth client's name>` |
 
-The caller's own `Cookie`, `Authorization`, `Origin`, `Referer`, `User-Agent` and `x-suger-*` headers are removed
-first, so a caller can't pose as anyone else.
+An OAuth client has no organization role, so the app gets no `x-suger-org-role` for it, and no
+`x-suger-member-lookup` either (that header is for a person's browser). The caller's own `Cookie`, `Authorization`,
+`Origin`, `Referer`, `User-Agent` and `x-suger-*` headers are removed first, so a caller can't pose as anyone else.
 
 Apps refuse changes to their own people, roles, billing or integrations unless `x-suger-access-via` is `browser`, so an
 OAuth client can't make those changes, whatever its role.

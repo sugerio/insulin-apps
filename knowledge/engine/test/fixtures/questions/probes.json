@@ -1,0 +1,216 @@
+{
+  "about": "One probe per document of the PoC's corpus (search words, the document and a fact it holds), kept from the PoC's test 3 and 4 so its tests can run on this corpus.",
+  "topK": 5,
+  "probes": [
+    {
+      "id": "p01",
+      "batch": "batch-001",
+      "query": "Hawser billing gateway retries and rate limit",
+      "expectDoc": "01-hawser-billing-gateway",
+      "expectFact": "1,200 requests per minute"
+    },
+    {
+      "id": "p02",
+      "batch": "batch-001",
+      "query": "Kestrel deploy pipeline freeze on Fridays",
+      "expectDoc": "02-kestrel-deploy-pipeline",
+      "expectFact": "15:00 UTC"
+    },
+    {
+      "id": "p03",
+      "batch": "batch-001",
+      "query": "on-call rotation handover and compensatory day off",
+      "expectDoc": "03-oncall-rotation-policy",
+      "expectFact": "Tuesday at 10:00"
+    },
+    {
+      "id": "p04",
+      "batch": "batch-001",
+      "query": "Tallyhoo expense submission deadline",
+      "expectDoc": "04-expense-reimbursement",
+      "expectFact": "45 days"
+    },
+    {
+      "id": "p05",
+      "batch": "batch-001",
+      "query": "database backups encryption and region",
+      "expectDoc": "05-data-retention-policy",
+      "expectFact": "eu-north"
+    },
+    {
+      "id": "p06",
+      "batch": "batch-001",
+      "query": "blameless postmortem deadline for SEV2 incidents",
+      "expectDoc": "06-incident-severity-levels",
+      "expectFact": "5 business days"
+    },
+    {
+      "id": "p07",
+      "batch": "batch-001",
+      "query": "Marlin search shards and reranking",
+      "expectDoc": "07-marlin-search-service",
+      "expectFact": "12 shards"
+    },
+    {
+      "id": "p08",
+      "batch": "batch-001",
+      "query": "laptop screen lock and Tollgate key requirement",
+      "expectDoc": "08-laptop-security-baseline",
+      "expectFact": "Tollgate 5C"
+    },
+    {
+      "id": "p09",
+      "batch": "batch-001",
+      "query": "vendor SOC 2 Type II report requirement",
+      "expectDoc": "09-vendor-onboarding",
+      "expectFact": "Driftfin"
+    },
+    {
+      "id": "p10",
+      "batch": "batch-001",
+      "query": "Sparrow feature flag naming pattern and kill switches",
+      "expectDoc": "10-sparrow-feature-flags",
+      "expectFact": "30 seconds"
+    },
+    {
+      "id": "p11",
+      "batch": "batch-001",
+      "query": "Lisbon office badge pickup and lost badge fee",
+      "expectDoc": "11-office-access-badges",
+      "expectFact": "25 euros"
+    },
+    {
+      "id": "p12",
+      "batch": "batch-001",
+      "query": "API version deprecation and Sunset header",
+      "expectDoc": "12-api-versioning-guidelines",
+      "expectFact": "180 days"
+    },
+    {
+      "id": "p13",
+      "batch": "batch-001",
+      "query": "Quarry warehouse nightly ETL and salted hashing",
+      "expectDoc": "13-quarry-data-warehouse",
+      "expectFact": "04:00 UTC"
+    },
+    {
+      "id": "p14",
+      "batch": "batch-001",
+      "query": "code review approvals for tier-0 services",
+      "expectDoc": "14-code-review-standards",
+      "expectFact": "400 changed lines"
+    },
+    {
+      "id": "p15",
+      "batch": "batch-001",
+      "query": "parental leave duration and blocks",
+      "expectDoc": "15-parental-leave-policy",
+      "expectFact": "20 weeks"
+    },
+    {
+      "id": "p16",
+      "batch": "batch-001",
+      "query": "Heron mobile release train cadence",
+      "expectDoc": "16-heron-mobile-release",
+      "expectFact": "every second Wednesday"
+    },
+    {
+      "id": "p17",
+      "batch": "batch-001",
+      "query": "Strongroom vault break-glass access",
+      "expectDoc": "17-secrets-management",
+      "expectFact": "two approvers"
+    },
+    {
+      "id": "p18",
+      "batch": "batch-001",
+      "query": "Gold Silver Bronze support response targets",
+      "expectDoc": "18-customer-support-tiers",
+      "expectFact": "Bridge queue"
+    },
+    {
+      "id": "p19",
+      "batch": "batch-001",
+      "query": "Osprey tracing sampling rate and metrics retention",
+      "expectDoc": "19-osprey-observability",
+      "expectFact": "8 percent"
+    },
+    {
+      "id": "p20",
+      "batch": "batch-001",
+      "query": "Roamwell travel portal hotel cap",
+      "expectDoc": "20-travel-booking-policy",
+      "expectFact": "240 US dollars"
+    },
+    {
+      "id": "p21",
+      "batch": "batch-002",
+      "query": "Pelican queue visibility timeout and dead-letter queue",
+      "expectDoc": "21-pelican-queue-service",
+      "expectFact": "45 seconds"
+    },
+    {
+      "id": "p22",
+      "batch": "batch-002",
+      "query": "annual learning budget amount",
+      "expectDoc": "22-learning-budget",
+      "expectFact": "1,800 US dollars"
+    },
+    {
+      "id": "p23",
+      "batch": "batch-002",
+      "query": "Fernhollow DNS TTL before a migration",
+      "expectDoc": "23-dns-change-process",
+      "expectFact": "300 seconds"
+    },
+    {
+      "id": "p24",
+      "batch": "batch-002",
+      "query": "WCAG contrast ratio and Glintline scanner",
+      "expectDoc": "24-accessibility-standards",
+      "expectFact": "4.5:1"
+    },
+    {
+      "id": "p25",
+      "batch": "batch-002",
+      "query": "Gannet cache eviction policy and default TTL",
+      "expectDoc": "25-gannet-cache-layer",
+      "expectFact": "allkeys-lfu"
+    },
+    {
+      "id": "p26",
+      "batch": "batch-003",
+      "query": "Tern access token expiry and signing key rotation",
+      "expectDoc": "26-tern-auth-service",
+      "expectFact": "15 minutes"
+    },
+    {
+      "id": "p27",
+      "batch": "batch-003",
+      "query": "monthly wellness stipend",
+      "expectDoc": "27-wellness-stipend",
+      "expectFact": "75 US dollars"
+    },
+    {
+      "id": "p28",
+      "batch": "batch-003",
+      "query": "Tidewright migration lock timeout",
+      "expectDoc": "28-database-migration-runbook",
+      "expectFact": "3 seconds"
+    },
+    {
+      "id": "p29",
+      "batch": "batch-003",
+      "query": "Cormorant CDN purge API limit",
+      "expectDoc": "29-cormorant-cdn",
+      "expectFact": "500 URLs"
+    },
+    {
+      "id": "p30",
+      "batch": "batch-003",
+      "query": "hiring committee meeting day and interview debrief",
+      "expectDoc": "30-hiring-interview-loop",
+      "expectFact": "48 hours"
+    }
+  ]
+}

@@ -161,7 +161,7 @@ Skip with `--plans-only`.
    **Esign** needs the stack over https (its embedded editor accepts only its own https origin) and its local
    settings to send codes. Write `$D/stack.mjs`, which starts the stack as `.github/hosting/docs/screenshots.mjs`'s
    `main()` does: `https: true`; Esign's `appVars` with a run-own `ESIGN_OTP_KEY`, a placeholder
-   `ESIGN_KMS_KEY_ARN`, `ESIGN_FRAME_ANCESTORS` set to its own origin, `SUGER_APP_TOKEN` from `appToken` in
+   `ESIGN_KMS_KEY_ARN`, `SUGER_APP_TOKEN` from `appToken` in
    `.github/scripts/deploy-apps.mjs`, and `SUGER_MAIL_URL` at a relay proxy like its `startRelayProxy`. Run it with
    `run_in_background`. Note each started task in `$D/started.md`.
 4. **Wait for it.** Poll `http://insulinapps.localhost:8797/` (with `curl -k https://…` over https) until it

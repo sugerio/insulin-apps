@@ -1,0 +1,2 @@
+# What the fixture's Python tests install: nothing. Each package would be pinned by version and hash, as in:
+#   example-package==1.2.3 --hash=sha256:<64 hex digits>

@@ -17,6 +17,7 @@ import { Field, Notice, PageHeader } from './parts.ts'
 import { Link, navigate } from './router.ts'
 import { TagsField } from './TagsField.ts'
 import { saveAsTemplate } from './SaveAsTemplateDialog.ts'
+import { describeUploadChanges, type UploadChanges } from '../lib/upload-changes.ts'
 
 const h = React.createElement
 const ROLE = /^[A-Za-z0-9_-]{1,64}$/
@@ -25,12 +26,12 @@ const EMPTY: Person = { role: '', name: '', email: '', title: '', company: '' }
 type Editor = { sessionId: string; url: string; ready: boolean; requestId: string; asDraft: boolean }
 const STEPS = ['Document and signers', 'Fields', 'Review and send'] as const
 
-/** The problem with the signers as typed, if any: a role of letters, digits, - and _, once each; a name and an email. */
+/** The problem with the signers as typed, if any: a role of English letters, digits, hyphens and underscores, once each; a name and an email. */
 export function checkSigners(people: Person[]): string {
   if (!people.length) return 'Add a signer.'
   for (const [i, p] of people.entries()) {
     const n = `Signer ${i + 1}`
-    if (!ROLE.test(p.role.trim())) return `${n}: give a role of letters, digits, - and _ (no spaces), such as partner.`
+    if (!ROLE.test(p.role.trim())) return `${n}: give a role of English letters, digits, hyphens (-) and underscores (_), with no spaces, such as partner or co-signer.`
     if (!p.name.trim()) return `${n}: enter their name.`
     if (!EMAIL.test(p.email.trim())) return `${n}: enter their email address.`
   }
@@ -43,6 +44,8 @@ export function SendDocumentPage({ me }: { me: Me }) {
   const [step, setStep] = useState(0)
   const [file, setFile] = useState<File | null>(null)
   const [hasDocument, setHasDocument] = useState(false)
+  /** What Esign changed in the uploaded PDF to prepare it for signing (server/esign/pdf-upload.ts), or null. */
+  const [changes, setChanges] = useState<UploadChanges | null>(null)
   const [docName, setDocName] = useState('')
   const [people, setPeople] = useState<Person[]>([{ ...EMPTY }])
   const [note, setNote] = useState({ subject: '', body: '' })
@@ -56,7 +59,7 @@ export function SendDocumentPage({ me }: { me: Me }) {
   // Also save as a template, once sent: its document, fields and roles, named as the document.
   const [alsoTemplate, setAlsoTemplate] = useState(false)
   // A scheduled draft: when it sends, or why it didn't (Send later).
-  const [schedule, setSchedule] = useState<{ sendAt?: string; sendError?: string }>({})
+  const [schedule, setSchedule] = useState<{ sendAt?: string; sendError?: string; sendWaiting?: string }>({})
   const [picking, setPicking] = useState(false)
   const frame = useRef<HTMLIFrameElement | null>(null)
   const draftKey = useRef<string>(typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : String(Date.now()))
@@ -72,8 +75,8 @@ export function SendDocumentPage({ me }: { me: Me }) {
       const form = formFromRequest(request, roles)
       setPeople(roles.length ? form.signers.map((s, i) => ({ role: roles[i] ?? '', name: s.name, email: s.email, title: s.title, company: s.company })) : [{ ...EMPTY }])
       setDocName(form.doc.name); setNote(form.note); setSignBy(form.signBy); setTags(form.tags)
-      setHasDocument(!!envelope.upload?.document); setPlaced(envelope.upload?.fields ?? [])
-      setSchedule({ sendAt: envelope.sendAt, sendError: envelope.sendError })
+      setHasDocument(!!envelope.upload?.document); setChanges(envelope.upload?.changes ?? null); setPlaced(envelope.upload?.fields ?? [])
+      setSchedule({ sendAt: envelope.sendAt, sendError: envelope.sendError, sendWaiting: envelope.sendWaiting })
       setLoaded(true)
     }).catch((error) => { setMessage({ text: describeError(error), error: true }); setLoaded(true) })
   }, [])
@@ -128,8 +131,8 @@ export function SendDocumentPage({ me }: { me: Me }) {
       navigate(`/envelopes/send?draft=${id}`, { replace: true })
     }
     if (file) {
-      await api(`/api/envelopes/${id}/document`, { method: 'POST', headers: { 'content-type': 'application/pdf' }, body: file })
-      setFile(null); setHasDocument(true); setPlaced([])
+      const uploaded = await apiJson<{ changes?: UploadChanges | null }>(`/api/envelopes/${id}/document`, { method: 'POST', headers: { 'content-type': 'application/pdf' }, body: file })
+      setFile(null); setHasDocument(true); setChanges(uploaded.changes ?? null); setPlaced([])
     }
     // Saved as a draft, it is no longer scheduled (the server keeps no time for a draft saved so).
     if (schedule.sendAt) setMessage({ text: 'The scheduled send was cancelled: saving the draft unschedules it. Schedule it again from Review.', error: false })
@@ -192,11 +195,15 @@ export function SendDocumentPage({ me }: { me: Me }) {
     h(Notice, { message: message.text, error: message.error }),
     h(ScheduleNotice, schedule))
   if (!loaded) return h('div', { className: 'flex flex-col gap-6' }, header, h('p', { role: 'status', className: 'text-sm text-muted-foreground' }, 'Loading the draft…'))
+  // Said where the document is chosen and again before it is sent: what signers see is the PDF as Esign changed it.
+  const changed = describeUploadChanges(changes)
+  const changesNotice = hasDocument && !file && changed.length ? h('div', { className: 'sm:col-span-2', 'data-upload-changes': true },
+    h(Notice, { message: `Esign prepared this PDF for signing: ${changed.join('; ')}. Signers see and sign it as it is now; the certificate also records the file as you uploaded it.` })) : null
   const saveButton = h(Button, { key: 'save', variant: 'outline', disabled: busy || (step === 1 && (!editor?.ready || !!editor?.requestId)), onClick: save }, h(Save, { 'aria-hidden': true }), 'Save draft')
 
   if (step === 0) return h('div', { className: 'flex flex-col gap-6' }, header,
     h(Card, null,
-      h(CardHeader, null, h(CardTitle, null, h('h2', null, 'Document')), h(CardDescription, null, 'A PDF of up to 5 MiB and 100 pages, with no form fields or annotations, pages not rotated.')),
+      h(CardHeader, null, h(CardTitle, null, h('h2', null, 'Document')), h(CardDescription, null, 'A PDF of up to 5 MiB and 100 pages. Form fields, comments and links are flattened into the page, and rotated or cropped pages are redrawn as they are shown, so fields can be placed and signed on it.')),
       h(CardContent, { className: 'grid gap-4 sm:grid-cols-2' },
         h(Field, { label: hasDocument ? 'PDF (uploaded; choose another to replace it)' : 'PDF', htmlFor: 'send-pdf' },
           h(Input, { id: 'send-pdf', type: 'file', accept: 'application/pdf', onChange: (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -207,7 +214,8 @@ export function SendDocumentPage({ me }: { me: Me }) {
           } })),
         h(Field, { label: 'Document name', htmlFor: 'send-doc-name', hint: 'Shown to signers, and the name of the signed PDF.' },
           h(Input, { id: 'send-doc-name', value: docName, maxLength: 200, onChange: (e: React.ChangeEvent<HTMLInputElement>) => setDocName(e.target.value) })),
-        hasDocument && placed.length && file ? h('p', { className: 'text-sm text-muted-foreground sm:col-span-2' }, 'Replacing the PDF clears the fields placed on it.') : null)),
+        hasDocument && placed.length && file ? h('p', { className: 'text-sm text-muted-foreground sm:col-span-2' }, 'Replacing the PDF clears the fields placed on it.') : null,
+        changesNotice)),
     h(Card, null,
       h(CardHeader, null, h(CardTitle, null, h('h2', null, 'Signers')), h(CardDescription, null, 'In signing order: each is emailed an invitation when the one before has signed. A role names what each signs as, such as partner or seller; it is shown in the editor, on the signing page and on the certificate.')),
       h(CardContent, { className: 'flex flex-col gap-4' },
@@ -216,7 +224,7 @@ export function SendDocumentPage({ me }: { me: Me }) {
             h(Button, { type: 'button', size: 'icon-sm', variant: 'ghost', 'aria-label': `Move signer ${i + 1} up`, disabled: i === 0, onClick: () => move(i, -1) }, h(ArrowUp, { 'aria-hidden': true })),
             h(Button, { type: 'button', size: 'icon-sm', variant: 'ghost', 'aria-label': `Move signer ${i + 1} down`, disabled: i === people.length - 1, onClick: () => move(i, 1) }, h(ArrowDown, { 'aria-hidden': true })),
             h(Button, { type: 'button', size: 'icon-sm', variant: 'ghost', 'aria-label': `Remove signer ${i + 1}`, disabled: people.length === 1, onClick: () => setPeople((old) => old.filter((_, j) => j !== i)) }, h(Trash2, { 'aria-hidden': true }))),
-          h(Field, { label: 'Role', htmlFor: `send-${i}-role`, hint: 'Letters, digits, - and _, such as partner.' },
+          h(Field, { label: 'Role', htmlFor: `send-${i}-role`, hint: 'English letters, digits, hyphens (-) and underscores (_), with no spaces, such as co-signer.' },
             h(Input, { id: `send-${i}-role`, value: p.role, maxLength: 64, placeholder: 'partner', onChange: (e: React.ChangeEvent<HTMLInputElement>) => setPerson(i, { role: e.target.value }) })),
           h('div', { className: 'hidden sm:block' }),
           h(ContactField, { id: `send-${i}-name`, label: 'Name', value: p.name, onChange: (v) => setPerson(i, { name: v }), onChoose: (c: Contact) => setPerson(i, { name: c.name, email: c.email, title: c.title ?? '', company: c.company ?? '' }) }),
@@ -247,8 +255,8 @@ export function SendDocumentPage({ me }: { me: Me }) {
   return h('div', { className: 'flex flex-col gap-6' }, header,
     h(Card, null,
       h(CardHeader, null, h(CardTitle, null, h('h2', null, 'Review')), h(CardDescription, null, 'Check what is sent. Once sent, the first signer is invited at once.')),
-      h(CardContent, null, h('dl', { 'aria-label': 'Review', className: 'grid gap-x-8 gap-y-3 text-sm sm:grid-cols-[max-content_1fr]' },
-        h('dt', { className: 'text-muted-foreground' }, 'Document'), h('dd', null, docName.trim() || defaultDocumentName(null)),
+      h(CardContent, null, h('dl', { 'aria-label': 'Review', className: 'grid gap-x-8 gap-y-3 text-sm sm:grid-cols-[max-content_1fr] [&>dd]:min-w-0 [&>dd]:wrap-anywhere' },
+        h('dt', { className: 'text-muted-foreground' }, 'Document'), h('dd', null, docName.trim() || defaultDocumentName(null), changed.length ? h('span', { className: 'block text-muted-foreground' }, `Prepared for signing: ${changed.join('; ')}.`) : null),
         h('dt', { className: 'text-muted-foreground' }, 'Signers'),
         h('dd', null, h('ol', { className: 'flex flex-col gap-1' }, ...people.map((p, i) => h('li', { key: i }, `${i + 1}. ${p.role} — ${p.name} (${p.email}): ${count(p.role.trim())} ${count(p.role.trim()) === 1 ? 'field' : 'fields'}`)))),
         h('dt', { className: 'text-muted-foreground' }, 'Message'), h('dd', null, note.subject.trim() || note.body.trim() ? [note.subject.trim(), note.body.trim()].filter(Boolean).join(' — ') : 'None'),

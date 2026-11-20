@@ -27,8 +27,9 @@ import { mergeTags, mountTagRoutes, parseTagFilter, parseTags, taggedIds, tagsBy
 import { mountMemberRoutes, recordMember } from './members.ts';
 import { deleteDraftObjects, deleteReplacedDocuments, envelopeDocument, initialDocumentId, mountEnvelopeDocumentRoutes } from './envelope-documents.ts';
 import { parsePrefill, PrefillDoesNotFit, resolvePrefill, stampPrefill } from './prefill.ts';
-import type { DirectoryEnv } from './directory.ts';
-import { dueScheduled, parseSendAt, recordScheduleFailure, SCHEDULED_BUDGET_MS, scheduledBy, scheduledCaller, scheduleView, splitDraft, type Schedule } from './scheduled-send.ts';
+import { parseUploadChanges, pdfRefusalBody, PdfUploadRefused, preparePdfUpload, type PreparedPdf, uploadRecord } from './pdf-upload.ts';
+import { memberStatusConfigured, organizationNow, STATUS_IDS_MAX, STATUS_TIMEOUT_MS, type DirectoryEnv, type OrganizationNow } from './directory.ts';
+import { deferOrganization, dueDrafts, dueOrganizations, LEASE_MARGIN_MS, parseSendAt, readCursor, recordScheduleFailure, releaseLease, restWaiting, SCHEDULED_BUDGET_MS, SCHEDULED_PER_RUN, scheduledBy, scheduledCaller, scheduleView, splitDraft, takeLease, writeCursor, type Schedule } from './scheduled-send.ts';
 
 const MAX_PDF_BYTES = 5 * 1024 * 1024;
 /**
@@ -53,12 +54,12 @@ export type Bindings = Omit<EnvironmentEnv, 'TEST_MAIL'> & SealEnv & MailEnv & M
    * envelope then runs after the signer's response instead of before it.
    */
   WAIT_UNTIL?: (work: Promise<unknown>) => void;
-  /** Space-separated host origins that may embed the signing page and the editor (ESIGN_FRAME_ANCESTORS). */
-  SIGNING_PAGE_FRAME_ANCESTORS?: string;
   /** dev only: other origins the signing page may run on, for local UI development. */
   SIGNING_PAGE_ORIGINS?: string;
   /** The app's own origin, which signed-copy links point to (the router sets it per request). */
   APP_ORIGIN?: string;
+  /** Tests only: a shorter scheduled-send budget and member status wait (sendScheduled); never set by the router. */
+  SCHEDULED_TIMING?: { budgetMs: number; statusTimeoutMs: number };
 };
 export type Env = { Bindings: Bindings; Variables: { tenantId: string; caller: Caller } };
 
@@ -338,14 +339,18 @@ app.post('/api/templates', bodyLimit({ maxSize: MAX_PDF_BYTES + 65536 }), async 
   if (defaultSigners === 'invalid') return context.json({ error: 'invalid_template' }, 422);
   try { await assertRenderableRecipientNames(defaultSignerNames(defaultSigners)); }
   catch { return context.json({ error: 'unsupported_recipient_name' }, 422); }
-  const bytes = new Uint8Array(await file.arrayBuffer());
-  try {
-    const pdf = await PDFDocument.load(bytes, { throwOnInvalidObject: true });
-    if (pdf.getPageCount() < 1 || pdf.getPageCount() > 100) throw new Error('invalid page count');
-  } catch { return context.json({ error: 'invalid_pdf' }, 422); }
+  // Flattened and reoriented as an envelope's upload is (pdf-upload.ts), so placed fields can be signed on it. One that
+  // can't be is kept as it came: a template uploaded here is signed on a page Esign adds, which needs none of that.
+  let prepared: PreparedPdf;
   const id = crypto.randomUUID();
+  try { prepared = await preparePdfUpload(new Uint8Array(await file.arrayBuffer()), { route: 'template', tenantId: context.get('tenantId'), subjectId: id }, { keepUnprepared: true }); }
+  catch (error) {
+    if (error instanceof PdfUploadRefused) return context.json(pdfRefusalBody('invalid_pdf', error), 422);
+    throw error;
+  }
+  const [uploadedSha256, changesJson] = uploadRecord(prepared);
   const key = `templates/${id}/source.pdf`;
-  const stored = await context.env.ARTIFACTS.put(key, bytes, { onlyIf: { etagDoesNotMatch: '*' }, httpMetadata: { contentType: 'application/pdf' } });
+  const stored = await context.env.ARTIFACTS.put(key, prepared.bytes, { onlyIf: { etagDoesNotMatch: '*' }, httpMetadata: { contentType: 'application/pdf' } });
   if (!stored) return context.json({ error: 'storage_conflict' }, 503);
   // An ambiguous D1 failure may have committed. Keep the object for later reconciliation;
   // deleting it here could leave a committed template without its source. The template, its shares and
@@ -353,12 +358,12 @@ app.post('/api/templates', bodyLimit({ maxSize: MAX_PDF_BYTES + 65536 }), async 
   const tenantId = context.get('tenantId'), caller = context.get('caller'), now = Date.now(), db = context.env.DB;
   const given = sharesFor(shares, caller);
   await db.batch([
-    db.prepare('INSERT INTO templates (id, tenant_id, object_key, roles_json, created_at, name, metadata_json, default_signers_json, owner_user_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
-      .bind(id, tenantId, key, JSON.stringify(roles), now, name, JSON.stringify(metadata ?? {}), JSON.stringify(defaultSigners ?? {}), caller.userId),
+    db.prepare('INSERT INTO templates (id, tenant_id, object_key, roles_json, created_at, name, metadata_json, default_signers_json, owner_user_id, uploaded_sha256, upload_changes_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+      .bind(id, tenantId, key, JSON.stringify(roles), now, name, JSON.stringify(metadata ?? {}), JSON.stringify(defaultSigners ?? {}), caller.userId, uploadedSha256, changesJson),
     ...shareInserts(db, tenantId, 'template', id, given, caller.userId, now),
     ...tagWrites(db, tenantId, caller.userId, 'template', id, tags),
   ]);
-  return context.json({ id, ...(name ? { name } : {}), metadata: metadata ?? {}, roles, defaultSigners: defaultSigners ?? {}, tags }, 201);
+  return context.json({ id, ...(name ? { name } : {}), metadata: metadata ?? {}, roles, defaultSigners: defaultSigners ?? {}, tags, changes: prepared.changes }, 201);
 });
 
 /** A multipart field holding JSON, parsed by `parse`; absent is the parser's undefined. */
@@ -515,8 +520,11 @@ async function templateFromEnvelope(context: import('hono').Context<Env>): Promi
   if (typeof input.fromEnvelope !== 'string' || name === 'invalid' || tags === 'invalid' || shares === 'invalid' || (input.defaultSigners !== undefined && typeof input.defaultSigners !== 'boolean')) return context.json({ error: 'invalid_template' }, 422);
   const id = input.fromEnvelope, db = context.env.DB, tenantId = context.get('tenantId'), caller = context.get('caller');
   if (!await documentRole(db, tenantId, caller, 'envelope', id)) return context.json({ error: 'not_found' }, 404);
-  const envelope = await db.prepare('SELECT template_id, status, details_json, roles_json, fields_json FROM envelopes WHERE id = ? AND tenant_id = ?').bind(id, tenantId)
-    .first<{ template_id: string | null; status: string; details_json: string; roles_json: string | null; fields_json: string | null }>();
+  const envelope = await db.prepare(`SELECT template_id, status, details_json, roles_json, fields_json,
+    (SELECT a.uploaded_sha256 FROM artifacts a WHERE a.envelope_id = envelopes.id) AS uploaded_sha256,
+    (SELECT a.upload_changes_json FROM artifacts a WHERE a.envelope_id = envelopes.id) AS upload_changes_json
+    FROM envelopes WHERE id = ? AND tenant_id = ?`).bind(id, tenantId)
+    .first<{ template_id: string | null; status: string; details_json: string; roles_json: string | null; fields_json: string | null; uploaded_sha256: string | null; upload_changes_json: string | null }>();
   if (!envelope) return context.json({ error: 'not_found' }, 404);
   if (envelope.template_id !== null || envelope.status === DRAFT || !envelope.roles_json || !envelope.fields_json) return context.json({ error: 'not_an_uploaded_envelope' }, 409);
   const from = JSON.parse(envelope.roles_json) as string[];
@@ -544,8 +552,9 @@ async function templateFromEnvelope(context: import('hono').Context<Env>): Promi
   if (!await context.env.ARTIFACTS.put(key, document, { onlyIf: { etagDoesNotMatch: '*' }, httpMetadata: { contentType: 'application/pdf' } })) return context.json({ error: 'storage_conflict' }, 503);
   const given = sharesFor(shares, caller);
   await db.batch([
-    db.prepare("INSERT INTO templates (id, tenant_id, object_key, roles_json, fields_json, created_at, name, metadata_json, default_signers_json, owner_user_id, status) VALUES (?, ?, ?, ?, ?, ?, ?, '{}', ?, ?, 'active')")
-      .bind(templateId, tenantId, key, JSON.stringify(roles), JSON.stringify(fields), now, templateName, JSON.stringify(defaultSigners), caller.userId),
+    // It keeps the record of what was changed when the document was uploaded.
+    db.prepare("INSERT INTO templates (id, tenant_id, object_key, roles_json, fields_json, created_at, name, metadata_json, default_signers_json, owner_user_id, status, uploaded_sha256, upload_changes_json) VALUES (?, ?, ?, ?, ?, ?, ?, '{}', ?, ?, 'active', ?, ?)")
+      .bind(templateId, tenantId, key, JSON.stringify(roles), JSON.stringify(fields), now, templateName, JSON.stringify(defaultSigners), caller.userId, envelope.uploaded_sha256, envelope.upload_changes_json),
     ...shareInserts(db, tenantId, 'template', templateId, given, caller.userId, now),
     ...tagWrites(db, tenantId, caller.userId, 'template', templateId, tags),
   ]);
@@ -624,31 +633,121 @@ async function scheduleSend(context: import('hono').Context<Env>, body: Record<s
 /**
  * The scheduled drafts due now, of one organization or (null) all, sent as whoever scheduled them, who must still be
  * able to send in Esign (as the platform says now) and an editor of it (shares change); what the send refuses is
- * recorded on the draft (scheduled-send.ts). A draft sent or changed meanwhile is left alone.
+ * recorded on the draft (scheduled-send.ts). A draft sent or changed meanwhile is left alone: sending claims it in the
+ * batch that sends it (only while it is the draft as read), so no draft is ever sent twice.
+ *
+ * The tick's runs go one at a time: a run takes the run lease (LEASE_SETTING) first, and sends nothing when another
+ * run holds it; the lease of a run that crashed lapses LEASE_MARGIN_MS after its budget, and is taken over. A run
+ * moves the cursor only while it still holds its lease: one that outlived it leaves the cursor to the run that took
+ * the lease over.
+ *
+ * Organizations take turns, round robin, across runs. A run starts after the organization the last one reached (the
+ * cursor, in `app_settings`), in id order and round again, in waves of WAVE_ORGANIZATIONS organizations with a draft
+ * due. All of a wave's organizations are asked about at once, each with the whole wait a question may take, and each
+ * is handled by its own answer: active, it is served; no record of Esign's use there yet, every due draft of it rests
+ * ten minutes (restWaiting); suspended, its drafts step back and wait (deferOrganization); no answer in time, its drafts
+ * are left as they are. Each organization served gets its first send (or refusal) before any gets a second: waves go
+ * on while places remain and the budget leaves a question's wait, and only then do the organizations reached send
+ * more, one draft of each a pass, in turn. Sends stop when the run's places (SCHEDULED_PER_RUN) or its budget run out,
+ * after at least one; the check comes before a draft is taken, so an organization not reached keeps its drafts and
+ * its turn. The cursor moves past every organization handled (served its first turn, resting, suspended or not
+ * answered for), up to the first one a run didn't serve.
+ *
+ * So with N organizations with a draft due, every one is asked about and served within N runs at worst (each run
+ * serves at least the next one in turn). A wave starts only while the budget leaves a question's wait, so when each
+ * wave (its questions and first sends) takes at most the budget less that wait, the first ends in time for a second,
+ * which ends within the budget, and a third is certain only when the first two ended that early: within
+ * ceil(N / (2 * WAVE_ORGANIZATIONS)) runs then, and ceil(N / SCHEDULED_PER_RUN) when the first two waves together take
+ * at most the budget less the wait too. Only runs that keep their lease count: a tick that finds another run under
+ * way, or a run that outlives its lease, moves no cursor.
  */
 async function sendScheduled(env: Bindings, tenantId: string | null): Promise<{ scheduledSent: number; scheduledFailed: number }> {
+  const budget = env.SCHEDULED_TIMING?.budgetMs ?? SCHEDULED_BUDGET_MS;
+  const rotating = tenantId === null;
+  // One organization's due work (process-due) takes no turn in the round, and needs no lease.
+  const lease = rotating ? crypto.randomUUID() : null;
+  if (lease && !(await takeLease(env.DB, lease, Date.now(), Date.now() + budget + LEASE_MARGIN_MS))) return { scheduledSent: 0, scheduledFailed: 0 };
+  try {
+    return await sendScheduledInTurn(env, tenantId, Date.now() + budget, lease);
+  } finally {
+    if (lease) await releaseLease(env.DB, lease);
+  }
+}
+
+type DueDraft = { row: { id: string; tenant_id: string; draft_json: string }; request: Record<string, unknown>; schedule: Schedule; at: number };
+
+async function sendScheduledInTurn(env: Bindings, tenantId: string | null, until: number, lease: string | null): Promise<{ scheduledSent: number; scheduledFailed: number }> {
   let sent = 0, failed = 0;
-  const until = Date.now() + SCHEDULED_BUDGET_MS;
-  for (const row of await dueScheduled(env.DB, Date.now(), tenantId)) {
-    if (Date.now() > until) break;
-    const { request, schedule } = splitDraft(row.draft_json);
-    if (!schedule || typeof schedule.at !== 'number') continue;
-    const caller = await scheduledCaller(env, schedule.by, row.tenant_id);
-    if (caller === 'unavailable') continue;
+  const wait = env.SCHEDULED_TIMING?.statusTimeoutMs ?? STATUS_TIMEOUT_MS;
+  const asking = memberStatusConfigured(env);
+  const start = lease ? await readCursor(env.DB) : '';
+  let cursor = start;
+  const asked: string[] = [];
+  const answers = new Map<string, OrganizationNow | null>();
+  // What the organizations served their first turn this run have left, in turn.
+  const served: DueDraft[][] = [];
+  // Whether the run may take another draft: places left and budget left, or none sent yet.
+  const room = () => sent + failed < SCHEDULED_PER_RUN && (sent + failed === 0 || Date.now() <= until);
+  const send = async ({ row, request, schedule, at }: DueDraft) => {
+    const caller = scheduledCaller(schedule.by, row.tenant_id, asking ? answers.get(row.tenant_id) ?? null : undefined);
+    if (caller === 'unavailable' || caller === 'unconfirmed') return;
     let error: string | null = null;
     try {
       if (!caller || !can(caller, 'esign.manage') || !atLeast((await documentRole(env.DB, row.tenant_id, caller, 'envelope', row.id))?.role ?? null, 'editor')) error = 'not_allowed';
       else {
         const answer = await sendEnvelope({ env, tenantId: row.tenant_id, caller, json: (body, status = 200) => Response.json(body, { status }) }, request, { draftId: row.id }, { draftJson: row.draft_json });
-        if (answer.ok) { sent += 1; continue; }
+        if (answer.ok) { sent += 1; return; }
         const code = ((await answer.json().catch(() => ({}))) as { error?: unknown }).error;
-        if (code === 'not_draft' || code === 'draft_changed') continue;
+        if (code === 'not_draft' || code === 'draft_changed') return;
         error = typeof code === 'string' ? code : `status_${answer.status}`;
       }
     } catch { error = 'send_failed'; }
     failed += 1;
-    await recordScheduleFailure(env.DB, row.id, schedule.at, error);
+    await recordScheduleFailure(env.DB, row.id, at, error);
+  };
+
+  // First turns, wave by wave.
+  let stopped = false;
+  while (room() && (asked.length === 0 || until - Date.now() >= wait)) {
+    const organizations = await dueOrganizations(env.DB, Date.now(), tenantId, cursor, asked);
+    if (!organizations.length) break;
+    asked.push(...organizations);
+    const rows = await dueDrafts(env.DB, Date.now(), organizations);
+    const queues = new Map(organizations.map((org) => [org, (rows.get(org) ?? []).flatMap((row): DueDraft[] => {
+      const { request, schedule } = splitDraft(row.draft_json);
+      return schedule && typeof schedule.at === 'number' ? [{ row, request, schedule, at: schedule.at }] : [];
+    })]));
+    if (asking) {
+      // The whole wave at once, each for every scheduler of its drafts in view.
+      await Promise.all(organizations.map(async (org) => {
+        const ids = [...new Set(queues.get(org)!.map((draft) => draft.schedule.by.userId))].slice(0, STATUS_IDS_MAX);
+        answers.set(org, ids.length ? await organizationNow(env, org, ids, wait) : null);
+      }));
+    }
+    for (const org of organizations) {
+      const answer = answers.get(org), queue = queues.get(org)!;
+      if (asking && !answer) { cursor = org; continue; } // no answer in time: its drafts stay as they are
+      if (answer?.status === 'unconfirmed') { await restWaiting(env.DB, org, 'organization_unconfirmed', Date.now()); cursor = org; continue; }
+      if (answer?.status === 'answered' && !answer.active) { await deferOrganization(env.DB, org, Date.now()); cursor = org; continue; }
+      if (!queue.length) { cursor = org; continue; }
+      // Checked before a draft is taken: an organization not reached keeps its drafts and its turn.
+      if (!room()) { stopped = true; break; }
+      await send(queue.shift()!);
+      served.push(queue);
+      cursor = org;
+    }
+    if (stopped) break;
   }
+  // Then the organizations reached send more, one draft of each a pass, in turn.
+  while (!stopped && served.some((queue) => queue.length)) {
+    for (const queue of served) {
+      if (!queue.length) continue;
+      if (!room()) { stopped = true; break; }
+      await send(queue.shift()!);
+    }
+  }
+  // Only while this run still holds its lease (writeCursor).
+  if (lease && cursor !== start) await writeCursor(env.DB, cursor, lease);
   return { scheduledSent: sent, scheduledFailed: failed };
 }
 
@@ -997,9 +1096,14 @@ app.get('/api/envelopes/:id', async (context) => {
   // Scheduled, also when it sends or why it didn't (scheduled-send.ts), apart from the request.
   let draft: unknown, scheduled: { sendAt?: string; sendError?: string } = {};
   if (envelope.status === DRAFT) { const split = splitDraft(envelope.draft_json); draft = split.request; scheduled = scheduleView(split.schedule); }
-  // A draft whose document is uploaded with it: whether it has one yet, and the roles and fields placed on it so far.
+  // A draft whose document is uploaded with it: whether it has one yet, what Esign changed in it when it was uploaded
+  // (pdf-upload.ts), and the roles and fields placed on it so far.
+  const document = envelope.status === DRAFT && envelope.template_id === null
+    ? await context.env.DB.prepare('SELECT upload_changes_json FROM artifacts WHERE id = ? AND envelope_id = ?').bind(initialDocumentId(id), id).first<{ upload_changes_json: string | null }>()
+    : null;
   const upload = envelope.status === DRAFT && envelope.template_id === null ? {
-    document: !!await context.env.DB.prepare('SELECT 1 FROM artifacts WHERE id = ? AND envelope_id = ?').bind(initialDocumentId(id), id).first(),
+    document: !!document,
+    changes: parseUploadChanges(document?.upload_changes_json),
     roles: envelope.roles_json ? JSON.parse(envelope.roles_json) as string[] : [],
     fields: placedFields(envelope.fields_json ?? '[]', true),
   } : undefined;

@@ -1,0 +1,75 @@
+{
+  "about": "Paraphrases of 10 answerable questions: each must cite the same document and fact as the question it rewords (ASK-01, FIX-01).",
+  "questions": [
+    {
+      "id": "p-q01",
+      "of": "q01",
+      "query": "Which port is the billing gateway reachable on?",
+      "expectDoc": "01-hawser-billing-gateway",
+      "expectFact": "8443"
+    },
+    {
+      "id": "p-q02",
+      "of": "q02",
+      "query": "At what canary error rate does a deploy roll back by itself?",
+      "expectDoc": "02-kestrel-deploy-pipeline",
+      "expectFact": "2 percent"
+    },
+    {
+      "id": "p-q03",
+      "of": "q03",
+      "query": "Within how many minutes does the primary on-call have to acknowledge?",
+      "expectDoc": "03-oncall-rotation-policy",
+      "expectFact": "7 minutes"
+    },
+    {
+      "id": "p-q04",
+      "of": "q04",
+      "query": "How much can I spend on food per day when I travel?",
+      "expectDoc": "04-expense-reimbursement",
+      "expectFact": "85 US dollars"
+    },
+    {
+      "id": "p-q05",
+      "of": "q05",
+      "query": "For how many days do we keep audit logs?",
+      "expectDoc": "05-data-retention-policy",
+      "expectFact": "400 days"
+    },
+    {
+      "id": "p-q06",
+      "of": "q06",
+      "query": "After declaring a SEV1, when is the first status page update due?",
+      "expectDoc": "06-incident-severity-levels",
+      "expectFact": "20 minutes"
+    },
+    {
+      "id": "p-q07",
+      "of": "q07",
+      "query": "When does the nightly rebuild of the product search index run?",
+      "expectDoc": "07-marlin-search-service",
+      "expectFact": "02:30 UTC"
+    },
+    {
+      "id": "p-q08",
+      "of": "q08",
+      "query": "How long does a feature flag live before it expires?",
+      "expectDoc": "10-sparrow-feature-flags",
+      "expectFact": "60 days"
+    },
+    {
+      "id": "p-q09",
+      "of": "q09",
+      "query": "What crash-free rate must the mobile rollout keep to advance?",
+      "expectDoc": "16-heron-mobile-release",
+      "expectFact": "99.6 percent"
+    },
+    {
+      "id": "p-q10",
+      "of": "q10",
+      "query": "What is the rotation period for secrets in the vault?",
+      "expectDoc": "17-secrets-management",
+      "expectFact": "90 days"
+    }
+  ]
+}

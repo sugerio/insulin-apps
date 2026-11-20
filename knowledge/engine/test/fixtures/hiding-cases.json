@@ -1,0 +1,1376 @@
+{
+  "about": "Hiding cases shared by the engine's detector (container/hide.py, test/python/test_hide.py) and the app's \"Try it\" preview, which must hide exactly the same (plan HID-05). For each case: the rules, the input, the spans hidden in it, the redacted text and where each [hidden] is in it. Positions are UTF-16 code units, as JavaScript counts them (see email-after-emoji). Key-shaped values are made up; each one has a character written as a \\u escape so that secret scanners, which cannot tell a planted test value from a real key, pass this file. Every JSON parser reads them as the plain value.",
+  "cases": [
+    {
+      "id": "email-plain",
+      "rules": {
+        "emails": true,
+        "phones": true,
+        "cards": true,
+        "apiKeys": true,
+        "secrets": true,
+        "words": []
+      },
+      "input": "Write to dana.reyes@example.com for access.",
+      "spans": [
+        {
+          "start": 9,
+          "end": 31,
+          "kind": "email"
+        }
+      ],
+      "redacted": "Write to [hidden] for access.",
+      "hidden": [
+        {
+          "start": 9,
+          "end": 17,
+          "kind": "email"
+        }
+      ]
+    },
+    {
+      "id": "email-plus-and-subdomain",
+      "rules": {
+        "emails": true,
+        "phones": true,
+        "cards": true,
+        "apiKeys": true,
+        "secrets": true,
+        "words": []
+      },
+      "input": "Alerts go to ops+alerts@corp.example.org, copies to Jordan.Lee@Example.NET.",
+      "spans": [
+        {
+          "start": 13,
+          "end": 40,
+          "kind": "email"
+        },
+        {
+          "start": 52,
+          "end": 74,
+          "kind": "email"
+        }
+      ],
+      "redacted": "Alerts go to [hidden], copies to [hidden].",
+      "hidden": [
+        {
+          "start": 13,
+          "end": 21,
+          "kind": "email"
+        },
+        {
+          "start": 33,
+          "end": 41,
+          "kind": "email"
+        }
+      ]
+    },
+    {
+      "id": "email-not-a-handle",
+      "rules": {
+        "emails": true,
+        "phones": true,
+        "cards": true,
+        "apiKeys": true,
+        "secrets": true,
+        "words": []
+      },
+      "input": "Mention @platform-team in the channel, or user@localhost on the test box.",
+      "spans": [],
+      "redacted": "Mention @platform-team in the channel, or user@localhost on the test box.",
+      "hidden": []
+    },
+    {
+      "id": "email-rule-off",
+      "rules": {
+        "emails": false,
+        "phones": true,
+        "cards": true,
+        "apiKeys": true,
+        "secrets": true,
+        "words": []
+      },
+      "input": "Write to dana.reyes@example.com for access.",
+      "spans": [],
+      "redacted": "Write to dana.reyes@example.com for access.",
+      "hidden": []
+    },
+    {
+      "id": "email-after-emoji",
+      "rules": {
+        "emails": true,
+        "phones": true,
+        "cards": true,
+        "apiKeys": true,
+        "secrets": true,
+        "words": []
+      },
+      "input": "😀 Contact sam.okafor@example.test today.",
+      "spans": [
+        {
+          "start": 11,
+          "end": 34,
+          "kind": "email"
+        }
+      ],
+      "redacted": "😀 Contact [hidden] today.",
+      "hidden": [
+        {
+          "start": 11,
+          "end": 19,
+          "kind": "email"
+        }
+      ]
+    },
+    {
+      "id": "phone-international",
+      "rules": {
+        "emails": true,
+        "phones": true,
+        "cards": true,
+        "apiKeys": true,
+        "secrets": true,
+        "words": []
+      },
+      "input": "Call the desk on +49 30 1234 5678 or +1 (555) 010-4477.",
+      "spans": [
+        {
+          "start": 17,
+          "end": 33,
+          "kind": "phone"
+        },
+        {
+          "start": 37,
+          "end": 54,
+          "kind": "phone"
+        }
+      ],
+      "redacted": "Call the desk on [hidden] or [hidden].",
+      "hidden": [
+        {
+          "start": 17,
+          "end": 25,
+          "kind": "phone"
+        },
+        {
+          "start": 29,
+          "end": 37,
+          "kind": "phone"
+        }
+      ]
+    },
+    {
+      "id": "phone-north-american",
+      "rules": {
+        "emails": true,
+        "phones": true,
+        "cards": true,
+        "apiKeys": true,
+        "secrets": true,
+        "words": []
+      },
+      "input": "Support: (555) 010-4477, fax 555-010-4478.",
+      "spans": [
+        {
+          "start": 9,
+          "end": 23,
+          "kind": "phone"
+        },
+        {
+          "start": 29,
+          "end": 41,
+          "kind": "phone"
+        }
+      ],
+      "redacted": "Support: [hidden], fax [hidden].",
+      "hidden": [
+        {
+          "start": 9,
+          "end": 17,
+          "kind": "phone"
+        },
+        {
+          "start": 23,
+          "end": 31,
+          "kind": "phone"
+        }
+      ]
+    },
+    {
+      "id": "phone-labelled",
+      "rules": {
+        "emails": true,
+        "phones": true,
+        "cards": true,
+        "apiKeys": true,
+        "secrets": true,
+        "words": []
+      },
+      "input": "Phone: 030 1234567 (desk).",
+      "spans": [
+        {
+          "start": 7,
+          "end": 18,
+          "kind": "phone"
+        }
+      ],
+      "redacted": "Phone: [hidden] (desk).",
+      "hidden": [
+        {
+          "start": 7,
+          "end": 15,
+          "kind": "phone"
+        }
+      ]
+    },
+    {
+      "id": "phone-not-numbers",
+      "rules": {
+        "emails": true,
+        "phones": true,
+        "cards": true,
+        "apiKeys": true,
+        "secrets": true,
+        "words": []
+      },
+      "input": "The gateway listens on port 8443, takes 1,200 requests per minute, shipped 2026-11-16 at 02:30 UTC as version 2.10.3 on 10.0.0.1.",
+      "spans": [],
+      "redacted": "The gateway listens on port 8443, takes 1,200 requests per minute, shipped 2026-11-16 at 02:30 UTC as version 2.10.3 on 10.0.0.1.",
+      "hidden": []
+    },
+    {
+      "id": "phone-rule-off",
+      "rules": {
+        "emails": true,
+        "phones": false,
+        "cards": true,
+        "apiKeys": true,
+        "secrets": true,
+        "words": []
+      },
+      "input": "Call +49 30 1234 5678.",
+      "spans": [],
+      "redacted": "Call +49 30 1234 5678.",
+      "hidden": []
+    },
+    {
+      "id": "card-luhn",
+      "rules": {
+        "emails": true,
+        "phones": true,
+        "cards": true,
+        "apiKeys": true,
+        "secrets": true,
+        "words": []
+      },
+      "input": "Test card 4111 1111 1111 1111 and 5555-5555-5555-4444 and 378282246310005.",
+      "spans": [
+        {
+          "start": 10,
+          "end": 29,
+          "kind": "card"
+        },
+        {
+          "start": 34,
+          "end": 53,
+          "kind": "card"
+        },
+        {
+          "start": 58,
+          "end": 73,
+          "kind": "card"
+        }
+      ],
+      "redacted": "Test card [hidden] and [hidden] and [hidden].",
+      "hidden": [
+        {
+          "start": 10,
+          "end": 18,
+          "kind": "card"
+        },
+        {
+          "start": 23,
+          "end": 31,
+          "kind": "card"
+        },
+        {
+          "start": 36,
+          "end": 44,
+          "kind": "card"
+        }
+      ]
+    },
+    {
+      "id": "card-fails-luhn",
+      "rules": {
+        "emails": true,
+        "phones": true,
+        "cards": true,
+        "apiKeys": true,
+        "secrets": true,
+        "words": []
+      },
+      "input": "Order 4111 1111 1111 1112 and invoice 1234567890123 are not cards.",
+      "spans": [],
+      "redacted": "Order 4111 1111 1111 1112 and invoice 1234567890123 are not cards.",
+      "hidden": []
+    },
+    {
+      "id": "card-rule-off",
+      "rules": {
+        "emails": true,
+        "phones": true,
+        "cards": false,
+        "apiKeys": true,
+        "secrets": true,
+        "words": []
+      },
+      "input": "Test card 4111 1111 1111 1111.",
+      "spans": [],
+      "redacted": "Test card 4111 1111 1111 1111.",
+      "hidden": []
+    },
+    {
+      "id": "api-key-aws",
+      "rules": {
+        "emails": true,
+        "phones": true,
+        "cards": true,
+        "apiKeys": true,
+        "secrets": true,
+        "words": []
+      },
+      "input": "Deploy key AKI\u0041IOSFODNN7EXAMPLE was rotated.",
+      "spans": [
+        {
+          "start": 11,
+          "end": 31,
+          "kind": "api_key"
+        }
+      ],
+      "redacted": "Deploy key [hidden] was rotated.",
+      "hidden": [
+        {
+          "start": 11,
+          "end": 19,
+          "kind": "api_key"
+        }
+      ]
+    },
+    {
+      "id": "api-key-github",
+      "rules": {
+        "emails": true,
+        "phones": true,
+        "cards": true,
+        "apiKeys": true,
+        "secrets": true,
+        "words": []
+      },
+      "input": "token in CI: gh\u0070_EXAMPLE0123456789abcdefghijklmnopqrs",
+      "spans": [
+        {
+          "start": 13,
+          "end": 53,
+          "kind": "api_key"
+        }
+      ],
+      "redacted": "token in CI: [hidden]",
+      "hidden": [
+        {
+          "start": 13,
+          "end": 21,
+          "kind": "api_key"
+        }
+      ]
+    },
+    {
+      "id": "api-key-slack",
+      "rules": {
+        "emails": true,
+        "phones": true,
+        "cards": true,
+        "apiKeys": true,
+        "secrets": true,
+        "words": []
+      },
+      "input": "The bot uses xox\u0062-0000000000-EXAMPLEtoken for alerts.",
+      "spans": [
+        {
+          "start": 13,
+          "end": 41,
+          "kind": "api_key"
+        }
+      ],
+      "redacted": "The bot uses [hidden] for alerts.",
+      "hidden": [
+        {
+          "start": 13,
+          "end": 21,
+          "kind": "api_key"
+        }
+      ]
+    },
+    {
+      "id": "api-key-stripe",
+      "rules": {
+        "emails": true,
+        "phones": true,
+        "cards": true,
+        "apiKeys": true,
+        "secrets": true,
+        "words": []
+      },
+      "input": "Payments test key sk_t\u0065st_EXAMPLE0000000000abcd.",
+      "spans": [
+        {
+          "start": 18,
+          "end": 47,
+          "kind": "api_key"
+        }
+      ],
+      "redacted": "Payments test key [hidden].",
+      "hidden": [
+        {
+          "start": 18,
+          "end": 26,
+          "kind": "api_key"
+        }
+      ]
+    },
+    {
+      "id": "api-key-google",
+      "rules": {
+        "emails": true,
+        "phones": true,
+        "cards": true,
+        "apiKeys": true,
+        "secrets": true,
+        "words": []
+      },
+      "input": "Maps key AIz\u0061SyEXAMPLE-0123456789_abcdefghijklmn is restricted.",
+      "spans": [
+        {
+          "start": 9,
+          "end": 48,
+          "kind": "api_key"
+        }
+      ],
+      "redacted": "Maps key [hidden] is restricted.",
+      "hidden": [
+        {
+          "start": 9,
+          "end": 17,
+          "kind": "api_key"
+        }
+      ]
+    },
+    {
+      "id": "api-key-openai-style",
+      "rules": {
+        "emails": true,
+        "phones": true,
+        "cards": true,
+        "apiKeys": true,
+        "secrets": true,
+        "words": []
+      },
+      "input": "Model key sk-pro\u006a-EXAMPLEexample0123456789 is in the vault.",
+      "spans": [
+        {
+          "start": 10,
+          "end": 42,
+          "kind": "api_key"
+        }
+      ],
+      "redacted": "Model key [hidden] is in the vault.",
+      "hidden": [
+        {
+          "start": 10,
+          "end": 18,
+          "kind": "api_key"
+        }
+      ]
+    },
+    {
+      "id": "api-key-jwt",
+      "rules": {
+        "emails": true,
+        "phones": true,
+        "cards": true,
+        "apiKeys": true,
+        "secrets": true,
+        "words": []
+      },
+      "input": "Session ey\u004ahbGciOiJIUzI1NiJ9.eyJzdWIiOiJ0ZXN0In0.c2lnbmF0dXJlX2V4YW1wbGU expired.",
+      "spans": [
+        {
+          "start": 8,
+          "end": 72,
+          "kind": "api_key"
+        }
+      ],
+      "redacted": "Session [hidden] expired.",
+      "hidden": [
+        {
+          "start": 8,
+          "end": 16,
+          "kind": "api_key"
+        }
+      ]
+    },
+    {
+      "id": "api-key-bearer",
+      "rules": {
+        "emails": true,
+        "phones": true,
+        "cards": true,
+        "apiKeys": true,
+        "secrets": true,
+        "words": []
+      },
+      "input": "Authorization: Bearer \u0045XAMPLEtokenEXAMPLEtoken1234",
+      "spans": [
+        {
+          "start": 22,
+          "end": 50,
+          "kind": "api_key"
+        }
+      ],
+      "redacted": "Authorization: Bearer [hidden]",
+      "hidden": [
+        {
+          "start": 22,
+          "end": 30,
+          "kind": "api_key"
+        }
+      ]
+    },
+    {
+      "id": "api-key-private-key",
+      "rules": {
+        "emails": true,
+        "phones": true,
+        "cards": true,
+        "apiKeys": true,
+        "secrets": true,
+        "words": []
+      },
+      "input": "Key file:\n\u002d----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASC\n-----END PRIVATE KEY-----\nKeep it safe.",
+      "spans": [
+        {
+          "start": 10,
+          "end": 96,
+          "kind": "api_key"
+        }
+      ],
+      "redacted": "Key file:\n[hidden]\nKeep it safe.",
+      "hidden": [
+        {
+          "start": 10,
+          "end": 18,
+          "kind": "api_key"
+        }
+      ]
+    },
+    {
+      "id": "api-key-rule-off",
+      "rules": {
+        "emails": true,
+        "phones": true,
+        "cards": true,
+        "apiKeys": false,
+        "secrets": true,
+        "words": []
+      },
+      "input": "Deploy key AKI\u0041IOSFODNN7EXAMPLE was rotated.",
+      "spans": [],
+      "redacted": "Deploy key AKI\u0041IOSFODNN7EXAMPLE was rotated.",
+      "hidden": []
+    },
+    {
+      "id": "secret-colon",
+      "rules": {
+        "emails": true,
+        "phones": true,
+        "cards": true,
+        "apiKeys": true,
+        "secrets": true,
+        "words": []
+      },
+      "input": "password: Tr0ub4dor&3",
+      "spans": [
+        {
+          "start": 10,
+          "end": 21,
+          "kind": "secret"
+        }
+      ],
+      "redacted": "password: [hidden]",
+      "hidden": [
+        {
+          "start": 10,
+          "end": 18,
+          "kind": "secret"
+        }
+      ]
+    },
+    {
+      "id": "secret-equals-quoted",
+      "rules": {
+        "emails": true,
+        "phones": true,
+        "cards": true,
+        "apiKeys": true,
+        "secrets": true,
+        "words": []
+      },
+      "input": "secret_key = 'EXAMPLEsecret99'",
+      "spans": [
+        {
+          "start": 14,
+          "end": 29,
+          "kind": "secret"
+        }
+      ],
+      "redacted": "secret_key = '[hidden]'",
+      "hidden": [
+        {
+          "start": 14,
+          "end": 22,
+          "kind": "secret"
+        }
+      ]
+    },
+    {
+      "id": "secret-api-key-label",
+      "rules": {
+        "emails": true,
+        "phones": true,
+        "cards": true,
+        "apiKeys": true,
+        "secrets": true,
+        "words": []
+      },
+      "input": "api_key=EXAMPLEkey12345",
+      "spans": [
+        {
+          "start": 8,
+          "end": 23,
+          "kind": "secret"
+        }
+      ],
+      "redacted": "api_key=[hidden]",
+      "hidden": [
+        {
+          "start": 8,
+          "end": 16,
+          "kind": "secret"
+        }
+      ]
+    },
+    {
+      "id": "secret-is",
+      "rules": {
+        "emails": true,
+        "phones": true,
+        "cards": true,
+        "apiKeys": true,
+        "secrets": true,
+        "words": []
+      },
+      "input": "The Wi-Fi password is Sunflower-2026.",
+      "spans": [
+        {
+          "start": 22,
+          "end": 36,
+          "kind": "secret"
+        }
+      ],
+      "redacted": "The Wi-Fi password is [hidden].",
+      "hidden": [
+        {
+          "start": 22,
+          "end": 30,
+          "kind": "secret"
+        }
+      ]
+    },
+    {
+      "id": "secret-prose-not-a-value",
+      "rules": {
+        "emails": true,
+        "phones": true,
+        "cards": true,
+        "apiKeys": true,
+        "secrets": true,
+        "words": []
+      },
+      "input": "The password is rotated every 90 days. Database passwords are rotated automatically. Token: none.",
+      "spans": [],
+      "redacted": "The password is rotated every 90 days. Database passwords are rotated automatically. Token: none.",
+      "hidden": []
+    },
+    {
+      "id": "secret-and-email-overlap",
+      "rules": {
+        "emails": true,
+        "phones": true,
+        "cards": true,
+        "apiKeys": true,
+        "secrets": true,
+        "words": []
+      },
+      "input": "password: dana.reyes@example.com",
+      "spans": [
+        {
+          "start": 10,
+          "end": 32,
+          "kind": "secret"
+        }
+      ],
+      "redacted": "password: [hidden]",
+      "hidden": [
+        {
+          "start": 10,
+          "end": 18,
+          "kind": "secret"
+        }
+      ]
+    },
+    {
+      "id": "secret-rule-off",
+      "rules": {
+        "emails": true,
+        "phones": true,
+        "cards": true,
+        "apiKeys": true,
+        "secrets": false,
+        "words": []
+      },
+      "input": "password: Tr0ub4dor&3",
+      "spans": [],
+      "redacted": "password: Tr0ub4dor&3",
+      "hidden": []
+    },
+    {
+      "id": "words",
+      "rules": {
+        "emails": true,
+        "phones": true,
+        "cards": true,
+        "apiKeys": true,
+        "secrets": true,
+        "words": [
+          "Bluewater",
+          "Project Falcon"
+        ]
+      },
+      "input": "Bluewater launches with project falcon in Q3; Bluewaters is another word.",
+      "spans": [
+        {
+          "start": 0,
+          "end": 9,
+          "kind": "word"
+        },
+        {
+          "start": 24,
+          "end": 38,
+          "kind": "word"
+        }
+      ],
+      "redacted": "[hidden] launches with [hidden] in Q3; Bluewaters is another word.",
+      "hidden": [
+        {
+          "start": 0,
+          "end": 8,
+          "kind": "word"
+        },
+        {
+          "start": 23,
+          "end": 31,
+          "kind": "word"
+        }
+      ]
+    },
+    {
+      "id": "words-only-when-listed",
+      "rules": {
+        "emails": true,
+        "phones": true,
+        "cards": true,
+        "apiKeys": true,
+        "secrets": true,
+        "words": []
+      },
+      "input": "Bluewater launches with Project Falcon in Q3.",
+      "spans": [],
+      "redacted": "Bluewater launches with Project Falcon in Q3.",
+      "hidden": []
+    },
+    {
+      "id": "mixed",
+      "rules": {
+        "emails": true,
+        "phones": true,
+        "cards": true,
+        "apiKeys": true,
+        "secrets": true,
+        "words": [
+          "Bluewater"
+        ]
+      },
+      "input": "Owner: maya.chen@example.com\nPhone: +44 20 7946 0958\nCard: 4111111111111111\nKey: AKI\u0041IOSFODNN7EXAMPLE\npassword: hunter2!x\nCodename Bluewater.",
+      "spans": [
+        {
+          "start": 7,
+          "end": 28,
+          "kind": "email"
+        },
+        {
+          "start": 36,
+          "end": 52,
+          "kind": "phone"
+        },
+        {
+          "start": 59,
+          "end": 75,
+          "kind": "card"
+        },
+        {
+          "start": 81,
+          "end": 101,
+          "kind": "api_key"
+        },
+        {
+          "start": 112,
+          "end": 121,
+          "kind": "secret"
+        },
+        {
+          "start": 131,
+          "end": 140,
+          "kind": "word"
+        }
+      ],
+      "redacted": "Owner: [hidden]\nPhone: [hidden]\nCard: [hidden]\nKey: [hidden]\npassword: [hidden]\nCodename [hidden].",
+      "hidden": [
+        {
+          "start": 7,
+          "end": 15,
+          "kind": "email"
+        },
+        {
+          "start": 23,
+          "end": 31,
+          "kind": "phone"
+        },
+        {
+          "start": 38,
+          "end": 46,
+          "kind": "card"
+        },
+        {
+          "start": 52,
+          "end": 60,
+          "kind": "api_key"
+        },
+        {
+          "start": 71,
+          "end": 79,
+          "kind": "secret"
+        },
+        {
+          "start": 89,
+          "end": 97,
+          "kind": "word"
+        }
+      ]
+    },
+    {
+      "id": "nothing-to-hide",
+      "rules": {
+        "emails": true,
+        "phones": true,
+        "cards": true,
+        "apiKeys": true,
+        "secrets": true,
+        "words": []
+      },
+      "input": "The billing gateway listens on port 8443 and retries 3 times.",
+      "spans": [],
+      "redacted": "The billing gateway listens on port 8443 and retries 3 times.",
+      "hidden": []
+    },
+    {
+      "id": "card-fullwidth-digits",
+      "rules": {
+        "emails": true,
+        "phones": true,
+        "cards": true,
+        "apiKeys": true,
+        "secrets": true,
+        "words": []
+      },
+      "input": "Card: ４１１１ １１１１ １１１１ １１１１ on file",
+      "spans": [
+        {
+          "start": 6,
+          "end": 25,
+          "kind": "card"
+        }
+      ],
+      "redacted": "Card: [hidden] on file",
+      "hidden": [
+        {
+          "start": 6,
+          "end": 14,
+          "kind": "card"
+        }
+      ]
+    },
+    {
+      "id": "phone-fullwidth-digits",
+      "rules": {
+        "emails": true,
+        "phones": true,
+        "cards": true,
+        "apiKeys": true,
+        "secrets": true,
+        "words": []
+      },
+      "input": "Call +４９ ３０ １２３４ ５６７８ now",
+      "spans": [
+        {
+          "start": 5,
+          "end": 21,
+          "kind": "phone"
+        }
+      ],
+      "redacted": "Call [hidden] now",
+      "hidden": [
+        {
+          "start": 5,
+          "end": 13,
+          "kind": "phone"
+        }
+      ]
+    },
+    {
+      "id": "phone-arabic-indic-digits",
+      "rules": {
+        "emails": true,
+        "phones": true,
+        "cards": true,
+        "apiKeys": true,
+        "secrets": true,
+        "words": []
+      },
+      "input": "Phone: ٠١٥٥ ١٢٣٤ ٥٦٧٨ (office)",
+      "spans": [
+        {
+          "start": 7,
+          "end": 21,
+          "kind": "phone"
+        }
+      ],
+      "redacted": "Phone: [hidden] (office)",
+      "hidden": [
+        {
+          "start": 7,
+          "end": 15,
+          "kind": "phone"
+        }
+      ]
+    },
+    {
+      "id": "api-key-after-a-letter",
+      "rules": {
+        "emails": true,
+        "phones": true,
+        "cards": true,
+        "apiKeys": true,
+        "secrets": true,
+        "words": []
+      },
+      "input": "Kontoschlüssel éAKI\u0041ABCDEFGHIJKLMNOP here",
+      "spans": [],
+      "redacted": "Kontoschlüssel éAKI\u0041ABCDEFGHIJKLMNOP here",
+      "hidden": []
+    },
+    {
+      "id": "api-key-before-a-letter",
+      "rules": {
+        "emails": true,
+        "phones": true,
+        "cards": true,
+        "apiKeys": true,
+        "secrets": true,
+        "words": []
+      },
+      "input": "Key AKI\u0041ABCDEFGHIJKLMNOPé done",
+      "spans": [],
+      "redacted": "Key AKI\u0041ABCDEFGHIJKLMNOPé done",
+      "hidden": []
+    },
+    {
+      "id": "secret-label-inside-a-word",
+      "rules": {
+        "emails": true,
+        "phones": true,
+        "cards": true,
+        "apiKeys": true,
+        "secrets": true,
+        "words": []
+      },
+      "input": "passwordé: Orchard-42 x, but passwort: Orchard-42 is not a label either",
+      "spans": [],
+      "redacted": "passwordé: Orchard-42 x, but passwort: Orchard-42 is not a label either",
+      "hidden": []
+    },
+    {
+      "id": "secret-after-unicode-space",
+      "rules": {
+        "emails": true,
+        "phones": true,
+        "cards": true,
+        "apiKeys": true,
+        "secrets": true,
+        "words": []
+      },
+      "input": "Login token　=　Zx9-Orchard-Wind for staging",
+      "spans": [
+        {
+          "start": 14,
+          "end": 30,
+          "kind": "secret"
+        }
+      ],
+      "redacted": "Login token　=　[hidden] for staging",
+      "hidden": [
+        {
+          "start": 14,
+          "end": 22,
+          "kind": "secret"
+        }
+      ]
+    },
+    {
+      "id": "card-in-devanagari-digits",
+      "rules": {
+        "emails": true,
+        "phones": true,
+        "cards": true,
+        "apiKeys": true,
+        "secrets": true,
+        "words": []
+      },
+      "input": "कार्ड ४१११-११११-११११-११११ से",
+      "spans": [
+        {
+          "start": 6,
+          "end": 25,
+          "kind": "card"
+        }
+      ],
+      "redacted": "कार्ड [hidden] से",
+      "hidden": [
+        {
+          "start": 6,
+          "end": 14,
+          "kind": "card"
+        }
+      ]
+    },
+    {
+      "id": "word-with-unicode-neighbours",
+      "rules": {
+        "emails": true,
+        "phones": true,
+        "cards": true,
+        "apiKeys": true,
+        "secrets": true,
+        "words": [
+          "Bluewater"
+        ]
+      },
+      "input": "Bluewaterß stays, Bluewater-Süd goes, ßBluewater stays, BLUEWATER goes",
+      "spans": [
+        {
+          "start": 18,
+          "end": 27,
+          "kind": "word"
+        },
+        {
+          "start": 56,
+          "end": 65,
+          "kind": "word"
+        }
+      ],
+      "redacted": "Bluewaterß stays, [hidden]-Süd goes, ßBluewater stays, [hidden] goes",
+      "hidden": [
+        {
+          "start": 18,
+          "end": 26,
+          "kind": "word"
+        },
+        {
+          "start": 55,
+          "end": 63,
+          "kind": "word"
+        }
+      ]
+    },
+    {
+      "id": "phone-after-a-letter",
+      "rules": {
+        "emails": true,
+        "phones": true,
+        "cards": true,
+        "apiKeys": true,
+        "secrets": true,
+        "words": []
+      },
+      "input": "Refé+49 30 1234 5678 and x(555) 010-4477 stay",
+      "spans": [],
+      "redacted": "Refé+49 30 1234 5678 and x(555) 010-4477 stay",
+      "hidden": []
+    },
+    {
+      "id": "secret-label-with-dotless-i",
+      "rules": {
+        "emails": true,
+        "phones": true,
+        "cards": true,
+        "apiKeys": true,
+        "secrets": true,
+        "words": []
+      },
+      "input": "The pın code: 4711-Alpha opens the gate.",
+      "spans": [
+        {
+          "start": 14,
+          "end": 24,
+          "kind": "secret"
+        }
+      ],
+      "redacted": "The pın code: [hidden] opens the gate.",
+      "hidden": [
+        {
+          "start": 14,
+          "end": 22,
+          "kind": "secret"
+        }
+      ]
+    },
+    {
+      "id": "secret-label-with-dotted-capital-i",
+      "rules": {
+        "emails": true,
+        "phones": true,
+        "cards": true,
+        "apiKeys": true,
+        "secrets": true,
+        "words": []
+      },
+      "input": "Our apİ key: Zx9-Orchard-77 is rotated monthly.",
+      "spans": [
+        {
+          "start": 13,
+          "end": 27,
+          "kind": "secret"
+        }
+      ],
+      "redacted": "Our apİ key: [hidden] is rotated monthly.",
+      "hidden": [
+        {
+          "start": 13,
+          "end": 21,
+          "kind": "secret"
+        }
+      ]
+    },
+    {
+      "id": "secret-is-with-dotless-i",
+      "rules": {
+        "emails": true,
+        "phones": true,
+        "cards": true,
+        "apiKeys": true,
+        "secrets": true,
+        "words": []
+      },
+      "input": "The passwoRd ıs Orchard-42x for the staging box.",
+      "spans": [
+        {
+          "start": 16,
+          "end": 27,
+          "kind": "secret"
+        }
+      ],
+      "redacted": "The passwoRd ıs [hidden] for the staging box.",
+      "hidden": [
+        {
+          "start": 16,
+          "end": 24,
+          "kind": "secret"
+        }
+      ]
+    },
+    {
+      "id": "phone-label-with-dotted-capital-i",
+      "rules": {
+        "emails": true,
+        "phones": true,
+        "cards": true,
+        "apiKeys": true,
+        "secrets": true,
+        "words": []
+      },
+      "input": "MOBİLE 030 1234 56789 after six.",
+      "spans": [
+        {
+          "start": 7,
+          "end": 21,
+          "kind": "phone"
+        }
+      ],
+      "redacted": "MOBİLE [hidden] after six.",
+      "hidden": [
+        {
+          "start": 7,
+          "end": 15,
+          "kind": "phone"
+        }
+      ]
+    },
+    {
+      "id": "word-with-turkish-i",
+      "rules": {
+        "emails": true,
+        "phones": true,
+        "cards": true,
+        "apiKeys": true,
+        "secrets": true,
+        "words": [
+          "İstanbul"
+        ]
+      },
+      "input": "İstanbul, istanbul, ISTANBUL and ıstanbul are one office.",
+      "spans": [
+        {
+          "start": 0,
+          "end": 8,
+          "kind": "word"
+        },
+        {
+          "start": 10,
+          "end": 18,
+          "kind": "word"
+        },
+        {
+          "start": 20,
+          "end": 28,
+          "kind": "word"
+        },
+        {
+          "start": 33,
+          "end": 41,
+          "kind": "word"
+        }
+      ],
+      "redacted": "[hidden], [hidden], [hidden] and [hidden] are one office.",
+      "hidden": [
+        {
+          "start": 0,
+          "end": 8,
+          "kind": "word"
+        },
+        {
+          "start": 10,
+          "end": 18,
+          "kind": "word"
+        },
+        {
+          "start": 20,
+          "end": 28,
+          "kind": "word"
+        },
+        {
+          "start": 33,
+          "end": 41,
+          "kind": "word"
+        }
+      ]
+    },
+    {
+      "id": "phone-label-then-many-spaces",
+      "rules": {
+        "emails": true,
+        "phones": true,
+        "cards": true,
+        "apiKeys": true,
+        "secrets": true,
+        "words": []
+      },
+      "input": "Phone 　　   :  +49 30 1234 5678 for the desk.",
+      "spans": [
+        {
+          "start": 15,
+          "end": 31,
+          "kind": "phone"
+        }
+      ],
+      "redacted": "Phone 　　   :  [hidden] for the desk.",
+      "hidden": [
+        {
+          "start": 15,
+          "end": 23,
+          "kind": "phone"
+        }
+      ]
+    },
+    {
+      "id": "private-key-after-a-begin-without-end",
+      "rules": {
+        "emails": true,
+        "phones": true,
+        "cards": true,
+        "apiKeys": true,
+        "secrets": true,
+        "words": []
+      },
+      "input": "\u002d----BEGIN RSA PRIVATE KEY----- (truncated)\n\u002d----BEGIN PRIVATE KEY-----\nMIIBVQIBADANBgkqhkiG9w0BAQEFAASCAT8wggE7AgEAAkEAq7BFUpkGp3\n-----END PRIVATE KEY----- rotated.",
+      "spans": [
+        {
+          "start": 0,
+          "end": 156,
+          "kind": "api_key"
+        }
+      ],
+      "redacted": "[hidden] rotated.",
+      "hidden": [
+        {
+          "start": 0,
+          "end": 8,
+          "kind": "api_key"
+        }
+      ]
+    },
+    {
+      "id": "private-key-begin-without-end",
+      "rules": {
+        "emails": true,
+        "phones": true,
+        "cards": true,
+        "apiKeys": true,
+        "secrets": true,
+        "words": []
+      },
+      "input": "Pasted by mistake: \u002d----BEGIN PRIVATE KEY----- and nothing after it.",
+      "spans": [],
+      "redacted": "Pasted by mistake: \u002d----BEGIN PRIVATE KEY----- and nothing after it.",
+      "hidden": []
+    }
+  ]
+}

@@ -1,0 +1,124 @@
+# Hints: checks on each return, like a tax program's "check and optimize". A hint shows when `when` is yes, worked out
+# from the return's side (`spouse.` reads the other return). It is one of:
+# - saving: a change of answers (`change`, each a formula from this return's side). The engine works out both returns
+#   again with the change, and the hint shows only when the combined refund less balance owing of the year's returns (`outcome` in
+#   year.yaml) goes up by $1 or more. Accepting it saves the answers, so the return stays explainable.
+# - info or warning: something to know. A change here is only worked out to show what it makes (`effectLabel`).
+# `amount` is a number shown with the hint, named by `amountLabel`.
+
+hints:
+  poolDonations:
+    kind: saving
+    title: Claim both spouses' donations on one return
+    text: >-
+      The first $200 of donations each year gets a lower credit. Claiming both spouses' donations on one return
+      uses that lower rate once instead of twice. Your spouse's or partner's donations are then claimed on this return
+      and left off theirs.
+    when: "line.SPOUSES.together == 1 and spouse.line.OWN.donations > 0 and not answer.claimSpouseDonations"
+    change:
+      answer.claimSpouseDonations: "true"
+      spouse.answer.claimSpouseDonations: "false"
+    amount: "spouse.line.OWN.donations"
+    amountLabel: Your spouse's or partner's donations
+
+  medicalOnOneReturn:
+    kind: saving
+    title: Claim the family's medical expenses on this return
+    text: >-
+      Medical expenses count only above 3% of the claimant's net income (or $2,834, if less), so they usually save
+      more on the return with the lower income. Your spouse's or partner's medical expenses are then claimed on this
+      return and left off theirs.
+    when: "line.SPOUSES.together == 1 and spouse.line.OWN.medical > 0 and not answer.claimSpouseMedical"
+    change:
+      answer.claimSpouseMedical: "true"
+      spouse.answer.claimSpouseMedical: "false"
+    amount: "spouse.line.OWN.medical"
+    amountLabel: Your spouse's or partner's medical expenses
+
+  tuitionTransfer:
+    kind: saving
+    title: Transfer tuition you don't need to your spouse or partner
+    text: >-
+      You can transfer up to $5,000 of this year's tuition that this return doesn't use to your spouse or partner. Sign
+      the transfer on the back of your T2202. The amount is saved as "Tuition to transfer to your spouse or partner" on
+      Credits.
+    when: "line.SPOUSES.together == 1 and line.S11.23 > answer.tuitionTransfer"
+    change:
+      answer.tuitionTransfer: "line.S11.23"
+    amount: "line.S11.23"
+    amountLabel: Tuition you can transfer
+
+  pensionSplit:
+    kind: saving
+    title: Split your pension income with your spouse or partner
+    text: >-
+      You can move up to half of your eligible pension income to your spouse's or partner's return (Form T1032). With
+      the lower income taxed there, the couple usually pays less, and a spouse with no pension of their own can
+      claim the pension income amount. The split brings your two net incomes as close as the limit allows. Both of you
+      sign Form T1032 and attach it to both returns if you file on paper.
+    when: >-
+      line.SPOUSES.together == 1 and line.PEN.splitMax > 0 and answer.pensionSplit == 0 and spouse.answer.pensionSplit == 0
+      and line.T1.23600 > spouse.line.T1.23600
+    change:
+      answer.pensionSplit: "min(line.PEN.splitMax, round((line.T1.23600 - spouse.line.T1.23600) / 2, 2))"
+    amount: "min(line.PEN.splitMax, round((line.T1.23600 - spouse.line.T1.23600) / 2, 2))"
+    amountLabel: Pension income to split
+
+  rrspNowOrLater:
+    kind: info
+    title: You can deduct your RRSP contributions in a later year
+    text: >-
+      Your taxable income is in the lowest federal bracket. You don't have to deduct all your RRSP contributions for
+      2025: what you don't deduct carries forward, and may save more in a year when your income is higher. To deduct
+      less, change the amount on Deductions.
+    when: "answer.rrspDeduction > 0 and line.T1.26000 <= param.lowestBracketTop"
+    change:
+      answer.rrspDeduction: "0"
+    effectLabel: Deducting it this year saves
+    amount: "answer.rrspDeduction"
+    amountLabel: RRSP deduction for 2025
+
+  fhsaNowOrLater:
+    kind: info
+    title: You can deduct your FHSA contributions in a later year
+    text: >-
+      Your taxable income is in the lowest federal bracket. FHSA contributions you don't deduct for 2025 carry forward
+      with no time limit, and may save more in a year when your income is higher. To deduct less, change the amount on
+      Deductions.
+    when: "answer.fhsaDeduction > 0 and line.T1.26000 <= param.lowestBracketTop"
+    change:
+      answer.fhsaDeduction: "0"
+    effectLabel: Deducting it this year saves
+    amount: "answer.fhsaDeduction"
+    amountLabel: FHSA deduction for 2025
+
+  fhsaOverContribution:
+    kind: warning
+    title: Your FHSA contributions may be over your participation room
+    text: >-
+      Your FHSA participation room is $8,000 a year, plus at most $8,000 carried forward from last year, for
+      contributions and RRSP transfers together. Your contributions and transfers for 2025 are more than $16,000. The
+      CRA charges a tax of 1% a month on an excess FHSA amount until it is removed, on form RC727. This app doesn't
+      prepare that form.
+    when: "sum(T4FHSA.box18) + sum(T4FHSA.box32) + sum(T4FHSA.box34) > param.fhsaRoomMax"
+    amount: "sum(T4FHSA.box18) + sum(T4FHSA.box32) + sum(T4FHSA.box34) - param.fhsaRoomMax"
+    amountLabel: Over $16,000
+
+  rrspOverContribution:
+    kind: warning
+    title: Your RRSP contributions may be over your limit
+    text: >-
+      Your contributions are more than your RRSP deduction limit on your 2024 notice of assessment plus $2,000. The
+      CRA charges a tax of 1% a month on the excess until it is withdrawn, on form T1-OVP. This app doesn't prepare
+      that form. Check your limit, and the contributions you made after your notice of assessment.
+    when: "sum(NOA.box1) > 0 and sum(RRSP.box1) + sum(RRSP.box2) + sum(NOA.box2) > sum(NOA.box1) + param.rrspOverContributionAllowance"
+    amount: "sum(RRSP.box1) + sum(RRSP.box2) + sum(NOA.box2) - sum(NOA.box1) - param.rrspOverContributionAllowance"
+    amountLabel: Over the limit and the $2,000
+
+  interestWithoutSlip:
+    kind: warning
+    title: Interest is taxable even without a T5
+    text: >-
+      A bank or credit union issues a T5 only when it pays you $50 or more. Interest under that is still income. If
+      you earned any, enter it as a T5 on Income, from your account statements.
+    when: "sum(T5.box13) == 0"

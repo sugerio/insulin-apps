@@ -1,0 +1,485 @@
+# Newfoundland and Labrador tax: Form NL428, Schedule NL(S11) (tuition and education), Schedule NL(S2) and Form NL479
+# (credits). Line ids are the line numbers in the forms' right margin. Every number below was checked against the 2025
+# NL428 (5001-C), Worksheet NL428 (5001-D), NL(S2) (5001-S2), NL(S11) (5001-S11), NL479 (5001-TC) and the
+# Newfoundland and Labrador information page of the 2025 package (5001-PC).
+
+params:
+  nlTaxBrackets:
+    label: Newfoundland and Labrador tax brackets
+    source: "NL428 Part A, bases as printed on the form"
+    value:
+      - { upTo: 44192, rate: 8.7%, base: 0 }
+      - { upTo: 88382, rate: 14.5%, base: 3844.70 }
+      - { upTo: 157792, rate: 15.8%, base: 10252.25 }
+      - { upTo: 220910, rate: 17.8%, base: 21219.03 }
+      - { upTo: 282214, rate: 19.8%, base: 32454.04 }
+      - { upTo: 564429, rate: 20.8%, base: 44592.23 }
+      - { upTo: 1128858, rate: 21.3%, base: 103292.95 }
+      - { rate: 21.8%, base: 223516.33 }
+  nlFirstBracketTop:
+    label: Top of the first Newfoundland and Labrador bracket
+    source: "NL428 Part A, NL(S2) line 6 and NL(S11) line 7: $44,192"
+    value: 44192
+  nlCreditRate:
+    label: Newfoundland and Labrador credit rate
+    source: "NL428 line 57: 8.7%"
+    value: 8.7%
+  nlBasicPersonalAmount:
+    label: Newfoundland and Labrador basic personal amount
+    source: "NL428 line 58040: claim $11,067"
+    value: 11067
+  nlAgeAmountMax:
+    label: Newfoundland and Labrador age amount, full
+    source: "Worksheet NL428, line 58080: $7,064"
+    value: 7064
+  nlAgeAmountThreshold:
+    label: Net income where the Newfoundland and Labrador age amount starts to go down
+    source: "Worksheet NL428, line 58080: income threshold"
+    value: 38712
+  nlAgeAmountRate:
+    label: Newfoundland and Labrador age amount reduction rate
+    source: "Worksheet NL428, line 58080: applicable rate"
+    value: 15%
+  nlSpouseBase:
+    label: Newfoundland and Labrador spouse and eligible dependant amount, base
+    source: "NL428 lines 18 and 21: $9,948"
+    value: 9948
+  nlSpouseMax:
+    label: Newfoundland and Labrador spouse and eligible dependant amount, most
+    source: "NL428 lines 20 and 23: maximum $9,043"
+    value: 9043
+  nlInfirmBase:
+    label: Newfoundland and Labrador amount for an infirm dependant, base
+    source: "Worksheet NL428, line 58200, line 1: $11,067"
+    value: 11067
+  nlInfirmMax:
+    label: Most Newfoundland and Labrador amount for an infirm dependant
+    source: "Worksheet NL428, line 58200, line 3: maximum $3,515 per dependant"
+    value: 3515
+  nlCaregiverBase:
+    label: Newfoundland and Labrador caregiver amount, base
+    source: "Worksheet NL428, line 58400, line 1: $20,689"
+    value: 20689
+  nlCaregiverMax:
+    label: Most Newfoundland and Labrador caregiver amount
+    source: "Worksheet NL428, line 58400, line 3: maximum $3,514 per dependant"
+    value: 3514
+  nlVolunteerAmount:
+    label: Newfoundland and Labrador volunteer firefighters' or search and rescue volunteers' amount
+    source: "5001-PC, lines 58315 and 58316: enter $3,000"
+    value: 3000
+  nlAdoptionMax:
+    label: Most Newfoundland and Labrador adoption expenses for each child
+    source: "5001-PC, line 58330: up to $14,935 of eligible expenses for each child"
+    value: 14935
+  nlDisabilityAmount:
+    label: Newfoundland and Labrador disability amount
+    source: "NL428 line 40 (58440): claim $7,467; Worksheet NL428, line 58480, line 1"
+    value: 7467
+  nlDisabilitySupplementMax:
+    label: Newfoundland and Labrador disability supplement for a person under 18, most
+    source: "Worksheet NL428, lines 58440 and 58480, line 2: $3,514"
+    value: 3514
+  nlDisabilityCareThreshold:
+    label: Child care and attendant care that the Newfoundland and Labrador disability supplement allows
+    source: "Worksheet NL428, lines 58440 and 58480, line 4: $2,987"
+    value: 2987
+  nlPensionAmountMax:
+    label: Most Newfoundland and Labrador pension income amount
+    source: "NL428 line 37 (58360): maximum $1,000"
+    value: 1000
+  nlMedicalThresholdMax:
+    label: Newfoundland and Labrador medical expense threshold, most
+    source: "NL428 line 52: whichever is less, $2,410 or 3% of net income"
+    value: 2410
+  nlDonationLowRate:
+    label: Newfoundland and Labrador donation credit rate on the first $200
+    source: "NL428 line 59: 8.7%"
+    value: 8.7%
+  nlDonationHighRate:
+    label: Newfoundland and Labrador donation credit rate above $200
+    source: "NL428 line 60: 21.8%"
+    value: 21.8%
+  nlDividendEligibleRate:
+    label: Newfoundland and Labrador dividend tax credit rate, eligible dividends
+    source: "Worksheet NL428, line 61520: 6.3% of the taxable amount of eligible dividends"
+    value: 6.3%
+  nlDividendOtherRate:
+    label: Newfoundland and Labrador dividend tax credit rate, other dividends
+    source: "Worksheet NL428, line 61520: 3.2% of the taxable amount of other than eligible dividends"
+    value: 3.2%
+  nlEducationPartTime:
+    label: Newfoundland and Labrador education amount for each month part-time
+    source: "NL(S11) line 3: $60 for each month on line 32010 of federal Schedule 11"
+    value: 60
+  nlEducationFullTime:
+    label: Newfoundland and Labrador education amount for each month full-time
+    source: "NL(S11) line 4: $200 for each month on line 32020 of federal Schedule 11"
+    value: 200
+  nlEducationMonthsMax:
+    label: Most months of study for the education amount
+    source: "Federal Schedule 11, lines 32010 and 32020: maximum 12"
+    value: 12
+  nlTuitionTransferMax:
+    label: Most Newfoundland and Labrador tuition and education amounts a student can transfer
+    source: "NL(S11) line 17: maximum $5,000"
+    value: 5000
+  nlLowIncomeBasic:
+    label: Newfoundland and Labrador low-income tax reduction, basic
+    source: "NL428 line 95: claim $997"
+    value: 997
+  nlLowIncomeFamily:
+    label: Newfoundland and Labrador low-income tax reduction for a spouse or an eligible dependant
+    source: "NL428 lines 96 and 97: claim $557"
+    value: 557
+  nlLowIncomeReductionMax:
+    label: Newfoundland and Labrador low-income tax reduction, most
+    source: "NL428 line 98: maximum $1,554"
+    value: 1554
+  nlLowIncomeBaseFamily:
+    label: Adjusted family income where the reduction starts to go down, with a spouse or an eligible dependant
+    source: "NL428 line 100: $40,460 if you claimed an amount on line 96 or 97"
+    value: 40460
+  nlLowIncomeBaseSingle:
+    label: Adjusted family income where the reduction starts to go down, otherwise
+    source: "NL428 line 100: $23,928 if not"
+    value: 23928
+  nlLowIncomeRate:
+    label: Newfoundland and Labrador low-income tax reduction rate
+    source: "NL428 line 102: 16%"
+    value: 16%
+  nlPoliticalCredit:
+    label: Newfoundland and Labrador political contribution tax credit
+    source: "Worksheet NL428, line 76: 75% of the first $100, 50% of the next $450, 33.33% above $550, bases as printed"
+    value:
+      - { upTo: 100, rate: 75%, base: 0 }
+      - { upTo: 550, rate: 50%, base: 75 }
+      - { rate: 33.33%, base: 300 }
+  nlPoliticalCreditMax:
+    label: Most Newfoundland and Labrador political contribution tax credit
+    source: "NL428 line 76: maximum $500"
+    value: 500
+  nlPhysicalActivityMax:
+    label: Most physical activity expenses for a family
+    source: "NL479 line 3: maximum $2,000"
+    value: 2000
+  nlPhysicalActivityRate:
+    label: Newfoundland and Labrador physical activity tax credit rate
+    source: "NL479 line 6: 17.4%"
+    value: 17.4%
+
+lines:
+  # Part A – Newfoundland and Labrador tax on taxable income
+  NL428.8:
+    label: Newfoundland and Labrador tax on taxable income
+    formula: "round(bracket(param.nlTaxBrackets, line.T1.26000), 2)"
+    source: "NL428 line 8 or 15"
+
+  # Part B – Newfoundland and Labrador non-refundable tax credits
+  NL428.16:
+    label: Newfoundland and Labrador basic personal amount
+    formula: >-
+      round((param.nlBasicPersonalAmount) * line.RES.factor, 2)
+
+  NL428.17:
+    label: Newfoundland and Labrador age amount
+    formula: >-
+      round((if(person.age >= 65, max(0, param.nlAgeAmountMax - round(max(0, line.T1.23600 - param.nlAgeAmountThreshold) * param.nlAgeAmountRate, 2)), 0)) * line.RES.factor, 2)
+    source: "Worksheet NL428, line 58080: for people born in 1960 or earlier"
+  NL428.20:
+    label: Newfoundland and Labrador spouse or common-law partner amount
+    formula: >-
+      round((if(line.HH.partner == 1, min(param.nlSpouseMax, max(0, param.nlSpouseBase - line.HH.spouseNetIncome)), 0)) * line.RES.factor, 2)
+
+  NL428.23:
+    label: Newfoundland and Labrador amount for an eligible dependant
+    formula: >-
+      round((if(line.HH.partner == 0 and family.childrenUnder18 > 0, min(param.nlSpouseMax, param.nlSpouseBase), 0)) * line.RES.factor, 2)
+    source: "NL428 lines 21 to 23. The app assumes the child had no income"
+  # An adult dependant with an impairment gets the infirm dependant amount, or the caregiver amount when they lived in
+  # your home, never both (5001-PC, line 58400): whichever is more. The app knows one such dependant.
+  NL.infirmAmount:
+    label: Newfoundland and Labrador amount for an infirm dependant, before choosing
+    formula: >-
+      if(answer.hasInfirmDependant, if(answer.infirmDependants > 1,
+      unsupported("The Newfoundland and Labrador amounts for more than one adult dependant aren't handled by this app yet"),
+      if(answer.infirmDependants == 1, min(param.nlInfirmMax, max(0, param.nlInfirmBase - answer.infirmDependantIncome)), 0)), 0)
+    source: "Worksheet NL428, line 58200: $11,067 less the dependant's net income, up to $3,515"
+  NL.caregiverAmount:
+    label: Newfoundland and Labrador caregiver amount, before choosing
+    formula: >-
+      if(answer.hasInfirmDependant, if(answer.infirmDependants == 1, if(answer.infirmDependantHome == "with_you",
+      min(param.nlCaregiverMax, max(0, param.nlCaregiverBase - answer.infirmDependantIncome)), 0), 0), 0)
+    source: "Worksheet NL428, line 58400: $20,689 less the dependant's net income, up to $3,514, for a dependant who lived with you"
+  NL428.24:
+    label: Newfoundland and Labrador amount for infirm dependants age 18 or older
+    formula: >-
+      round((if(line.NL428.38 > 0, 0, line.NL.infirmAmount)) * line.RES.factor, 2)
+    source: "NL428 line 58200"
+  NL428.31:
+    label: Newfoundland and Labrador volunteer firefighters' amount
+    formula: 'if(answer.hasVolunteerService, if(answer.volunteerKind == "firefighter", param.nlVolunteerAmount, 0), 0)'
+    source: "NL428 line 58315: $3,000 when you claimed line 31220"
+  NL428.32:
+    label: Newfoundland and Labrador search and rescue volunteers' amount
+    formula: 'if(answer.hasVolunteerService, if(answer.volunteerKind == "search_rescue", param.nlVolunteerAmount, 0), 0)'
+    source: "NL428 line 58316: $3,000 when you claimed line 31240"
+  NL428.33:
+    label: Child care amount
+    formula: "line.T1.21400"
+    source: "NL428 line 58320: the child care expenses deducted on line 21400 of your return"
+  NL428.34:
+    label: Newfoundland and Labrador adoption expenses
+    formula: >-
+      if(answer.hasAdoption, if(answer.adoptedChildren > 1 and answer.adoptionExpenses > param.nlAdoptionMax,
+      unsupported("Newfoundland and Labrador adoption expenses over $14,935 for more than one child are claimed child by child, which this app doesn't handle yet"),
+      min(answer.adoptionExpenses, param.nlAdoptionMax)), 0)
+    source: "NL428 line 58330: the expenses of line 31300, up to $14,935 for each child"
+  NL428.35:
+    label: CPP, EI, volunteer, child care and adoption amounts
+    formula: "line.T1.30800 + line.T1.31000 + line.T1.31200 + line.NL428.31 + line.NL428.32 + line.NL428.33 + line.NL428.34"
+    source: "NL428 lines 27 to 35: lines 30800, 31000 and 31200 of your return, and lines 31 to 34. Line 31217 isn't handled"
+  NL428.37:
+    label: Newfoundland and Labrador pension income amount
+    formula: "min(param.nlPensionAmountMax, line.PEN.creditBase)"
+    source: "NL428 line 37 (58360): eligible pension income, up to $1,000"
+  NL428.38:
+    label: Newfoundland and Labrador caregiver amount
+    formula: >-
+      round((if(line.NL.caregiverAmount > 0 and line.NL.caregiverAmount >= line.NL.infirmAmount, line.NL.caregiverAmount, 0)) * line.RES.factor, 2)
+    source: "NL428 line 58400: claimed instead of line 58200 when it is at least as much"
+  NL428.40:
+    label: Newfoundland and Labrador disability amount for self
+    formula: >-
+      round((if(answer.hasDisability, param.nlDisabilityAmount, 0)) * line.RES.factor, 2)
+    source: "NL428 line 58440: $7,467 at 18 or older, when you claim line 31600"
+  NL428.41:
+    label: Newfoundland and Labrador disability amount transferred from a dependant
+    formula: >-
+      round((if(answer.hasDisabledDependant, if(answer.disabledChildren > 1 and answer.disabledChildCare > 0, unsupported("Child care for more than one child with a disability is worked out child by child, which this app doesn't handle yet"), answer.disabledChildren * (param.nlDisabilityAmount + param.nlDisabilitySupplementMax) - min(answer.disabledChildren * param.nlDisabilitySupplementMax, max(0, answer.disabledChildCare - param.nlDisabilityCareThreshold)) + answer.disabledAdults * param.nlDisabilityAmount), 0)) * line.RES.factor, 2)
+    source: "Worksheet NL428, line 58480: $7,467, plus up to $3,514 for a child under 18, less care over $2,987. The app assumes the dependant had no income"
+  NL428.42:
+    label: Newfoundland and Labrador credit amounts before tuition and transfers
+    formula: >-
+      line.NL428.16 + line.NL428.17 + line.NL428.20 + line.NL428.23 + line.NL428.24 + line.NL428.35 + line.NL428.37
+      + line.NL428.38 + line.NL428.40 + line.NL428.41
+    source: "NL428 lines 25, 26, 36, 39 and 42"
+  NL428.43:
+    label: Interest paid on your student loans
+    formula: "line.T1.31900"
+    source: "NL428 line 58520: line 31900 of your return"
+  NL428.44:
+    label: Newfoundland and Labrador tuition and education amounts
+    formula: "line.NLS11.13"
+    source: "NL428 line 58560, from Schedule NL(S11)"
+  NL428.45:
+    label: Tuition and education amounts transferred from a child or grandchild
+    formula: "line.CHILD.provincialTuition"
+    source: "NL428 line 58600: the provincial amount they designate on their T2202, taken as the same as federally"
+  NL428.46:
+    label: Newfoundland and Labrador amounts transferred from your spouse or common-law partner
+    formula: "if(line.HH.partner == 1 and family.partnerInYear, line.NLS2.12, 0)"
+    source: "NL428 line 58640, from Schedule NL(S2)"
+  NL428.47:
+    label: Newfoundland and Labrador credit amounts before medical expenses
+    formula: "line.NL428.42 + line.NL428.43 + line.NL428.44 + line.NL428.45 + line.NL428.46"
+    source: "NL428 line 47"
+  NL428.53:
+    label: Allowable medical expenses for you, your spouse and your children
+    formula: "max(0, line.T1.33099 - min(param.nlMedicalThresholdMax, round(line.T1.23600 * param.medicalThresholdRate, 2)))"
+    source: "NL428 lines 48 to 53: expenses over whichever is less, $2,410 or 3% of net income"
+  NL428.54:
+    label: Allowable amount of medical expenses for other dependants
+    formula: >-
+      if(answer.hasOtherDependantMedical, max(0, answer.otherDependantMedical
+      - min(param.nlMedicalThresholdMax, round(answer.otherDependantIncome * param.medicalThresholdRate, 2))), 0)
+    source: "Worksheet NL428, line 58729: their expenses less line 52 of their NL428 (whichever is less, $2,410 or 3% of their net income)"
+  NL428.55:
+    label: Allowable medical expenses
+    formula: "line.NL428.53 + line.NL428.54"
+    source: "NL428 line 55 (58769)"
+  NL428.56:
+    label: Newfoundland and Labrador credit amounts
+    formula: "line.NL428.47 + line.NL428.55"
+    source: "NL428 line 56 (58800)"
+  NL428.58:
+    label: Newfoundland and Labrador credit amounts at the credit rate
+    formula: "round(line.NL428.56 * param.nlCreditRate, 2)"
+  NL428.61:
+    label: Newfoundland and Labrador donations credit
+    formula: "round(line.S9.13 * param.nlDonationLowRate, 2) + round(line.S9.14 * param.nlDonationHighRate, 2)"
+    source: "NL428 lines 59 to 61: Schedule 9 lines 13 and 14 at 8.7% and 21.8%"
+  NL428.62:
+    label: Newfoundland and Labrador non-refundable tax credits
+    formula: "line.NL428.58 + line.NL428.61"
+
+  # Part C – Newfoundland and Labrador tax
+  NL428.67:
+    label: Newfoundland and Labrador dividend tax credit
+    formula: "round(line.T1.12010 * param.nlDividendOtherRate, 2) + round((line.T1.12000 - line.T1.12010) * param.nlDividendEligibleRate, 2)"
+    source: "Worksheet NL428, line 61520"
+  NL428.70:
+    label: Newfoundland and Labrador tax after credits
+    formula: "max(0, line.NL428.8 - line.NL428.62 - line.NL428.67)"
+    source: "NL428 lines 63 to 70"
+  # Form T2036 – the provincial foreign tax credit: the foreign tax left after the federal credit, up to the share of
+  # the province's tax otherwise payable on the foreign income. For Newfoundland and Labrador that is the tax before
+  # the credit (line 72), which is line 70: the additional tax for minimum tax purposes (line 71) isn't handled.
+  NL428.73:
+    label: Provincial foreign tax credit
+    formula: >-
+      if(line.FTC.left > 0 and line.T1.23600 > 0, min(line.FTC.left,
+      round(min(line.FTC.netForeign, line.T1.23600) * line.NL428.70 / line.T1.23600, 2), line.NL428.70), 0)
+    source: "Form T2036, line 5, with note 4: NL428 line 72"
+  NL428.74:
+    label: Newfoundland and Labrador tax after the foreign tax credit
+    formula: "max(0, line.NL428.70 - line.NL428.73)"
+  NL428.75:
+    label: Newfoundland and Labrador political contributions made in 2025
+    formula: "answer.provincialPoliticalContributions"
+    source: "NL428 line 61750"
+  NL428.76:
+    label: Newfoundland and Labrador political contribution tax credit
+    formula: "min(param.nlPoliticalCreditMax, round(bracket(param.nlPoliticalCredit, line.NL428.75), 2))"
+    source: "Worksheet NL428, line 76: $500 for contributions over $1,150"
+  NL428.85:
+    label: Newfoundland and Labrador tax after the political contribution tax credit
+    formula: "max(0, line.NL428.74 - line.NL428.76)"
+    source: "NL428 lines 77 to 85. The direct equity, resort property and venture capital credits aren't claimed"
+
+  # The low-income tax reduction is the family's: one spouse claims it, and the other claims what it leaves unused
+  # (line 86). The spouse with more Newfoundland and Labrador tax claims it, so the least of it goes unused; a tie
+  # goes to the higher net income, then the older spouse, then the person preparing. A spouse who lives in another
+  # province can't claim it, and a spouse whose return isn't prepared here is taken not to.
+  NL.claimsReduction:
+    label: This return claims the family's Newfoundland and Labrador low-income tax reduction (1 for yes)
+    formula: >-
+      if(line.HH.partner == 0 or not family.partnerInYear, 1,
+      if(spouse.person.province != "NL", 1,
+      if(line.NL428.85 != spouse.line.NL428.85, if(line.NL428.85 > spouse.line.NL428.85, 1, 0),
+      if(line.T1.23600 != spouse.line.T1.23600, if(line.T1.23600 > spouse.line.T1.23600, 1, 0),
+      if(person.age != spouse.person.age, if(person.age > spouse.person.age, 1, 0),
+      if(person.role == "self", 1, 0))))))
+    source: "NL428 lines 86 to 108: you and your spouse decide who claims the reduction for your family"
+  NL428.86:
+    label: Unused low-income tax reduction from your spouse or common-law partner
+    formula: "if(line.NL.claimsReduction == 1, 0, spouse.line.NL428.108)"
+    source: "NL428 line 86: line 108 of their NL428"
+  NL428.87:
+    label: Newfoundland and Labrador tax after your spouse's unused reduction
+    formula: "max(0, line.NL428.85 - line.NL428.86)"
+  NL428.93:
+    label: Adjusted family income
+    formula: "line.T1.23600 + line.HH.spouseNetIncome"
+    source: "NL428 lines 88 to 93: both spouses' net income. The app has no UCCB or RDSP amounts"
+  NL428.98:
+    label: Newfoundland and Labrador low-income tax reductions claimed
+    formula: >-
+      min(param.nlLowIncomeReductionMax, param.nlLowIncomeBasic + if(line.HH.partner == 1, param.nlLowIncomeFamily, 0)
+      + if(line.HH.partner == 0 and line.NL428.23 > 0, param.nlLowIncomeFamily, 0))
+    source: "NL428 lines 95 to 98: basic, and for a spouse or for an eligible dependant claimed on line 58160, up to $1,554"
+  NL428.100:
+    label: Adjusted family income where the reduction starts to go down
+    formula: "if(line.HH.partner == 1 or line.NL428.23 > 0, param.nlLowIncomeBaseFamily, param.nlLowIncomeBaseSingle)"
+    source: "NL428 line 100: $40,460 if you claimed an amount on line 96 or 97, else $23,928"
+  NL428.103:
+    label: Adjusted family income over that amount, at 16%
+    formula: "round(max(0, line.NL428.93 - line.NL428.100) * param.nlLowIncomeRate, 2)"
+    source: "NL428 lines 99 to 103"
+  NL428.104:
+    label: Newfoundland and Labrador low-income tax reduction
+    formula: "if(line.NL.claimsReduction == 1, max(0, line.NL428.98 - line.NL428.103), 0)"
+    source: "NL428 line 104"
+  NL428.105:
+    label: Newfoundland and Labrador tax
+    formula: "max(0, line.NL428.87 - line.NL428.104)"
+  NL428.108:
+    label: Unused low-income tax reduction your spouse or common-law partner can claim
+    formula: "if(line.HH.partner == 1, max(0, line.NL428.104 - line.NL428.85), 0)"
+    source: "NL428 lines 106 to 108, for a spouse or common-law partner"
+
+  # Schedule NL(S11) – Newfoundland and Labrador tuition and education amounts (the student's own)
+  NLS11.1:
+    label: Unused Newfoundland and Labrador tuition and education amounts from your 2024 notice of assessment
+    formula: "answer.unusedProvincialTuition"
+  NLS11.2:
+    label: Tuition fees for 2025
+    formula: "line.S11.8"
+    source: "NL(S11) line 2: line 8 of your federal Schedule 11"
+  NLS11.3:
+    label: Education amount, part-time months
+    formula: "min(param.nlEducationMonthsMax, sum(T2202.box24)) * param.nlEducationPartTime"
+    source: "NL(S11) line 3: months part-time (T2202 box 24, federal Schedule 11 line 32010) at $60"
+  NLS11.4:
+    label: Education amount, full-time months
+    formula: "min(param.nlEducationMonthsMax, sum(T2202.box25)) * param.nlEducationFullTime"
+    source: "NL(S11) line 4: months full-time (T2202 box 25, federal Schedule 11 line 32020) at $200"
+  NLS11.5:
+    label: Total 2025 tuition and education amounts
+    formula: "line.NLS11.2 + line.NLS11.3 + line.NLS11.4"
+  NLS11.7:
+    label: Income the tuition amount can reduce to zero tax
+    formula: "if(line.T1.26000 <= param.nlFirstBracketTop, line.T1.26000, round(line.NL428.8 / param.nlCreditRate, 2))"
+    source: "NL(S11) line 7: taxable income, or above $44,192, NL428 line 8 or 15 ÷ 8.7%"
+  NLS11.9:
+    label: Room left after other Newfoundland and Labrador credits
+    formula: "max(0, line.NLS11.7 - line.NL428.42)"
+    source: "NL(S11) lines 8 and 9: less NL428 line 42"
+  NLS11.10:
+    label: Unused tuition and education amounts claimed for 2025
+    formula: "min(line.NLS11.1, line.NLS11.9)"
+  NLS11.12:
+    label: 2025 tuition and education amounts claimed
+    formula: "min(line.NLS11.5, line.NLS11.9 - line.NLS11.10)"
+  NLS11.13:
+    label: Newfoundland and Labrador tuition and education amounts claimed for 2025
+    formula: "line.NLS11.10 + line.NLS11.12"
+  NLS11.19:
+    label: Newfoundland and Labrador tuition and education amounts you can transfer
+    formula: "max(0, min(param.nlTuitionTransferMax, line.NLS11.5) - line.NLS11.12)"
+    source: "NL(S11) lines 17 to 19: this year's amounts up to $5,000, less what you used"
+  NLS11.20:
+    label: Newfoundland and Labrador tuition and education amounts transferred to your spouse or common-law partner
+    formula: "if(line.HH.partner == 1 and family.partnerInYear and line.NLS11.5 > 0, min(answer.tuitionTransfer, line.NLS11.19), 0)"
+    source: "NL(S11) line 20: the amount you designate on your T2202 (the same as federally), up to line 19"
+
+  # Schedule NL(S2) – Newfoundland and Labrador amounts transferred from your spouse (read from their NL428, worked
+  # out with Newfoundland and Labrador's rules whatever their province, as the schedule asks)
+  NLS2.5:
+    label: Their Newfoundland and Labrador age, pension income and disability amounts, and the tuition they designate to you
+    formula: "spouse.line.NL428.17 + spouse.line.NL428.37 + spouse.line.NL428.40 + spouse.line.NLS11.20"
+    source: "NL(S2) lines 1 to 5: their lines 58080, 58360 and 58440, and the tuition they designate to you"
+  NLS2.6:
+    label: Their taxable income, for the transfer
+    formula: "if(spouse.line.T1.26000 <= param.nlFirstBracketTop, spouse.line.T1.26000, round(spouse.line.NL428.8 / param.nlCreditRate, 2))"
+    source: "NL(S2) line 6"
+  NLS2.10:
+    label: Their basic personal amount, CPP, EI and child care amounts, and tuition
+    formula: "spouse.line.NL428.16 + spouse.line.NL428.35 + spouse.line.NL428.44"
+    source: "NL(S2) lines 7 to 10: their lines 58040, 35 and 58560"
+  NLS2.11:
+    label: Their adjusted taxable income
+    formula: "max(0, line.NLS2.6 - line.NLS2.10)"
+  NLS2.12:
+    label: Newfoundland and Labrador amounts transferred from your spouse
+    formula: "max(0, line.NLS2.5 - line.NLS2.11)"
+
+  # Form NL479 – Newfoundland and Labrador credits (refundable)
+  NL479.5:
+    label: Physical activity expenses
+    formula: >-
+      if(line.HH.partner == 1 and family.partnerInYear,
+      if(spouse.person.province == "NL",
+      if(answer.physicalActivityFees + spouse.answer.physicalActivityFees > param.nlPhysicalActivityMax,
+      unsupported("Your family can claim up to $2,000 of physical activity fees in all. Split them between your two returns so they add up to $2,000 or less"),
+      answer.physicalActivityFees), min(param.nlPhysicalActivityMax, answer.physicalActivityFees)),
+      min(param.nlPhysicalActivityMax, answer.physicalActivityFees))
+    source: "NL479 lines 1 to 5: the family's fees, up to $2,000, less what another family member claims"
+  NL479.7:
+    label: Physical activity tax credit
+    formula: "round(line.NL479.5 * param.nlPhysicalActivityRate, 2)"
+    source: "NL479 lines 6 and 7: 17.4%"
+  NL479.9:
+    label: Newfoundland and Labrador credits
+    formula: "line.NL479.7"
+    source: "NL479 line 9. The research and development tax credit (line 8) isn't claimed"

@@ -37,7 +37,7 @@ name: Release
 # .github/scripts/configure-release-tags.sh sets up the environment, key and ruleset.
 on:
   workflow_run:
-    workflows: [CI, Gateway, captable, esign, knowledge]
+    workflows: [CI, Gateway, captable, esign, knowledge, taxi]
     types: [completed]
     branches: [main]
   schedule:

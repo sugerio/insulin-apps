@@ -1,0 +1,246 @@
+import { PROVINCE_NAMES, isAdult, printBlockers, type Province, type Slip, type TaxYear } from "#shared";
+import { Dec } from "../../shared/engine/decimal.ts";
+import { Evaluation } from "../../shared/engine/evaluate.ts";
+import { fillForms, personalFacts } from "../../shared/engine/forms.ts";
+import { documentName, type FormLanguage, type FormSpec, type RuleSet } from "../../shared/engine/rules.ts";
+import { rulesFor } from "../../shared/rules/index.ts";
+import { buildReturnPdf, type Worksheet, type WorksheetRow } from "./forms-pdf.ts";
+import { hintsOf, stillApplied } from "./hints.ts";
+import { ApiError, conflict, notFound } from "./http.ts";
+import { openYear } from "./returns.ts";
+import { engineInputOf, loadWorkspace, spouseResult } from "./workspace.ts";
+
+// A return printed on the CRA's own forms (and, for a resident of Quebec, on Revenu Québec's TP-1 and schedules after
+// them), with a worksheet: built on request from what is stored, only once the return is finished (shared/print.ts).
+// The print PDFs are downloaded from canada.ca or revenuquebec.ca the first time an organization prints and kept in D1
+// (form_files); a file whose SHA-256 isn't the one the layout was measured on is refused, so a form its publisher
+// changed is never filled in the wrong places.
+
+type Db = D1Database;
+
+/** Where the forms come from. `checkHash` is off only in tests, which print on blank stand-in pages. */
+export interface FormSource {
+  fetch: (url: string) => Promise<Uint8Array>;
+  checkHash: boolean;
+}
+
+const MAX_FORM_BYTES = 4 * 1024 * 1024;
+
+/** Who publishes a form, for the messages: the CRA on canada.ca, or Revenu Québec on revenuquebec.ca. */
+function publisherOf(url: string): { name: string; site: string } {
+  return new URL(url).hostname.endsWith("revenuquebec.ca") ? { name: "Revenu Québec", site: "revenuquebec.ca" } : { name: "the CRA", site: "canada.ca" };
+}
+const capital = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
+
+export const craForms: FormSource = {
+  checkHash: true,
+  async fetch(url) {
+    const { name, site } = publisherOf(url);
+    const response = await fetch(url, { headers: { Accept: "application/pdf" } });
+    const type = response.headers.get("Content-Type") ?? "";
+    if (!response.ok || !type.startsWith("application/pdf")) {
+      throw new ApiError("unavailable", `${capital(name)}'s form couldn't be downloaded from ${site} (HTTP ${response.status}). Try again later.`);
+    }
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    if (bytes.byteLength > MAX_FORM_BYTES) throw new ApiError("unavailable", `${capital(name)}'s form from ${site} is larger than expected.`);
+    return bytes;
+  },
+};
+
+/**
+ * A person's return on the forms, with the worksheet. In French (`language` fr), Revenu Québec's forms are printed on
+ * their French versions; the CRA's forms and the worksheet stay in English.
+ */
+export async function printReturn(
+  db: Db,
+  orgId: string,
+  year: number,
+  personId: string,
+  source: FormSource,
+  now: number,
+  language: FormLanguage = "en",
+): Promise<{ bytes: Uint8Array<ArrayBuffer>; name: string }> {
+  const { row, view } = await openYear(db, orgId, year);
+  if (!view.adults.some((adult) => adult.personId === personId)) throw notFound("There is no such return in this year");
+  const rules = rulesFor(year);
+  if (!rules) throw notFound(`No tax rules for ${year}`);
+  const workspace = await loadWorkspace(db, orgId, row.id);
+  const evaluation = new Evaluation(rules, engineInputOf(view, workspace));
+  const people = evaluation.result().people;
+  const result = people.find((person) => person.personId === personId)!;
+  const blockers = printBlockers(result, workspace.slips, spouseResult(view, people, personId));
+  if (blockers.length > 0) {
+    throw conflict(`The return isn't finished, so its forms can't be printed yet: ${blockers.map((blocker) => blocker.text).join(" ")}`);
+  }
+  // Step 1 names the spouse even when their return isn't prepared here: the other adult in the profile.
+  const partner = view.people.find((each) => each.id !== personId && isAdult(each.relationship));
+  const facts = personalFacts(evaluation.input, personId, {
+    spouseName: partner?.name,
+    spouseBirthDate: partner?.birthDate,
+    provinceName: (code) => PROVINCE_NAMES[code as Province] ?? code,
+  });
+  const filled = fillForms(rules, evaluation, personId, facts, language);
+  const forms = [];
+  for (const each of filled) forms.push({ filled: each, template: await formTemplate(db, orgId, each.form, source, now) });
+  const person = view.people.find((each) => each.id === personId)!;
+  const accepted = await db
+    .prepare("SELECT person_id, hint, decision, effect, previous FROM hint_decisions WHERE org_id = ? AND tax_year_id = ? AND person_id = ? AND decision = 'accepted' ORDER BY decided_at")
+    .bind(orgId, row.id, personId)
+    .all<{ person_id: string; hint: string; decision: "accepted"; effect: string | null; previous: string }>();
+  // Only the savings that still hold: one whose answers were changed since isn't applied any more.
+  const applied = accepted.results.length > 0 ? stillApplied(accepted.results, hintsOf(view, workspace), workspace.answers) : [];
+  const worksheet = worksheetOf(rules, evaluation, view, {
+    personId,
+    name: person.name,
+    slips: workspace.slips.filter((slip) => slip.personId === personId),
+    answers: workspace.answers[personId] ?? {},
+    hints: applied.map(({ hint, effect }) => ({ hint, effect })),
+    forms: filled.map((each) => each.form),
+    now,
+  });
+  return { bytes: new Uint8Array(await buildReturnPdf(forms, worksheet)), name: `Taxi ${year} return - ${person.name}.pdf` };
+}
+
+/** A form's PDF: the copy kept for the organization, or downloaded from its publisher's site and kept. */
+async function formTemplate(db: Db, orgId: string, form: FormSpec, source: FormSource, now: number): Promise<Uint8Array> {
+  const kept = await db.prepare("SELECT sha256, bytes FROM form_files WHERE org_id = ? AND url = ?").bind(orgId, form.url).first<{ sha256: string; bytes: ArrayBuffer | Uint8Array }>();
+  if (kept && (!source.checkHash || kept.sha256 === form.sha256)) return kept.bytes instanceof Uint8Array ? kept.bytes : new Uint8Array(kept.bytes);
+  const bytes = await source.fetch(form.url);
+  const sha256 = await sha256Of(bytes);
+  if (source.checkHash && sha256 !== form.sha256) {
+    const { name, site } = publisherOf(form.url);
+    throw new ApiError(
+      "unavailable",
+      `${capital(name)} has changed ${form.title} on ${site} since this app measured it, so it isn't filled in. The app needs an update for the new form.`,
+    );
+  }
+  await db
+    .prepare(
+      `INSERT INTO form_files (org_id, url, sha256, bytes, fetched_at) VALUES (?, ?, ?, ?, ?)
+       ON CONFLICT(org_id, url) DO UPDATE SET sha256 = excluded.sha256, bytes = excluded.bytes, fetched_at = excluded.fetched_at`,
+    )
+    .bind(orgId, form.url, sha256, bytes, now)
+    .run();
+  return bytes;
+}
+
+async function sha256Of(bytes: Uint8Array): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", new Uint8Array(bytes));
+  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+interface WorksheetInput {
+  personId: string;
+  name: string;
+  slips: Slip[];
+  answers: Record<string, string | boolean>;
+  hints: { hint: string; effect: string | null }[];
+  forms: FormSpec[];
+  now: number;
+}
+
+/** The worksheet: how to file, the result, what went in (slips, answers, applied hints), and every line worked out. */
+function worksheetOf(rules: RuleSet, evaluation: Evaluation, view: TaxYear, input: WorksheetInput): Worksheet {
+  const line = (id: string) => evaluation.line(input.personId, id).value;
+  const refund = line("T1.48400");
+  const owing = line("T1.48500");
+  const prepared = new Date(input.now).toISOString().slice(0, 10);
+  const formNames = input.forms.map((form) => form.title).join("; ");
+  // A resident of Quebec files two returns, the federal one and Revenu Québec's TP-1, each with its own result.
+  const quebec = evaluation.input.people.find((each) => each.id === input.personId)?.province === "QC";
+  const quebecOwing = line("TP1.479");
+
+  const result: WorksheetRow[] = [
+    owing && !owing.isZero() ? { text: "Balance owing (line 48500)", amount: money(owing) } : { text: "Refund (line 48400)", amount: money(refund ?? Dec.ZERO) },
+    ...["T1.15000", "T1.23600", "T1.26000", "T1.42000", "T1.42800", "T1.43500", "T1.43700"].map((id) => ({
+      text: `${rules.lines.get(id)!.label} (line ${id.split(".")[1]})`,
+      amount: money(line(id) ?? Dec.ZERO),
+    })),
+    ...(quebec
+      ? [
+          quebecOwing && !quebecOwing.isZero()
+            ? { text: "Quebec balance due (TP-1 line 479)", amount: money(quebecOwing) }
+            : { text: "Quebec refund (TP-1 line 478)", amount: money(line("TP1.478") ?? Dec.ZERO) },
+          ...["TP1.199", "TP1.275", "TP1.299", "TP1.432", "TP1.450"].map((id) => ({
+            text: `${rules.lines.get(id)!.label} (TP-1 line ${id.split(".")[1]})`,
+            amount: money(line(id) ?? Dec.ZERO),
+          })),
+        ]
+      : []),
+  ];
+
+  const slips: WorksheetRow[] = input.slips.map((slip) => {
+    const type = rules.slips.get(slip.type);
+    return {
+      text: `${documentName(type, slip.type)} from ${slip.issuer}`,
+      notes: Object.entries(slip.boxes).map(([box, amount]) => `${type?.receipt ? "" : `Box ${box} `}${type?.boxes[box] ?? ""}: ${type?.counts.includes(box) ? amount : money(Dec.from(amount))}`),
+    };
+  });
+
+  const answers: WorksheetRow[] = [...rules.questions.values()]
+    .filter((question) => question.id in input.answers)
+    .map((question) => {
+      const value = input.answers[question.id]!;
+      const shown =
+        typeof value === "boolean"
+          ? value
+            ? "Yes"
+            : "No"
+          : question.type === "money"
+            ? money(Dec.from(value))
+            : question.type === "percent"
+              ? `${value}%`
+              : (question.optionLabels?.[value] ?? value);
+      // A group's part is named with its group: "Self-employment or business income: Gross income".
+      const parent = question.parent ? rules.questions.get(question.parent) : undefined;
+      return { text: parent ? `${parent.ask}: ${question.ask}` : question.ask, amount: shown };
+    });
+
+  const hints: WorksheetRow[] = input.hints.flatMap(({ hint, effect }) => {
+    const spec = rules.hints.get(hint);
+    return spec ? [{ text: spec.title, ...(effect ? { amount: `saves ${money(Dec.from(effect))}` } : {}) }] : [];
+  });
+
+  // Every line the return reads that has an amount, in the rules' order: the forms', the schedules' and worksheets'.
+  const lines: WorksheetRow[] = evaluation
+    .linesOf(input.personId)
+    .map((id) => rules.lines.get(id)!)
+    .flatMap((each) => {
+      const value = line(each.id);
+      if (value === null || value.isZero()) return [];
+      return [{ text: `${each.id}  ${each.label}`, amount: money(value), notes: [`= ${each.text}`, ...(each.source ? [each.source] : [])] }];
+    });
+
+  return {
+    title: `${input.name}: ${view.year} return worksheet`,
+    intro: quebec
+      ? [
+          `Prepared with Taxi on ${prepared}. Taxi doesn't file returns. As a resident of Quebec you file two returns, and both are here, filled in with what Taxi knows: first the federal return on the CRA's forms, then your Quebec return on Revenu Québec's TP-1 and its schedules: ${formNames}.`,
+          "Filled in for you: in Step 1 of the T1, your name, date of birth, marital status and province, and your spouse's or partner's first name and net income; on pages 1 and 2 of the TP-1, your name and date of birth, whether you had a spouse, and your spouse's name, date of birth and net income; on both returns and on each schedule and form above, every row Taxi works out. A row left blank is one Taxi doesn't know or that doesn't apply to you.",
+          "Still to do by hand before you file on paper: on both returns, your social insurance number, mailing address and your spouse's or partner's social insurance number; on the T1, your email address, language and the other Step 1 questions; on the TP-1, your sex, language of communication and the other questions on page 1; any blank row of a schedule that applies to you (such as each child's details on Schedule C); and any form not listed above. Keep your slips and receipts; the CRA and Revenu Québec may ask for them.",
+          "Mail the two returns in two parts, each signed: the federal return (the T1 for residents of Quebec, with its schedules and forms) to the CRA, at your tax centre; the TP-1, with its schedules, to Revenu Québec.",
+          "To file online: copy the amounts into tax software certified for NETFILE and for Revenu Québec's NetFile Québec, and file both returns there.",
+          "Every line Taxi works out is listed below with how it was worked out.",
+        ]
+      : [
+          `Prepared with Taxi on ${prepared}. Taxi doesn't file returns. Before this worksheet are the CRA's own forms, filled in with what Taxi knows: ${formNames}.`,
+          "Filled in for you: in Step 1 of the T1, your name, date of birth, marital status and province of residence, and your spouse's or partner's first name and net income; on the T1 and on each schedule and form above, every row Taxi works out. A row left blank is one Taxi doesn't know or that doesn't apply to you.",
+          "Still to do by hand before you file on paper: in Step 1 of the T1, your social insurance number, mailing address, email address and language, your spouse's or partner's social insurance number, and the other questions (Elections Canada, income exempt under the Indian Act, the organ donor registry); any blank row of a schedule that applies to you (such as each dependant's details, or each property's address); and any form not listed above (such as Schedule 7 for RRSP contributions, Form T1135, or a provincial form such as ON428-A). Then sign the T1 and mail it with the other forms to your tax centre. Keep your slips and receipts; the CRA may ask for them.",
+          "To file online: copy the amounts into NETFILE-certified tax software and file there.",
+          "Every line Taxi works out is listed below with how it was worked out.",
+        ],
+    sections: [
+      { heading: "Result", rows: result },
+      { heading: "Slips, receipts and notices", rows: slips.length > 0 ? slips : [{ text: "None." }] },
+      { heading: "Answers", rows: answers },
+      ...(hints.length > 0 ? [{ heading: "Hints applied", rows: hints }] : []),
+      { heading: "How each line is worked out", rows: lines },
+    ],
+  };
+}
+
+function money(value: Dec): string {
+  const rounded = value.roundTo(2, "HALF_UP");
+  const [whole, fraction = ""] = rounded.abs().toString().split(".");
+  return `${rounded.isNegative() ? "-" : ""}$${whole!.replace(/\B(?=(\d{3})+(?!\d))/g, ",")}.${fraction.padEnd(2, "0")}`;
+}

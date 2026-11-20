@@ -9,6 +9,7 @@ D1 database.
 | [`captable/`](captable/) | Cap table and equity management: stakeholders, share classes, equity plans, option grants, vesting, exercises, terminations, 409A valuations, documents and a holder view, set up by importing Pulley's reports or a spreadsheet template. |
 | [`esign/`](esign/) | Electronic signatures: templates, envelopes signed in order on a public signing page after an emailed code, an embeddable template editor, hash-chained evidence, a signed and timestamped seal, and certificates of completion. Experimental: synthetic documents only. |
 | [`knowledge/`](knowledge/) | A team's knowledge, answered with sources: collections of files, web pages and notes, shared with people and AI assistants, answers that cite their passages or say they won't guess, facts to check, corrections that apply everywhere and a restore point after every change. Each collection is learned by its own engine in a Cloudflare Container, so it runs on insulinapps.com rather than in the Insulin console. |
+| [`taxi/`](taxi/) | Canadian personal income tax: your profile (you, your spouse, your dependants), AI-read slips, deductions and credits in every province and territory, and the CRA's and Revenu Québec's own forms filled in to sign and mail. Early: built in parts. |
 
 ## Use the apps online
 

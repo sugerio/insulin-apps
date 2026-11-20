@@ -1,0 +1,351 @@
+# Northwest Territories tax: Form NT428, Schedules NT(S2) and NT(S11), and Form NT479 (the cost of living tax
+# credit). Line ids are the line numbers in the forms' right margin. Every number below was checked against the 2025
+# NT428 (5012-C), Worksheet NT428 (5012-D), NT(S2) (5012-S2), NT(S11) (5012-S11) and NT479 (5012-TC).
+
+params:
+  ntTaxBrackets:
+    label: Northwest Territories tax brackets
+    source: "NT428 Part A, bases as printed on the form"
+    value:
+      - { upTo: 51964, rate: 5.9%, base: 0 }
+      - { upTo: 103930, rate: 8.6%, base: 3065.88 }
+      - { upTo: 168967, rate: 12.2%, base: 7534.95 }
+      - { rate: 14.05%, base: 15469.47 }
+  ntFirstBracketTop:
+    label: Top of the first Northwest Territories bracket
+    source: "NT428 Part A, NT(S2) line 6 and NT(S11) line 7: $51,964"
+    value: 51964
+  ntCreditRate:
+    label: Northwest Territories credit rate
+    source: "NT428 line 46: 5.9%"
+    value: 5.9%
+  ntBasicPersonalAmount:
+    label: Northwest Territories basic personal amount
+    source: "NT428 line 9 (58040): claim $17,842"
+    value: 17842
+  ntAgeAmountMax:
+    label: Northwest Territories age amount, full
+    source: "Worksheet NT428, line 58080: $8,727"
+    value: 8727
+  ntAgeAmountThreshold:
+    label: Net income where the Northwest Territories age amount starts to go down
+    source: "Worksheet NT428, line 58080: income threshold $45,522"
+    value: 45522
+  ntAgeAmountRate:
+    label: Northwest Territories age amount reduction rate
+    source: "Worksheet NT428, line 58080: applicable rate"
+    value: 15%
+  ntSpouseBase:
+    label: Northwest Territories spouse and eligible dependant amount, base
+    source: "NT428 lines 11 and 14: $17,842"
+    value: 17842
+  ntPensionAmountMax:
+    label: Most Northwest Territories pension income amount
+    source: "NT428 line 26 (58360): maximum $1,000"
+    value: 1000
+  ntMedicalThresholdMax:
+    label: Northwest Territories medical expense threshold, most
+    source: "NT428 line 41: whichever is less, $2,834 or 3% of net income"
+    value: 2834
+  ntDonationLowRate:
+    label: Northwest Territories donation credit rate on the first $200
+    source: "NT428 line 48: 5.9%"
+    value: 5.9%
+  ntDonationHighRate:
+    label: Northwest Territories donation credit rate above $200
+    source: "NT428 line 49: 14.05%"
+    value: 14.05%
+  ntDividendEligibleRate:
+    label: Northwest Territories dividend tax credit rate, eligible dividends
+    source: "Worksheet NT428, line 61520: 11.5% of the taxable amount"
+    value: 11.5%
+  ntDividendOtherRate:
+    label: Northwest Territories dividend tax credit rate, other dividends
+    source: "Worksheet NT428, line 61520: 6% of the taxable amount"
+    value: 6%
+  ntInfirmDependantBase:
+    label: Northwest Territories amount for infirm dependants age 18 or older, base
+    source: "Worksheet NT428, line 58200, line 1: $14,305"
+    value: 14305
+  ntInfirmDependantMax:
+    label: Most Northwest Territories amount for an infirm dependant
+    source: "Worksheet NT428, line 58200, line 3: maximum $5,914 per dependant"
+    value: 5914
+  ntDisabilityAmount:
+    label: Northwest Territories disability amount
+    source: "NT428 line 29 (58440) and Worksheet NT428, line 58480, line 1: $14,469"
+    value: 14469
+  ntDisabilitySupplementMax:
+    label: Northwest Territories disability supplement for a person under 18
+    source: "Worksheet NT428, line 58480, line 2: $5,914"
+    value: 5914
+  ntDisabilityCareThreshold:
+    label: Child care and attendant care that the Northwest Territories disability supplement allows
+    source: "Worksheet NT428, line 58480, line 4: $3,464"
+    value: 3464
+  ntOtherDependantMedicalMax:
+    label: Most allowable medical expenses for each other dependant
+    source: "Worksheet NT428, line 58729, line 3: maximum $5,000 per dependant"
+    value: 5000
+  ntPoliticalFullUpTo:
+    label: Northwest Territories political contributions credited in full
+    source: "Worksheet NT428, line 65: contributions of $100 or less"
+    value: 100
+  ntPoliticalRate:
+    label: Northwest Territories political contribution credit rate above $100
+    source: "Worksheet NT428, line 65, line 4: 50%"
+    value: 50%
+  ntPoliticalMax:
+    label: Most Northwest Territories political contribution tax credit
+    source: "NT428 line 65: maximum $500"
+    value: 500
+  ntEducationPartTime:
+    label: Northwest Territories education amount for each month part-time
+    source: "NT(S11) line 3 (59160): $120 a month"
+    value: 120
+  ntEducationFullTime:
+    label: Northwest Territories education amount for each month full-time
+    source: "NT(S11) line 4 (59180): $400 a month"
+    value: 400
+  ntTuitionTransferMax:
+    label: Most Northwest Territories tuition and education amounts a student can transfer
+    source: "NT(S11) line 17: maximum $5,000"
+    value: 5000
+  ntCostOfLivingBrackets:
+    label: Northwest Territories cost of living tax credit, basic credit
+    source: "NT479 lines 6 to 12, bases as printed on the form"
+    value:
+      - { upTo: 12000, rate: 2.6%, base: 0 }
+      - { upTo: 48000, rate: 1.25%, base: 312 }
+      - { rate: 1%, base: 762 }
+  ntCostOfLivingMax:
+    label: Most Northwest Territories cost of living tax credit
+    source: "NT479 lines 13 and 21: maximum $942, the credit at adjusted net income of $66,000 or more"
+    value: 942
+  ntCostOfLivingFullAt:
+    label: Adjusted net income from which the basic cost of living credit is the most
+    source: "NT479 line 13: $66,000 or more"
+    value: 66000
+  ntCostOfLivingSupplement:
+    label: Northwest Territories cost of living supplement, for each spouse
+    source: "NT479 lines 14 and 15: $350"
+    value: 350
+
+lines:
+  # Part A – Northwest Territories tax on taxable income
+  NT428.8:
+    label: Northwest Territories tax on taxable income
+    formula: "round(bracket(param.ntTaxBrackets, line.T1.26000), 2)"
+
+  # Part B – Northwest Territories non-refundable tax credits
+  NT428.9:
+    label: Northwest Territories basic personal amount
+    formula: >-
+      round((param.ntBasicPersonalAmount) * line.RES.factor, 2)
+
+  NT428.10:
+    label: Northwest Territories age amount
+    formula: >-
+      round((if(person.age >= 65, max(0, param.ntAgeAmountMax - round(max(0, line.T1.23600 - param.ntAgeAmountThreshold) * param.ntAgeAmountRate, 2)), 0)) * line.RES.factor, 2)
+    source: "Worksheet NT428, line 58080: for people born in 1960 or earlier"
+  NT428.13:
+    label: Northwest Territories spouse or common-law partner amount
+    formula: >-
+      round((if(line.HH.partner == 1, max(0, param.ntSpouseBase - line.HH.spouseNetIncome), 0)) * line.RES.factor, 2)
+
+  NT428.16:
+    label: Northwest Territories amount for an eligible dependant
+    formula: >-
+      round((if(line.HH.partner == 0 and family.childrenUnder18 > 0, param.ntSpouseBase, 0)) * line.RES.factor, 2)
+    source: "NT428 lines 14 to 16. The app assumes the child had no income"
+  # The worksheet's infirm dependant amount, which needn't live with you, rather than the caregiver amount (line 27),
+  # which needs a dependant living with you: the app doesn't ask where they live. One dependant, as line 30450.
+  NT428.17:
+    label: Northwest Territories amount for infirm dependants age 18 or older
+    formula: >-
+      round((if(line.T1.30450 > 0, min(param.ntInfirmDependantMax, max(0, param.ntInfirmDependantBase - answer.infirmDependantIncome)), 0)) * line.RES.factor, 2)
+    source: "Worksheet NT428, line 58200: $14,305 less the dependant's net income, up to $5,914"
+  NT428.23:
+    label: CPP and EI credit amounts
+    formula: "line.T1.30800 + line.T1.31000 + line.T1.31200"
+    source: "NT428 lines 19 to 23: lines 30800, 31000 and 31200 of your return"
+  NT428.26:
+    label: Northwest Territories pension income amount
+    formula: "min(param.ntPensionAmountMax, line.PEN.creditBase)"
+    source: "NT428 line 26 (58360): eligible pension income, up to $1,000"
+  NT428.29:
+    label: Northwest Territories disability amount for self
+    formula: >-
+      round((if(line.T1.31600 > 0, param.ntDisabilityAmount, 0)) * line.RES.factor, 2)
+    source: "NT428 line 29 (58440): claim $14,469 with an approved Form T2201"
+  NT428.30:
+    label: Northwest Territories disability amount transferred from a dependant
+    formula: >-
+      round((if(line.T1.31800 > 0, answer.disabledChildren * (param.ntDisabilityAmount + param.ntDisabilitySupplementMax) - min(answer.disabledChildren * param.ntDisabilitySupplementMax, max(0, answer.disabledChildCare - param.ntDisabilityCareThreshold)) + answer.disabledAdults * param.ntDisabilityAmount, 0)) * line.RES.factor, 2)
+    source: "Worksheet NT428, line 58480: $14,469, plus up to $5,914 for a child under 18, less care over $3,464. The app assumes the dependant had no income"
+  NT428.31:
+    label: Northwest Territories credit amounts before tuition and transfers
+    formula: "line.NT428.9 + line.NT428.10 + line.NT428.13 + line.NT428.16 + line.NT428.17 + line.NT428.23 + line.NT428.26 + line.NT428.29 + line.NT428.30"
+    source: "NT428 lines 18, 24, 28 and 31"
+  NT428.32:
+    label: Interest paid on your student loans
+    formula: "line.T1.31900"
+    source: "NT428 line 32 (58520): line 31900 of your return"
+  NT428.33:
+    label: Northwest Territories tuition and education amounts
+    formula: "line.NTS11.13"
+    source: "NT428 line 33 (58560): Schedule NT(S11)"
+  NT428.35:
+    label: Amounts transferred from your spouse or common-law partner
+    formula: "if(line.HH.partner == 1 and family.partnerInYear, line.NTS2.12, 0)"
+    source: "NT428 line 35 (58640): Schedule NT(S2)"
+  NT428.34:
+    label: Northwest Territories tuition and education amounts transferred from a child or grandchild
+    formula: "line.CHILD.provincialTuition"
+    source: "NT428 line 34 (58600): the territorial amount designated to you on their T2202 (the app takes the federal one, line 32400)"
+  NT428.42:
+    label: Allowable medical expenses
+    formula: "max(0, line.T1.33099 - min(param.ntMedicalThresholdMax, round(line.T1.23600 * param.medicalThresholdRate, 2)))"
+    source: "NT428 lines 37 to 42: expenses over whichever is less, $2,834 or 3% of net income"
+  NT428.43:
+    label: Allowable amount of medical expenses for other dependants
+    formula: >-
+      if(answer.hasOtherDependantMedical, min(param.ntOtherDependantMedicalMax, max(0, answer.otherDependantMedical
+      - min(param.ntMedicalThresholdMax, round(answer.otherDependantIncome * param.medicalThresholdRate, 2)))), 0)
+    source: "Worksheet NT428, line 58729: their expenses over their NT428 line 41 (whichever is less, $2,834 or 3% of their net income), up to $5,000"
+  NT428.45:
+    label: Northwest Territories credit amounts
+    formula: "line.NT428.31 + line.NT428.32 + line.NT428.33 + line.NT428.34 + line.NT428.35 + line.NT428.42 + line.NT428.43"
+  NT428.47:
+    label: Northwest Territories credit amounts at the credit rate
+    formula: "round(line.NT428.45 * param.ntCreditRate, 2)"
+  NT428.50:
+    label: Northwest Territories donations credit
+    formula: "round(line.S9.13 * param.ntDonationLowRate, 2) + round(line.S9.14 * param.ntDonationHighRate, 2)"
+    source: "NT428 lines 48 to 50: Schedule 9 lines 13 and 14 at 5.9% and 14.05%"
+  NT428.51:
+    label: Northwest Territories non-refundable tax credits
+    formula: "line.NT428.47 + line.NT428.50"
+
+  # Part C – Northwest Territories tax
+  NT428.56:
+    label: Northwest Territories dividend tax credit
+    formula: "round(line.T1.12010 * param.ntDividendOtherRate, 2) + round((line.T1.12000 - line.T1.12010) * param.ntDividendEligibleRate, 2)"
+    source: "Worksheet NT428, line 61520"
+  NT428.59:
+    label: Northwest Territories tax after credits
+    formula: "max(0, line.NT428.8 - line.NT428.51 - line.NT428.56)"
+  # Form T2036 – the territorial foreign tax credit: the foreign tax left after the federal credit, up to the share of
+  # the territory's tax otherwise payable (NT428 line 61, which is line 59 here) on the foreign income.
+  NT428.62:
+    label: Territorial foreign tax credit
+    formula: >-
+      if(line.FTC.left > 0 and line.T1.23600 > 0, min(line.FTC.left,
+      round(min(line.FTC.netForeign, line.T1.23600) * line.NT428.59 / line.T1.23600, 2), line.NT428.59), 0)
+    source: "Form T2036, line 5; note 4: the tax before the foreign tax credit, NT428 line 61"
+  NT428.63:
+    label: Northwest Territories tax after the foreign tax credit
+    formula: "max(0, line.NT428.59 - line.NT428.62)"
+  NT428.62550:
+    label: Northwest Territories political contributions made in 2025
+    formula: "answer.provincialPoliticalContributions"
+  NT428.65:
+    label: Northwest Territories political contribution tax credit
+    formula: >-
+      if(line.NT428.62550 <= param.ntPoliticalFullUpTo, line.NT428.62550,
+      min(param.ntPoliticalMax, param.ntPoliticalFullUpTo + round((line.NT428.62550 - param.ntPoliticalFullUpTo) * param.ntPoliticalRate, 2)))
+    source: "Worksheet NT428, line 65: contributions up to $100, then 50% of the rest, up to $500"
+  NT428.66:
+    label: Northwest Territories tax
+    formula: "max(0, line.NT428.63 - line.NT428.65)"
+    source: "NT428 lines 64 to 66"
+
+  # Schedule NT(S11) – Northwest Territories tuition and education amounts (the student's own). A month counts once:
+  # full-time months first, up to 12 in all.
+  NTS11.1:
+    label: Unused Northwest Territories tuition and education from your 2024 notice of assessment
+    formula: "answer.unusedProvincialTuition"
+  NTS11.5:
+    label: Tuition and education amounts for 2025
+    formula: >-
+      line.S11.8 + min(12, sum(T2202.box25)) * param.ntEducationFullTime
+      + min(12 - min(12, sum(T2202.box25)), sum(T2202.box24)) * param.ntEducationPartTime
+    source: "NT(S11) lines 2 to 5: line 8 of your federal Schedule 11, and the months of study on your T2202 at $400 full-time and $120 part-time"
+  NTS11.9:
+    label: Income the Northwest Territories tuition amount can reduce to zero tax
+    formula: "max(0, if(line.T1.26000 <= param.ntFirstBracketTop, line.T1.26000, round(line.NT428.8 / param.ntCreditRate, 2)) - line.NT428.31)"
+    source: "NT(S11) lines 7 to 9: taxable income, or above $51,964, NT428 line 8 ÷ 5.9%, less NT428 line 31"
+  NTS11.10:
+    label: Unused Northwest Territories tuition and education claimed for 2025
+    formula: "min(line.NTS11.1, line.NTS11.9)"
+  NTS11.12:
+    label: 2025 Northwest Territories tuition and education claimed
+    formula: "min(line.NTS11.5, line.NTS11.9 - line.NTS11.10)"
+  NTS11.13:
+    label: Northwest Territories tuition and education amounts claimed for 2025
+    formula: "line.NTS11.10 + line.NTS11.12"
+  NTS11.19:
+    label: Northwest Territories tuition and education you can transfer
+    formula: "max(0, min(param.ntTuitionTransferMax, line.NTS11.5) - line.NTS11.12)"
+    source: "NT(S11) lines 17 to 19: this year's amounts up to $5,000, less what you used"
+  NTS11.20:
+    label: Northwest Territories tuition and education transferred to your spouse or common-law partner
+    formula: "if(line.HH.partner == 1 and family.partnerInYear and line.NTS11.5 > 0, min(answer.tuitionTransfer, line.NTS11.19), 0)"
+    source: "NT(S11) line 20: the amount you designate on your T2202 (the app takes the federal one), up to line 19"
+
+  # Schedule NT(S2) – Northwest Territories amounts transferred from your spouse (read from their NT428, whatever
+  # their province)
+  NTS2.5:
+    label: Their Northwest Territories age, pension and disability amounts, and the tuition they designate to you
+    formula: "spouse.line.NT428.10 + spouse.line.NT428.26 + spouse.line.NT428.29 + spouse.line.NTS11.20"
+    source: "NT(S2) lines 1 to 4"
+  NTS2.6:
+    label: Their taxable income, for the transfer
+    formula: "if(spouse.line.T1.26000 <= param.ntFirstBracketTop, spouse.line.T1.26000, round(spouse.line.NT428.8 / param.ntCreditRate, 2))"
+    source: "NT(S2) line 6"
+  NTS2.10:
+    label: Their basic personal amount, CPP and EI amounts, and tuition
+    formula: "spouse.line.NT428.9 + spouse.line.NT428.23 + spouse.line.NT428.33"
+    source: "NT(S2) lines 7 to 10: their NT428 lines 58040, 23 and 58560"
+  NTS2.11:
+    label: Their adjusted taxable income
+    formula: "max(0, line.NTS2.6 - line.NTS2.10)"
+  NTS2.12:
+    label: Northwest Territories amounts transferred from your spouse or common-law partner
+    formula: "max(0, line.NTS2.5 - line.NTS2.11)"
+
+  # Form NT479 – the cost of living tax credit. Treaty-exempt foreign income (line 62450) isn't in this app.
+  NT479.5:
+    label: Adjusted net income
+    formula: "max(0, line.T1.23600 - line.T1.24400 - line.T1.25000)"
+    source: "NT479 lines 1 to 5: net income less lines 24400 and 25000 of your return"
+  NT479.13:
+    label: Basic cost of living credit
+    formula: "min(param.ntCostOfLivingMax, round(bracket(param.ntCostOfLivingBrackets, line.NT479.5), 2))"
+    source: "NT479 lines 6 to 13: 2.6% of the first $12,000, 1.25% of the next $36,000 and 1% above, up to $942"
+  NT479.16:
+    label: Basic cost of living supplement for the family
+    formula: "param.ntCostOfLivingSupplement + if(line.HH.partner == 1, param.ntCostOfLivingSupplement, 0)"
+    source: "NT479 lines 14 to 16: $350, and $350 more with a spouse or partner"
+  NT479.18:
+    label: Your spouse's or partner's basic cost of living credit
+    formula: >-
+      if(line.HH.partner == 1, min(param.ntCostOfLivingMax, round(bracket(param.ntCostOfLivingBrackets,
+      if(family.partnerInYear, spouse.line.NT479.5, line.HH.spouseNetIncome)), 2)), 0)
+    source: "NT479 line 18: line 13 of their NT479, worked out from their adjusted net income (or your answer for their net income)"
+  # Only one spouse claims the supplement for the family; it comes to the same either way. The one with the higher net
+  # income claims it (the person preparing when they are equal), unless the other can't: a spouse living outside the
+  # Northwest Territories or under 18.
+  NTCOL.claimant:
+    label: This return claims the family's cost of living supplement (1 for yes)
+    formula: >-
+      if(line.HH.partner == 0 or not family.partnerInYear, 1, if(spouse.person.province != "NT" or spouse.person.age < 18, 1,
+      if(line.T1.23600 > spouse.line.T1.23600 or (line.T1.23600 == spouse.line.T1.23600 and person.role == "self"), 1, 0)))
+  NT479.20:
+    label: Cost of living tax credit supplement
+    formula: "if(person.age >= 18 and line.NTCOL.claimant == 1, max(0, line.NT479.16 - line.NT479.13 - line.NT479.18), 0)"
+    source: "NT479 lines 14 to 20: for people 18 or older, the supplement less both spouses' basic credits"
+  NT479.21:
+    label: Northwest Territories credit
+    formula: "min(param.ntCostOfLivingMax, line.NT479.13 + line.NT479.20)"
+    source: "NT479 line 21, entered on line 47900 of your return"

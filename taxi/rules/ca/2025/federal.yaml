@@ -1,0 +1,2081 @@
+# Federal tax: the T1 (5006-R) and Schedules 3, 9 and 11, for the income, deductions and credits in scope. Line ids
+# are the form's own: T1 lines by their five-digit number, a schedule's lines by the number in its right margin, a
+# form's area A (capital cost allowance) by its column (T2125A.7 is column 7).
+# Every number below was checked against the 2025 forms: T1 5006-R, Federal Worksheet 5000-D1, Schedules 2, 3, 5, 8, 9
+# and 11, Forms T2125, T2042, T2121, T776, T778, T2091(IND) and T2204, Guides T4002 and T4036, and the CRA's 2025
+# payroll tables for CPP and EI.
+#
+# A resident of Quebec on December 31 files the T1 for residents of Quebec (5005-R) with Quebec's own Schedules 6, 8 and
+# 10 (5005-S6, 5005-S8, 5005-S10): QPP instead of CPP, EI at the Quebec rate, PPIP premiums, the refundable Quebec
+# abatement (line 44000), and the Canada workers benefit at Quebec's rates. The lines below branch on
+# person.province == "QC" for these; Quebec's own tax is on the TP-1, not on line 42800, and there is no Form 479.
+
+params:
+  taxBrackets:
+    label: Federal tax brackets
+    source: "T1 Step 5 Part A. The lowest rate went from 15% to 14% on July 1, 2025, so 14.5% applies for the year. Bases as printed on the form."
+    value:
+      - { upTo: 57375, rate: 14.5%, base: 0 }
+      - { upTo: 114750, rate: 20.5%, base: 8319.38 }
+      - { upTo: 177882, rate: 26%, base: 20081.25 }
+      - { upTo: 253414, rate: 29%, base: 36495.57 }
+      - { rate: 33%, base: 58399.85 }
+  creditRate:
+    label: Federal credit rate
+    source: "T1 line 114: federal non-refundable tax credit rate for 2025"
+    value: 14.5%
+  basicPersonalAmountMax:
+    label: Basic personal amount, full
+    source: "T1 line 30000 and Federal Worksheet: $16,129 when net income is $177,882 or less"
+    value: 16129
+  basicPersonalAmountMin:
+    label: Basic personal amount, minimum
+    source: "T1 line 30000 and Federal Worksheet: $14,538 when net income is $253,414 or more"
+    value: 14538
+  basicPersonalAmountPhaseStart:
+    label: Net income where the basic personal amount starts to go down
+    source: "Federal Worksheet, line 30000: income threshold"
+    value: 177882
+  basicPersonalAmountPhaseEnd:
+    label: Net income where the basic personal amount reaches its minimum
+    source: "Federal Worksheet, line 30000: threshold plus the 75,532 range"
+    value: 253414
+  ageAmountMax:
+    label: Age amount, full
+    source: "T1 line 30100 and Federal Worksheet: maximum $9,028 for people born in 1960 or earlier"
+    value: 9028
+  ageAmountThreshold:
+    label: Net income where the age amount starts to go down
+    source: "Federal Worksheet, line 30100: income threshold"
+    value: 45522
+  ageAmountRate:
+    label: Age amount reduction rate
+    source: "Federal Worksheet, line 30100: applicable rate"
+    value: 15%
+  canadaEmploymentAmount:
+    label: Canada employment amount
+    source: "T1 line 31260: whichever is less, $1,471 or employment income"
+    value: 1471
+  cppBaseRate:
+    label: CPP base rate for employees
+    source: "Schedule 8, Part 3, line 11: 4.95%"
+    value: 4.95%
+  cppFirstRate:
+    label: First additional CPP rate for employees
+    source: "Schedule 8, Part 3, line 12: 1%"
+    value: 1%
+  cppBaseShare:
+    label: Base part of the CPP contributions on a T4 slip (box 16)
+    source: "Schedule 8, Part 3, line 9: 83.1933%"
+    value: 83.1933%
+  eiPremiumRate:
+    label: EI premium rate for employees
+    source: "Form T2204, line 10: 1.64% for residents of a province other than Quebec"
+    value: 1.64%
+  eiPremiumMax:
+    label: Most EI premiums
+    source: "Form T2204, line 10, and T1 line 31200: maximum $1,077.48"
+    value: 1077.48
+  eiMaxInsurableEarnings:
+    label: Most EI insurable earnings
+    source: "Form T2204, line 3: maximum $65,700"
+    value: 65700
+  eiMinInsurableEarnings:
+    label: Insurable earnings at or below which all EI premiums are refunded
+    source: "Form T2204, line 7 and note 1: $2,000"
+    value: 2000
+  eiPremiumRateQc:
+    label: EI premium rate for employees resident in Quebec
+    source: "Schedule 10 for residents of Quebec (5005-S10), Part C, line 19: 1.31%, on line 18 (maximum $65,700; 0 when $2,000 or less)"
+    value: 1.31%
+  eiPremiumMaxQc:
+    label: Most EI premiums for a resident of Quebec
+    source: "5005-S10, Part C, line 20, and 5005-R line 31200: maximum $860.67"
+    value: 860.67
+  # PPIP: the Quebec parental insurance plan (QPIP) premiums, claimed on the federal return of a resident of Quebec.
+  ppipPremiumMax:
+    label: Most PPIP premiums claimed
+    source: "5005-R lines 31205 and 31215: maximum $484.12"
+    value: 484.12
+  ppipMinEarnings:
+    label: PPIP insurable earnings below which no PPIP premiums are claimed
+    source: "canada.ca/line-31205: PPIP insurable earnings less than $2,000 are claimed as an overpayment on the TP-1; TP-1 Schedule R: no premium when net business income and employment income subject to the QPIP total less than $2,000"
+    value: 2000
+  ppipMaxInsurableEarnings:
+    label: Maximum PPIP insurable earnings
+    source: "5005-S10, Part A, line 2: $98,000"
+    value: 98000
+  ppipSelfEmployedRate:
+    label: PPIP rate on self-employment income
+    source: "5005-S10, Part A, line 6: 0.878% (maximum $860.44 on line 7)"
+    value: 0.878%
+  ppipSelfEmployedDeductionShare:
+    label: Share of the PPIP premium on self-employment income that is deducted
+    source: "5005-S10, Part A, line 8: 43.736% (maximum $376.32 on line 9, line 22300); the rest is the credit on line 31215"
+    value: 43.736%
+  quebecAbatementRate:
+    label: Refundable Quebec abatement rate
+    source: "5005-R line 44000 (row 156): amount from line 42900 × 16.5%"
+    value: 16.5%
+  medicalThresholdRate:
+    label: Medical expense threshold rate
+    source: "T1 line 108: 3% of net income"
+    value: 3%
+  medicalThresholdMax:
+    label: Medical expense threshold, most
+    source: "T1 line 109: whichever is less, $2,834 or 3% of net income"
+    value: 2834
+  donationLowRate:
+    label: Donation credit rate on the first $200
+    source: "Schedule 9 line 22: 14.5%"
+    value: 14.5%
+  donationHighRate:
+    label: Donation credit rate above $200
+    source: "Schedule 9 line 21: 29%"
+    value: 29%
+  donationTopRate:
+    label: Donation credit rate on income in the top bracket
+    source: "Schedule 9 line 20: 33% on the part of donations up to taxable income over $253,414"
+    value: 33%
+  donationLowLimit:
+    label: Donations at the low rate
+    source: "Schedule 9 line 13: the first $200"
+    value: 200
+  donationTopThreshold:
+    label: Taxable income where the top donation rate starts
+    source: "Schedule 9 line 18"
+    value: 253414
+  donationIncomeLimit:
+    label: Donation limit, share of net income
+    source: "Schedule 9 line 6: 75% of net income"
+    value: 75%
+  topUpThreshold:
+    label: Credits that the 14.5% rate fully covers
+    source: "Federal Worksheet, line 34990, line 4"
+    value: 8319.38
+  topUpRate:
+    label: Top-up tax credit rate
+    source: "Federal Worksheet, line 34990, line 6"
+    value: 3.45%
+  tuitionIncomeThreshold:
+    label: Taxable income up to which tuition is limited by taxable income
+    source: "Schedule 11 line 11: $57,375"
+    value: 57375
+  lowestBracketTop:
+    label: Top of the lowest federal tax bracket
+    source: "T1 Step 5 Part A: taxable income up to $57,375 is taxed at the lowest rate (the first row of taxBrackets)"
+    value: 57375
+  fhsaRoomMax:
+    label: Most FHSA participation room in a year
+    source: "canada.ca, Participating in your FHSAs: $8,000 a year, and up to $8,000 of unused room carried forward"
+    value: 16000
+  daysInYear:
+    label: Days in 2025
+    value: 365
+    source: "2025 isn't a leap year"
+  nonResidentCanadaShare:
+    label: Share of world income from Canada that keeps the full personal amounts
+    value: 90%
+    source: "canada.ca, newcomers to Canada: 90% or more of world income for the part of the year not resident"
+  rrspOverContributionAllowance:
+    label: RRSP contributions allowed above the deduction limit without tax
+    source: "Form T1-OVP: the 1% monthly tax applies to excess contributions over $2,000"
+    value: 2000
+  tuitionTransferMax:
+    label: Most current-year tuition a student can transfer
+    source: "Schedule 11 line 21: maximum $5,000"
+    value: 5000
+  pensionSplitRate:
+    label: Most share of eligible pension income that can be split
+    source: "Form T1032, line 20: 50%"
+    value: 50%
+  pensionSplitFullAnnuityBase:
+    label: Qualifying pension income from which a receiving spouse under 65 keeps the whole split for the pension amount
+    source: "Form T1032, note 1: $4,000"
+    value: 4000
+  pensionIncomeAmountMax:
+    label: Most pension income amount
+    source: "Federal Worksheet, line 31400: whichever is less, line 8 or $2,000"
+    value: 2000
+  oasRecoveryThreshold:
+    label: Net income where OAS starts to be repaid
+    source: "Federal Worksheet, line 23500, line 16: OAS benefits base amount $93,454"
+    value: 93454
+  oasRecoveryRate:
+    label: OAS repayment rate
+    source: "Federal Worksheet, line 23500, line 18: 15%"
+    value: 15%
+  eiRepaymentThreshold:
+    label: Net income where EI benefits may be repaid
+    source: "Federal Worksheet, line 23500: line 23400 more than $82,125 with EI on line 11900; the T4E repayment chart, line 2"
+    value: 82125
+  eiRepaymentRate:
+    label: EI benefits repayment rate
+    source: "T4E repayment chart, line 4: 30%, when box 7 of the T4E shows 30%"
+    value: 30%
+  cppMaxPensionableEarnings:
+    label: Maximum pensionable earnings (YMPE)
+    source: "Schedule 8, Part 2, line B: $71,300 for 12 months"
+    value: 71300
+  cppAdditionalMaxPensionableEarnings:
+    label: Additional maximum pensionable earnings (YAMPE)
+    source: "Schedule 8, Part 2, line D: $81,200 for 12 months"
+    value: 81200
+  cppBasicExemption:
+    label: CPP basic exemption
+    source: "Schedule 8, Part 2, line E: $3,500 for 12 months"
+    value: 3500
+  cpp2MaxEarnings:
+    label: Most earnings subject to second additional contributions
+    source: "Schedule 8, Part 2, line C: $9,900 for 12 months"
+    value: 9900
+  cppEarningsPerContribution:
+    label: Earnings that a dollar of employee base and first additional contributions covers
+    source: "Schedule 8, Part 5, line 20: 16.80672 (1 ÷ 5.95%)"
+    value: "16.80672"
+  cpp2EmployeeRate:
+    label: Second additional CPP rate for employees
+    source: "Schedule 8, Part 3, line 22: 4%; Part 5, line 35: line 16 ÷ 4%"
+    value: 4%
+  cppSelfEmployedBaseRate:
+    label: Base CPP rate on self-employment earnings
+    source: "Schedule 8, Part 5, line 43: 9.9%"
+    value: 9.9%
+  cppSelfEmployedFirstRate:
+    label: First additional CPP rate on self-employment earnings
+    source: "Schedule 8, Part 5, line 44: 2%"
+    value: 2%
+  cppSelfEmployedSecondRate:
+    label: Second additional CPP rate on self-employment earnings
+    source: "Schedule 8, Part 5, line 45: 8%"
+    value: 8%
+  # QPP (5005-S8). Its earnings limits (the monthly proration table of Part 1), the first additional rates (1%, and 2%
+  # on self-employment), the second additional rates (4%, and 8%) are the same numbers as CPP's above.
+  qppBaseRate:
+    label: QPP base rate for employees
+    source: "Schedule 8 for residents of Quebec (5005-S8), Part 2, line 11: 5.4% (maximum $3,661.20)"
+    value: 5.4%
+  qppBaseShare:
+    label: Base part of the QPP contributions on a T4 slip (box 17)
+    source: "5005-S8, Part 2, line 9: 84.375% of line 8 (box 17 of all T4 slips)"
+    value: 84.375%
+  qppEarningsPerContribution:
+    label: Earnings that a dollar of employee base and first additional QPP contributions covers
+    source: "5005-S8, Part 4, line 19: line 9 × 15.625 (1 ÷ 6.4%)"
+    value: "15.625"
+  qppSelfEmployedBaseRate:
+    label: Base QPP rate on self-employment earnings
+    source: "5005-S8, Part 3 line 10 and Part 4 line 42: 10.8% (maximum $7,322.40)"
+    value: 10.8%
+  childCareUnder7:
+    label: Child care limit for a child born in 2019 or later
+    source: "Form T778, Part B, line 1: $8,000"
+    value: 8000
+  childCare7to16:
+    label: Child care limit for a child born in 2009 to 2018
+    source: "Form T778, Part B, line 3: $5,000"
+    value: 5000
+  childCareDisabled:
+    label: Child care limit for a child the disability amount can be claimed for
+    source: "Form T778, Part B, line 2: $11,000"
+    value: 11000
+  childCarePartCRate:
+    label: Child care the higher-income spouse can claim for each week or month, share of the basic limit
+    source: "Form T778, Part C, line 10: 2.5% of line 4"
+    value: 2.5%
+  ccaRateClass1:
+    label: Capital cost allowance rate, class 1
+    source: "Guide T4002 and Guide T4036, \"Class 1 (4%)\": most buildings acquired after 1987"
+    value: 4%
+  ccaRateClass3:
+    label: Capital cost allowance rate, class 3
+    source: "Guide T4036, \"Class 3 (5%)\": most buildings acquired before 1988"
+    value: 5%
+  ccaRateClass8:
+    label: Capital cost allowance rate, class 8
+    source: "Guide T4002 and Guide T4036, \"Class 8 (20%)\": furniture, appliances, tools and equipment"
+    value: 20%
+  ccaRateClass10:
+    label: Capital cost allowance rate, class 10
+    source: "Guide T4002, \"Class 10 (30%)\": motor vehicles and passenger vehicles that aren't class 10.1"
+    value: 30%
+  ccaRateClass10_1:
+    label: Capital cost allowance rate, class 10.1
+    source: "Guide T4002, \"Class 10.1 (30%)\": a passenger vehicle bought in 2025 that cost more than $38,000 before tax"
+    value: 30%
+  ccaRateClass50:
+    label: Capital cost allowance rate, class 50
+    source: "Guide T4002, \"Class 50 (55%)\": computer hardware and systems software"
+    value: 55%
+  ccaRiipFactor:
+    label: Extra share of 2025 additions allowed under the reaccelerated investment incentive
+    source: "T2125 and T776 Area A, note 8, and Guide T4002, column 17 (proposed changes the CRA applies for 2025): 1/2 for the remaining reaccelerated investment incentive properties (acquired after 2024). Class 50 has 9/11, in its formula"
+    value: 50%
+  ccaHalfYearOnSale:
+    label: Share of a sold class 10.1 vehicle's balance that gets capital cost allowance
+    source: "Guide T4002, column 19: the half-year rule on sale, 50% of column 2, for a class 10.1 vehicle owned at the end of 2024"
+    value: 50%
+  foreignPropertyTaxRate:
+    label: Most foreign tax on property income that counts for the credit
+    source: "Income Tax Act 20(11) and Form T2209: foreign tax on property income above 15% is deducted on line 23200 instead"
+    value: 15%
+  northernBasicPerDay:
+    label: Basic residency amount for each day in a northern zone
+    source: "Form T2222, Step 2, line 1: $11.00 a day in Zone A"
+    value: 11
+  northernAdditionalPerDay:
+    label: Additional residency amount for each day in a northern zone
+    source: "Form T2222, Step 2, line 2: $11.00 a day in Zone A"
+    value: 11
+  northernIncomeShare:
+    label: Most residency deduction, as a share of net income
+    source: "Form T2222, Step 2, line 12: 20% of net income"
+    value: 20%
+  northernDaysMax:
+    label: Days in 2025
+    source: "Form T2222, Step 2, line 1: the days you lived in a prescribed zone in 2025"
+    value: 365
+  capitalGainsInclusionRate:
+    label: Capital gains inclusion rate
+    source: "Schedule 3 line 23: 50%"
+    value: 50%
+  scholarshipExemption:
+    label: Basic scholarship exemption
+    source: "canada.ca/line-13010: a scholarship is taxable only above $500 when you aren't a qualifying student"
+    value: 500
+  caregiverChildAmount:
+    label: Canada caregiver amount for an infirm child, and the infirmity addition
+    source: "T1 line 30500 and Schedule 5 lines 51090 and 51100: $2,687"
+    value: 2687
+  caregiverBase:
+    label: Canada caregiver amount, base
+    source: "Schedule 5, lines 30425 and 30450, line 1: $28,798"
+    value: 28798
+  caregiverMax:
+    label: Most Canada caregiver amount for one person
+    source: "Schedule 5, lines 30425 and 30450, line 3: maximum $8,601"
+    value: 8601
+  volunteerAmount:
+    label: Volunteer firefighters' or search and rescue volunteers' amount
+    source: "canada.ca/line-31220: $6,000 for 2025, for at least 200 hours of eligible volunteer service"
+    value: 6000
+  homeBuyersMax:
+    label: Most home buyers' amount
+    source: "T1 line 31270: maximum $10,000, shared with a spouse or partner"
+    value: 10000
+  homeAccessibilityMax:
+    label: Most home accessibility expenses
+    source: "T1 line 31285 and Federal Worksheet: maximum $20,000"
+    value: 20000
+  adoptionMax:
+    label: Most adoption expenses for each child
+    source: "canada.ca/line-31300: federal maximum $19,580 for each child for 2025"
+    value: 19580
+  disabilityAmount:
+    label: Disability amount
+    source: "T1 line 31600 and Federal Worksheet, line 1: $10,138"
+    value: 10138
+  disabilitySupplementMax:
+    label: Disability supplement for a person under 18
+    source: "Federal Worksheet, lines 31600 and 31800, line 2: $5,914"
+    value: 5914
+  disabilityCareThreshold:
+    label: Child care and attendant care that the disability supplement allows
+    source: "Federal Worksheet, lines 31600 and 31800, line 4: $3,464"
+    value: 3464
+  politicalCreditRates:
+    label: Federal political contribution tax credit
+    source: "Federal Worksheet, line 41000: 75% of the first $400, 50% of the next $350 and 33.33% of the rest"
+    value:
+      - { upTo: 400, rate: 75%, base: 0 }
+      - { upTo: 750, rate: 50%, base: 300 }
+      - { rate: 33.33%, base: 475 }
+  politicalCreditMaxContributions:
+    label: Contributions that give the most political contribution credit
+    source: "Federal Worksheet, line 41000: $1,275 or more"
+    value: 1275
+  politicalCreditMax:
+    label: Most federal political contribution tax credit
+    source: "T1 line 41000: maximum $650"
+    value: 650
+  medicalSupplementThreshold:
+    label: Family net income where the refundable medical expense supplement starts to go down
+    source: "Federal Worksheet, line 45200, line 7: $33,294"
+    value: 33294
+  medicalSupplementRate:
+    label: Refundable medical expense supplement rate
+    source: "Federal Worksheet, line 45200, line 12: 25%"
+    value: 25%
+  medicalSupplementMax:
+    label: Most refundable medical expense supplement
+    source: "Federal Worksheet, line 45200, line 14: $1,504"
+    value: 1504
+  medicalSupplementReductionRate:
+    label: Refundable medical expense supplement reduction rate
+    source: "Federal Worksheet, line 45200, line 15: 5%"
+    value: 5%
+  medicalSupplementMinEarnings:
+    label: Earnings needed for the refundable medical expense supplement
+    source: "Federal Worksheet, line 45200: employment and self-employment income of $4,390 or more"
+    value: 4390
+  cwbWorkingIncomeBase:
+    label: Working income where the basic Canada workers benefit starts
+    source: "Schedule 6, line 17: $3,000"
+    value: 3000
+  cwbRate:
+    label: Canada workers benefit rate on working income
+    source: "Schedule 6, lines 19 and 32: 27%"
+    value: 27%
+  cwbMaxSingle:
+    label: Most basic Canada workers benefit, single
+    source: "Schedule 6, line 21: $1,633"
+    value: 1633
+  cwbMaxFamily:
+    label: Most basic Canada workers benefit, with an eligible spouse or dependant
+    source: "Schedule 6, line 21: $2,813"
+    value: 2813
+  cwbIncomeBaseSingle:
+    label: Adjusted family net income where the basic benefit starts to go down, single
+    source: "Schedule 6, line 24: $26,855"
+    value: 26855
+  cwbIncomeBaseFamily:
+    label: Adjusted family net income where the basic benefit starts to go down, with an eligible spouse or dependant
+    source: "Schedule 6, line 24: $30,639"
+    value: 30639
+  cwbReductionRate:
+    label: Canada workers benefit reduction rate
+    source: "Schedule 6, lines 26 and 38: 15%"
+    value: 15%
+  cwbReductionRateBothDisabled:
+    label: Disability supplement reduction rate when both spouses are eligible for the disability tax credit
+    source: "Schedule 6, line 38: 7.5%"
+    value: 7.5%
+  cwbSecondaryEarnerMax:
+    label: Most secondary earner exemption
+    source: "Schedule 6, line 14: maximum $16,386"
+    value: 16386
+  cwbDisabilityWorkingBase:
+    label: Working income where the disability supplement starts
+    source: "Schedule 6, line 30: $1,150"
+    value: 1150
+  cwbDisabilityMax:
+    label: Most Canada workers benefit disability supplement
+    source: "Schedule 6, line 34: $843"
+    value: 843
+  cwbDisabilityIncomeBaseSingle:
+    label: Adjusted family net income where the disability supplement starts to go down, single
+    source: "Schedule 6, line 36: $37,740"
+    value: 37740
+  cwbDisabilityIncomeBaseFamily:
+    label: Adjusted family net income where the disability supplement starts to go down, with an eligible spouse or dependant
+    source: "Schedule 6, line 36: $49,389"
+    value: 49389
+  cwbFamilyLimit:
+    label: Adjusted family net income from which a family gets no Canada workers benefit
+    source: "Schedule 6, the chart of limits: $49,393 for the basic benefit, $55,009 with the disability supplement"
+    value: 55009
+  cwbStudentMonths:
+    label: Months of full-time study a person can have and still get the Canada workers benefit
+    source: "Schedule 6: not a full-time student for more than 13 weeks in the year, unless they had an eligible dependant"
+    value: 3
+  # Schedule 6 for residents of Quebec (5005-S6): four family types (no spouse or dependant, a spouse, a dependant, both)
+  # for the basic benefit, and its own rates for the disability supplement.
+  cwbQcWorkingIncomeBase:
+    label: Working income where the basic Canada workers benefit starts, Quebec, with no eligible spouse
+    source: "5005-S6, line 17: $2,400"
+    value: 2400
+  cwbQcWorkingIncomeBaseSpouse:
+    label: Working income where the basic Canada workers benefit starts, Quebec, with an eligible spouse
+    source: "5005-S6, line 17: $3,600 with an eligible spouse (with or without an eligible dependant)"
+    value: 3600
+  cwbQcRate:
+    label: Canada workers benefit rate on working income, Quebec, with no eligible dependant
+    source: "5005-S6, line 19: 37.3% (no eligible dependant, with or without an eligible spouse)"
+    value: 37.3%
+  cwbQcRateDependant:
+    label: Canada workers benefit rate on working income, Quebec, with an eligible dependant and no eligible spouse
+    source: "5005-S6, line 19: 20%"
+    value: 20%
+  cwbQcRateSpouseDependant:
+    label: Canada workers benefit rate on working income, Quebec, with an eligible spouse and an eligible dependant
+    source: "5005-S6, line 19: 23.9%"
+    value: 23.9%
+  cwbQcMaxSingle:
+    label: Most basic Canada workers benefit, Quebec, no eligible spouse or dependant
+    source: "5005-S6, line 21: $3,812.06"
+    value: 3812.06
+  cwbQcMaxSpouse:
+    label: Most basic Canada workers benefit, Quebec, an eligible spouse and no eligible dependant
+    source: "5005-S6, line 21: $5,943.38"
+    value: 5943.38
+  cwbQcMaxDependant:
+    label: Most basic Canada workers benefit, Quebec, an eligible dependant and no eligible spouse
+    source: "5005-S6, line 21: $2,044.00"
+    value: 2044.00
+  cwbQcMaxSpouseDependant:
+    label: Most basic Canada workers benefit, Quebec, an eligible spouse and an eligible dependant
+    source: "5005-S6, line 21: $3,808.23"
+    value: 3808.23
+  cwbQcIncomeBaseSingle:
+    label: Adjusted family net income where the basic benefit starts to go down, Quebec, no eligible spouse or dependant
+    source: "5005-S6, line 24: $14,170.05"
+    value: 14170.05
+  cwbQcIncomeBaseSpouse:
+    label: Adjusted family net income where the basic benefit starts to go down, Quebec, an eligible spouse and no eligible dependant
+    source: "5005-S6, line 24: $21,787.19"
+    value: 21787.19
+  cwbQcIncomeBaseDependant:
+    label: Adjusted family net income where the basic benefit starts to go down, Quebec, an eligible dependant and no eligible spouse
+    source: "5005-S6, line 24: $14,341.56"
+    value: 14341.56
+  cwbQcIncomeBaseSpouseDependant:
+    label: Adjusted family net income where the basic benefit starts to go down, Quebec, an eligible spouse and an eligible dependant
+    source: "5005-S6, line 24: $22,007.75"
+    value: 22007.75
+  cwbQcReductionRate:
+    label: Canada workers benefit reduction rate, Quebec
+    source: "5005-S6, lines 26 and 38: 20%"
+    value: 20%
+  cwbQcReductionRateBothDisabled:
+    label: Disability supplement reduction rate when both spouses are eligible for the disability tax credit, Quebec
+    source: "5005-S6, line 38: 10% if you had an eligible spouse who is also eligible for the DTC"
+    value: 10%
+  cwbQcDisabilityWorkingBase:
+    label: Working income where the disability supplement starts, Quebec
+    source: "5005-S6, line 30: $1,200"
+    value: 1200
+  cwbQcDisabilityRate:
+    label: Disability supplement rate on working income, Quebec, with no eligible spouse
+    source: "5005-S6, line 32: 40%"
+    value: 40%
+  cwbQcDisabilityRateSpouse:
+    label: Disability supplement rate on working income, Quebec, with an eligible spouse
+    source: "5005-S6, line 32: 20%"
+    value: 20%
+  cwbQcDisabilityMax:
+    label: Most Canada workers benefit disability supplement, Quebec
+    source: "5005-S6, line 34: $851.31"
+    value: 851.31
+  cwbQcDisabilityIncomeBaseSingle:
+    label: Adjusted family net income where the disability supplement starts to go down, Quebec, no eligible spouse or dependant
+    source: "5005-S6, line 36: $33,230.35"
+    value: 33230.35
+  cwbQcDisabilityIncomeBaseSpouse:
+    label: Adjusted family net income where the disability supplement starts to go down, Quebec, an eligible spouse and no eligible dependant
+    source: "5005-S6, line 36: $51,504.09"
+    value: 51504.09
+  cwbQcDisabilityIncomeBaseDependant:
+    label: Adjusted family net income where the disability supplement starts to go down, Quebec, an eligible dependant and no eligible spouse
+    source: "5005-S6, line 36: $24,561.56"
+    value: 24561.56
+  cwbQcDisabilityIncomeBaseSpouseDependant:
+    label: Adjusted family net income where the disability supplement starts to go down, Quebec, an eligible spouse and an eligible dependant
+    source: "5005-S6, line 36: $41,048.90"
+    value: 41048.90
+  cwbQcFamilyLimit:
+    label: Adjusted family net income from which a family in Quebec gets no Canada workers benefit
+    source: "5005-S6, the chart of limits: $60,017.19, the highest (an eligible spouse, no dependant, both eligible for the disability tax credit)"
+    value: 60017.19
+  trainingCreditRate:
+    label: Canada training credit, share of tuition
+    source: "Schedule 11, line 2: 50%"
+    value: 50%
+  renovationRate:
+    label: Multigenerational home renovation tax credit rate
+    source: "Schedule 12, line 9: 14.5%"
+    value: 14.5%
+  renovationMax:
+    label: Most qualifying renovation expenditures
+    source: "Schedule 12: up to $50,000"
+    value: 50000
+  educatorRate:
+    label: Eligible educator school supply tax credit rate
+    source: "T1 line 46900: 25%"
+    value: 25%
+  educatorMax:
+    label: Most eligible school supplies expenses
+    source: "T1 line 46800: maximum $1,000"
+    value: 1000
+
+lines:
+  # The family: whether you have a spouse or partner, and their net income
+  HH.partner:
+    label: Spouse or common-law partner on December 31 (1 for yes)
+    formula: 'if(family.maritalStatus == "married" or family.maritalStatus == "common_law", 1, 0)'
+  # Read by hints: a claim moves between the returns only when both are prepared here. The lines that move a claim read
+  # the marital status only once a claim was moved, so a return's numbers don't wait for it.
+  SPOUSES.together:
+    label: Both spouses' returns are prepared here (1 for yes)
+    formula: "if(family.partnerInYear and line.HH.partner == 1, 1, 0)"
+  HH.spouseNetIncome:
+    label: Your spouse's or partner's net income
+    formula: "if(line.HH.partner == 1, if(family.partnerInYear, spouse.line.T1.23600, answer.spouseNetIncome), 0)"
+    source: "From their return when both returns are prepared here; otherwise from your answer"
+
+  # Step 2 – Total income
+  T1.10100:
+    label: Employment income
+    formula: "sum(T4.box14)"
+  T1.10120:
+    label: Commissions included on line 10100
+    formula: "sum(T4.box42)"
+  T1.10400:
+    label: Other employment income
+    formula: "if(answer.hasForeignIncome, answer.foreignEmploymentIncome, 0)"
+    source: "Employment income earned outside Canada, in Canadian dollars"
+  T1.11300:
+    label: Old age security pension
+    formula: "sum(T4AOAS.box18)"
+    source: "Box 18 of the T4A(OAS) slip"
+  T1.11400:
+    label: CPP or QPP benefits
+    formula: "sum(T4AP.box20)"
+    source: "Box 20 of the T4A(P) slip"
+  T1.11410:
+    label: Disability benefits included on line 11400
+    formula: "sum(T4AP.box16)"
+    source: "Box 16 of the T4A(P) slip"
+  T1.11500:
+    label: Other pensions and superannuation
+    formula: "sum(T4A.box016) + if(person.age >= 65, sum(T4A.box024) + sum(T4RIF.box16), 0)"
+    source: "T4A box 016; annuities (T4A box 024) and RRIF payments (T4RIF box 16) at 65 or older, else on line 13000"
+  T1.11600:
+    label: Elected split-pension amount
+    formula: "if(line.HH.partner == 1 and family.partnerInYear, spouse.line.T1.21000, 0)"
+    source: "Form T1032, line 22: the amount your spouse or partner splits with you"
+  T1.11900:
+    label: Employment insurance and other benefits
+    formula: 'sum(T4E.box14) + if(person.province == "QC", sum(RL6.boxA), 0)'
+    source: "Box 14 of the T4E slip, and for a resident of Quebec the parental insurance benefits on the RL-6 (5005-R line 11905)"
+  T1.11905:
+    label: Provincial parental insurance plan (PPIP) benefits included on line 11900
+    formula: 'if(person.province == "QC", sum(RL6.boxA), 0)'
+    source: "5005-R line 11905: box A of the RL-6. EI maternity and parental benefits aren't shown apart on the T4E the app reads"
+  T1.12000:
+    label: Taxable amount of dividends (eligible and other than eligible)
+    formula: "sum(T5.box11) + sum(T5.box25) + sum(T3.box32) + sum(T3.box50)"
+    source: "Federal Worksheet, line 12000: boxes 11 and 25 of T5 slips, boxes 32 and 50 of T3 slips"
+  T1.12010:
+    label: Taxable amount of dividends other than eligible
+    formula: "sum(T5.box11) + sum(T3.box32)"
+    source: "Federal Worksheet, line 12010"
+  T1.12100:
+    label: Interest and other investment income
+    formula: "sum(T5.box13) + sum(T3.box25) + if(answer.hasForeignIncome, answer.foreignInvestmentIncome, 0)"
+    source: "Federal Worksheet, line 12100: box 13 of T5 slips, box 25 of T3 slips, and foreign interest and dividends"
+  T1.12500:
+    label: Registered disability savings plan (RDSP) income
+    formula: "sum(T4A.box131)"
+    source: "Box 131 of the T4A slip"
+  T1.12599:
+    label: Gross rental income
+    formula: "if(answer.hasRentalIncome, answer.rentalGross, 0)"
+    source: "Form T776, line 8299"
+  T1.12600:
+    label: Net rental income
+    formula: "if(answer.hasRentalIncome, line.T776.5 - line.T776.9936, 0)"
+    source: "Form T776, line 9946 (amount 6): amount 5 less the capital cost allowance claimed"
+  # Form T776 – rental income. Its capital cost allowance (Area A) is worked out for one class (questions.yaml says why).
+  # Every 2025 addition is taken as acquired and put in use in 2025: a reaccelerated investment incentive property, so
+  # the half-year rule (column 18) doesn't apply and column 17 adds half of the net additions.
+  T776.9947:
+    label: Recaptured capital cost allowance
+    formula: >-
+      if(answer.hasRentalIncome, if(answer.rentalCcaClass == "none" or answer.rentalCcaClass == "several", 0,
+      max(0, -line.T776A.7)), 0)
+    source: "Form T776, line 9947, and Area A, note 3: a negative column 7 is added to income"
+  T776.5:
+    label: Net rental income before capital cost allowance
+    formula: "if(answer.hasRentalIncome, answer.rentalGross - answer.rentalExpenses + line.T776.9947, 0)"
+    source: "Form T776, Part 4, amounts 1 to 5: gross rents less expenses, plus recaptured capital cost allowance. A terminal loss (line 9948) isn't handled"
+  T776A.7:
+    label: Rental class, undepreciated capital cost after additions and dispositions
+    formula: "answer.rentalUccStart + answer.rentalCcaAdditions - answer.rentalCcaDispositions"
+    source: "Form T776, Area A, column 7: column 2 plus column 3 minus column 5"
+  T776A.17:
+    label: Rental class, adjustment for 2025 additions
+    formula: "round(max(0, answer.rentalCcaAdditions - answer.rentalCcaDispositions) * param.ccaRiipFactor, 2)"
+    source: "Form T776, Area A, column 17 and note 8: additions less the dispositions that reduce them (column 16), times 1/2"
+  T776A.19:
+    label: Rental class, base amount for capital cost allowance
+    formula: "line.T776A.7 + line.T776A.17"
+    source: "Form T776, Area A, column 19: column 13 (column 7, with no immediate expensing) plus column 17. Column 18 is zero: no 2025 addition is under the half-year rule"
+  T776A.20:
+    label: Rental class, capital cost allowance rate
+    formula: >-
+      if(answer.rentalCcaClass == "class1", param.ccaRateClass1, if(answer.rentalCcaClass == "class3", param.ccaRateClass3,
+      if(answer.rentalCcaClass == "class8", param.ccaRateClass8, 0)))
+    source: "Form T776, Area A, column 20"
+  T776A.21:
+    label: Rental class, available capital cost allowance
+    formula: "round(max(0, line.T776A.19) * line.T776A.20, 2)"
+    source: "Form T776, Area A, column 21: column 19 times column 20; none when column 7 is negative"
+  T776.9936:
+    label: Rental capital cost allowance claimed
+    formula: >-
+      if(answer.hasRentalIncome, if(answer.rentalCcaClass == "none", 0, if(answer.rentalCcaClass == "several",
+      unsupported("Capital cost allowance for more than one class of rental property isn't handled by this app yet"),
+      min(line.T776A.21, max(0, line.T776.5), if(answer.rentalCcaLimit > 0, answer.rentalCcaLimit, line.T776A.21)))), 0)
+    source: "Form T776, Area A, column 23, and line 9936: up to the available allowance, as much as asked, and never making or increasing a rental loss (Guide T4036, Limits on CCA)"
+  T776A.24:
+    label: Rental class, undepreciated capital cost at the end of the year
+    formula: 'if(answer.hasRentalIncome, if(answer.rentalCcaClass == "none" or answer.rentalCcaClass == "several", 0, max(0, line.T776A.7 - line.T776.9936)), 0)'
+    source: "Form T776, Area A, column 24: column 7 less the allowance claimed; zero after a recapture. Next year's column 2"
+  T1.12700:
+    label: Taxable capital gains
+    formula: "max(0, line.S3.19900)"
+    source: "Schedule 3. A net capital loss isn't entered here; it carries forward"
+  T1.12799:
+    label: Support payments received
+    formula: "if(answer.hasSupportReceived, answer.supportReceived, 0)"
+  T1.12800:
+    label: Taxable support payments received
+    formula: "if(answer.hasSupportReceived, max(0, answer.supportReceived - answer.childSupportReceived), 0)"
+    source: "canada.ca/taxes-support-payments: spousal support is taxable; child support under an order or agreement made after April 1997 isn't"
+  T1.12900:
+    label: RRSP income
+    formula: "sum(T4RSP.box16) + sum(T4RSP.box18) + sum(T4RSP.box20) + sum(T4RSP.box22) + sum(T4RSP.box26) + sum(T4RSP.box28) + sum(T4RSP.box34)"
+    source: "T4RSP slips: every box of income. Home Buyers' Plan and Lifelong Learning Plan withdrawals (boxes 25 and 27) aren't income"
+  T1.12905:
+    label: Taxable FHSA income
+    formula: "sum(T4FHSA.box22) + sum(T4FHSA.box26)"
+    source: "canada.ca/line-12905: box 22 of all T4FHSA slips and box 26 for your own FHSA"
+  T1.12906:
+    label: Taxable FHSA income – other
+    formula: "sum(T4FHSA.box24)"
+    source: "canada.ca/line-12906: amounts received as the beneficiary of a deceased holder's FHSA (box 24)"
+  T1.13000:
+    label: Other income
+    formula: "sum(T3.box26) + if(person.age < 65, sum(T4A.box024) + sum(T4RIF.box16), 0) + sum(T4A.box018) + sum(T4A.box028)"
+    source: "Box 26 of T3 slips; annuities and RRIF payments before 65; lump-sum payments and other income on T4A slips"
+  T1.13010:
+    label: Taxable scholarships, fellowships, bursaries and artists' project grants
+    formula: >-
+      if(sum(T2202.box25) > 0 or (sum(T2202.box24) > 0 and answer.hasDisability), 0,
+      if(sum(T2202.box24) > 0, max(0, sum(T4A.box105) - sum(T2202.box26) - param.scholarshipExemption),
+      max(0, sum(T4A.box105) - param.scholarshipExemption)))
+    source: "canada.ca/line-13010: not taxable for a full-time student, or a part-time student with the disability tax credit; for a part-time student, taxable above the tuition paid plus $500; otherwise above $500"
+  # Self-employment (Forms T2125, T2042 and T2121): the person's own business, profession, farm or fishing, of one kind,
+  # and the profit on a flipped property, which is business income whatever else the person does. Each T1 line takes its
+  # own kind; SE.net is their total (T1 line 27), and SE.earned the same without losses, for the lines that count
+  # earnings.
+  SE.ownGross:
+    label: Gross self-employment income
+    formula: "if(answer.hasSelfEmployment, answer.selfEmploymentGross + line.T2125.8230, 0)"
+    source: "Form T2125, line 8299 (T2042 line 9659, T2121 line 8299): what was earned, with recaptured capital cost allowance"
+  SE.own:
+    label: Net self-employment income of your own business
+    formula: "if(answer.hasSelfEmployment, line.SE.ownGross - answer.selfEmploymentExpenses - line.T2125.9936, 0)"
+    source: "Form T2125, line 9946 (T2042 line 9946, T2121 line 9946): gross income less expenses and capital cost allowance"
+  SE.flip:
+    label: Profit on a flipped property
+    formula: 'if(answer.soldProperty, if(answer.propertyUse == "flipped", max(0, answer.propertyProceeds - answer.propertyCost - answer.propertyOutlays), 0), 0)'
+    source: "Schedule 3, Part 1, and Guide T4002, Flipped property rules: a housing unit owned less than 365 days is business income, and a loss on it is deemed nil"
+  T1.13499:
+    label: Gross business income
+    formula: 'if(answer.hasSelfEmployment, if(answer.selfEmploymentKind == "business", line.SE.ownGross, 0), 0) + line.SE.flip'
+  T1.13500:
+    label: Net business income
+    formula: 'if(answer.hasSelfEmployment, if(answer.selfEmploymentKind == "business", line.SE.own, 0), 0) + line.SE.flip'
+    source: "Your business's net income, and the profit on a flipped property (Form T2125, Part 5 note)"
+  T1.13699:
+    label: Gross professional income
+    formula: 'if(answer.hasSelfEmployment, if(answer.selfEmploymentKind == "professional", line.SE.ownGross, 0), 0)'
+  T1.13700:
+    label: Net professional income
+    formula: 'if(answer.hasSelfEmployment, if(answer.selfEmploymentKind == "professional", line.SE.own, 0), 0)'
+  T1.13899:
+    label: Gross commission income
+    formula: 'if(answer.hasSelfEmployment, if(answer.selfEmploymentKind == "commission", line.SE.ownGross, 0), 0)'
+  T1.13900:
+    label: Net commission income
+    formula: 'if(answer.hasSelfEmployment, if(answer.selfEmploymentKind == "commission", line.SE.own, 0), 0)'
+  T1.14099:
+    label: Gross farming income
+    formula: 'if(answer.hasSelfEmployment, if(answer.selfEmploymentKind == "farming", line.SE.ownGross, 0), 0)'
+    source: "Form T2042, line 9659"
+  T1.14100:
+    label: Net farming income
+    formula: >-
+      if(answer.hasSelfEmployment, if(answer.selfEmploymentKind == "farming", if(line.SE.own < 0,
+      unsupported("A farming loss may be a restricted farm loss (Guide T4002), which this app doesn't handle yet"), line.SE.own), 0), 0)
+    source: "Form T2042, line 9946"
+  T1.14299:
+    label: Gross fishing income
+    formula: 'if(answer.hasSelfEmployment, if(answer.selfEmploymentKind == "fishing", line.SE.ownGross, 0), 0)'
+    source: "Form T2121, line 8299"
+  T1.14300:
+    label: Net fishing income
+    formula: 'if(answer.hasSelfEmployment, if(answer.selfEmploymentKind == "fishing", line.SE.own, 0), 0)'
+    source: "Form T2121, line 9946"
+  SE.net:
+    label: Net self-employment income
+    formula: "line.T1.13500 + line.T1.13700 + line.T1.13900 + line.T1.14100 + line.T1.14300"
+    source: "T1 line 27, the total of lines 13500 to 14300: Schedule 8, Part 5, line 1 (with no partnership income on line 12200)"
+  SE.earned:
+    label: Net self-employment income, not counting losses
+    formula: "max(0, line.SE.own) + line.SE.flip"
+    source: "Schedule 6 line 3, Form T778 line 6 and Federal Worksheet line 45200: self-employment income from lines 13500 to 14300, a business's loss not counted"
+
+  # Capital cost allowance of the person's own business (Area A of T2125, T2042 or T2121, which share its columns),
+  # for one class. As for rentals, every 2025 addition is a reaccelerated investment incentive property: column 17 adds
+  # half of the net additions (9/11 for class 50) and column 18, the half-year rule, is zero.
+  T2125.8230:
+    label: Recaptured capital cost allowance
+    formula: >-
+      if(answer.hasSelfEmployment, if(answer.businessCcaClass == "none" or answer.businessCcaClass == "several"
+      or answer.businessCcaClass == "class10_1", 0, max(0, -line.T2125A.7)), 0)
+    source: "Form T2125, Area A, note 3, line 8230 (line 9600 of T2042 and T2121): a negative column 7 is income. It doesn't apply to class 10.1"
+  T2125A.7:
+    label: Business class, undepreciated capital cost after additions and dispositions
+    formula: "answer.businessUccStart + answer.businessCcaAdditions - answer.businessCcaDispositions"
+    source: "Form T2125, Area A, column 7: column 2 plus column 3 minus column 5"
+  T2125A.17:
+    label: Business class, adjustment for 2025 additions
+    formula: >-
+      if(answer.businessCcaClass == "class50", round(max(0, answer.businessCcaAdditions - answer.businessCcaDispositions) * 9 / 11, 2),
+      round(max(0, answer.businessCcaAdditions - answer.businessCcaDispositions) * param.ccaRiipFactor, 2))
+    source: "Form T2125, Area A, column 17 and note 8: additions less the dispositions that reduce them (column 16), times 9/11 for class 50 and 1/2 for the others"
+  T2125A.19:
+    label: Business class, base amount for capital cost allowance
+    formula: >-
+      if(answer.businessCcaClass == "class10_1" and answer.businessCcaDispositions > 0,
+      round(answer.businessUccStart * param.ccaHalfYearOnSale, 2), line.T2125A.7 + line.T2125A.17)
+    source: "Form T2125, Area A, column 19: column 13 (column 7, with no immediate expensing) plus column 17. For a class 10.1 car sold in 2025, half of column 2 (Guide T4002)"
+  T2125A.20:
+    label: Business class, capital cost allowance rate
+    formula: >-
+      if(answer.businessCcaClass == "class1", param.ccaRateClass1, if(answer.businessCcaClass == "class8", param.ccaRateClass8,
+      if(answer.businessCcaClass == "class10", param.ccaRateClass10, if(answer.businessCcaClass == "class10_1", param.ccaRateClass10_1,
+      if(answer.businessCcaClass == "class50", param.ccaRateClass50, 0)))))
+    source: "Form T2125, Area A, column 20"
+  T2125A.max:
+    label: Business class, most capital cost allowance for the year
+    formula: "round(max(0, line.T2125A.19) * line.T2125A.20, 2)"
+    source: "Guide T4002, column 21: column 19 times column 20; none when column 7 is negative"
+  T2125A.21:
+    label: Business class, capital cost allowance for the year
+    formula: "if(answer.businessCcaLimit > 0, min(answer.businessCcaLimit, line.T2125A.max), line.T2125A.max)"
+    source: "Form T2125, Area A, column 21: the most, or less if you ask for less"
+  T2125.9936:
+    label: Business capital cost allowance claimed
+    formula: >-
+      if(answer.hasSelfEmployment, if(answer.businessCcaClass == "none", 0, if(answer.businessCcaClass == "several",
+      unsupported("Capital cost allowance for more than one class of business property isn't handled by this app yet"),
+      round(line.T2125A.21 * (100 - answer.businessCcaPersonalUse) / 100, 2))), 0)
+    source: "Form T2125, line 9936: amount ii of Area A (column 21) less its personal part"
+  T2125A.22:
+    label: Business class, undepreciated capital cost at the end of the year
+    formula: >-
+      if(answer.hasSelfEmployment, if(answer.businessCcaClass == "none" or answer.businessCcaClass == "several"
+      or (answer.businessCcaClass == "class10_1" and answer.businessCcaDispositions > 0), 0,
+      max(0, line.T2125A.7 - line.T2125A.21)), 0)
+    source: "Form T2125, Area A, column 22: column 7 less column 21; zero after a recapture or once a class 10.1 car is sold. Next year's column 2"
+  T1.14400:
+    label: Workers' compensation benefits
+    formula: "sum(T5007.box10)"
+  T1.14500:
+    label: Social assistance payments
+    formula: "sum(T5007.box11)"
+  T1.14600:
+    label: Net federal supplements paid
+    formula: "sum(T4AOAS.box21)"
+    source: "Box 21 of the T4A(OAS) slip: the guaranteed income supplement and allowances"
+  T1.14700:
+    label: Income that is deducted again on line 25000
+    formula: "line.T1.14400 + line.T1.14500 + line.T1.14600"
+  T1.15000:
+    label: Total income
+    formula: >-
+      line.T1.10100 + line.T1.10400 + line.T1.11300 + line.T1.11400 + line.T1.11500 + line.T1.11600 + line.T1.11900 + line.T1.12000
+      + line.T1.12100 + line.T1.12500 + line.T1.12600 + line.T1.12700 + line.T1.12800 + line.T1.12900 + line.T1.12905 + line.T1.12906
+      + line.T1.13000 + line.T1.13010 + line.T1.13500 + line.T1.13700 + line.T1.13900 + line.T1.14100 + line.T1.14300 + line.T1.14700
+      + line.SCOPE.departure
+
+  # Leaving Canada: property other than Canadian real estate and registered plans is deemed sold on the day you left.
+  SCOPE.departure:
+    label: Property deemed sold when leaving Canada
+    formula: >-
+      if(person.residentAllYear, 0, if(answer.departureProperty,
+      unsupported("Leaving Canada with shares, funds or other property (the deemed disposition, Forms T1243 and T1161) isn't handled by this app yet"), 0))
+
+  # Step 3 – Net income
+  T1.20700:
+    label: Registered pension plan (RPP) deduction
+    module: deductions
+    formula: "sum(T4.box20)"
+  T1.20800:
+    label: RRSP deduction
+    formula: "answer.rrspDeduction"
+  T1.20805:
+    label: FHSA deduction
+    formula: "answer.fhsaDeduction"
+  # Form T1032 – pension income splitting. The transferring spouse elects an amount (a decision, set by accepting the
+  # pensionSplit hint); both returns are prepared here.
+  T1.21000:
+    label: Deduction for elected split-pension amount
+    formula: >-
+      if(answer.pensionSplit > 0 and line.HH.partner == 1 and family.partnerInYear,
+      if(spouse.answer.pensionSplit > 0, unsupported("Only one spouse can split pension income with the other for a year. Undo one of the two splits"),
+      min(answer.pensionSplit, line.PEN.splitMax)), 0)
+    source: "Form T1032, line 22, up to the maximum on line 21"
+  PEN.eligible:
+    label: Eligible pension income
+    formula: "line.T1.11500 + if(person.age >= 65, sum(T4RSP.box16), 0)"
+    source: "Federal Worksheet, line 31400, line 8: line 11500, and RRSP annuity payments at 65 or older"
+  PEN.splitMax:
+    label: Maximum split-pension amount
+    formula: "round(line.PEN.eligible * param.pensionSplitRate, 2)"
+    source: "Form T1032, lines 1 to 21: half the eligible pension income"
+  PEN.qualifying:
+    label: Eligible pension income other than RRIF, annuity and RRSP annuity payments
+    formula: "max(0, line.PEN.eligible - sum(T4RIF.box16) - sum(T4A.box024) - sum(T4RSP.box16))"
+    source: "Form T1032, note 1: for a receiving spouse under 65, the transferring spouse's line 1 less RRIF and annuity payments"
+  PEN.received:
+    label: Split-pension amount that counts for your pension income amount
+    formula: >-
+      if(line.T1.11600 == 0, 0, if(line.PEN.eligible < param.pensionIncomeAmountMax and person.age < 65 and spouse.person.age >= 65
+      and spouse.line.PEN.qualifying < param.pensionSplitFullAnnuityBase,
+      min(line.T1.11600, round(spouse.line.PEN.qualifying * param.pensionSplitRate, 2)), line.T1.11600))
+    source: "Form T1032, line 33 and note 1"
+  PEN.creditBase:
+    label: Pension income for the pension income amount
+    formula: "line.PEN.eligible - line.T1.21000 + line.PEN.received"
+    source: "Form T1032, lines 31 and 34: your eligible pension income less what you split, plus what is split with you"
+  PEN.tax:
+    label: Income tax deducted from eligible pension income
+    formula: >-
+      if(sum(T4A.box016) + sum(T4A.box024) + sum(T4A.box018) + sum(T4A.box028) == 0, 0,
+      round(sum(T4A.box022) * if(person.age >= 65, sum(T4A.box016) + sum(T4A.box024), sum(T4A.box016))
+      / (sum(T4A.box016) + sum(T4A.box024) + sum(T4A.box018) + sum(T4A.box028)), 2))
+      + if(person.age >= 65, sum(T4RIF.box28), 0)
+    source: "Form T1032, line 35: the tax on the slips for eligible pension income; a T4A's tax shared in proportion to its eligible pension"
+  PEN.taxSplit:
+    label: Income tax deducted that goes with the split-pension amount
+    formula: "if(line.T1.21000 == 0 or line.PEN.eligible == 0, 0, round(line.T1.21000 * line.PEN.tax / line.PEN.eligible, 2))"
+    source: "Form T1032, line 36"
+  T1.21200:
+    label: Annual union, professional, or like dues
+    module: deductions
+    formula: "sum(T4.box44)"
+  # Form T778: the family's child care, entered on either return of a couple, or both. The spouse with the lower net
+  # income (without this deduction) claims it; the higher-income spouse claims a part only in the cases of Part C, and
+  # the lower-income spouse claims the rest (line 8).
+  CC.ownExpenses:
+    label: Child care expenses entered on this return
+    formula: "if(answer.hasChildCare, answer.childCareExpenses + sum(CHILDCARE.box1), 0)"
+    source: "Receipts, and the amount entered that isn't on one"
+  CC.expenses:
+    label: Child care expenses paid
+    formula: "line.CC.ownExpenses + if(line.SPOUSES.together == 1, spouse.line.CC.ownExpenses, 0)"
+    source: "Form T778, line 67950 (line 5): the expenses both of you paid, when both returns are prepared here"
+  CC.family:
+    label: Child care is claimed on one of the year's returns (1 for yes)
+    formula: "if(answer.hasChildCare or (line.SPOUSES.together == 1 and spouse.answer.hasChildCare), 1, 0)"
+  T778.1:
+    label: Basic limit for children born in 2019 or later
+    formula: >-
+      param.childCareUnder7 * (family.childrenUnder7 - if(answer.hasChildCare, answer.childCareDisabledUnder7,
+      if(line.SPOUSES.together == 1, if(spouse.answer.hasChildCare, spouse.answer.childCareDisabledUnder7, 0), 0)))
+    source: "Form T778, Part B, line 1: $8,000 for each child born in 2019 or later the disability amount can't be claimed for. The counts come from the return that entered child care"
+  T778.2:
+    label: Basic limit for children the disability amount can be claimed for
+    formula: >-
+      param.childCareDisabled * if(answer.hasChildCare, answer.childCareDisabledUnder7 + answer.childCareDisabled7to16 + answer.childCareDisabledOlder,
+      if(line.SPOUSES.together == 1, if(spouse.answer.hasChildCare, spouse.answer.childCareDisabledUnder7 + spouse.answer.childCareDisabled7to16
+      + spouse.answer.childCareDisabledOlder, 0), 0))
+    source: "Form T778, Part B, line 2 (67960): $11,000 for each child the disability amount can be claimed for, born in 2025 or earlier"
+  T778.3:
+    label: Basic limit for children born from 2009 to 2018, and older infirm children
+    formula: >-
+      param.childCare7to16 * (family.childrenUnder17 - family.childrenUnder7 + if(answer.hasChildCare,
+      answer.childCareInfirmOlder - answer.childCareDisabled7to16, if(line.SPOUSES.together == 1, if(spouse.answer.hasChildCare,
+      spouse.answer.childCareInfirmOlder - spouse.answer.childCareDisabled7to16, 0), 0)))
+    source: "Form T778, Part B, line 3: $5,000 for each child born from 2009 to 2018, and born in 2008 or earlier with an infirmity, the disability amount can't be claimed for"
+  CC.limit:
+    label: Basic limit for child care expenses
+    formula: >-
+      if(line.T778.1 < 0 or line.T778.3 < 0,
+      unsupported("More children have the disability tax credit than the dependants born in those years. Check the counts under child care, or the people in the year"),
+      line.T778.1 + line.T778.2 + line.T778.3)
+    source: "Form T778, Part B, line 4: lines 1 to 3"
+  CC.earned:
+    label: Earned income
+    formula: "line.T1.10100 + line.T1.10400 + line.SE.earned + line.T1.13010 + line.T1.11410"
+    source: "Form T778, line 6, earned income: employment income, net self-employment income (not losses), taxable scholarships and CPP disability benefits"
+  CC.least:
+    label: Child care you could claim
+    formula: "min(line.CC.expenses, line.CC.limit, round(line.CC.earned * 2 / 3, 2))"
+    source: "Form T778, Part B, line 7: whichever is least, the basic limit, the expenses, or 2/3 of earned income"
+  CC.netIncome:
+    label: Net income without the child care deduction
+    formula: "line.T1.15000 - line.DED.other"
+  CC.spouseNetIncome:
+    label: Your spouse's or partner's net income without it
+    formula: "if(family.partnerInYear, spouse.line.CC.netIncome, answer.spouseNetIncome)"
+  CC.higher:
+    label: This return has the higher net income of the couple (1 for yes)
+    formula: >-
+      if(line.HH.partner == 1, if(line.CC.netIncome > line.CC.spouseNetIncome, 1, if(line.CC.netIncome == line.CC.spouseNetIncome
+      and family.partnerInYear and person.role == "spouse", 1, 0)), 0)
+    source: "Form T778, page 1: the person with the lower net income claims. With equal incomes the couple agrees: here the person preparing claims"
+  CC.weekly:
+    label: Child care the higher-income spouse can claim for each week or month
+    formula: "round(line.CC.limit * param.childCarePartCRate, 2)"
+    source: "Form T778, Part C, line 10: 2.5% of line 4"
+  CC.partC:
+    label: Child care for the weeks and months your spouse or partner couldn't care for the children
+    formula: "if(answer.childCareSpouseUnable, line.CC.weekly * (answer.childCareSpouseWeeks + answer.childCareSpouseMonths), 0)"
+    source: "Form T778, Part C, lines 11 to 13 (67980): line 10 times the weeks of situations b) to f), plus line 10 times the months of a)"
+  CC.higherClaim:
+    label: Child care claimed by the higher-income spouse
+    formula: "if(line.CC.family == 1 and line.CC.higher == 1, min(line.CC.least, line.CC.partC), 0)"
+    source: "Form T778, Part C, line 14: whichever is less, line 7 or line 13"
+  T1.21400:
+    label: Child care expenses
+    formula: >-
+      if(line.CC.family == 1, if(line.CC.higher == 1, line.CC.higherClaim,
+      max(0, line.CC.least - if(line.SPOUSES.together == 1, spouse.line.CC.higherClaim, 0))), 0)
+    source: "Form T778: Part C line 14 for the higher-income spouse; otherwise Part B line 9, line 7 less what the higher-income spouse claimed (when their return isn't prepared here, taken as none). Part D, for a student claiming, isn't handled"
+  T1.21500:
+    label: Disability supports deduction
+    formula: >-
+      if(answer.hasDisabilitySupports, min(answer.disabilitySupportsExpenses,
+      max(0, line.T1.10100 + line.T1.10400 + line.SE.earned + line.T1.13010)), 0)
+    source: "Form T929: the expenses, up to earned income (employment, self-employment and taxable scholarships)"
+  T1.21900:
+    label: Moving expenses
+    formula: "if(answer.hasMovingExpenses, min(answer.movingExpenses, answer.movingIncome), 0)"
+    source: "Form T1-M, line 29: net moving expenses up to the net eligible income at the new location"
+  T1.21999:
+    label: Support payments made
+    formula: "if(answer.hasSupportPaid, answer.supportPaid, 0)"
+  T1.22000:
+    label: Deductible support payments made
+    formula: "if(answer.hasSupportPaid, max(0, answer.supportPaid - answer.childSupportPaid), 0)"
+    source: "canada.ca/taxes-support-payments: spousal support is deductible; child support isn't"
+  T1.22100:
+    label: Carrying charges, interest expenses, and other expenses
+    formula: "answer.carryingCharges"
+    source: "Federal Worksheet, line 22100"
+  # Part 5, lines 70 to 88 in short: lines 80 + 81 + 83 come to line 70 plus twice line 71 less line 72 or 73, whichever
+  # is less (lines 75 and 77 only split that amount), and line 87 is line 84 less what line 73 leaves over line 72.
+  T1.22200:
+    label: Deduction for CPP contributions on self-employment income
+    formula: >-
+      if(line.CPP.employed > 0,
+      line.T1.31000 + 2 * round(line.CPP.first * 50%, 2) + 2 * round(line.CPP.second * 50%, 2)
+      - min(line.T1.31000 + round(line.CPP.first * 50%, 2), line.CPP.offset)
+      - min(round(line.CPP.second * 50%, 2), max(0, line.CPP.offset - line.T1.31000 - round(line.CPP.first * 50%, 2))),
+      line.T1.31000 + line.CPP.first + line.CPP.second)
+    source: "Schedule 8, Part 4 line 17 (no employment), or Part 5 lines 70 to 88: half of each contribution, twice for the additional ones, less the employment overpayment used. In Quebec, 5005-S8 Part 3 line 15 or Part 4 lines 68 to 86, which come to the same amount (its 84.375% split of lines 73 to 75 only divides it)"
+  T1.22215:
+    label: Deduction for CPP enhanced contributions on employment income
+    module: deductions
+    formula: >-
+      if(line.CPP.employmentDiff > 0 and line.CPP.withSelfEmployment == 0,
+      line.CPP.requiredFirst + line.CPP.requiredSecond, line.CPP.enhancedDeduction)
+    source: "Schedule 8 (5005-S8 in Quebec), Part 3a line 28, Part 3b line 48 or Part 5 line 69: the enhanced part of the contributions on your T4 slips, up to what was required"
+  T1.22300:
+    label: Deduction for PPIP premiums on self-employment income
+    formula: "round(line.PPIP.sePremium * param.ppipSelfEmployedDeductionShare, 2)"
+    source: "5005-S10, Part A, line 9: line 7 × 43.736% (maximum $376.32)"
+  T1.22900:
+    label: Other employment expenses
+    formula: >-
+      if(answer.hasWorkFromHome, min(round(answer.homeOfficeExpenses * answer.homeOfficeShare / 100, 2),
+      max(0, line.T1.10100 + line.T1.10400 - line.T1.20700 - line.T1.21200)), 0)
+    source: "Form T777, lines 48 to 54: home expenses times the employment-use share, up to employment income"
+  T1.23200:
+    label: Other deductions
+    formula: >-
+      if(answer.hasForeignIncome, max(0, answer.foreignInvestmentTax - round(answer.foreignInvestmentIncome * param.foreignPropertyTaxRate, 2)), 0)
+      + sum(T4E.box30)
+    source: "Foreign tax on foreign interest and dividends above 15% of them (Income Tax Act 20(11)), and EI benefits repaid (box 30 of the T4E)"
+  DED.other:
+    label: Deductions other than child care
+    formula: >-
+      line.T1.20700 + line.T1.20800 + line.T1.20805 + line.T1.21000 + line.T1.21200 + line.T1.21500 + line.T1.21900 + line.T1.22000
+      + line.T1.22100 + line.T1.22200 + line.T1.22215 + line.T1.22300 + line.T1.22900 + line.T1.23200
+  T1.23300:
+    label: Total deductions
+    formula: "line.DED.other + line.T1.21400"
+  T1.23400:
+    label: Net income before adjustments
+    formula: "line.T1.15000 - line.T1.23300"
+  # The T4E repayment chart. The app has no universal child care benefit (lines 11700 and 21300) and no RDSP income
+  # repayment on line 23200, so line 1 of the chart is line 23400 less line 12500.
+  EI.benefits:
+    label: Regular EI benefits less the benefits repaid
+    formula: "max(0, sum(T4E.box15) - sum(T4E.box30))"
+    source: "T4E repayment chart, line 0: box 15 minus box 30"
+  EI.repayment:
+    label: EI benefits repayment
+    formula: >-
+      if(max(0, T4E.box7) == 0, 0,
+      if(min(T4E.box7) != 30 or max(T4E.box7) != 30 or count(T4E.box7) < count(T4E.box15),
+      unsupported("Repaying EI benefits is worked out here only when every T4E slip with regular benefits shows 30% in box 7. Work out the chart on each T4E yourself"),
+      round(min(line.EI.benefits, max(0, line.T1.23400 - line.T1.12500 - param.eiRepaymentThreshold)) * param.eiRepaymentRate, 2)))
+    source: "T4E repayment chart, lines 1 to 4: 30% of box 15 (less box 30) or of net income over $82,125, whichever is less, when box 7 shows 30%"
+  T1.23500:
+    label: Social benefits repayment
+    formula: >-
+      line.EI.repayment + min(max(0, line.T1.11300 + line.T1.14600 - sum(T4AOAS.box20)),
+      round(max(0, line.T1.23400 - line.EI.repayment - line.T1.12500 - param.oasRecoveryThreshold) * param.oasRecoveryRate, 2))
+    source: "Federal Worksheet, line 23500, lines 1 to 21: the EI repayment, plus 15% of net income (less the EI repayment and RDSP income) over $93,454, up to the OAS and net federal supplements received"
+  T1.23600:
+    label: Net income
+    formula: "max(0, line.T1.23400 - line.T1.23500)"
+
+  # Schedule 8 – CPP contributions and overpayment. Part 2 prorates the year's limits by the months CPP applied. Part 3
+  # compares the contributions on the T4 slips with the ones required on the pensionable earnings. Part 4 (self-employment
+  # only) and Part 5 (self-employment and employment) work out the contributions on self-employment earnings; with no
+  # employment, Part 5's lines below give Part 4's amounts. Not handled: the elections of Part 1 and Form CPT30 (Part 2,
+  # conditions c to e), a CPP disability pension (condition b), and electing to pay on other earnings (Form CPT20).
+  #
+  # A resident of Quebec contributes to the QPP instead, on Schedule 8 for residents of Quebec (5005-S8): its Parts 2,
+  # 2a and 2b are Parts 3, 3a and 3b here line for line, and its Parts 3 and 4 are Parts 4 and 5. The same lines work it
+  # out with boxes 17 and 17A instead of 16 and 16A and Quebec's rates; only the months (Part 1) differ. Not handled for
+  # QPP either: a disability pension (condition b), the election to stop contributing (Form RR-50-V) and optional
+  # contributions on other earnings. A T4 with the other plan's contributions needs Form RC381, which isn't handled.
+
+  # Part 2 – the number of months, and the year's limits for that many months (the monthly proration table).
+  CPP.months:
+    label: Months CPP or QPP applied in 2025
+    formula: >-
+      if(person.province == "QC", if(person.age <= 17 or person.age >= 73, 0, if(person.age == 18, 12 - person.birthMonth, 12)),
+      if(person.age <= 17 or person.age >= 71, 0,
+      if(person.age == 18, 12 - person.birthMonth, if(person.age == 70, person.birthMonth, 12))))
+    source: "Schedule 8, Part 2, line A: the months after the month you turned 18 (a), up to and including the month you turned 70 (f), none when 70 or older all year (g). In Quebec, 5005-S8 Part 1, line A: the months after the month you turned 18 (a), none when 73 or older at the end of 2025 (c)"
+  CPP.ympe:
+    label: Your maximum pensionable earnings
+    formula: "round(param.cppMaxPensionableEarnings * line.CPP.months / 12, 2)"
+    source: "Schedule 8, Part 2, line B: $71,300 for 12 months, prorated by line A"
+  CPP.secondMax:
+    label: Your maximum amount subject to second additional contributions
+    formula: "round(param.cpp2MaxEarnings * line.CPP.months / 12, 2)"
+    source: "Schedule 8, Part 2, line C: $9,900 for 12 months, prorated by line A"
+  CPP.yampe:
+    label: Your additional maximum pensionable earnings
+    formula: "round(param.cppAdditionalMaxPensionableEarnings * line.CPP.months / 12, 2)"
+    source: "Schedule 8, Part 2, line D: $81,200 for 12 months, prorated by line A"
+  CPP.exemption:
+    label: Your maximum basic exemption
+    formula: "round(param.cppBasicExemption * line.CPP.months / 12, 2)"
+    source: "Schedule 8, Part 2, line E: $3,500 for 12 months, prorated by line A"
+
+  # Part 3 – contributions and overpayment on employment income. A difference is what was deducted less what is
+  # required: positive when more was deducted.
+  CPP.employed:
+    label: CPP pensionable earnings from employment
+    formula: >-
+      if(count(T4.box26) == 0, sum(T4.box14), if(count(T4.box26) >= count(T4.box14), sum(T4.box26),
+      unsupported("Some of your T4 slips show CPP pensionable earnings (box 26) and some don't. Enter box 26 on each slip: the amount from box 14 when box 26 is blank")))
+    source: "Schedule 8, Part 3, line 1: box 26 of T4 slips (box 14 if blank)"
+  CPP.employedSecondEarnings:
+    label: Employment earnings subject to second additional contributions
+    formula: "max(0, min(line.CPP.yampe, line.CPP.employed) - line.CPP.ympe)"
+    source: "Schedule 8, Part 3, lines 2 to 4"
+  CPP.employedBaseEarnings:
+    label: Employment earnings subject to base and first additional contributions
+    formula: "max(0, min(line.CPP.yampe, line.CPP.employed) - line.CPP.employedSecondEarnings - line.CPP.exemption)"
+    source: "Schedule 8, Part 3, lines 5 to 7"
+  CPP.deducted:
+    label: Base and first additional CPP or QPP contributions deducted
+    formula: >-
+      if(person.province == "QC", if(sum(T4.box16) + sum(T4.box16A) > 0,
+      unsupported("Your T4 slips show CPP contributions (box 16 or 16A). A resident of Quebec with CPP contributions works them out on Form RC381, which this app doesn't handle yet"),
+      sum(T4.box17)),
+      if(sum(T4.box17) + sum(T4.box17A) > 0,
+      unsupported("Your T4 slips show QPP contributions (box 17 or 17A). Outside Quebec, QPP contributions are worked out on Form RC381, which this app doesn't handle yet"),
+      sum(T4.box16)))
+    source: "Schedule 8, Part 3, line 8: box 16 of T4 slips. In Quebec, 5005-S8 Part 2, line 8: box 17. Either schedule sends a T4 with the other plan's contributions to Form RC381 (5005-S8, page 1)"
+  CPP.secondDeducted:
+    label: Second additional CPP or QPP contributions deducted
+    formula: 'if(person.province == "QC", sum(T4.box17A), sum(T4.box16A))'
+    source: "Schedule 8, Part 3, line 21: box 16A of T4 slips. In Quebec, 5005-S8 Part 2, line 21: box 17A"
+  CPP.actualBase:
+    label: Base CPP or QPP contributions deducted
+    formula: 'round(line.CPP.deducted * if(person.province == "QC", param.qppBaseShare, param.cppBaseShare), 2)'
+    source: "Schedule 8, Part 3, lines 8 and 9: 83.1933% of box 16 of T4 slips. In Quebec, 5005-S8 Part 2, line 9: 84.375% of box 17"
+  CPP.actualFirst:
+    label: First additional CPP or QPP contributions deducted
+    formula: "line.CPP.deducted - line.CPP.actualBase"
+    source: "Schedule 8, Part 3, line 10 (5005-S8, Part 2, line 10)"
+  CPP.requiredBase:
+    label: Base CPP or QPP contributions required on employment earnings
+    formula: 'round(line.CPP.employedBaseEarnings * if(person.province == "QC", param.qppBaseRate, param.cppBaseRate), 2)'
+    source: "Schedule 8, Part 3, line 11: 4.95%. In Quebec, 5005-S8 Part 2, line 11: 5.4%"
+  CPP.requiredFirst:
+    label: First additional CPP contributions required on employment earnings
+    formula: "round(line.CPP.employedBaseEarnings * param.cppFirstRate, 2)"
+    source: "Schedule 8, Part 3, line 12: 1%"
+  CPP.baseDiff:
+    label: Base contributions deducted less required
+    formula: "line.CPP.actualBase - line.CPP.requiredBase"
+    source: "Schedule 8, Part 3, line 16"
+  CPP.firstDiff:
+    label: First additional contributions deducted less required
+    formula: "line.CPP.actualFirst - line.CPP.requiredFirst"
+    source: "Schedule 8, Part 3, line 19"
+  CPP.baseFirstDiff:
+    label: Base and first additional contributions deducted less required
+    formula: "line.CPP.baseDiff + line.CPP.firstDiff"
+    source: "Schedule 8, Part 3, line 20"
+  CPP.requiredSecond:
+    label: Second additional CPP contributions required on employment earnings
+    formula: "round(line.CPP.employedSecondEarnings * param.cpp2EmployeeRate, 2)"
+    source: "Schedule 8, Part 3, line 22: 4%"
+  CPP.secondDiff:
+    label: Second additional contributions deducted less required
+    formula: "line.CPP.secondDeducted - line.CPP.requiredSecond"
+    source: "Schedule 8, Part 3, lines 21 to 23: box 16A of T4 slips (box 17A in Quebec, 5005-S8 Part 2) less line 22"
+  CPP.employmentDiff:
+    label: CPP contributions deducted less required
+    formula: "line.CPP.baseFirstDiff + line.CPP.secondDiff"
+    source: "Schedule 8, Part 3, line 24"
+  # Part 3b (and Part 5, lines 51 to 69, which are the same): what was deducted, where a part that was short takes what
+  # another part had over, and the required amount where a part had more than enough. In short, with d16, d19 and d23
+  # the differences: line 32 is d19 over 0 up to the base shortfall, line 35 is d23 over 0 up to what line 32 left;
+  # line 39 is d16 over 0 up to the first shortfall, line 42 is d23 over 0 less line 35, up to what line 39 left; line
+  # 46 is d20 over 0 up to the second shortfall.
+  CPP.baseCredit:
+    label: Base CPP contributions through employment, when no more was deducted than required
+    formula: >-
+      if(line.CPP.baseDiff >= 0, line.CPP.requiredBase,
+      line.CPP.actualBase + min(max(0, line.CPP.firstDiff), -line.CPP.baseDiff)
+      + min(max(0, line.CPP.secondDiff), max(0, -line.CPP.baseDiff - max(0, line.CPP.firstDiff))))
+    source: "Schedule 8, Part 3b, lines 30 to 36 (Part 5, lines 51 to 57)"
+  CPP.enhancedDeduction:
+    label: Enhanced CPP contributions through employment, when no more was deducted than required
+    formula: >-
+      if(line.CPP.firstDiff >= 0, line.CPP.requiredFirst,
+      line.CPP.actualFirst + min(max(0, line.CPP.baseDiff), -line.CPP.firstDiff)
+      + min(max(0, -line.CPP.firstDiff - max(0, line.CPP.baseDiff)),
+      max(0, line.CPP.secondDiff) - min(max(0, line.CPP.secondDiff), max(0, -line.CPP.baseDiff))))
+      + if(line.CPP.secondDiff >= 0, line.CPP.requiredSecond,
+      line.CPP.secondDeducted + min(max(0, line.CPP.baseFirstDiff), -line.CPP.secondDiff))
+    source: "Schedule 8, Part 3b, lines 37 to 48 (Part 5, lines 58 to 69); 5005-S8, Part 2b lines 36 to 47 (Part 4, lines 56 to 67)"
+
+  # Part 4 and Part 5 – contributions on self-employment earnings.
+  CPP.seEarnings:
+    label: Pensionable net self-employment earnings
+    formula: "if(line.SE.net > 0, round(line.SE.net * line.CPP.months / 12, 2), 0)"
+    source: "Schedule 8, Part 4 line 1 and Part 5 line 1: net self-employment income, prorated by the months on line A (notes 1 and 2)"
+  CPP.employedPaid:
+    label: Base and first additional employment contributions, as Part 5 counts them
+    formula: >-
+      line.CPP.deducted - max(0, line.CPP.baseFirstDiff)
+      + min(max(0, line.CPP.secondDiff), max(0, -line.CPP.baseFirstDiff))
+    source: "Schedule 8, Part 5, lines 5 to 10 (5005-S8, Part 4, lines 4 to 9): box 16 (17) less any overpayment, plus second additional contributions over the required that make up a shortfall"
+  CPP.employedSecondPaid:
+    label: Second additional employment contributions, as Part 5 counts them
+    formula: >-
+      line.CPP.secondDeducted - max(0, line.CPP.secondDiff)
+      + min(max(0, line.CPP.baseFirstDiff), max(0, -line.CPP.secondDiff))
+    source: "Schedule 8, Part 5, lines 11 to 16 (5005-S8, Part 4, lines 10 to 15)"
+  CPP.covered:
+    label: Earnings already covered by employment contributions
+    formula: 'round(line.CPP.employedPaid * if(person.province == "QC", param.qppEarningsPerContribution, param.cppEarningsPerContribution), 2)'
+    source: "Schedule 8, Part 5, line 20: × 16.80672. In Quebec, 5005-S8 Part 4, line 19: × 15.625"
+  CPP.exemptionLeft:
+    label: Basic exemption not used by employment
+    formula: "max(0, line.CPP.exemption - line.CPP.employed)"
+    source: "Schedule 8, Part 5, lines 23 to 25"
+  CPP.baseEarnings:
+    label: Self-employment earnings subject to base and first additional contributions
+    formula: >-
+      max(0, min(line.CPP.seEarnings, max(0, max(0, line.CPP.ympe - line.CPP.exemption) - line.CPP.covered))
+      - max(0, line.CPP.exemptionLeft - max(0, line.CPP.seEarnings - max(0, line.CPP.ympe - line.CPP.exemption))))
+    source: "Schedule 8, Part 5, lines 17 to 30 (Part 4, lines 3 to 9)"
+  CPP.secondEarnings:
+    label: Self-employment earnings subject to second additional contributions
+    formula: >-
+      if(line.CPP.seEarnings + min(line.CPP.yampe, line.CPP.employed) > line.CPP.ympe,
+      max(0, min(line.CPP.secondMax - round(line.CPP.employedSecondPaid / param.cpp2EmployeeRate, 2),
+      line.CPP.seEarnings - line.CPP.exemptionLeft - line.CPP.baseEarnings)), 0)
+    source: "Schedule 8, Part 5, lines 31 to 42 (Part 4, lines 4 to 6)"
+  CPP.base:
+    label: Base CPP or QPP contributions on self-employment earnings
+    formula: 'round(line.CPP.baseEarnings * if(person.province == "QC", param.qppSelfEmployedBaseRate, param.cppSelfEmployedBaseRate), 2)'
+    source: "Schedule 8, Part 5, line 43: 9.9%. In Quebec, 5005-S8 Part 3 line 10 and Part 4 line 42: 10.8%"
+  CPP.first:
+    label: First additional CPP contributions on self-employment earnings
+    formula: "round(line.CPP.baseEarnings * param.cppSelfEmployedFirstRate, 2)"
+    source: "Schedule 8, Part 5, line 44: 2%"
+  CPP.second:
+    label: Second additional CPP contributions on self-employment earnings
+    formula: "round(line.CPP.secondEarnings * param.cppSelfEmployedSecondRate, 2)"
+    source: "Schedule 8, Part 5, line 45: 8%"
+  # Part 5 decides the credit, the deductions and the overpayment unless lines 30 and 42 are both 0; then Part 3 does.
+  CPP.withSelfEmployment:
+    label: Part 5 applies (1 for yes)
+    formula: "if(line.CPP.employed > 0 and line.CPP.baseEarnings + line.CPP.secondEarnings > 0, 1, 0)"
+    source: "Schedule 8, Part 3 and Part 5, note after line 42"
+  CPP.offset:
+    label: Employment contributions deducted over the required, used against self-employment contributions
+    formula: "if(line.CPP.withSelfEmployment == 1, max(0, line.CPP.employmentDiff), 0)"
+    source: "Schedule 8, Part 5, lines 48 and 73: line 24 of Part 3, if positive"
+
+  # Step 4 – Taxable income
+  T1.24400:
+    label: Canadian Armed Forces personnel and police deduction
+    formula: "sum(T4.box43)"
+  T1.24900:
+    label: Security options deductions
+    formula: "sum(T4.box39) + sum(T4.box41)"
+  T1.25000:
+    label: Other payments deduction
+    formula: >-
+      if(line.T1.14600 > 0 and max(0, line.T1.23400) - line.T1.12500 > param.oasRecoveryThreshold,
+      unsupported("Net federal supplements with net income over $93,454 (line 25000) aren't handled by this app yet"), line.T1.14700)
+    source: "Federal Worksheet, line 25000: the amount on line 14700"
+  T1.25200:
+    label: Non-capital losses of other years
+    formula: "answer.nonCapitalLosses"
+  T1.25300:
+    label: Net capital losses of other years
+    formula: "min(answer.netCapitalLosses, line.T1.12700)"
+    source: "canada.ca/line-25300: up to the taxable capital gains of the year"
+  # Form T2222 – the residency deduction, for people living in Yukon, the Northwest Territories or Nunavut, all of which
+  # are a prescribed northern zone (Zone A). The prescribed zones of the provinces are lists of places, so it isn't
+  # asked there. The travel deduction (Step 3) and board and lodging at a special work site (line 4) aren't handled.
+  NRD.days:
+    label: Days you lived in a northern zone in 2025
+    formula: >-
+      if(person.province == "YT" or person.province == "NT" or person.province == "NU",
+      if(answer.hasNorthernResidence, min(param.northernDaysMax, answer.northernDays), 0), 0)
+  # Only one person in a home claims the additional amount, and only if no one else there claims the basic amount. When
+  # both spouses lived there, one claims both amounts (the one with the higher net income, or the person preparing when
+  # they are equal), unless each claiming the basic amount gives the couple more: the 20% of net income limit.
+  NRD.shared:
+    label: Both spouses lived in a northern zone (1 for yes)
+    formula: "if(line.HH.partner == 1 and family.partnerInYear, if(line.NRD.days > 0 and spouse.line.NRD.days > 0, 1, 0), 0)"
+  NRD.first:
+    label: This return is the one that would claim both amounts (1 for yes)
+    formula: 'if(line.T1.23600 > spouse.line.T1.23600 or (line.T1.23600 == spouse.line.T1.23600 and person.role == "self"), 1, 0)'
+  NRD.both:
+    label: Residency deduction claiming both amounts
+    formula: "min(line.NRD.days * (param.northernBasicPerDay + param.northernAdditionalPerDay), line.T2222.12)"
+  NRD.basic:
+    label: Residency deduction claiming the basic amount only
+    formula: "min(line.NRD.days * param.northernBasicPerDay, line.T2222.12)"
+  NRD.oneClaims:
+    label: One spouse claims both amounts for the home (1 for yes)
+    formula: >-
+      if(line.NRD.first == 1, if(line.NRD.both >= line.NRD.basic + spouse.line.NRD.basic, 1, 0),
+      if(spouse.line.NRD.both >= spouse.line.NRD.basic + line.NRD.basic, 1, 0))
+  T2222.1:
+    label: Basic residency amount
+    formula: "if(line.NRD.days == 0, 0, if(line.NRD.shared == 1, if(line.NRD.oneClaims == 1 and line.NRD.first == 0, 0, line.NRD.days * param.northernBasicPerDay), line.NRD.days * param.northernBasicPerDay))"
+    source: "Form T2222, Step 2, line 1: $11 for each day"
+  T2222.2:
+    label: Additional residency amount
+    formula: >-
+      if(line.NRD.days == 0, 0, if(line.NRD.shared == 1, if(line.NRD.oneClaims == 1 and line.NRD.first == 1, line.NRD.days * param.northernAdditionalPerDay, 0),
+      if(answer.northernHome == "alone", line.NRD.days * param.northernAdditionalPerDay, 0)))
+    source: "Form T2222, Step 2, line 2: $11 for each day, when no one else in the home claims the basic amount"
+  T2222.3:
+    label: Residency amounts
+    formula: "line.T2222.1 + line.T2222.2"
+  T2222.12:
+    label: Most residency deduction
+    formula: "round(line.T1.23600 * param.northernIncomeShare, 2)"
+    source: "Form T2222, Step 2, line 12: 20% of net income"
+  T1.25500:
+    label: Northern residents deductions
+    formula: "min(line.T2222.3, line.T2222.12)"
+    source: "Form T2222, lines 13 and 19: the residency deduction; no travel deduction"
+  T1.25700:
+    label: Deductions from net income
+    formula: "line.T1.24400 + line.T1.24900 + line.T1.25000 + line.T1.25200 + line.T1.25300 + line.T1.25500"
+  T1.26000:
+    label: Taxable income
+    formula: "max(0, line.T1.23600 - line.T1.25700)"
+
+  # Step 5 Part B – Federal non-refundable tax credits
+  # Part-year residents (the year they moved to or from Canada): these personal amounts are prorated by the days they
+  # lived in Canada, unless their income from Canada while not resident was 90% or more of their world income then.
+  # The other credits count only what was paid or earned while resident, which the slips and answers already are.
+  RES.days:
+    label: Days you lived in Canada in 2025
+    formula: "if(person.residentAllYear, param.daysInYear, min(param.daysInYear, answer.daysResident))"
+  RES.full:
+    label: Full personal amounts while not resident (1 for yes)
+    formula: >-
+      if(person.residentAllYear, 1, if(answer.nonResidentIncome == 0
+      or answer.nonResidentCanadianIncome >= round(answer.nonResidentIncome * param.nonResidentCanadaShare, 2), 1, 0))
+    source: "canada.ca, newcomers and emigrants: the full amounts when Canadian income was 90% or more of world income for the part of the year not resident"
+  RES.factor:
+    label: Share of the personal amounts you can claim
+    formula: "if(person.residentAllYear, 1, max(line.RES.full, line.RES.days / param.daysInYear))"
+    source: "1 for the full amounts; otherwise the days in Canada over 365. Both are read, so both questions are asked"
+  FULL.30000:
+    label: Basic personal amount for a full year
+    formula: >-
+      round(param.basicPersonalAmountMax - (param.basicPersonalAmountMax - param.basicPersonalAmountMin) * clamp(line.T1.23600 - param.basicPersonalAmountPhaseStart, 0, param.basicPersonalAmountPhaseEnd - param.basicPersonalAmountPhaseStart) / (param.basicPersonalAmountPhaseEnd - param.basicPersonalAmountPhaseStart), 2)
+    source: "Federal Worksheet, line 30000: the full amount up to the 26% bracket, going down to the minimum at the 33% bracket"
+  T1.30000:
+    label: Basic personal amount
+    formula: >-
+      round(line.FULL.30000 * line.RES.factor, 2)
+    source: "Federal Worksheet, line 30000: the full amount up to the 26% bracket, going down to the minimum at the 33% bracket"
+  T1.30100:
+    label: Age amount
+    formula: >-
+      round((if(person.age >= 65, max(0, param.ageAmountMax - round(max(0, line.T1.23600 - param.ageAmountThreshold) * param.ageAmountRate, 2)), 0)) * line.RES.factor, 2)
+    source: "Federal Worksheet, line 30100: for people born in 1960 or earlier"
+  FULL.30300:
+    label: Spouse or common-law partner amount for a full year
+    formula: "if(line.HH.partner == 1, max(0, line.FULL.30000 + if(answer.spouseInfirm, param.caregiverChildAmount, 0) - line.HH.spouseNetIncome), 0)"
+  T1.30300:
+    label: Spouse or common-law partner amount
+    formula: >-
+      round(line.FULL.30300 * line.RES.factor, 2)
+    source: "Schedule 5 line 30300: your basic personal amount (plus $2,687 for a spouse with an infirmity) minus their net income"
+  T1.30400:
+    label: Amount for an eligible dependant
+    formula: >-
+      round((if(line.HH.partner == 0 and family.childrenUnder18 > 0, line.FULL.30000, 0)) * line.RES.factor, 2)
+    source: "Schedule 5 line 30400: for a single parent, one child under 18 who lived with you. The app assumes the child had no income"
+  T1.30425:
+    label: Canada caregiver amount for spouse or common-law partner
+    formula: >-
+      round((if(line.HH.partner == 1 and answer.spouseInfirm, max(0, min(param.caregiverMax, max(0, param.caregiverBase - line.HH.spouseNetIncome)) - line.FULL.30300), 0)) * line.RES.factor, 2)
+    source: "Schedule 5 line 30425: $28,798 less their net income (up to $8,601), less the spouse amount"
+  T1.30450:
+    label: Canada caregiver amount for other infirm dependants age 18 or older
+    formula: >-
+      round((if(answer.hasInfirmDependant, if(answer.infirmDependants > 1, unsupported("The Canada caregiver amount for more than one adult dependant isn't handled by this app yet"), if(answer.infirmDependants == 0, 0, min(param.caregiverMax, max(0, param.caregiverBase - answer.infirmDependantIncome)))), 0)) * line.RES.factor, 2)
+    source: "Schedule 5 line 30450: $28,798 less the dependant's net income, up to $8,601"
+  T1.30500:
+    label: Canada caregiver amount for infirm children under 18 years of age
+    formula: >-
+      round((if(answer.hasInfirmChildren, answer.infirmChildren * param.caregiverChildAmount, 0)) * line.RES.factor, 2)
+    source: "T1 lines 30499 and 30500: $2,687 for each child"
+  T1.T84:
+    label: Credit amounts for you and your dependants (T1 line 84)
+    formula: "line.T1.30000 + line.T1.30100 + line.T1.30300 + line.T1.30400 + line.T1.30425 + line.T1.30450 + line.T1.30500"
+  T1.30800:
+    label: Base CPP contributions through employment
+    module: credits
+    formula: >-
+      if(line.CPP.employmentDiff > 0 and line.CPP.withSelfEmployment == 0,
+      line.CPP.requiredBase, line.CPP.baseCredit)
+    source: "Schedule 8 (5005-S8 in Quebec), Part 3a line 25, Part 3b line 36 or Part 5 line 57: the base part of the contributions on your T4 slips, up to what was required"
+  T1.31000:
+    label: CPP contributions on self-employment income
+    formula: "round(line.CPP.base * 50%, 2)"
+    source: "Schedule 8, Part 4 line 15 or Part 5 line 70: half the base contributions. In Quebec, 5005-S8 Part 3 line 14 or Part 4 line 68"
+  # Form T2204 – employee overpayment of EI premiums, for a resident of a province other than Quebec with no EI
+  # special benefits agreement for self-employment (Schedule 13). A resident of Quebec pays EI at Quebec's rate, on
+  # Schedule 10 for residents of Quebec (5005-S10), Part C.
+  EI.insurable:
+    label: EI insurable earnings
+    formula: >-
+      if(count(T4.box24) == 0, sum(T4.box14), if(count(T4.box24) >= count(T4.box14), sum(T4.box24),
+      unsupported("Some of your T4 slips show EI insurable earnings (box 24) and some don't. Enter box 24 on each slip: the amount from box 14 when box 24 is blank")))
+    source: "Form T2204, line 1: box 24 of T4 slips (box 14 if blank)"
+  EI.required:
+    label: EI premiums required
+    formula: >-
+      if(person.province == "QC", if(line.EI.insurable <= param.eiMinInsurableEarnings, 0,
+      min(param.eiPremiumMaxQc, round(line.EI.insurable * param.eiPremiumRateQc, 2))),
+      if(line.EI.insurable < param.eiMinInsurableEarnings, 0,
+      min(param.eiPremiumMax, round(line.EI.insurable * param.eiPremiumRate, 2))))
+    source: "Form T2204, lines 10 and 12: 1.64% of line 1, up to $1,077.48; line 1 is 0 when insurable earnings are less than $2,000 (note 1). In Quebec, 5005-S10 Part C, lines 18 to 20: 1.31%, up to $860.67; line 18 is 0 when insurable earnings are $2,000 or less"
+  T1.31200:
+    label: Employment insurance premiums through employment
+    module: credits
+    formula: >-
+      if(person.province == "QC", min(line.EI.required, sum(T4.box18)),
+      min(max(0, min(param.eiMaxInsurableEarnings, line.EI.insurable) - param.eiMinInsurableEarnings),
+      sum(T4.box18), line.EI.required))
+    source: "Form T2204 (5005-S10 in Quebec): the EI premiums on your T4 slips, up to what was required"
+  # PPIP (Quebec parental insurance plan) premiums, for a resident of Quebec: those deducted on T4 slips (box 55), and
+  # those payable on self-employment income (5005-S10, Part A). Line 31210, PPIP payable on employment outside Quebec
+  # (Part B), needs the province of employment of each T4 (box 10), which the app doesn't keep: it isn't claimed.
+  PPIP.insurable:
+    label: PPIP insurable earnings
+    formula: >-
+      if(person.province == "QC", if(count(T4.box56) == 0, sum(T4.box14), if(count(T4.box56) >= count(T4.box14), sum(T4.box56),
+      unsupported("Some of your T4 slips show PPIP insurable earnings (box 56) and some don't. Enter box 56 on each slip: the amount from box 14 when box 56 is blank"))), 0)
+    source: "5005-S10, Part A line 3 and Part B line 13: box 56 of T4 slips (box 14 if blank)"
+  T1.31205:
+    label: PPIP premiums paid
+    module: credits
+    formula: >-
+      if(person.province == "QC", if(line.PPIP.insurable < param.ppipMinEarnings, 0, min(param.ppipPremiumMax, sum(T4.box55))),
+      if(sum(T4.box55) > 0, unsupported("PPIP premiums (box 55 of a T4) of a person living outside Quebec on December 31 aren't handled by this app yet"), 0))
+    source: "5005-R line 31205 and canada.ca/line-31205: box 55 of all T4 slips, up to $484.12; nothing when PPIP insurable earnings are less than $2,000 (the TP-1 refunds them)"
+  PPIP.seEarnings:
+    label: Self-employment income subject to the PPIP premium
+    formula: >-
+      if(person.province == "QC" and max(0, line.SE.net) + line.PPIP.insurable >= param.ppipMinEarnings,
+      min(max(0, line.SE.net), max(0, param.ppipMaxInsurableEarnings - line.PPIP.insurable)), 0)
+    source: "5005-S10, Part A, lines 1 to 5: net business income (TP-1 Schedule L line 27, the self-employment lines here, not less than 0), up to $98,000 less the PPIP insurable employment earnings; none when the two total less than $2,000 (TP-1 Schedule R)"
+  PPIP.sePremium:
+    label: PPIP premium on self-employment income
+    formula: "round(line.PPIP.seEarnings * param.ppipSelfEmployedRate, 2)"
+    source: "5005-S10, Part A, line 7: line 5 × 0.878% (maximum $860.44)"
+  T1.31215:
+    label: PPIP premiums payable on self-employment income
+    formula: "line.PPIP.sePremium - line.T1.22300"
+    source: "5005-S10, Part A, line 10: line 7 minus line 9 (maximum $484.12)"
+  T1.31260:
+    label: Canada employment amount
+    module: credits
+    formula: "min(param.canadaEmploymentAmount, line.T1.10100 + line.T1.10400)"
+  T1.31220:
+    label: Volunteer firefighters' amount
+    formula: 'if(answer.hasVolunteerService, if(answer.volunteerKind == "firefighter", param.volunteerAmount, 0), 0)'
+  T1.31240:
+    label: Search and rescue volunteers' amount
+    formula: 'if(answer.hasVolunteerService, if(answer.volunteerKind == "search_rescue", param.volunteerAmount, 0), 0)'
+    source: "T1 lines 31220 and 31240: one or the other"
+  T1.31270:
+    label: Home buyers' amount
+    formula: >-
+      if(family.partnerInYear and line.HH.partner == 1 and answer.homeBuyers + spouse.answer.homeBuyers > param.homeBuyersMax,
+      unsupported("You and your spouse or partner can claim at most $10,000 together for the home buyers' amount. Lower one of the claims"),
+      min(answer.homeBuyers, param.homeBuyersMax))
+  T1.31285:
+    label: Home accessibility expenses
+    formula: "min(answer.homeAccessibility, param.homeAccessibilityMax)"
+  T1.31300:
+    label: Adoption expenses
+    formula: >-
+      if(answer.hasAdoption, if(answer.adoptedChildren > 1 and answer.adoptionExpenses > param.adoptionMax,
+      unsupported("Adoption expenses over $19,580 for more than one child are claimed child by child, which this app doesn't handle yet"),
+      min(answer.adoptionExpenses, param.adoptionMax)), 0)
+    source: "canada.ca/line-31300: up to $19,580 for each child"
+  T1.T96:
+    label: CPP, EI, PPIP, volunteer, employment, home and adoption amounts (T1 line 96; line 100 of 5005-R)
+    formula: >-
+      line.T1.30800 + line.T1.31000 + line.T1.31200 + line.T1.31205 + line.T1.31215 + line.T1.31220 + line.T1.31240 + line.T1.31260
+      + line.T1.31270 + line.T1.31285 + line.T1.31300
+  T1.31400:
+    label: Pension income amount
+    formula: "min(param.pensionIncomeAmountMax, line.PEN.creditBase)"
+    source: "Federal Worksheet, line 31400, and Form T1032 when splitting: eligible pension income, up to $2,000"
+  T1.31600:
+    label: Disability amount for self
+    formula: >-
+      round((if(answer.hasDisability, param.disabilityAmount, 0)) * line.RES.factor, 2)
+    source: "T1 line 31600: $10,138 at 18 or older, with an approved Form T2201"
+  T1.31800:
+    label: Disability amount transferred from a dependant
+    formula: >-
+      round((if(answer.hasDisabledDependant, if(answer.disabledChildren > 1 and answer.disabledChildCare > 0, unsupported("Child care for more than one child with a disability is worked out child by child, which this app doesn't handle yet"), answer.disabledChildren * (param.disabilityAmount + param.disabilitySupplementMax) - min(answer.disabledChildren * param.disabilitySupplementMax, max(0, answer.disabledChildCare - param.disabilityCareThreshold)) + answer.disabledAdults * param.disabilityAmount), 0)) * line.RES.factor, 2)
+    source: "Federal Worksheet, line 31800: $10,138, plus up to $5,914 for a child under 18, less care over $3,464. The app assumes the dependant had no income"
+  T1.T101:
+    label: Credit amounts before tuition (T1 line 101)
+    formula: "line.T1.T84 + line.T1.T96 + line.T1.31400 + line.T1.31600 + line.T1.31800"
+  T1.31900:
+    label: Interest paid on your student loans
+    formula: "answer.studentLoanInterest"
+  T1.32300:
+    label: Federal tuition amount
+    formula: "line.S11.17"
+  T1.32400:
+    label: Tuition amount transferred from a child or grandchild
+    formula: "answer.childTuitionTransfer"
+  CHILD.provincialTuition:
+    label: Provincial or territorial tuition transferred from a child or grandchild
+    formula: "if(answer.childTuitionTransfer == 0, 0, answer.childProvincialTuitionTransfer)"
+    source: "The amount on the student's T2202 for your province or territory, asked once a federal amount is transferred"
+  T1.32600:
+    label: Amounts transferred from your spouse or common-law partner
+    formula: "if(line.HH.partner == 1 and family.partnerInYear, line.S2.13, 0)"
+    source: "Schedule 2: their unused age amount and the tuition they designate to you"
+  T1.33099:
+    label: Medical expenses for you, your spouse and your children
+    formula: "if(family.partnerInYear and spouse.answer.claimSpouseMedical and line.HH.partner == 1, 0, line.OWN.medical) + if(family.partnerInYear and answer.claimSpouseMedical and line.HH.partner == 1, spouse.line.OWN.medical, 0)"
+    source: "Either spouse can claim the family's medical expenses: this return's own, unless the spouse claims them, and the spouse's when this return claims them"
+  OWN.medical:
+    label: Medical expenses on this return's receipts and entered here
+    formula: "answer.medicalExpenses + sum(MEDICAL.box1)"
+    source: "Medical expense receipts, and the amount entered that isn't on one"
+  T1.33199:
+    label: Allowable amount of medical expenses for other dependants
+    formula: >-
+      if(answer.hasOtherDependantMedical, max(0, answer.otherDependantMedical
+      - min(param.medicalThresholdMax, round(answer.otherDependantIncome * param.medicalThresholdRate, 2))), 0)
+    source: "Federal Worksheet, line 33199: their expenses over whichever is less, $2,834 or 3% of their net income"
+  T1.33200:
+    label: Allowable medical expenses
+    formula: "max(0, line.T1.33099 - min(param.medicalThresholdMax, round(line.T1.23600 * param.medicalThresholdRate, 2))) + line.T1.33199"
+    source: "T1 lines 107 to 112: expenses over whichever is less, $2,834 or 3% of net income, and those for other dependants"
+  T1.33500:
+    label: Federal non-refundable credit amounts
+    formula: "line.T1.T101 + line.T1.31900 + line.T1.32300 + line.T1.32400 + line.T1.32600 + line.T1.33200"
+  T1.33800:
+    label: Credit amounts at the credit rate
+    formula: "round(line.T1.33500 * param.creditRate, 2)"
+  T1.34900:
+    label: Donations and gifts
+    formula: "line.S9.23"
+  T1.34990:
+    label: Top-up tax credit
+    formula: "round(max(0, line.T1.33800 + line.S9.22 - param.topUpThreshold) * param.topUpRate, 2)"
+    source: "Federal Worksheet, line 34990: keeps credit amounts above the first bracket at 15%"
+  T1.35000:
+    label: Total federal non-refundable tax credits
+    formula: "line.T1.33800 + line.T1.34900 + line.T1.34990"
+
+  # Step 5 Part C – Net federal tax
+  T1.40400:
+    label: Federal tax on taxable income
+    formula: "round(bracket(param.taxBrackets, line.T1.26000), 2)"
+  T1.40425:
+    label: Federal dividend tax credit
+    formula: "sum(T5.box12) + sum(T5.box26) + sum(T3.box39) + sum(T3.box51)"
+    source: "Federal Worksheet, line 40425: the credit as shown on the slips"
+  T1.42900:
+    label: Basic federal tax
+    formula: "max(0, line.T1.40400 - line.T1.35000 - line.T1.40425)"
+  # Form T2209 – federal foreign tax credit on non-business income
+  FTC.netForeign:
+    label: Net foreign non-business income
+    formula: "if(answer.hasForeignIncome, answer.foreignInvestmentIncome + answer.foreignEmploymentIncome - (line.T1.23200 - sum(T4E.box30)), 0)"
+    source: "Form T2209, note 2: the foreign income less the foreign tax deducted under 20(11) (line 23200, without the EI benefits repaid)"
+  FTC.eligibleTax:
+    label: Non-business income tax paid to a foreign country
+    formula: >-
+      if(answer.hasForeignIncome, min(answer.foreignInvestmentTax, round(answer.foreignInvestmentIncome * param.foreignPropertyTaxRate, 2))
+      + answer.foreignEmploymentTax, 0)
+    source: "Form T2209, line 1: foreign tax on interest and dividends counts up to 15% of them"
+  FTC.basicFederalTax:
+    label: Basic federal tax, for the foreign tax credit
+    formula: "line.T1.42900 + line.T1.40425"
+    source: "Form T2209, note 4: line 42900 plus the federal dividend tax credit"
+  T1.40500:
+    label: Federal foreign tax credit
+    formula: >-
+      if(line.FTC.eligibleTax > 0 and line.T1.23600 > 0, min(line.FTC.eligibleTax,
+      round(min(line.FTC.netForeign, line.T1.23600) * line.FTC.basicFederalTax / line.T1.23600, 2), line.T1.42900), 0)
+    source: "Form T2209, line 3: the foreign tax, up to the share of basic federal tax on the foreign income"
+  FTC.left:
+    label: Foreign tax left for the provincial credit
+    formula: "line.FTC.eligibleTax - line.T1.40500"
+    source: "Form T2036, line 3"
+  T1.40600:
+    label: Federal tax
+    formula: "line.T1.42900 - line.T1.40500"
+  T1.40900:
+    label: Total federal political contributions
+    formula: "answer.politicalContributions"
+  T1.41000:
+    label: Federal political contribution tax credit
+    formula: "if(line.T1.40900 >= param.politicalCreditMaxContributions, param.politicalCreditMax, round(bracket(param.politicalCreditRates, line.T1.40900), 2))"
+    source: "Federal Worksheet, line 41000"
+  T1.41600:
+    label: Federal political contribution, investment and labour-sponsored funds credits
+    formula: "line.T1.41000"
+  T1.41700:
+    label: Federal tax after those credits
+    formula: "max(0, line.T1.40600 - line.T1.41600)"
+  T1.42000:
+    label: Net federal tax
+    formula: "line.T1.41700 + line.T1.41500"
+
+  # Step 6 – Refund or balance owing
+  T1.42800:
+    label: Provincial tax
+    formula: 'if(person.province == "ON", line.ON428.90, if(person.province == "BC", line.BC428.91, if(person.province == "AB", line.AB428.75, if(person.province == "MB", line.MB428.82, if(person.province == "SK", line.SK428.82, if(person.province == "NB", line.NB428.97, if(person.province == "NL", line.NL428.105, if(person.province == "NS", line.NS428.99, if(person.province == "PE", line.PE428.97, if(person.province == "YT", line.YT428.79, if(person.province == "NT", line.NT428.66, if(person.province == "NU", line.NU428.66, if(person.province == "QC", 0, unsupported("Provincial tax for this province isn''t handled by this app"))))))))))))))'
+    source: "The Form 428 of your province or territory. A resident of Quebec has none: Quebec's tax is on the TP-1, and 5005-R line 42800 is only for Form T2203 (a business with a permanent establishment outside Quebec), which isn't handled"
+  T1.42100:
+    label: CPP contributions payable on self-employment income
+    formula: 'if(person.province == "QC", 0, max(0, line.CPP.base + line.CPP.first + line.CPP.second - 2 * line.CPP.offset))'
+    source: "Schedule 8, Part 4 line 14, or Part 5 line 49 when positive: the contributions less twice the employment overpayment. 5005-R has no line 42100: a resident of Quebec pays QPP on self-employment on the TP-1 (line 445, Schedule U)"
+  T1.42200:
+    label: Social benefits repayment
+    formula: "line.T1.23500"
+  T1.43500:
+    label: Total payable
+    formula: "line.T1.42000 + line.T1.42100 + line.T1.42200 + line.T1.42800"
+  T1.43700:
+    label: Total income tax deducted
+    formula: >-
+      sum(T4.box22) + sum(T4A.box022) + sum(T4AP.box22) + sum(T4AOAS.box22) + sum(T4E.box22) + sum(T4RIF.box28) + sum(T4RSP.box30) + sum(T4FHSA.box30)
+      - line.PEN.taxSplit + if(line.HH.partner == 1 and family.partnerInYear, spouse.line.PEN.taxSplit, 0)
+    source: "The income tax deducted on all slips; with pension splitting, the tax that goes with the split (Form T1032, lines 39 and 42)"
+  T1.44800:
+    label: CPP overpayment
+    formula: >-
+      if(person.province == "QC", 0, if(line.CPP.withSelfEmployment == 1,
+      round(max(0, 2 * line.CPP.offset - line.CPP.base - line.CPP.first - line.CPP.second) * 50%, 2),
+      max(0, line.CPP.employmentDiff)))
+    source: "Schedule 8, Part 3a line 29 (line 24 when positive), or Part 5 line 50: half of line 49 when negative. 5005-R has no line 44800: a resident of Quebec claims a QPP overpayment on the TP-1 (line 452; 5005-S8 Part 2a and Part 4 note 1)"
+  T1.45000:
+    label: Employment insurance overpayment
+    formula: 'if(person.province == "QC", max(0, sum(T4.box18) - line.T1.31200), if(sum(T4.box18) - line.T1.31200 > 1, sum(T4.box18) - line.T1.31200, 0))'
+    source: "Form T2204, lines 8 to 15: the premiums deducted less line 16, when more than $1. In Quebec, 5005-S10 Part C, line 23: box 18 less line 20, if positive"
+  T1.45100:
+    label: Net EI overpayment
+    formula: 'if(person.province == "QC", line.T1.45000, 0)'
+    source: "5005-R lines 157 to 159: line 45000 less line 31210 (not claimed here: the app doesn't keep a T4's province of employment). Only on the T1 for residents of Quebec"
+  T1.44000:
+    label: Refundable Quebec abatement
+    formula: 'if(person.province == "QC", round(line.T1.42900 * param.quebecAbatementRate, 2), 0)'
+    source: "5005-R line 44000 (row 156) and canada.ca/line-44000: line 42900 × 16.5%, for a resident of Quebec on December 31. Form T2203 (a business with a permanent establishment outside Quebec) isn't handled"
+  # Federal Worksheet, line 45200 – the refundable medical expense supplement
+  MED.earned:
+    label: Earnings for the refundable medical expense supplement
+    formula: "max(0, line.T1.10100 + line.T1.10400 - line.T1.20700 - line.T1.21200 - line.T1.22900) + line.SE.earned"
+    source: "Federal Worksheet, line 45200: employment income less lines 20700, 21200 and 22900, and net self-employment income"
+  MED.familyIncome:
+    label: Adjusted family net income for the refundable medical expense supplement
+    formula: >-
+      max(0, line.T1.23600 - line.T1.12500) + if(line.HH.partner == 1,
+      if(family.partnerInYear, max(0, spouse.line.T1.23600 - spouse.line.T1.12500), line.HH.spouseNetIncome), 0)
+    source: "Federal Worksheet, line 45200, lines 1 to 6"
+  T1.45200:
+    label: Refundable medical expense supplement
+    formula: >-
+      if(person.residentAllYear and person.age >= 18 and line.MED.earned >= param.medicalSupplementMinEarnings,
+      max(0, min(round((line.T1.21500 + line.T1.33200) * param.medicalSupplementRate, 2), param.medicalSupplementMax)
+      - round(max(0, line.MED.familyIncome - param.medicalSupplementThreshold) * param.medicalSupplementReductionRate, 2)), 0)
+    source: "Federal Worksheet, line 45200: 25% of lines 21500 and 33200, up to $1,504, less 5% of family net income over $33,294"
+
+  # Schedule 6 – Canada workers benefit. A couple's basic benefit is claimed once: on the return of the spouse with the
+  # higher working income (the person preparing when equal); each spouse claims their own disability supplement.
+  # A resident of Quebec uses Schedule 6 for residents of Quebec (5005-S6): the same steps with Quebec's amounts and
+  # rates, which depend on four family types instead of two. CWB.workingBase to CWB.familyLimit pick them.
+  CWB.working:
+    label: Working income
+    formula: "line.T1.10100 + line.T1.10400 + line.T1.13010 + line.SE.earned"
+    source: "Schedule 6, Part A, lines 1 to 5"
+  CWB.netIncome:
+    label: Net income for the Canada workers benefit
+    formula: "max(0, line.T1.23600 - line.T1.12500)"
+    source: "Schedule 6, Part B, lines 7 to 12"
+  CWB.dependant:
+    label: An eligible dependant (1 for yes)
+    formula: "if(family.childrenUnder19 > 0, 1, 0)"
+    source: "Schedule 6: a child under 19 who lived with you on December 31"
+  CWB.student:
+    label: A full-time student for more than 13 weeks without an eligible dependant (1 for yes)
+    formula: "if(sum(T2202.box25) > param.cwbStudentMonths and line.CWB.dependant == 0, 1, 0)"
+  CWB.spouse:
+    label: An eligible spouse (1 for yes)
+    formula: "if(line.HH.partner == 1, if(family.partnerInYear, if(spouse.line.CWB.student == 1, 0, 1), 1), 0)"
+  CWB.eligible:
+    label: Eligible for the Canada workers benefit (1 for yes)
+    formula: "if(person.residentAllYear and line.CWB.student == 0 and (person.age >= 19 or line.CWB.spouse == 1 or line.CWB.dependant == 1), 1, 0)"
+    source: "Schedule 6: resident in Canada all year, 19 or older (or with a spouse or a child) and not a full-time student for more than 13 weeks"
+  CWB.familyWorking:
+    label: Family working income
+    formula: "line.CWB.working + if(line.CWB.spouse == 1 and family.partnerInYear, spouse.line.CWB.working, 0)"
+    source: "Schedule 6, line 6"
+  CWB.familyIncome:
+    label: Adjusted family net income
+    formula: >-
+      if(line.CWB.spouse == 1, if(family.partnerInYear, line.CWB.netIncome + spouse.line.CWB.netIncome
+      - min(param.cwbSecondaryEarnerMax, if(line.CWB.working < spouse.line.CWB.working, min(line.CWB.working, line.CWB.netIncome),
+      min(spouse.line.CWB.working, spouse.line.CWB.netIncome))),
+      if(line.CWB.netIncome + line.HH.spouseNetIncome - min(param.cwbSecondaryEarnerMax, line.CWB.netIncome, line.HH.spouseNetIncome) < line.CWB.familyLimit and line.CWB.working > 0,
+      unsupported("The Canada workers benefit for a couple needs your spouse's or partner's working income: prepare their return here too"), line.CWB.familyLimit)),
+      line.CWB.netIncome)
+    source: "Schedule 6, lines 13 to 15: with the secondary earner exemption (up to $16,386). With a spouse whose return isn't prepared here, a family that might get the benefit is asked to prepare it; one that can't is put at the limit"
+  CWB.familyLimit:
+    label: Adjusted family net income from which a family gets no Canada workers benefit
+    formula: 'if(person.province == "QC", param.cwbQcFamilyLimit, param.cwbFamilyLimit)'
+    source: "Schedule 6 (5005-S6 in Quebec), the chart of limits: the highest limit"
+  CWB.workingBase:
+    label: Working income where the basic benefit starts
+    formula: >-
+      if(person.province == "QC", if(line.CWB.spouse == 1, param.cwbQcWorkingIncomeBaseSpouse, param.cwbQcWorkingIncomeBase),
+      param.cwbWorkingIncomeBase)
+    source: "Schedule 6, line 17: $3,000. In Quebec, 5005-S6 line 17: $3,600 with an eligible spouse, else $2,400"
+  CWB.rate:
+    label: Basic benefit rate on working income
+    formula: >-
+      if(person.province == "QC", if(line.CWB.dependant == 1, if(line.CWB.spouse == 1, param.cwbQcRateSpouseDependant, param.cwbQcRateDependant),
+      param.cwbQcRate), param.cwbRate)
+    source: "Schedule 6, line 19: 27%. In Quebec, 5005-S6 line 19: 20% with an eligible dependant and no eligible spouse, 23.9% with both, else 37.3%"
+  CWB.max:
+    label: Most basic Canada workers benefit
+    formula: >-
+      if(person.province == "QC", if(line.CWB.spouse == 1, if(line.CWB.dependant == 1, param.cwbQcMaxSpouseDependant, param.cwbQcMaxSpouse),
+      if(line.CWB.dependant == 1, param.cwbQcMaxDependant, param.cwbQcMaxSingle)),
+      if(line.CWB.spouse == 1 or line.CWB.dependant == 1, param.cwbMaxFamily, param.cwbMaxSingle))
+    source: "Schedule 6, line 21 (5005-S6 line 21 in Quebec, by family type)"
+  CWB.incomeBase:
+    label: Adjusted family net income where the basic benefit starts to go down
+    formula: >-
+      if(person.province == "QC", if(line.CWB.spouse == 1, if(line.CWB.dependant == 1, param.cwbQcIncomeBaseSpouseDependant, param.cwbQcIncomeBaseSpouse),
+      if(line.CWB.dependant == 1, param.cwbQcIncomeBaseDependant, param.cwbQcIncomeBaseSingle)),
+      if(line.CWB.spouse == 1 or line.CWB.dependant == 1, param.cwbIncomeBaseFamily, param.cwbIncomeBaseSingle))
+    source: "Schedule 6, line 24 (5005-S6 line 24 in Quebec, by family type)"
+  CWB.reductionRate:
+    label: Basic benefit reduction rate
+    formula: 'if(person.province == "QC", param.cwbQcReductionRate, param.cwbReductionRate)'
+    source: "Schedule 6, line 26: 15%. In Quebec, 5005-S6 line 26: 20%"
+  CWB.disabilityWorkingBase:
+    label: Working income where the disability supplement starts
+    formula: 'if(person.province == "QC", param.cwbQcDisabilityWorkingBase, param.cwbDisabilityWorkingBase)'
+    source: "Schedule 6, line 30: $1,150. In Quebec, 5005-S6 line 30: $1,200"
+  CWB.disabilityRate:
+    label: Disability supplement rate on working income
+    formula: >-
+      if(person.province == "QC", if(line.CWB.spouse == 1, param.cwbQcDisabilityRateSpouse, param.cwbQcDisabilityRate), param.cwbRate)
+    source: "Schedule 6, line 32: 27%. In Quebec, 5005-S6 line 32: 20% with an eligible spouse, else 40%"
+  CWB.disabilityMax:
+    label: Most Canada workers benefit disability supplement
+    formula: 'if(person.province == "QC", param.cwbQcDisabilityMax, param.cwbDisabilityMax)'
+    source: "Schedule 6, line 34: $843. In Quebec, 5005-S6 line 34: $851.31"
+  CWB.disabilityIncomeBase:
+    label: Adjusted family net income where the disability supplement starts to go down
+    formula: >-
+      if(person.province == "QC", if(line.CWB.spouse == 1, if(line.CWB.dependant == 1, param.cwbQcDisabilityIncomeBaseSpouseDependant,
+      param.cwbQcDisabilityIncomeBaseSpouse), if(line.CWB.dependant == 1, param.cwbQcDisabilityIncomeBaseDependant, param.cwbQcDisabilityIncomeBaseSingle)),
+      if(line.CWB.spouse == 1 or line.CWB.dependant == 1, param.cwbDisabilityIncomeBaseFamily, param.cwbDisabilityIncomeBaseSingle))
+    source: "Schedule 6, line 36 (5005-S6 line 36 in Quebec, by family type)"
+  CWB.disabilityReductionRate:
+    label: Disability supplement reduction rate
+    formula: >-
+      if(line.CWB.spouse == 1 and family.partnerInYear and spouse.answer.hasDisability,
+      if(person.province == "QC", param.cwbQcReductionRateBothDisabled, param.cwbReductionRateBothDisabled),
+      if(person.province == "QC", param.cwbQcReductionRate, param.cwbReductionRate))
+    source: "Schedule 6, line 38: 15% (7.5% when both spouses have the disability tax credit). In Quebec, 5005-S6 line 38: 20% (10%)"
+  CWB.claimsBasic:
+    label: This return claims the couple's basic benefit (1 for yes)
+    formula: >-
+      if(line.CWB.eligible == 0, 0, if(line.CWB.spouse == 0 or not family.partnerInYear, 1,
+      if(spouse.line.CWB.eligible == 0 or line.CWB.working > spouse.line.CWB.working
+      or (line.CWB.working == spouse.line.CWB.working and person.role == "self"), 1, 0)))
+  CWB.basic:
+    label: Basic Canada workers benefit
+    formula: >-
+      if(line.CWB.claimsBasic == 1, max(0, min(round(max(0, line.CWB.familyWorking - line.CWB.workingBase) * line.CWB.rate, 2), line.CWB.max)
+      - round(max(0, line.CWB.familyIncome - line.CWB.incomeBase) * line.CWB.reductionRate, 2)), 0)
+    source: "Schedule 6, Step 2, lines 16 to 28: 27% of family working income over $3,000, up to the maximum, less 15% of adjusted family net income over the base (in Quebec, 5005-S6 Step 2 with its own amounts and rates)"
+  CWB.disability:
+    label: Canada workers benefit disability supplement
+    formula: >-
+      if(line.CWB.eligible == 1 and answer.hasDisability, max(0, min(round(max(0, line.CWB.working - line.CWB.disabilityWorkingBase) * line.CWB.disabilityRate, 2),
+      line.CWB.disabilityMax) - round(max(0, line.CWB.familyIncome - line.CWB.disabilityIncomeBase) * line.CWB.disabilityReductionRate, 2)), 0)
+    source: "Schedule 6, Step 3, lines 29 to 40: 27% of working income over $1,150, up to $843, less 15% (7.5% when both spouses have the disability tax credit) of adjusted family net income over the base (in Quebec, 5005-S6 Step 3 with its own amounts and rates)"
+  T1.45300:
+    label: Canada workers benefit
+    formula: "line.CWB.basic + line.CWB.disability"
+    source: "Schedule 6, line 42"
+  T1.41500:
+    label: Advanced Canada workers benefit
+    formula: >-
+      min(max(line.CWB.basic, line.T1.45300), if(line.CWB.claimsBasic == 1, sum(RC210.box10)
+      + if(family.partnerInYear and line.HH.partner == 1, sum(spouse.RC210.box10), 0), 0) + sum(RC210.box11))
+    source: "Schedule 6, Step 4: the advance payments (RC210 box 10 of both spouses, on the return claiming the basic benefit, and box 11), up to the benefit"
+
+  # Schedule 11 – the Canada training credit: half the tuition, up to the limit on the notice of assessment.
+  T1.45350:
+    label: Canada training credit
+    formula: "if(person.residentAllYear, min(round(sum(T2202.box26) * param.trainingCreditRate, 2), answer.trainingCreditLimit), 0)"
+    source: "Schedule 11, lines 1 to 5: for a resident of Canada all year"
+  T1.45355:
+    label: Multigenerational home renovation tax credit
+    formula: "round(min(answer.multigenerationalRenovation, param.renovationMax) * param.renovationRate, 2)"
+    source: "Schedule 12: 14.5% of qualifying expenditures, up to $50,000"
+  T1.45600:
+    label: Part XII.2 tax credit
+    formula: "sum(T3.box38)"
+  T1.46800:
+    label: Eligible school supplies expenses
+    formula: "min(answer.teacherSupplies, param.educatorMax)"
+  T1.46900:
+    label: Eligible educator school supply tax credit
+    formula: "round(line.T1.46800 * param.educatorRate, 2)"
+  T1.47600:
+    label: Tax paid by instalments
+    formula: "answer.instalmentsPaid"
+  # The home rented, which several provinces' credits read (Form 479).
+  RENT.paid:
+    label: Rent paid for your home
+    formula: "if(answer.hasRentedHome, answer.rentPaid, 0)"
+  RENT.months:
+    label: Months you rented your home
+    formula: "if(answer.hasRentedHome, answer.rentMonths, 0)"
+  # Form 479 of each province or territory: its refundable credits.
+  T1.47900:
+    label: Provincial or territorial credits
+    formula: 'if(person.province == "ON", line.ON479.21, if(person.province == "BC", line.BC479.45, if(person.province == "NB", line.NBS12.7, if(person.province == "MB", line.MB479.81, if(person.province == "SK", line.SK479.10, if(person.province == "NL", line.NL479.9, if(person.province == "NS", line.NS479.5, if(person.province == "PE", line.PE428.98, if(person.province == "YT", line.YT479.6, if(person.province == "NT", line.NT479.21, if(person.province == "NU", line.NU479.21, 0)))))))))))'
+    source: "T1 line 47900: the Form 479 of your province or territory. 5005-R (Quebec) has no line 47900 and there is no Form 479 for Quebec: Quebec's credits are on the TP-1"
+  T1.48200:
+    label: Total credits
+    formula: >-
+      line.T1.43700 + line.T1.45200 + line.T1.45300 + line.T1.45350 + line.T1.45355 + line.T1.45600 + line.T1.46900 + line.T1.47600
+      + if(person.province == "QC", line.T1.44000 + line.T1.45100, line.T1.44800 + line.T1.45000 + line.T1.47900)
+    source: "T1 line 48200 (row 166). In Quebec, 5005-R row 171: lines 155 (43850, which is line 43700: the tax transfer on line 43800 isn't handled), 156 (44000) and 159 to 170, with no line 44800 or 47900"
+  T1.48400:
+    label: Refund
+    formula: "max(0, line.T1.48200 - line.T1.43500)"
+  T1.48500:
+    label: Balance owing
+    formula: "max(0, line.T1.43500 - line.T1.48200)"
+
+  # Schedule 2 – Federal amounts transferred from your spouse or common-law partner (read from their return)
+  S2.6:
+    label: Their age amount, pension income amount, and the tuition they designate to you
+    formula: "spouse.line.T1.30100 + spouse.line.T1.30500 + spouse.line.T1.31400 + spouse.line.T1.31600 + spouse.line.S11.24"
+    source: "Schedule 2 lines 1 to 5"
+  S2.7:
+    label: Their taxable income, for the transfer
+    formula: "if(spouse.line.T1.26000 <= param.tuitionIncomeThreshold, spouse.line.T1.26000, round(spouse.line.T1.40400 / param.creditRate, 2))"
+    source: "Schedule 2 line 7"
+  S2.11:
+    label: Their basic personal amount, CPP, EI and employment amounts, and tuition
+    formula: "spouse.line.T1.30000 + spouse.line.T1.T96 + spouse.line.T1.32300"
+    source: "Schedule 2 lines 8 to 11: their lines 30000, 96 and 32300"
+  S2.12:
+    label: Their adjusted taxable income
+    formula: "max(0, line.S2.7 - line.S2.11)"
+  S2.13:
+    label: Federal amounts transferred from your spouse or common-law partner
+    formula: "max(0, line.S2.6 - line.S2.12)"
+
+  # Schedule 3 – Capital gains or losses
+  S3.13200:
+    label: Gain or loss on publicly traded shares and mutual fund units
+    formula: "sum(T5008.box20) - sum(T5008.box21)"
+    source: "Schedule 3 line 4: proceeds (T5008 box 20) minus cost (box 21)"
+  S3.17400:
+    label: Capital gains from T5 slips
+    formula: "sum(T5.box18)"
+  S3.17600:
+    label: Capital gains from T3 slips
+    formula: "sum(T3.box21)"
+  S3.13599:
+    label: Real estate sold, proceeds
+    formula: 'if(answer.soldProperty, if(answer.propertyUse == "rental_or_investment", answer.propertyProceeds, 0), 0)'
+  S3.13800:
+    label: Gain or loss on real estate
+    formula: 'if(answer.soldProperty, if(answer.propertyUse == "rental_or_investment", answer.propertyProceeds - answer.propertyCost - answer.propertyOutlays, 0), 0)'
+    source: "Schedule 3 line 5: proceeds less the adjusted cost base and selling costs. A home that was your principal residence every year has no gain (Form T2091)"
+  S3.15800:
+    label: Gain on personal-use property
+    formula: 'if(answer.soldProperty, if(answer.propertyUse == "personal_use", max(0, answer.propertyProceeds - answer.propertyCost - answer.propertyOutlays), 0), 0) + line.T2091.24'
+    source: "Schedule 3 line 8: a cottage or other property for your own use (a loss on it isn't allowed), and the gain on a home that was your principal residence only some of the years (Form T2091(IND), Part 4)"
+  S3.17900:
+    label: Principal residence designation (the box to tick)
+    formula: 'if(answer.soldProperty, if(answer.propertyUse == "principal_residence", 1, if(answer.propertyUse == "principal_residence_some_years", 2, 0)), 0)'
+    source: "Schedule 3, Part 2, line 17900: box 1 for every year owned (or all but one), box 2 for some of the years. A home sold is designated on Form T2091(IND) even when its whole gain is exempt"
+  # Form T2091(IND) – a home that was your principal residence for only some of the years you owned it. The years are
+  # all after 1981; Part 2 (owned before 1982) and Part 4 (Form T664) aren't handled.
+  T2091.18:
+    label: Capital gain on the home before the principal residence exemption
+    formula: 'if(answer.soldProperty, if(answer.propertyUse == "principal_residence_some_years", answer.propertyProceeds - answer.propertyCost - answer.propertyOutlays, 0), 0)'
+    source: "Form T2091(IND), lines 14 to 18: proceeds less the adjusted cost base and the selling costs"
+  T2091.23:
+    label: Principal residence exemption
+    formula: >-
+      if(line.T2091.18 > 0, if(answer.propertyYearsOwned < 1 or answer.propertyYearsDesignated > answer.propertyYearsOwned,
+      unsupported("The years you designate the home as your principal residence can't be more than the years you owned it, and you owned it at least one year (Form T2091(IND), lines 3 and 7)"),
+      min(line.T2091.18, round(line.T2091.18 * (answer.propertyYearsDesignated + 1) / answer.propertyYearsOwned, 2))), 0)
+    source: "Form T2091(IND), lines 19 to 23: the gain times (the years designated plus 1) divided by the years owned"
+  T2091.24:
+    label: Capital gain on the home after the exemption
+    formula: "max(0, line.T2091.18 - line.T2091.23)"
+    source: "Form T2091(IND), line 24, carried to line 54 and to line 15800 of Schedule 3"
+  S3.19700:
+    label: Total capital gains or losses
+    formula: "line.S3.13200 + line.S3.13800 + line.S3.15800 + line.S3.17400 + line.S3.17600"
+  S3.19900:
+    label: Taxable capital gains or net capital loss
+    formula: "round(line.S3.19700 * param.capitalGainsInclusionRate, 2)"
+
+  # Schedule 9 – Donations and gifts
+  S9.5:
+    label: Total eligible amount of charitable donations
+    formula: "if(family.partnerInYear and spouse.answer.claimSpouseDonations and line.HH.partner == 1, 0, line.OWN.donations) + if(family.partnerInYear and answer.claimSpouseDonations and line.HH.partner == 1, spouse.line.OWN.donations, 0)"
+    source: "Schedule 9 line 5: either spouse can claim both spouses' donations"
+  OWN.donations:
+    label: Donations on this return's receipts and entered here
+    formula: "answer.donations + sum(DONATION.box1) + sum(T4.box46)"
+    source: "Official receipts (uploaded, or entered), and box 46 of T4 slips"
+  S9.10:
+    label: Donations claimed (within the limit)
+    formula: "min(line.S9.5, round(line.T1.23600 * param.donationIncomeLimit, 2))"
+    source: "Schedule 9 lines 6 to 10: up to 75% of net income"
+  S9.13:
+    label: Donations at the low rate
+    formula: "min(line.S9.10, param.donationLowLimit)"
+  S9.14:
+    label: Donations above the first $200
+    formula: "line.S9.10 - line.S9.13"
+  S9.19:
+    label: Taxable income in the top bracket
+    formula: "max(0, line.T1.26000 - param.donationTopThreshold)"
+  S9.F:
+    label: Donations at the top rate
+    formula: "min(line.S9.14, line.S9.19)"
+  S9.20:
+    label: Credit at the top rate
+    formula: "round(line.S9.F * param.donationTopRate, 2)"
+  S9.21:
+    label: Credit at the high rate
+    formula: "round((line.S9.14 - line.S9.F) * param.donationHighRate, 2)"
+  S9.22:
+    label: Credit on the first $200
+    formula: "round(line.S9.13 * param.donationLowRate, 2)"
+  S9.23:
+    label: Allowable donations credit
+    formula: "line.S9.20 + line.S9.21 + line.S9.22"
+
+  # Schedule 11 – Federal tuition amount (the student's own; transfers come with couples)
+  S11.8:
+    label: Tuition fees for 2025
+    formula: "sum(T2202.box26) - line.T1.45350"
+    source: "Schedule 11 lines 1 to 8: eligible fees from T2202 box 26, less the Canada training credit claimed"
+  S11.9:
+    label: Unused federal tuition from your 2024 notice of assessment
+    formula: "answer.unusedTuition"
+  S11.11:
+    label: Income the tuition amount can reduce to zero tax
+    formula: "if(line.T1.26000 <= param.tuitionIncomeThreshold, line.T1.26000, round(line.T1.40400 / param.creditRate, 2))"
+    source: "Schedule 11 line 11: taxable income, or above $57,375, federal tax on taxable income ÷ 14.5%"
+  S11.13:
+    label: Room left after other credits
+    formula: "max(0, line.S11.11 - line.T1.T101)"
+  S11.14:
+    label: Unused tuition claimed for 2025
+    formula: "min(line.S11.9, line.S11.13)"
+  S11.16:
+    label: 2025 tuition claimed
+    formula: "min(line.S11.8, line.S11.13 - line.S11.14)"
+  S11.17:
+    label: Federal tuition amount
+    formula: "line.S11.14 + line.S11.16"
+  S11.23:
+    label: Tuition you can transfer
+    formula: "max(0, min(param.tuitionTransferMax, line.S11.8) - line.S11.16)"
+    source: "Schedule 11 lines 21 to 23: this year's tuition up to $5,000, less what you used"
+  S11.24:
+    label: Tuition transferred to your spouse or common-law partner
+    formula: "if(line.HH.partner == 1 and family.partnerInYear and line.S11.8 > 0, min(answer.tuitionTransfer, line.S11.23), 0)"
+    source: "Schedule 11 line 24: the amount you designate on your T2202, up to line 23"
+
+  # The outcome of one return; hints add it up over the year's returns and compare with and without their change.
+  RESULT.net:
+    label: Refund, less balance owing
+    formula: 'line.T1.48400 - line.T1.48500 + if(person.province == "QC", line.TP1.478 - line.TP1.479, 0)'
+    source: "The federal refund or balance, and for a Quebec resident the Quebec one (TP-1 lines 478 and 479)"
+
+  # Starting amounts worked out from receipts and last year's notice of assessment, for the person to check: not lines
+  # of the return. The RRSP deduction is the contributions (with unused ones from earlier years) up to the limit.
+  SUGGEST.rrspDeduction:
+    label: RRSP contributions you can deduct for 2025
+    formula: "if(sum(NOA.box1) > 0, min(sum(RRSP.box1) + sum(RRSP.box2) + sum(NOA.box2), sum(NOA.box1)), sum(RRSP.box1) + sum(RRSP.box2) + sum(NOA.box2))"
+    source: "RRSP receipts, and the unused contributions and deduction limit on your 2024 notice of assessment"
+  SUGGEST.fhsaDeduction:
+    label: FHSA contributions you can deduct for 2025
+    formula: "sum(T4FHSA.box18)"
+    source: "Box 18 of your T4FHSA slips: contributions in 2025. Transfers from an RRSP aren't deductible; contributions you didn't deduct in earlier years can be added"
+  SUGGEST.trainingCreditLimit:
+    label: Canada training credit limit
+    formula: "sum(NOA.box4)"
+    source: "Your 2024 notice of assessment"
+  SUGGEST.unusedTuition:
+    label: Unused federal tuition carried forward
+    formula: "sum(NOA.box3)"
+    source: "Your 2024 notice of assessment"

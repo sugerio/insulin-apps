@@ -1,0 +1,440 @@
+# New Brunswick tax: Form NB428, Schedule NB(S11) (tuition), Schedule NB(S2) and Schedule NB(S12) (the seniors' home
+# renovation credit). Line ids are the line numbers in the forms' right margin. Every number below was checked against
+# the 2025 NB428 (5004-C), Worksheet NB428 (5004-D), NB(S2) (5004-S2), NB(S11) (5004-S11), NB(S12) (5004-S12) and
+# the New Brunswick information page of the 2025 package (5004-PC). New Brunswick has no Form NB479: its one refundable
+# credit is on Schedule NB(S12), which goes on line 47900 of the return.
+
+params:
+  nbTaxBrackets:
+    label: New Brunswick tax brackets
+    source: "NB428 Part A, bases as printed on the form"
+    value:
+      - { upTo: 51306, rate: 9.4%, base: 0 }
+      - { upTo: 102614, rate: 14%, base: 4822.76 }
+      - { upTo: 190060, rate: 16%, base: 12005.88 }
+      - { rate: 19.5%, base: 25997.24 }
+  nbFirstBracketTop:
+    label: Top of the first New Brunswick bracket
+    source: "NB428 Part A, NB(S2) line 6 and NB(S11) line 4: $51,306"
+    value: 51306
+  nbCreditRate:
+    label: New Brunswick credit rate
+    source: "NB428 line 48: 9.4%"
+    value: 9.4%
+  nbBasicPersonalAmount:
+    label: New Brunswick basic personal amount
+    source: "NB428 line 58040: claim $13,396"
+    value: 13396
+  nbAgeAmountMax:
+    label: New Brunswick age amount, full
+    source: "Worksheet NB428, line 58080: $6,037"
+    value: 6037
+  nbAgeAmountThreshold:
+    label: Net income where the New Brunswick age amount starts to go down
+    source: "Worksheet NB428, line 58080: income threshold"
+    value: 44945
+  nbAgeAmountRate:
+    label: New Brunswick age amount reduction rate
+    source: "Worksheet NB428, line 58080: applicable rate"
+    value: 15%
+  nbSpouseBase:
+    label: New Brunswick spouse and eligible dependant amount, base
+    source: "NB428 lines 11 and 14: $11,550"
+    value: 11550
+  nbSpouseMax:
+    label: New Brunswick spouse and eligible dependant amount, most
+    source: "NB428 lines 13 and 16: maximum $10,499"
+    value: 10499
+  nbInfirmBase:
+    label: New Brunswick amount for an infirm dependant, base
+    source: "Worksheet NB428, line 58200, line 1: $14,124"
+    value: 14124
+  nbInfirmMax:
+    label: Most New Brunswick amount for an infirm dependant
+    source: "Worksheet NB428, line 58200, line 3: maximum $5,839 per dependant"
+    value: 5839
+  nbCaregiverBase:
+    label: New Brunswick caregiver amount, base
+    source: "Worksheet NB428, line 58400, line 1: $25,781"
+    value: 25781
+  nbCaregiverMax:
+    label: Most New Brunswick caregiver amount
+    source: "Worksheet NB428, line 58400, line 3: maximum $5,839 per dependant"
+    value: 5839
+  nbVolunteerAmount:
+    label: New Brunswick volunteer firefighters' or search and rescue volunteers' amount
+    source: "5004-PC, lines 58315 and 58316: enter $5,000"
+    value: 5000
+  nbDisabilityAmount:
+    label: New Brunswick disability amount
+    source: "NB428 line 31 (58440): claim $10,010; Worksheet NB428, line 58480, line 1"
+    value: 10010
+  nbDisabilitySupplementMax:
+    label: New Brunswick disability supplement for a person under 18, most
+    source: "Worksheet NB428, lines 58440 and 58480, line 2: $5,839"
+    value: 5839
+  nbDisabilityCareThreshold:
+    label: Child care and attendant care that the New Brunswick disability supplement allows
+    source: "Worksheet NB428, lines 58440 and 58480, line 4: $3,420"
+    value: 3420
+  nbPensionAmountMax:
+    label: Most New Brunswick pension income amount
+    source: "NB428 line 28 (58360): maximum $1,000"
+    value: 1000
+  nbMedicalThresholdMax:
+    label: New Brunswick medical expense threshold, most
+    source: "NB428 line 43: whichever is less, $2,798 or 3% of net income"
+    value: 2798
+  nbDonationLowRate:
+    label: New Brunswick donation credit rate on the first $200
+    source: "NB428 line 50: 9.4%"
+    value: 9.4%
+  nbDonationHighRate:
+    label: New Brunswick donation credit rate above $200
+    source: "NB428 line 51: 17.95%"
+    value: 17.95%
+  nbDividendEligibleRate:
+    label: New Brunswick dividend tax credit rate, eligible dividends
+    source: "Worksheet NB428, line 61520: 14% of the taxable amount of eligible dividends"
+    value: 14%
+  nbDividendOtherRate:
+    label: New Brunswick dividend tax credit rate, other dividends
+    source: "Worksheet NB428, line 61520: 2.75% of the taxable amount of other than eligible dividends"
+    value: 2.75%
+  nbTuitionTransferMax:
+    label: Most New Brunswick tuition a student can transfer
+    source: "NB(S11) line 14: maximum $5,000"
+    value: 5000
+  nbLowIncomeReduction:
+    label: New Brunswick low-income tax reduction, each amount
+    source: "NB428 lines 77, 78 and 79: claim $802"
+    value: 802
+  nbLowIncomeReductionMax:
+    label: New Brunswick low-income tax reduction, most
+    source: "NB428 line 80: maximum $1,604"
+    value: 1604
+  nbLowIncomeBase:
+    label: Adjusted family income where the New Brunswick low-income tax reduction starts to go down
+    source: "NB428 line 82: $21,920"
+    value: 21920
+  nbLowIncomeRate:
+    label: New Brunswick low-income tax reduction rate
+    source: "NB428 line 84: 3%"
+    value: 3%
+  nbPoliticalCredit:
+    label: New Brunswick political contribution tax credit
+    source: "Worksheet NB428, line 92: 75% of the first $200, 50% of the next $350, 33.33% above $550, bases as printed"
+    value:
+      - { upTo: 200, rate: 75%, base: 0 }
+      - { upTo: 550, rate: 50%, base: 150 }
+      - { rate: 33.33%, base: 325 }
+  nbPoliticalCreditMax:
+    label: Most New Brunswick political contribution tax credit
+    source: "NB428 line 92: maximum $500"
+    value: 500
+  nbSeniorsRenovationMax:
+    label: Most home renovation expenses for the New Brunswick seniors' credit
+    source: "NB(S12) line 3: maximum $10,000"
+    value: 10000
+  nbSeniorsRenovationRate:
+    label: New Brunswick seniors' home renovation tax credit rate
+    source: "NB(S12) line 6: 10%"
+    value: 10%
+
+lines:
+  # Part A – New Brunswick tax on taxable income
+  NB428.8:
+    label: New Brunswick tax on taxable income
+    formula: "round(bracket(param.nbTaxBrackets, line.T1.26000), 2)"
+
+  # Part B – New Brunswick non-refundable tax credits
+  NB428.9:
+    label: New Brunswick basic personal amount
+    formula: >-
+      round((param.nbBasicPersonalAmount) * line.RES.factor, 2)
+
+  NB428.10:
+    label: New Brunswick age amount
+    formula: >-
+      round((if(person.age >= 65, max(0, param.nbAgeAmountMax - round(max(0, line.T1.23600 - param.nbAgeAmountThreshold) * param.nbAgeAmountRate, 2)), 0)) * line.RES.factor, 2)
+    source: "Worksheet NB428, line 58080: for people born in 1960 or earlier"
+  NB428.13:
+    label: New Brunswick spouse or common-law partner amount
+    formula: >-
+      round((if(line.HH.partner == 1, min(param.nbSpouseMax, max(0, param.nbSpouseBase - line.HH.spouseNetIncome)), 0)) * line.RES.factor, 2)
+
+  NB428.16:
+    label: New Brunswick amount for an eligible dependant
+    formula: >-
+      round((if(line.HH.partner == 0 and family.childrenUnder18 > 0, min(param.nbSpouseMax, param.nbSpouseBase), 0)) * line.RES.factor, 2)
+    source: "NB428 lines 14 to 16. The app assumes the child had no income"
+  # An adult dependant with an impairment gets the infirm dependant amount, or the caregiver amount when they lived in
+  # your home, never both (5004-PC, line 58400). The app knows one such dependant.
+  NB.infirmAmount:
+    label: New Brunswick amount for an infirm dependant, before choosing
+    formula: >-
+      if(answer.hasInfirmDependant, if(answer.infirmDependants > 1,
+      unsupported("The New Brunswick amounts for more than one adult dependant aren't handled by this app yet"),
+      if(answer.infirmDependants == 1, min(param.nbInfirmMax, max(0, param.nbInfirmBase - answer.infirmDependantIncome)), 0)), 0)
+    source: "Worksheet NB428, line 58200: $14,124 less the dependant's net income, up to $5,839"
+  NB.caregiverAmount:
+    label: New Brunswick caregiver amount, before choosing
+    formula: >-
+      if(answer.hasInfirmDependant, if(answer.infirmDependants == 1, if(answer.infirmDependantHome == "with_you",
+      min(param.nbCaregiverMax, max(0, param.nbCaregiverBase - answer.infirmDependantIncome)), 0), 0), 0)
+    source: "Worksheet NB428, line 58400: $25,781 less the dependant's net income, up to $5,839, for a dependant who lived with you"
+  NB428.17:
+    label: New Brunswick amount for infirm dependants age 18 or older
+    formula: >-
+      round((if(line.NB428.29 > 0, 0, line.NB.infirmAmount)) * line.RES.factor, 2)
+    source: "NB428 line 58200"
+  NB428.23:
+    label: New Brunswick volunteer firefighters' amount
+    formula: 'if(answer.hasVolunteerService, if(answer.volunteerKind == "firefighter", param.nbVolunteerAmount, 0), 0)'
+    source: "NB428 line 58315: $5,000 when you claimed line 31220"
+  NB428.24:
+    label: New Brunswick search and rescue volunteers' amount
+    formula: 'if(answer.hasVolunteerService, if(answer.volunteerKind == "search_rescue", param.nbVolunteerAmount, 0), 0)'
+    source: "NB428 line 58316: $5,000 when you claimed line 31240"
+  NB428.25:
+    label: CPP, EI and volunteer amounts
+    formula: "line.T1.30800 + line.T1.31000 + line.T1.31200 + line.NB428.23 + line.NB428.24"
+    source: "NB428 lines 19 to 25: lines 30800, 31000 and 31200 of your return, and the volunteer amounts. Line 31217 isn't handled"
+  NB428.28:
+    label: New Brunswick pension income amount
+    formula: "min(param.nbPensionAmountMax, line.PEN.creditBase)"
+    source: "NB428 line 28 (58360): eligible pension income, up to $1,000"
+  NB428.29:
+    label: New Brunswick caregiver amount
+    formula: >-
+      round((if(line.NB.caregiverAmount > 0 and line.NB.caregiverAmount >= line.NB.infirmAmount, line.NB.caregiverAmount, 0)) * line.RES.factor, 2)
+    source: "NB428 line 58400: claimed instead of line 58200 when it is at least as much"
+  NB428.31:
+    label: New Brunswick disability amount for self
+    formula: >-
+      round((if(answer.hasDisability, param.nbDisabilityAmount, 0)) * line.RES.factor, 2)
+    source: "NB428 line 58440: $10,010 at 18 or older, when you claim line 31600"
+  NB428.32:
+    label: New Brunswick disability amount transferred from a dependant
+    formula: >-
+      round((if(answer.hasDisabledDependant, if(answer.disabledChildren > 1 and answer.disabledChildCare > 0, unsupported("Child care for more than one child with a disability is worked out child by child, which this app doesn't handle yet"), answer.disabledChildren * (param.nbDisabilityAmount + param.nbDisabilitySupplementMax) - min(answer.disabledChildren * param.nbDisabilitySupplementMax, max(0, answer.disabledChildCare - param.nbDisabilityCareThreshold)) + answer.disabledAdults * param.nbDisabilityAmount), 0)) * line.RES.factor, 2)
+    source: "Worksheet NB428, line 58480: $10,010, plus up to $5,839 for a child under 18, less care over $3,420. The app assumes the dependant had no income"
+  NB428.33:
+    label: New Brunswick credit amounts before tuition and transfers
+    formula: >-
+      line.NB428.9 + line.NB428.10 + line.NB428.13 + line.NB428.16 + line.NB428.17 + line.NB428.25 + line.NB428.28
+      + line.NB428.29 + line.NB428.31 + line.NB428.32
+    source: "NB428 lines 18, 26, 30 and 33"
+  NB428.34:
+    label: Interest paid on your student loans
+    formula: "line.T1.31900"
+    source: "NB428 line 58520: line 31900 of your return"
+  NB428.35:
+    label: New Brunswick tuition and education amounts
+    formula: "line.NBS11.10"
+    source: "NB428 line 58560, from Schedule NB(S11)"
+  NB428.36:
+    label: Tuition amounts transferred from a child or grandchild
+    formula: "line.CHILD.provincialTuition"
+    source: "NB428 line 58600: the provincial amount they designate on their T2202, taken as the same as federally"
+  NB428.37:
+    label: New Brunswick amounts transferred from your spouse or common-law partner
+    formula: "if(line.HH.partner == 1 and family.partnerInYear, line.NBS2.12, 0)"
+    source: "NB428 line 58640, from Schedule NB(S2)"
+  NB428.38:
+    label: New Brunswick credit amounts before medical expenses
+    formula: "line.NB428.33 + line.NB428.34 + line.NB428.35 + line.NB428.36 + line.NB428.37"
+    source: "NB428 line 38"
+  NB428.44:
+    label: Allowable medical expenses for you, your spouse and your children
+    formula: "max(0, line.T1.33099 - min(param.nbMedicalThresholdMax, round(line.T1.23600 * param.medicalThresholdRate, 2)))"
+    source: "NB428 lines 39 to 44: expenses over whichever is less, $2,798 or 3% of net income"
+  NB428.45:
+    label: Allowable amount of medical expenses for other dependants
+    formula: >-
+      if(answer.hasOtherDependantMedical, max(0, answer.otherDependantMedical
+      - min(param.nbMedicalThresholdMax, round(answer.otherDependantIncome * param.medicalThresholdRate, 2))), 0)
+    source: "Worksheet NB428, line 58729: their expenses less line 43 of their NB428 (whichever is less, $2,798 or 3% of their net income)"
+  NB428.46:
+    label: Allowable medical expenses
+    formula: "line.NB428.44 + line.NB428.45"
+    source: "NB428 line 46 (58769)"
+  NB428.47:
+    label: New Brunswick credit amounts
+    formula: "line.NB428.38 + line.NB428.46"
+    source: "NB428 line 47 (58800)"
+  NB428.49:
+    label: New Brunswick credit amounts at the credit rate
+    formula: "round(line.NB428.47 * param.nbCreditRate, 2)"
+  NB428.52:
+    label: New Brunswick donations credit
+    formula: "round(line.S9.13 * param.nbDonationLowRate, 2) + round(line.S9.14 * param.nbDonationHighRate, 2)"
+    source: "NB428 lines 50 to 52: Schedule 9 lines 13 and 14 at 9.4% and 17.95%"
+  NB428.53:
+    label: New Brunswick non-refundable tax credits
+    formula: "line.NB428.49 + line.NB428.52"
+
+  # Part C – New Brunswick tax
+  NB428.58:
+    label: New Brunswick tax after credits
+    formula: "max(0, line.NB428.8 - line.NB428.53)"
+    source: "NB428 lines 54 to 58"
+  NB428.60:
+    label: New Brunswick dividend tax credit
+    formula: "round(line.T1.12010 * param.nbDividendOtherRate, 2) + round((line.T1.12000 - line.T1.12010) * param.nbDividendEligibleRate, 2)"
+    source: "Worksheet NB428, line 61520"
+  NB428.63:
+    label: New Brunswick tax after the dividend credit
+    formula: "max(0, line.NB428.58 - line.NB428.60)"
+    source: "NB428 lines 59 to 63"
+  # Form T2036 – the provincial foreign tax credit: the foreign tax left after the federal credit, up to the share of
+  # the province's tax otherwise payable on the foreign income. For New Brunswick that is the tax before the credit
+  # (line 65), which is line 63: the additional tax for minimum tax purposes (line 64) isn't handled.
+  NB428.66:
+    label: Provincial foreign tax credit
+    formula: >-
+      if(line.FTC.left > 0 and line.T1.23600 > 0, min(line.FTC.left,
+      round(min(line.FTC.netForeign, line.T1.23600) * line.NB428.63 / line.T1.23600, 2), line.NB428.63), 0)
+    source: "Form T2036, line 5, with note 4: NB428 line 65"
+  NB428.67:
+    label: New Brunswick tax after the foreign tax credit
+    formula: "max(0, line.NB428.63 - line.NB428.66)"
+
+  # The low-income tax reduction is the family's: one spouse claims it, and the other claims what it leaves unused
+  # (line 68). The spouse with more New Brunswick tax claims it, so the least of it goes unused; a tie goes to the
+  # higher net income, then the older spouse, then the person preparing. A spouse who lives in another province can't
+  # claim it, and a spouse whose return isn't prepared here is taken not to.
+  NB.claimsReduction:
+    label: This return claims the family's New Brunswick low-income tax reduction (1 for yes)
+    formula: >-
+      if(line.HH.partner == 0 or not family.partnerInYear, 1,
+      if(spouse.person.province != "NB", 1,
+      if(line.NB428.67 != spouse.line.NB428.67, if(line.NB428.67 > spouse.line.NB428.67, 1, 0),
+      if(line.T1.23600 != spouse.line.T1.23600, if(line.T1.23600 > spouse.line.T1.23600, 1, 0),
+      if(person.age != spouse.person.age, if(person.age > spouse.person.age, 1, 0),
+      if(person.role == "self", 1, 0))))))
+    source: "NB428 lines 68 to 90: you and your spouse decide who claims the reduction for your family"
+  NB428.68:
+    label: Unused low-income tax reduction from your spouse or common-law partner
+    formula: "if(line.NB.claimsReduction == 1, 0, spouse.line.NB428.90)"
+    source: "NB428 line 68: line 90 of their NB428"
+  NB428.69:
+    label: New Brunswick tax after your spouse's unused reduction
+    formula: "max(0, line.NB428.67 - line.NB428.68)"
+  NB428.75:
+    label: Adjusted family income
+    formula: "line.T1.23600 + line.HH.spouseNetIncome"
+    source: "NB428 lines 70 to 75: both spouses' net income. The app has no UCCB or RDSP amounts"
+  NB428.80:
+    label: New Brunswick low-income tax reductions claimed
+    formula: >-
+      min(param.nbLowIncomeReductionMax, param.nbLowIncomeReduction + if(line.HH.partner == 1, param.nbLowIncomeReduction, 0)
+      + if(line.HH.partner == 0 and line.T1.30400 > 0, param.nbLowIncomeReduction, 0))
+    source: "NB428 lines 77 to 80: basic, for a spouse, or for an eligible dependant claimed on line 30400, up to $1,604"
+  NB428.85:
+    label: Adjusted family income over the base, at 3%
+    formula: "round(max(0, line.NB428.75 - param.nbLowIncomeBase) * param.nbLowIncomeRate, 2)"
+    source: "NB428 lines 81 to 85"
+  NB428.86:
+    label: New Brunswick low-income tax reduction
+    formula: "if(line.NB.claimsReduction == 1, max(0, line.NB428.80 - line.NB428.85), 0)"
+    source: "NB428 line 86. Below $48,653 of net income single, or $75,387 of adjusted family income otherwise, it is more than zero"
+  NB428.87:
+    label: New Brunswick tax after the low-income tax reduction
+    formula: "max(0, line.NB428.69 - line.NB428.86)"
+  NB428.90:
+    label: Unused low-income tax reduction your spouse or common-law partner can claim
+    formula: "if(line.HH.partner == 1, max(0, line.NB428.86 - line.NB428.67), 0)"
+    source: "NB428 lines 88 to 90, for a spouse or common-law partner"
+  NB428.91:
+    label: New Brunswick political contributions made in 2025
+    formula: "answer.provincialPoliticalContributions"
+    source: "NB428 line 61550"
+  NB428.92:
+    label: New Brunswick political contribution tax credit
+    formula: "min(param.nbPoliticalCreditMax, round(bracket(param.nbPoliticalCredit, line.NB428.91), 2))"
+    source: "Worksheet NB428, line 92: $500 for contributions over $1,075"
+  NB428.93:
+    label: New Brunswick tax after the political contribution tax credit
+    formula: "max(0, line.NB428.87 - line.NB428.92)"
+  NB428.97:
+    label: New Brunswick tax
+    formula: "line.NB428.93"
+    source: "NB428 lines 94 to 97. The venture capital and small business investor credits aren't claimed"
+
+  # Schedule NB(S11) – New Brunswick tuition and education amounts (the student's own)
+  NBS11.1:
+    label: Unused New Brunswick tuition from your 2024 notice of assessment
+    formula: "answer.unusedProvincialTuition"
+  NBS11.2:
+    label: Tuition fees for 2025
+    formula: "line.S11.8"
+    source: "NB(S11) line 2: line 8 of your federal Schedule 11"
+  NBS11.4:
+    label: Income the tuition amount can reduce to zero tax
+    formula: "if(line.T1.26000 <= param.nbFirstBracketTop, line.T1.26000, round(line.NB428.8 / param.nbCreditRate, 2))"
+    source: "NB(S11) line 4: taxable income, or above $51,306, NB428 line 8 ÷ 9.4%"
+  NBS11.6:
+    label: Room left after other New Brunswick credits
+    formula: "max(0, line.NBS11.4 - line.NB428.33)"
+    source: "NB(S11) lines 5 and 6: less NB428 line 33"
+  NBS11.7:
+    label: Unused tuition claimed for 2025
+    formula: "min(line.NBS11.1, line.NBS11.6)"
+  NBS11.9:
+    label: 2025 tuition claimed
+    formula: "min(line.NBS11.2, line.NBS11.6 - line.NBS11.7)"
+  NBS11.10:
+    label: New Brunswick tuition and education amounts claimed for 2025
+    formula: "line.NBS11.7 + line.NBS11.9"
+  NBS11.16:
+    label: New Brunswick tuition you can transfer
+    formula: "max(0, min(param.nbTuitionTransferMax, line.NBS11.2) - line.NBS11.9)"
+    source: "NB(S11) lines 14 to 16: this year's tuition up to $5,000, less what you used"
+  NBS11.17:
+    label: New Brunswick tuition transferred to your spouse or common-law partner
+    formula: "if(line.HH.partner == 1 and family.partnerInYear and line.NBS11.2 > 0, min(answer.tuitionTransfer, line.NBS11.16), 0)"
+    source: "NB(S11) line 17: the amount you designate on your T2202 (the same as federally), up to line 16"
+
+  # Schedule NB(S2) – New Brunswick amounts transferred from your spouse (read from their NB428, worked out with New
+  # Brunswick's rules whatever their province, as the schedule asks)
+  NBS2.5:
+    label: Their New Brunswick age, pension income and disability amounts, and the tuition they designate to you
+    formula: "spouse.line.NB428.10 + spouse.line.NB428.28 + spouse.line.NB428.31 + spouse.line.NBS11.17"
+    source: "NB(S2) lines 1 to 5: their lines 58080, 58360 and 58440, and the tuition they designate to you"
+  NBS2.6:
+    label: Their taxable income, for the transfer
+    formula: "if(spouse.line.T1.26000 <= param.nbFirstBracketTop, spouse.line.T1.26000, round(spouse.line.NB428.8 / param.nbCreditRate, 2))"
+    source: "NB(S2) line 6"
+  NBS2.10:
+    label: Their basic personal amount, CPP and EI amounts, and tuition
+    formula: "spouse.line.NB428.9 + spouse.line.NB428.25 + spouse.line.NB428.35"
+    source: "NB(S2) lines 7 to 10: their lines 58040, 25 and 58560"
+  NBS2.11:
+    label: Their adjusted taxable income
+    formula: "max(0, line.NBS2.6 - line.NBS2.10)"
+  NBS2.12:
+    label: New Brunswick amounts transferred from your spouse
+    formula: "max(0, line.NBS2.5 - line.NBS2.11)"
+
+  # Schedule NB(S12) – New Brunswick seniors' home renovation tax credit (refundable, on line 47900 of the return). The
+  # home renovation is the one entered for the federal home accessibility expenses: both are improvements that let a
+  # senior get around the home safely. Claimed when you or your spouse is 65 or older; a couple shares the $10,000.
+  NBS12.3:
+    label: Eligible home renovation expenses, up to $10,000
+    formula: >-
+      if(person.age >= 65 or (line.HH.partner == 1 and family.partnerInYear and spouse.person.age >= 65),
+      min(param.nbSeniorsRenovationMax, answer.homeAccessibility), 0)
+    source: "NB(S12) lines 1 to 3: for a senior 65 or older, or someone living with a family member who is"
+  NBS12.5:
+    label: Home renovation expenses
+    formula: >-
+      if(line.HH.partner == 1 and family.partnerInYear and spouse.person.province == "NB"
+      and line.NBS12.3 + spouse.line.NBS12.3 > param.nbSeniorsRenovationMax,
+      unsupported("You and your spouse or partner can claim at most $10,000 together for the New Brunswick seniors' home renovation tax credit. Lower one of the claims"),
+      line.NBS12.3)
+    source: "NB(S12) lines 4 and 5 (60360): less what another person living with you claims"
+  NBS12.7:
+    label: New Brunswick seniors' home renovation tax credit
+    formula: "round(line.NBS12.5 * param.nbSeniorsRenovationRate, 2)"
+    source: "NB(S12) lines 6 and 7: 10%, entered on line 47900 of your return"

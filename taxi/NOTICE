@@ -1,0 +1,53 @@
+Taxi
+====
+
+Taxi is distributed under the MIT License: see the LICENSE file at the
+root of this repository. It includes the third-party material listed below.
+
+
+shadcn/ui (components and theme)
+--------------------------------
+
+Where:     src/app/components/ui/ (the radix-nova style as shadcn's registry
+           has it), src/app/hooks/use-mobile.ts, the theme tokens in
+           src/app/app.css and the variants in src/app/shadcn.css
+Copyright: shadcn
+License:   MIT; https://github.com/shadcn-ui/ui/blob/main/LICENSE.md
+
+Radix UI (radix-ui) 1.8.1
+-------------------------
+
+Where:     the dialogs, menus, checkboxes, radio groups, tabs and other parts
+           under src/app/components/ui/
+Copyright: WorkOS
+License:   MIT; the text is in node_modules/radix-ui/LICENSE
+
+Tailwind CSS 4.3.3 (tailwindcss, @tailwindcss/postcss)
+------------------------------------------------------
+
+Where:     compiles src/app/app.css; its base styles are in the built CSS
+Copyright: Tailwind Labs, Inc.
+License:   MIT; the text is in node_modules/tailwindcss/LICENSE
+
+tw-animate-css 1.4.0
+--------------------
+
+Where:     the components' open and close animations, in the built CSS
+Copyright: Wombosvideo
+License:   MIT; the text is in node_modules/tw-animate-css/LICENSE
+
+Lucide (lucide-react) 1.59.0
+----------------------------
+
+Where:     every icon of the app (src/app/components/Icon.tsx, the shell and
+           the components)
+Copyright: Lucide Icons and Contributors
+License:   ISC; the text is in node_modules/lucide-react/LICENSE
+
+class-variance-authority 0.7.1, cn 0.5.0
+----------------------------------------
+
+Where:     the components' class names (src/app/lib/utils.ts)
+Copyright: Joe Bell (class-variance-authority); shadcn (cn)
+License:   Apache License, Version 2.0 (class-variance-authority); MIT (cn);
+           the texts are in each package's LICENSE file

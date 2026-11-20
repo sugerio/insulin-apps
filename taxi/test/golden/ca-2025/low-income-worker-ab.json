@@ -1,0 +1,283 @@
+{
+  "about": "A low-income single parent in Alberta with the disability tax credit: part-time work, social assistance and workers' compensation (line 25000), a CPP disability benefit, search and rescue volunteering, a bursary without a T2202, RDSP income, disability supports, the Canada workers benefit with its disability supplement and advance payments, the refundable medical expense supplement, and the Canada training credit. Synthetic data.",
+  "input": {
+    "year": 2025,
+    "people": [
+      {
+        "id": "p1",
+        "name": "Jesse Moreau",
+        "role": "self",
+        "birthDate": "1990-11-11",
+        "province": "AB"
+      }
+    ],
+    "family": {
+      "maritalStatus": "single",
+      "dependants": [
+        {
+          "id": "d1",
+          "name": "Mika Moreau",
+          "birthDate": "2017-04-04"
+        }
+      ]
+    },
+    "answers": {
+      "p1": {
+        "hasDisability": true,
+        "hasDisabilitySupports": true,
+        "disabilitySupportsExpenses": "900",
+        "medicalExpenses": "2600",
+        "trainingCreditLimit": "750",
+        "hasSelfEmployment": false,
+        "hasRentalIncome": false,
+        "hasForeignIncome": false,
+        "hasForeignProperty": false,
+        "soldProperty": false,
+        "hasSupportReceived": false,
+        "rrspDeduction": "0",
+        "fhsaDeduction": "0",
+        "hasWorkFromHome": false,
+        "hasChildCare": false,
+        "hasMovingExpenses": false,
+        "hasSupportPaid": false,
+        "carryingCharges": "0",
+        "nonCapitalLosses": "0",
+        "netCapitalLosses": "0",
+        "spouseInfirm": false,
+        "hasInfirmChildren": false,
+        "hasInfirmDependant": false,
+        "hasDisabledDependant": false,
+        "hasVolunteerService": true,
+        "homeBuyers": "0",
+        "homeAccessibility": "0",
+        "hasAdoption": false,
+        "studentLoanInterest": "0",
+        "childTuitionTransfer": "0",
+        "hasOtherDependantMedical": false,
+        "politicalContributions": "0",
+        "teacherSupplies": "0",
+        "multigenerationalRenovation": "0",
+        "instalmentsPaid": "0",
+        "unusedTuition": "0",
+        "tuitionTransfer": "0",
+        "donations": "0",
+        "volunteerKind": "search_rescue",
+        "unusedProvincialTuition": "0",
+        "physicalActivityFees": "0",
+        "childActivityFees": "0",
+        "provincialPoliticalContributions": "0",
+        "propertyTaxPaid": "0",
+        "childFitnessFees": "0",
+        "homeRenovationExpenses": "0",
+        "paidSchoolTaxes": false,
+        "childArtsFees": "0",
+        "hasNorthernResidence": false,
+        "fertilityExpenses": "0",
+        "hasRentedHome": false,
+        "publicTransitPaid": "0",
+        "departureProperty": false,
+        "businessCcaClass": "none",
+        "rentalCcaClass": "none",
+        "childCareDisabledUnder7": "0",
+        "childCareDisabled7to16": "0",
+        "childCareDisabledOlder": "0",
+        "childCareInfirmOlder": "0",
+        "childCareSpouseUnable": false,
+        "childCareSpouseWeeks": "0",
+        "childCareSpouseMonths": "0",
+        "qcLivedAlone": false,
+        "qcHomeOwner": false,
+        "qcHomeOwners": "1",
+        "qcGroupDrugPlan": false,
+        "qcDrugMonthsJanJun": "6",
+        "qcDrugMonthsJulDec": "6",
+        "qcChildCareReceipts": "0",
+        "hasHomeSupport": false,
+        "qcChildTransfer": "0",
+        "qcChildTuitionTransfer": "0",
+        "qcInstalmentsPaid": "0",
+        "qcMunicipalPoliticalContributions": "0"
+      }
+    },
+    "slips": [
+      {
+        "id": "s1",
+        "person": "p1",
+        "type": "T4",
+        "issuer": "Prairie Grocers",
+        "boxes": {
+          "14": "16500",
+          "16": "773.50",
+          "18": "269",
+          "22": "300",
+          "24": "16500",
+          "26": "16500"
+        }
+      },
+      {
+        "id": "s2",
+        "person": "p1",
+        "type": "T5007",
+        "issuer": "Alberta Supports",
+        "boxes": {
+          "11": "4200"
+        }
+      },
+      {
+        "id": "s3",
+        "person": "p1",
+        "type": "T5007",
+        "issuer": "WCB Alberta",
+        "boxes": {
+          "10": "1800"
+        }
+      },
+      {
+        "id": "s4",
+        "person": "p1",
+        "type": "T4A",
+        "issuer": "Prairie Foundation",
+        "boxes": {
+          "105": "1500",
+          "131": "1000"
+        }
+      },
+      {
+        "id": "s5",
+        "person": "p1",
+        "type": "T2202",
+        "issuer": "Bow Valley College",
+        "boxes": {
+          "24": "4",
+          "25": "0",
+          "26": "1100"
+        }
+      },
+      {
+        "id": "s6",
+        "person": "p1",
+        "type": "RC210",
+        "issuer": "Canada Revenue Agency",
+        "boxes": {
+          "10": "400",
+          "11": "100"
+        }
+      },
+      {
+        "id": "s7",
+        "person": "p1",
+        "type": "T4AP",
+        "issuer": "Service Canada",
+        "boxes": {
+          "16": "1200",
+          "20": "1200"
+        }
+      },
+      {
+        "id": "s8",
+        "person": "p1",
+        "type": "NOA",
+        "issuer": "Canada Revenue Agency",
+        "boxes": {
+          "4": "750"
+        }
+      }
+    ]
+  },
+  "expected": {
+    "p1": {
+      "AB428.8": "1413.6",
+      "AB428.16": "22323",
+      "AB428.23": "22323",
+      "AB428.25": "44646",
+      "AB428.32": "912.5",
+      "AB428.33": "45558.5",
+      "AB428.36": "45558.5",
+      "AB428.37": "17219",
+      "AB428.39": "62777.5",
+      "AB428.43": "62777.5",
+      "AB428.49": "1889.9",
+      "AB428.51": "1889.9",
+      "AB428.52": "64667.4",
+      "AB428.54": "5173.39",
+      "AB428.58": "5173.39",
+      "AB428.74": "93.35",
+      "T1.10100": "16500",
+      "T1.11400": "1200",
+      "T1.12500": "1000",
+      "T1.14400": "1800",
+      "T1.14500": "4200",
+      "T1.14700": "6000",
+      "T1.15000": "24700",
+      "T1.21500": "900",
+      "T1.22215": "130",
+      "DED.other": "1030",
+      "T1.23300": "1030",
+      "T1.23400": "23670",
+      "T1.23600": "23670",
+      "CPP.months": "12",
+      "CPP.ympe": "71300",
+      "CPP.yampe": "81200",
+      "CPP.exemption": "3500",
+      "CPP.employed": "16500",
+      "CPP.employedBaseEarnings": "13000",
+      "CPP.actualBase": "643.5",
+      "CPP.actualFirst": "130",
+      "CPP.requiredBase": "643.5",
+      "CPP.requiredFirst": "130",
+      "CPP.baseCredit": "643.5",
+      "CPP.enhancedDeduction": "130",
+      "CPP.employedPaid": "773.5",
+      "CPP.covered": "13000",
+      "T1.25000": "6000",
+      "T2222.12": "4734",
+      "T1.25700": "6000",
+      "T1.26000": "17670",
+      "RES.factor": "1",
+      "FULL.30000": "16129",
+      "T1.30000": "16129",
+      "T1.30400": "16129",
+      "T1.T84": "32258",
+      "T1.30800": "643.5",
+      "EI.insurable": "16500",
+      "EI.required": "270.6",
+      "T1.31200": "269",
+      "T1.31260": "1471",
+      "T1.31240": "6000",
+      "T1.T96": "8383.5",
+      "T1.31600": "10138",
+      "T1.T101": "50779.5",
+      "T1.33099": "2600",
+      "OWN.medical": "2600",
+      "T1.33200": "1889.9",
+      "T1.33500": "52669.4",
+      "T1.33800": "7637.06",
+      "T1.35000": "7637.06",
+      "T1.40400": "2562.15",
+      "T1.42000": "500",
+      "T1.42800": "0",
+      "T1.43500": "500",
+      "T1.43700": "300",
+      "MED.earned": "16500",
+      "MED.familyIncome": "22670",
+      "T1.45200": "697.48",
+      "CWB.working": "16500",
+      "CWB.netIncome": "22670",
+      "CWB.dependant": "1",
+      "CWB.eligible": "1",
+      "CWB.familyWorking": "16500",
+      "CWB.familyIncome": "22670",
+      "CWB.claimsBasic": "1",
+      "CWB.basic": "2813",
+      "CWB.disability": "843",
+      "T1.45300": "3656",
+      "T1.41500": "500",
+      "T1.45350": "550",
+      "T1.48200": "5203.48",
+      "T1.48400": "4703.48",
+      "T1.48500": "0",
+      "S11.8": "550",
+      "S11.11": "17670"
+    }
+  }
+}

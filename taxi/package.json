@@ -1,0 +1,96 @@
+{
+  "name": "insulin-taxi",
+  "displayName": "Taxi",
+  "version": "0.1.0",
+  "description": "Prepare Canadian personal T1 returns: your profile, AI-read tax slips, deductions, and the CRA's own forms filled in to sign and mail",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "insulin": {
+    "permissions": [
+      {
+        "key": "taxi.prepare",
+        "label": "Prepare returns",
+        "description": "Change the profile, add and confirm documents and answers, and download the filled-in forms. Includes viewing.",
+        "role": "EDITOR"
+      },
+      {
+        "key": "taxi.view",
+        "label": "View returns",
+        "description": "See the profile, its documents and every number on its returns, read only.",
+        "role": "VIEWER"
+      }
+    ],
+    "navigation": [
+      {
+        "key": "returns",
+        "label": "Returns",
+        "icon": "file-text",
+        "path": "/returns",
+        "group": "Taxi"
+      },
+      {
+        "key": "profile",
+        "label": "Profile",
+        "icon": "users",
+        "path": "/profile",
+        "group": "Taxi"
+      }
+    ],
+    "scheduled": "/api/scheduled"
+  },
+  "imports": {
+    "#shared": "./src/app/shared/index.ts",
+    "#/*": "./src/*"
+  },
+  "scripts": {
+    "dev": "vite --configLoader native --host 0.0.0.0 --port 3000",
+    "build": "vite build --configLoader native",
+    "db:generate": "drizzle-kit generate",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "rules": "node scripts/compile-rules.ts",
+    "form-layout": "node scripts/form-layout.ts",
+    "rules:try": "node scripts/try-rules.ts",
+    "sample-slips": "node scripts/sample-slips.ts"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "1.4.0",
+    "@fours/app": "0.1.0-beta.0",
+    "class-variance-authority": "0.7.1",
+    "cn": "0.5.0",
+    "drizzle-orm": "0.45.3",
+    "hono": "4.13.13",
+    "lucide-react": "1.59.0",
+    "nitro": "3.0.260610-beta",
+    "pdf-lib": "1.17.1",
+    "radix-ui": "1.8.1",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "react-router": "8.4.0",
+    "tw-animate-css": "1.4.0",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "5.20260925.2",
+    "@rolldown/binding-wasm32-wasi": "1.2.14",
+    "@tailwindcss/postcss": "4.3.3",
+    "@testing-library/react": "16.3.3",
+    "@types/node": "22.20.4",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@vitejs/plugin-react": "6.1.1",
+    "jsdom": "30.1.2",
+    "lightningcss": "npm:lightningcss-wasm@1.33.0",
+    "pdfjs-dist": "5.4.624",
+    "tailwindcss": "4.3.3",
+    "typescript": "6.0.3",
+    "vite": "8.3.4",
+    "vitest": "5.0.3",
+    "yaml": "2.9.1"
+  },
+  "overrides": {
+    "rolldown": "1.2.14",
+    "source-map-js": "1.2.2"
+  }
+}

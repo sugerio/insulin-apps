@@ -1,0 +1,683 @@
+# Manitoba tax: Form MB428, Schedule MB428-A (the family tax benefit), Schedules MB(S2) and MB(S11), and Form MB479
+# (Manitoba credits). Line ids are the line numbers in the forms' right margin. Every number below was checked against
+# the 2025 MB428 (5007-C), Worksheet MB428 (5007-D), MB428-A (5007-A), MB(S2) (5007-S2), MB(S11) (5007-S11) and
+# MB479 (5007-TC), with the Manitoba information guide (5007-PC) where the forms send you to it. For 2025 Manitoba's
+# basic personal amount goes down from $200,000 of net income to zero at $400,000.
+
+params:
+  mbTaxBrackets:
+    label: Manitoba tax brackets
+    source: "MB428 Part A, bases as printed on the form"
+    value:
+      - { upTo: 47000, rate: 10.8%, base: 0 }
+      - { upTo: 100000, rate: 12.75%, base: 5076 }
+      - { rate: 17.4%, base: 11833.50 }
+  mbFirstBracketTop:
+    label: Top of the first Manitoba bracket
+    source: "MB(S2) line 6 and MB(S11) line 7: $47,000"
+    value: 47000
+  mbCreditRate:
+    label: Manitoba credit rate
+    source: "MB428 line 52: 10.8%"
+    value: 10.8%
+  mbBasicPersonalAmount:
+    label: Manitoba basic personal amount
+    source: "Worksheet MB428, line 58040, line 1: $15,780"
+    value: 15780
+  mbBasicPersonalAmountThreshold:
+    label: Net income where the Manitoba basic personal amount starts to go down
+    source: "Worksheet MB428, line 58040, line 3: $200,000"
+    value: 200000
+  mbBasicPersonalAmountRange:
+    label: Net income over which the Manitoba basic personal amount goes down to zero
+    source: "Worksheet MB428, line 58040, line 5: $200,000"
+    value: 200000
+  mbAgeAmountMax:
+    label: Manitoba age amount, full
+    source: "Worksheet MB428, line 58080: $3,728"
+    value: 3728
+  mbAgeAmountThreshold:
+    label: Net income where the Manitoba age amount starts to go down
+    source: "Worksheet MB428, line 58080, line 3: $27,749"
+    value: 27749
+  mbAgeAmountRate:
+    label: Manitoba age amount reduction rate
+    source: "Worksheet MB428, line 58080, line 5: 15%"
+    value: 15%
+  mbSpouseBase:
+    label: Manitoba spouse and eligible dependant amount, base
+    source: "MB428 lines 11 and 14: $9,134"
+    value: 9134
+  mbPensionAmountMax:
+    label: Most Manitoba pension income amount
+    source: "MB428 line 31 (58360): maximum $1,000"
+    value: 1000
+  mbMedicalThresholdMax:
+    label: Manitoba medical expense threshold, most
+    source: "MB428 line 47: whichever is less, $1,728 or 3% of net income"
+    value: 1728
+  mbDonationLowRate:
+    label: Manitoba donation credit rate on the first $200
+    source: "MB428 line 54: 10.8%"
+    value: 10.8%
+  mbDonationHighRate:
+    label: Manitoba donation credit rate above $200
+    source: "MB428 line 55: 17.4%"
+    value: 17.4%
+  mbDividendEligibleRate:
+    label: Manitoba dividend tax credit rate, eligible dividends
+    source: "Worksheet MB428, line 61520, line 2: 8% of the taxable amount"
+    value: 8%
+  mbDividendOtherRate:
+    label: Manitoba dividend tax credit rate, other dividends
+    source: "Worksheet MB428, line 61520, line 1: 0.7835% of the taxable amount"
+    value: 0.7835%
+  mbEducationPartTime:
+    label: Manitoba education amount per month of part-time study
+    source: "MB(S11) line 3: $120 a month"
+    value: 120
+  mbEducationFullTime:
+    label: Manitoba education amount per month of full-time study
+    source: "MB(S11) line 4: $400 a month"
+    value: 400
+  mbStudyMonthsMax:
+    label: Most months of study in a year
+    source: "Federal Schedule 11 lines 32010 and 32020, which MB(S11) lines 3 and 4 read: maximum 12"
+    value: 12
+  mbTuitionTransferMax:
+    label: Most current-year Manitoba tuition and education amounts a student can transfer
+    source: "MB(S11) line 17: maximum $5,000"
+    value: 5000
+  mbFamilyBenefitAmount:
+    label: Family tax benefit, basic, spouse, eligible dependant and age amounts
+    source: "MB428-A lines 1 to 5: $2,065 each"
+    value: 2065
+  mbFamilyBenefitChild:
+    label: Family tax benefit amount per dependent child
+    source: "MB428-A line 9: $2,752 for each dependent child born in 2007 or later"
+    value: 2752
+  mbFamilyBenefitRate:
+    label: Family tax benefit reduction rate
+    source: "MB428-A line 11: 9% of net income"
+    value: 9%
+  mbChildAgeLimit:
+    label: Age under which a child counts for the family tax benefit and the personal tax credit
+    source: "MB428-A line 9 and MB479 line 16: children born in 2007 or later (18 or younger at the end of 2025)"
+    value: 19
+  mbPersonalCreditBasic:
+    label: Personal tax credit, basic credit for you, your spouse or an eligible dependant
+    source: "MB479 lines 7, 9 and 13: $195"
+    value: 195
+  mbPersonalCreditAge:
+    label: Personal tax credit, age credit
+    source: "MB479 lines 8 and 10: $113 for each of you born in 1960 or earlier"
+    value: 113
+  mbPersonalCreditChild:
+    label: Personal tax credit per dependent child
+    source: "MB479 line 16: $26 for each dependent child born in 2007 or later"
+    value: 26
+  mbPersonalCreditRate:
+    label: Personal tax credit reduction rate
+    source: "MB479 line 18: 1% of family income"
+    value: 1%
+  mbInfirmBase:
+    label: Manitoba amount for infirm dependants, base
+    source: "Worksheet MB428, line 58200, line 1: $8,720"
+    value: 8720
+  mbInfirmMax:
+    label: Most Manitoba amount for an infirm dependant
+    source: "Worksheet MB428, line 58200, line 3: maximum $3,605 per dependant"
+    value: 3605
+  mbVolunteerAmount:
+    label: Manitoba volunteer firefighters' or search and rescue volunteers' amount
+    source: "Manitoba information guide, lines 58315 and 58316: enter $6,000"
+    value: 6000
+  mbFitnessMax:
+    label: Most Manitoba fitness amount for each person
+    source: "Manitoba information guide, line 58325 (MB428 line 25): up to $500"
+    value: 500
+  mbFitnessAgeLimit:
+    label: Age under which you or your spouse count for the fitness amount
+    source: "Manitoba information guide, line 58325: you if under 25, a spouse or partner 18 to 24"
+    value: 25
+  mbArtsMax:
+    label: Most Manitoba children's arts amount for each child
+    source: "Manitoba information guide, line 58326 (MB428 line 26): up to $500 per child under 16 at the start of the year"
+    value: 500
+  mbAdoptionMax:
+    label: Most Manitoba adoption expenses for each child
+    source: "Manitoba information guide, line 58330 (MB428 line 27): up to $10,000 for each child"
+    value: 10000
+  mbDisabilityAmount:
+    label: Manitoba disability amount
+    source: "MB428 line 34 (58440): claim $6,180; Worksheet MB428, line 58480, line 1"
+    value: 6180
+  mbDisabilitySupplementMax:
+    label: Most Manitoba disability supplement for a dependant under 18
+    source: "Worksheet MB428, line 58480, line 2: $3,605"
+    value: 3605
+  mbDisabilityCareThreshold:
+    label: Child care and attendant care over which the Manitoba supplement goes down
+    source: "Worksheet MB428, line 58480, line 4: $2,112"
+    value: 2112
+  mbPoliticalCreditRates:
+    label: Manitoba political contribution tax credit
+    source: "Worksheet MB428, line 69: 75% of the first $400, 50% of the next $350 and 33.33% of the rest, bases as printed"
+    value:
+      - { upTo: 400, rate: 75%, base: 0 }
+      - { upTo: 750, rate: 50%, base: 300 }
+      - { rate: 33.33%, base: 475 }
+  mbPoliticalCreditMaxContributions:
+    label: Contributions over which the Manitoba political contribution credit is the most
+    source: "Worksheet MB428, line 69: more than $2,325"
+    value: 2325
+  mbPoliticalCreditMax:
+    label: Most Manitoba political contribution tax credit
+    source: "MB428 line 69: maximum $1,000"
+    value: 1000
+  mbFamilyBenefitDisability:
+    label: Family tax benefit amount for each disability claim or disabled dependant
+    source: "MB428-A lines 6 to 8: $2,752"
+    value: 2752
+  mbPersonalCreditDisability:
+    label: Personal tax credit, disability credit
+    source: "MB479 lines 11 and 14: $113"
+    value: 113
+  mbPersonalCreditDisabledDependant:
+    label: Personal tax credit for each disabled dependant 18 or older
+    source: "MB479 line 15: $62"
+    value: 62
+  mbHomeownersCreditMax:
+    label: Homeowners affordability tax credit, base amount
+    source: "MB479 line 23: $1,500"
+    value: 1500
+  mbDaysInYear:
+    label: Days in the year
+    source: "MB479 line 24: number of days ÷ 365"
+    value: 365
+  mbRentersSeniorBase:
+    label: Renters affordability tax credit for seniors, base amount
+    source: "MB479 line 31: $903.57"
+    value: 903.57
+  mbRentersSeniorRate:
+    label: Renters affordability tax credit for seniors, reduction rate
+    source: "MB479 line 32: 0.8214% of family income"
+    value: 0.8214%
+  mbRentersSeniorReductionMax:
+    label: Renters affordability tax credit for seniors, most reduction
+    source: "MB479 line 32: maximum $328.57"
+    value: 328.57
+  mbMonthsInYear:
+    label: Months in the year
+    source: "MB479 line 34: 12"
+    value: 12
+  mbRentersMonthly:
+    label: Renters affordability tax credit for each month
+    source: "MB479 line 36: whichever is more, line 35 or $47.91"
+    value: 47.91
+  mbSeniorsRebateMax:
+    label: Most seniors school tax rebate
+    source: "MB479 line 44: maximum $235"
+    value: 235
+  mbSeniorsRebateBase:
+    label: Family income over which the seniors school tax rebate goes down
+    source: "MB479 line 46: $40,000 (no rebate from $63,500)"
+    value: 40000
+  mbSeniorsRebateRate:
+    label: Seniors school tax rebate reduction rate
+    source: "MB479 line 48: 1%"
+    value: 1%
+  mbTeachingMax:
+    label: Most eligible teaching supplies expenses
+    source: "MB479 line 79: maximum $1,000"
+    value: 1000
+  mbTeachingRate:
+    label: Teaching expense tax credit rate
+    source: "MB479 line 79: 15%"
+    value: 15%
+
+lines:
+  # Part A – Manitoba tax on taxable income
+  MB428.8:
+    label: Manitoba tax on taxable income
+    formula: "round(bracket(param.mbTaxBrackets, line.T1.26000), 2)"
+
+  # Part B – Manitoba non-refundable tax credits
+  MB428.9:
+    label: Manitoba basic personal amount
+    formula: >-
+      round((max(0, param.mbBasicPersonalAmount - round(param.mbBasicPersonalAmount * max(0, line.T1.23600 - param.mbBasicPersonalAmountThreshold) / param.mbBasicPersonalAmountRange, 2))) * line.RES.factor, 2)
+    source: "Worksheet MB428, line 58040: $15,780, less the same share of it as net income over $200,000 is of $200,000"
+  MB428.10:
+    label: Manitoba age amount
+    formula: >-
+      round((if(person.age >= 65, max(0, param.mbAgeAmountMax - round(max(0, line.T1.23600 - param.mbAgeAmountThreshold) * param.mbAgeAmountRate, 2)), 0)) * line.RES.factor, 2)
+    source: "Worksheet MB428, line 58080: for people born in 1960 or earlier"
+  MB428.13:
+    label: Manitoba spouse or common-law partner amount
+    formula: >-
+      round((if(line.HH.partner == 1, max(0, param.mbSpouseBase - line.HH.spouseNetIncome), 0)) * line.RES.factor, 2)
+
+  MB428.16:
+    label: Manitoba amount for an eligible dependant
+    formula: >-
+      round((if(line.HH.partner == 0 and family.childrenUnder18 > 0, param.mbSpouseBase, 0)) * line.RES.factor, 2)
+    source: "MB428 lines 14 to 16. The app assumes the child had no income"
+  MB428.17:
+    label: Manitoba amount for infirm dependants age 18 or older
+    formula: >-
+      round((if(answer.hasInfirmDependant, if(answer.infirmDependants > 1, unsupported("The Manitoba amount for more than one infirm dependant isn't handled by this app yet"), if(answer.infirmDependants == 0, 0, min(param.mbInfirmMax, max(0, param.mbInfirmBase - answer.infirmDependantIncome)))), 0)) * line.RES.factor, 2)
+    source: >-
+      Worksheet MB428, line 58200: $8,720 less the dependant's net income, up to $3,605. The app claims this line, not
+      the caregiver amount (58400), which needs the dependant to have lived with you
+  MB428.23:
+    label: Volunteer firefighters' amount
+    formula: "if(line.T1.31220 > 0, param.mbVolunteerAmount, 0)"
+    source: "Manitoba information guide, line 58315: $6,000 when you claim line 31220 of your return"
+  MB428.24:
+    label: Search and rescue volunteers' amount
+    formula: "if(line.T1.31240 > 0, param.mbVolunteerAmount, 0)"
+    source: "Manitoba information guide, line 58316: $6,000 when you claim line 31240 of your return"
+  # Who counts for the fitness amount: you under 25, your children under 18, and your spouse aged 18 to 24 (their age
+  # is known only when their return is prepared here).
+  MB.fitnessPeople:
+    label: People the Manitoba fitness amount can be claimed for
+    formula: >-
+      if(person.age < param.mbFitnessAgeLimit, 1, 0) + family.childrenUnder18
+      + if(line.HH.partner == 1 and family.partnerInYear, if(spouse.person.age >= 18 and spouse.person.age < param.mbFitnessAgeLimit, 1, 0), 0)
+    source: "Manitoba information guide, line 58325"
+  MB428.25:
+    label: Fitness amount
+    formula: >-
+      if(line.MB.fitnessPeople == 0, 0,
+      if(line.HH.partner == 1 and family.partnerInYear and spouse.person.province == "MB"
+      and answer.physicalActivityFees + spouse.answer.physicalActivityFees > param.mbFitnessMax * line.MB.fitnessPeople,
+      unsupported("Only one of you can claim the Manitoba fitness amount for a person, up to $500 each. Together you claim more: enter each person's fees on one return"),
+      min(answer.physicalActivityFees, param.mbFitnessMax * line.MB.fitnessPeople)))
+    source: "Manitoba information guide, line 58325: fees for a program of physical activity, up to $500 a person. The extra $500 for a person with a disability isn't handled"
+  MB428.26:
+    label: Children's arts amount
+    formula: >-
+      if(family.childrenUnder17 == 0, 0,
+      if(line.HH.partner == 1 and family.partnerInYear and spouse.person.province == "MB"
+      and answer.childArtsFees + spouse.answer.childArtsFees > param.mbArtsMax * family.childrenUnder17,
+      unsupported("Only one of you can claim the Manitoba children's arts amount for a child, up to $500 each. Together you claim more: enter each child's fees on one return"),
+      min(answer.childArtsFees, param.mbArtsMax * family.childrenUnder17)))
+    source: >-
+      Manitoba information guide, line 58326: up to $500 for each child under 16 at the start of the year (born in 2009
+      or later). The extra $500 for a child with a disability isn't handled
+  MB428.27:
+    label: Adoption expenses
+    formula: >-
+      if(answer.hasAdoption, if(answer.adoptedChildren > 1 and answer.adoptionExpenses > param.mbAdoptionMax,
+      unsupported("Manitoba adoption expenses over $10,000 for more than one child are claimed child by child, which this app doesn't handle yet"),
+      min(answer.adoptionExpenses, param.mbAdoptionMax)), 0)
+    source: "Manitoba information guide, line 58330: the expenses of line 31300, up to $10,000 for each child"
+  MB428.28:
+    label: CPP, EI, volunteer, fitness, arts and adoption amounts
+    formula: >-
+      line.T1.30800 + line.T1.31000 + line.T1.31200 + line.MB428.23 + line.MB428.24 + line.MB428.25 + line.MB428.26
+      + line.MB428.27
+    source: "MB428 lines 19 to 28: lines 30800, 31000 and 31200 of your return, and lines 23 to 27"
+  MB428.31:
+    label: Manitoba pension income amount
+    formula: "min(param.mbPensionAmountMax, line.PEN.creditBase)"
+    source: "MB428 line 31 (58360): eligible pension income, up to $1,000"
+  MB428.34:
+    label: Manitoba disability amount for self
+    formula: >-
+      round((if(answer.hasDisability, param.mbDisabilityAmount, 0)) * line.RES.factor, 2)
+    source: "MB428 line 34 (58440): $6,180 at 18 or older. The worksheet for someone under 18 isn't handled"
+  MB428.35:
+    label: Manitoba disability amount transferred from a dependant
+    formula: >-
+      round((if(answer.hasDisabledDependant, if(answer.disabledChildren > 1 and answer.disabledChildCare > 0, unsupported("Child care for more than one child with a disability is worked out child by child, which this app doesn't handle yet"), answer.disabledChildren * (param.mbDisabilityAmount + param.mbDisabilitySupplementMax) - min(answer.disabledChildren * param.mbDisabilitySupplementMax, max(0, answer.disabledChildCare - param.mbDisabilityCareThreshold)) + answer.disabledAdults * param.mbDisabilityAmount), 0)) * line.RES.factor, 2)
+    source: >-
+      Worksheet MB428, line 58480: $6,180, plus up to $3,605 for a child under 18 less care over $2,112. The app
+      assumes the dependant had no income, so all of it transfers (lines 8 to 12)
+  MB428.36:
+    label: Manitoba credit amounts before tuition and transfers
+    formula: >-
+      line.MB428.9 + line.MB428.10 + line.MB428.13 + line.MB428.16 + line.MB428.17 + line.MB428.28 + line.MB428.31
+      + line.MB428.34 + line.MB428.35
+    source: "MB428 lines 18, 29, 33 and 36. The caregiver amount (line 32) isn't handled"
+  MB428.37:
+    label: Interest paid on your student loans
+    formula: "line.T1.31900"
+    source: "MB428 line 37: line 31900 of your return"
+  MB428.38:
+    label: Manitoba tuition and education amounts
+    formula: "line.MBS11.13"
+    source: "Schedule MB(S11) line 13"
+  MB428.39:
+    label: Tuition and education amounts transferred from a child or grandchild
+    formula: "line.CHILD.provincialTuition"
+    source: "MB428 line 39 (58600): the app uses the amount the student designated to you federally (line 32400)"
+  MB428.40:
+    label: Manitoba amounts transferred from your spouse or common-law partner
+    formula: "if(line.HH.partner == 1 and family.partnerInYear, line.MBS2.12, 0)"
+    source: "Schedule MB(S2): their unused Manitoba age, pension, and tuition and education amounts"
+  MB428.41:
+    label: Family tax benefit
+    formula: "max(0, line.MB428A.10 - round(line.T1.23600 * param.mbFamilyBenefitRate, 2))"
+    source: "Schedule MB428-A lines 10 to 12"
+  MB428.48:
+    label: Allowable medical expenses
+    formula: "max(0, line.T1.33099 - min(param.mbMedicalThresholdMax, round(line.T1.23600 * param.medicalThresholdRate, 2)))"
+    source: "MB428 lines 43 to 48: expenses over whichever is less, $1,728 or 3% of net income"
+  MB428.49:
+    label: Allowable amount of medical expenses for other dependants
+    formula: >-
+      if(answer.hasOtherDependantMedical, max(0, answer.otherDependantMedical
+      - min(param.mbMedicalThresholdMax, round(answer.otherDependantIncome * param.medicalThresholdRate, 2))), 0)
+    source: "Worksheet MB428, line 58729: their expenses less line 47 of their MB428 (whichever is less, $1,728 or 3% of their net income)"
+  MB428.51:
+    label: Manitoba credit amounts
+    formula: >-
+      line.MB428.36 + line.MB428.37 + line.MB428.38 + line.MB428.39 + line.MB428.40 + line.MB428.41 + line.MB428.48
+      + line.MB428.49
+    source: "MB428 lines 42, 50 and 51"
+  MB428.53:
+    label: Manitoba credit amounts at the credit rate
+    formula: "round(line.MB428.51 * param.mbCreditRate, 2)"
+  MB428.56:
+    label: Manitoba donations credit
+    formula: "round(line.S9.13 * param.mbDonationLowRate, 2) + round(line.S9.14 * param.mbDonationHighRate, 2)"
+    source: "MB428 lines 54 to 56: Schedule 9 lines 13 and 14 at 10.8% and 17.4%"
+  MB428.57:
+    label: Manitoba non-refundable tax credits
+    formula: "line.MB428.53 + line.MB428.56"
+
+  # Part C – Manitoba tax
+  MB428.62:
+    label: Manitoba dividend tax credit
+    formula: "round(line.T1.12010 * param.mbDividendOtherRate, 2) + round((line.T1.12000 - line.T1.12010) * param.mbDividendEligibleRate, 2)"
+    source: "Worksheet MB428, line 61520"
+  MB428.65:
+    label: Manitoba tax after credits
+    formula: "max(0, line.MB428.8 - line.MB428.57 - line.MB428.62)"
+    source: "MB428 lines 58 to 65"
+  MB428.68:
+    label: Manitoba political contributions made in 2025
+    formula: "answer.provincialPoliticalContributions"
+  MB428.69:
+    label: Manitoba political contribution tax credit
+    formula: "if(line.MB428.68 > param.mbPoliticalCreditMaxContributions, param.mbPoliticalCreditMax, round(bracket(param.mbPoliticalCreditRates, line.MB428.68), 2))"
+    source: "Worksheet MB428, line 69"
+  MB428.72:
+    label: Manitoba tax before the foreign tax credit
+    formula: "max(0, line.MB428.65 - line.MB428.69)"
+    source: "MB428 lines 67 to 72: minimum tax and labour-sponsored funds aren't handled by this app"
+  # Form T2036 – the provincial foreign tax credit: the foreign tax left after the federal credit, up to the share of
+  # the province's tax otherwise payable on the foreign income.
+  MB428.73:
+    label: Provincial foreign tax credit
+    formula: >-
+      if(line.FTC.left > 0 and line.T1.23600 > 0, min(line.FTC.left,
+      round(min(line.FTC.netForeign, line.T1.23600) * line.MB428.72 / line.T1.23600, 2), line.MB428.72), 0)
+    source: "Form T2036, line 5, with note 4: Manitoba tax before the provincial foreign tax credit (MB428 line 72)"
+  MB428.82:
+    label: Manitoba tax
+    formula: "max(0, line.MB428.72 - line.MB428.73)"
+    source: "MB428 lines 74 to 82: the Manitoba investment tax credits aren't handled by this app"
+
+  # Who claims a credit only one of a couple may claim. The spouse with the higher net income claims the family tax
+  # benefit for the children (MB428-A line 9); a spouse living in another province can't claim Manitoba's. Equal
+  # incomes go to the older spouse, then to the person preparing, so exactly one return claims.
+  MB.higherIncome:
+    label: This return claims the Manitoba credits for the children (1 for yes)
+    formula: >-
+      if(line.HH.partner == 0, 1, if(not family.partnerInYear, if(line.T1.23600 >= line.HH.spouseNetIncome, 1, 0),
+      if(spouse.person.province != "MB", 1, if(line.T1.23600 > line.HH.spouseNetIncome, 1, if(line.T1.23600 < line.HH.spouseNetIncome, 0,
+      if(person.age > spouse.person.age, 1, if(person.age < spouse.person.age, 0, if(person.role == "self", 1, 0))))))))
+    source: "Manitoba information guide, Schedule MB428-A line 9: only the spouse or partner with the higher net income can claim it"
+  # The personal tax credit (MB479) is one claim for the couple. A spouse whose age amount the other transfers on
+  # Schedule MB(S2) can't make it; otherwise it goes with the children's credits.
+  MB.claimsPersonalCredit:
+    label: This return claims the Manitoba personal tax credit for the family (1 for yes)
+    formula: >-
+      if(line.HH.partner == 0, 1, if(not family.partnerInYear, 1, if(spouse.person.province != "MB", 1,
+      if(spouse.line.MB428.40 > 0 and line.MB428.10 > 0 and not (line.MB428.40 > 0 and spouse.line.MB428.10 > 0), 0,
+      if(line.MB428.40 > 0 and spouse.line.MB428.10 > 0 and not (spouse.line.MB428.40 > 0 and line.MB428.10 > 0), 1,
+      line.MB.higherIncome)))))
+    source: "Manitoba information guide, Form MB479, personal tax credit: only one of a couple claims it, for both"
+  # Dependants with a disability, whichever spouse claims them on their MB428: the family tax benefit and the personal
+  # tax credit count them once, on the return that claims for the family.
+  MB.disabledDependants:
+    label: Dependants whose disability amount you or your spouse claim (line 58480)
+    formula: >-
+      if(answer.hasDisabledDependant, answer.disabledChildren + answer.disabledAdults, 0)
+      + if(line.HH.partner == 1 and family.partnerInYear, if(spouse.answer.hasDisabledDependant, spouse.answer.disabledChildren + spouse.answer.disabledAdults, 0), 0)
+    source: "MB428-A line 7 and MB479 line 14"
+  MB.infirmDependants:
+    label: Infirm dependants 18 or older you or your spouse claim (line 58200)
+    formula: >-
+      if(answer.hasInfirmDependant, answer.infirmDependants, 0)
+      + if(line.HH.partner == 1 and family.partnerInYear, if(spouse.answer.hasInfirmDependant, spouse.answer.infirmDependants, 0), 0)
+    source: "MB428-A line 8 and MB479 line 15"
+
+  # Schedule MB428-A – Manitoba family tax benefit
+  MB428A.9:
+    label: Amount for dependent children
+    formula: >-
+      if(family.childrenUnder19 - if(line.MB428.16 > 0, 1, 0) > 0, if(line.MB.higherIncome == 1, param.mbFamilyBenefitChild
+      * (family.childrenUnder19 - if(line.MB428.16 > 0, 1, 0)), 0), 0)
+    source: "MB428-A line 9: children born in 2007 or later, other than the one claimed as an eligible dependant"
+  MB428A.6:
+    label: Disability amount for spouse or common-law partner
+    formula: >-
+      if(line.MB428.40 > 0 and spouse.line.MB428.34 > 0 and line.MBS2.12 > spouse.line.MBS11.20, param.mbFamilyBenefitDisability, 0)
+    source: "MB428-A line 6: when you transfer their disability amount on MB(S2) line 3 and line 12 is more than line 4"
+  MB428A.7:
+    label: Disability amount for self or for a dependant
+    formula: >-
+      param.mbFamilyBenefitDisability * (if(line.MB428.34 > 0, 1, 0)
+      + if(line.MB.disabledDependants > 0, if(line.MB.higherIncome == 1, line.MB.disabledDependants, 0), 0))
+    source: "MB428-A line 7: yours, and each dependant's on line 58480, claimed by the spouse with the higher net income"
+  MB428A.8:
+    label: Amount for disabled dependants born in 2007 or earlier
+    formula: "if(line.MB.infirmDependants > 0, if(line.MB.higherIncome == 1, param.mbFamilyBenefitDisability * line.MB.infirmDependants, 0), 0)"
+    source: "MB428-A line 8: each dependant claimed on line 58200, by the spouse with the higher net income"
+  MB428A.10:
+    label: Family tax benefit amounts
+    formula: >-
+      param.mbFamilyBenefitAmount + if(line.MB428.13 > 0, param.mbFamilyBenefitAmount, 0)
+      + if(line.MB428.16 > 0, param.mbFamilyBenefitAmount, 0) + if(person.age >= 65, param.mbFamilyBenefitAmount, 0)
+      + if(line.MB428.40 > 0 and spouse.line.MB428.10 > line.MBS2.11, param.mbFamilyBenefitAmount, 0)
+      + line.MB428A.6 + line.MB428A.7 + line.MB428A.8 + line.MB428A.9
+    source: "MB428-A lines 1 to 10"
+
+  # Schedule MB(S2) – Manitoba amounts transferred from your spouse (read from their MB428, worked out under
+  # Manitoba's rules whatever their province, as the schedule asks)
+  MBS2.5:
+    label: Their age, pension income and disability amounts, and the tuition they designate to you
+    formula: "spouse.line.MB428.10 + spouse.line.MB428.31 + spouse.line.MB428.34 + spouse.line.MBS11.20"
+    source: "MB(S2) lines 1 to 5"
+  MBS2.6:
+    label: Their taxable income, for the transfer
+    formula: "if(spouse.line.T1.26000 <= param.mbFirstBracketTop, spouse.line.T1.26000, round(spouse.line.MB428.8 / param.mbCreditRate, 2))"
+    source: "MB(S2) line 6"
+  MBS2.10:
+    label: Their basic personal amount, CPP and EI amounts, and tuition
+    formula: "spouse.line.MB428.9 + spouse.line.MB428.28 + spouse.line.MB428.38"
+    source: "MB(S2) lines 7 to 10: their lines 58040, 28 and 58560"
+  MBS2.11:
+    label: Their adjusted taxable income
+    formula: "max(0, line.MBS2.6 - line.MBS2.10)"
+  MBS2.12:
+    label: Manitoba amounts transferred from your spouse or common-law partner
+    formula: "max(0, line.MBS2.5 - line.MBS2.11)"
+
+  # Schedule MB(S11) – Manitoba tuition and education amounts (the student's own)
+  MBS11.2:
+    label: Tuition fees for 2025
+    formula: "line.S11.8"
+    source: "MB(S11) line 2: line 8 of the federal Schedule 11"
+  MBS11.3:
+    label: Education amount, part-time months
+    formula: "min(param.mbStudyMonthsMax, sum(T2202.box24)) * param.mbEducationPartTime"
+    source: "MB(S11) line 3: months part-time (T2202 box 24, federal line 32010) times $120"
+  MBS11.4:
+    label: Education amount, full-time months
+    formula: "min(param.mbStudyMonthsMax, sum(T2202.box25)) * param.mbEducationFullTime"
+    source: "MB(S11) line 4: months full-time (T2202 box 25, federal line 32020) times $400"
+  MBS11.5:
+    label: Total 2025 tuition and education amounts
+    formula: "line.MBS11.2 + line.MBS11.3 + line.MBS11.4"
+  MBS11.7:
+    label: Income the tuition amount can reduce to zero tax
+    formula: "if(line.T1.26000 <= param.mbFirstBracketTop, line.T1.26000, round(line.MB428.8 / param.mbCreditRate, 2))"
+    source: "MB(S11) line 7: taxable income, or above $47,000, Manitoba tax on taxable income ÷ 10.8%"
+  MBS11.9:
+    label: Room left after other credits
+    formula: "max(0, line.MBS11.7 - line.MB428.36)"
+    source: "MB(S11) lines 8 and 9: less line 36 of Form MB428"
+  MBS11.10:
+    label: Unused tuition and education amounts claimed for 2025
+    formula: "min(answer.unusedProvincialTuition, line.MBS11.9)"
+    source: "MB(S11) lines 1 and 10: the unused amounts on your 2024 notice of assessment"
+  MBS11.12:
+    label: 2025 tuition and education amounts claimed
+    formula: "min(line.MBS11.5, line.MBS11.9 - line.MBS11.10)"
+    source: "MB(S11) lines 11 and 12"
+  MBS11.13:
+    label: Manitoba tuition and education amounts
+    formula: "line.MBS11.10 + line.MBS11.12"
+  MBS11.19:
+    label: Manitoba tuition and education amounts you can transfer
+    formula: "max(0, min(param.mbTuitionTransferMax, line.MBS11.5) - line.MBS11.12)"
+    source: "MB(S11) lines 17 to 19: this year's amounts up to $5,000, less what you used"
+  MBS11.20:
+    label: Manitoba tuition and education amounts transferred to your spouse or common-law partner
+    formula: "if(line.S11.24 > 0, line.MBS11.19, 0)"
+    source: "MB(S11) line 20: when you transfer tuition to your spouse federally, the app designates all you can transfer of the Manitoba amounts too"
+
+  # Form MB479 – Manitoba credits. A couple makes one claim for each credit: the personal tax credit on the return
+  # that claims for the family, the renters and homeowners credits on the return where the rent or school taxes are
+  # entered.
+  MB479.5:
+    label: Your net income, for family income
+    formula: "max(0, line.T1.23400 - line.T1.23500 - line.T1.12500)"
+    source: "MB479 lines 1 to 5: net income (line 23600) before it was floored at zero, less RDSP income (line 12500). UCCB and RDSP repayments aren't handled"
+  MB479.6:
+    label: Family income
+    formula: "line.MB479.5 + if(line.HH.partner == 1, if(family.partnerInYear, spouse.line.MB479.5, answer.spouseNetIncome), 0)"
+    source: "MB479 line 6: yours and your spouse's or partner's, from their return or your answer for their net income"
+  MB479.12:
+    label: Credits for your spouse or common-law partner
+    formula: >-
+      if(line.HH.partner == 1, param.mbPersonalCreditBasic
+      + if(family.partnerInYear, if(spouse.person.age >= 65, param.mbPersonalCreditAge, 0)
+      + if(spouse.answer.hasDisability, param.mbPersonalCreditDisability, 0), 0), 0)
+    source: "MB479 lines 9 to 12: $195, $113 if they were born in 1960 or earlier and $113 if they have the disability amount (counted only when their return is prepared here)"
+  MB479.14:
+    label: Disability credit for self or for a dependant
+    formula: "param.mbPersonalCreditDisability * (if(line.MB428.34 > 0, 1, 0) + line.MB.disabledDependants)"
+    source: "MB479 line 14: yours (line 58440) and each dependant's on line 58480 of your or your spouse's MB428"
+  MB479.15:
+    label: Credit for disabled dependants born in 2007 or earlier
+    formula: "param.mbPersonalCreditDisabledDependant * line.MB.infirmDependants"
+    source: "MB479 line 15: each dependant claimed on line 58200 of your or your spouse's MB428"
+  MB479.16:
+    label: Credit for dependent children
+    formula: "param.mbPersonalCreditChild * (family.childrenUnder19 - if(line.MB428.16 > 0, 1, 0))"
+    source: "MB479 line 16: children born in 2007 or later, other than the one claimed as an eligible dependant"
+  MB479.17:
+    label: Total personal credits
+    formula: >-
+      param.mbPersonalCreditBasic + if(person.age >= 65, param.mbPersonalCreditAge, 0) + line.MB479.12
+      + if(line.MB428.16 > 0, param.mbPersonalCreditBasic, 0) + line.MB479.14 + line.MB479.15 + line.MB479.16
+    source: "MB479 lines 7, 8 and 12 to 16"
+  MB479.19:
+    label: Personal tax credit
+    formula: "if(line.MB.claimsPersonalCredit == 1, max(0, line.MB479.17 - round(line.MB479.6 * param.mbPersonalCreditRate, 2)), 0)"
+    source: "MB479 lines 17 to 19: the credits less 1% of family income, on one return of a couple"
+
+  # Homeowners affordability tax credit (lines 20 to 28)
+  MB479.22:
+    label: School taxes on your principal residence
+    formula: >-
+      if(answer.paidSchoolTaxes, if(line.HH.partner == 1 and family.partnerInYear and spouse.person.province == "MB" and spouse.answer.paidSchoolTaxes,
+      unsupported("Only one of you claims the Manitoba homeowners affordability tax credit for both of you. Enter the school taxes on one return"),
+      answer.schoolTaxes), 0)
+    source: "MB479 lines 20 to 22: the school taxes after the advance, plus the advance (the gross school taxes)"
+  MB479.24:
+    label: Share of the year you owned your home
+    formula: "if(line.MB479.22 > 0, min(answer.homeOwnedDays, param.mbDaysInYear) / param.mbDaysInYear, 0)"
+    source: "MB479 line 24: number of days ÷ 365"
+  MB479.26:
+    label: School taxes the credit covers
+    formula: "min(line.MB479.22, round(param.mbHomeownersCreditMax * line.MB479.24, 2))"
+    source: "MB479 lines 23 to 26: whichever is less, the school taxes or $1,500 for the days you owned it"
+  MB479.27:
+    label: Homeowners affordability tax credit advance
+    formula: "if(line.MB479.22 > 0, answer.schoolTaxAdvance, 0)"
+    source: "MB479 lines 21 and 27: the advance on your property tax statement"
+  MB479.28:
+    label: Homeowners affordability tax credit
+    formula: "max(0, line.MB479.26 - line.MB479.27)"
+
+  # Renters affordability tax credit (lines 29 to 39)
+  MB479.30:
+    label: Rent paid
+    formula: >-
+      if(line.HH.partner == 1 and family.partnerInYear and spouse.person.province == "MB" and line.RENT.paid > 0 and spouse.line.RENT.paid > 0,
+      unsupported("Only one of you claims the Manitoba renters affordability tax credit for both of you. Enter the rent on one return"),
+      line.RENT.paid)
+    source: "MB479 line 30"
+  MB.senior:
+    label: You or your spouse were 65 or older (1 for yes)
+    formula: "if(person.age >= 65, 1, if(line.HH.partner == 1 and family.partnerInYear, if(spouse.person.age >= 65, 1, 0), 0))"
+    source: "MB479 lines 31 and 42: at the end of the year"
+  MB479.35:
+    label: Renters credit for each month, for seniors
+    formula: >-
+      if(line.MB479.30 > 0 and line.MB.senior == 1, round((param.mbRentersSeniorBase
+      - min(param.mbRentersSeniorReductionMax, round(line.MB479.6 * param.mbRentersSeniorRate, 2))) / param.mbMonthsInYear, 2), 0)
+    source: "MB479 lines 31 to 35: $903.57 less 0.8214% of family income (at most $328.57), divided by 12"
+  MB479.37:
+    label: Months you rented
+    formula: "if(line.MB479.30 > 0, min(line.RENT.months, param.mbMonthsInYear), 0)"
+    source: "MB479 line 37: the months you lived in a home you rented"
+  MB479.38:
+    label: Renters credit for the months you rented
+    formula: "round(max(line.MB479.35, param.mbRentersMonthly) * line.MB479.37, 2)"
+    source: "MB479 lines 36 to 38: whichever is more, line 35 or $47.91, times the months"
+  MB479.39:
+    label: Renters affordability tax credit
+    formula: "min(line.MB479.30, line.MB479.38)"
+
+  # Seniors school tax rebate (lines 42 to 52): the homeowners credit's claimant, 65 or older (or their spouse), with
+  # family income under $63,500 (the rebate is zero from there).
+  MB479.44:
+    label: School taxes over the homeowners credit
+    formula: "if(line.MB479.22 > 0 and line.MB.senior == 1, min(param.mbSeniorsRebateMax, max(0, line.MB479.22 - line.MB479.26)), 0)"
+    source: "MB479 lines 42 to 44: up to $235. Community revitalization levies aren't handled"
+  MB479.49:
+    label: Seniors school tax rebate reduction
+    formula: "if(line.MB479.44 > 0, round(max(0, line.MB479.6 - param.mbSeniorsRebateBase) * param.mbSeniorsRebateRate, 2), 0)"
+    source: "MB479 lines 45 to 49: 1% of family income over $40,000, only when lines 42 to 52 apply (otherwise line 52 is 0)"
+  MB479.52:
+    label: Seniors school tax rebate
+    formula: "round(max(0, line.MB479.44 - line.MB479.49) * line.MB479.24, 2)"
+    source: "MB479 lines 50 to 52: for the days you owned your home"
+
+  MB479.55:
+    label: Manitoba credits before assistance payments
+    formula: "line.MB479.28 + line.MB479.39 + line.MB479.52 + line.MB479.19"
+    source: "MB479 lines 53 to 55"
+  MB479.57:
+    label: Manitoba credits after assistance payments
+    formula: >-
+      if(line.MB479.55 > 0 and (line.T1.14500 > 0 or (line.HH.partner == 1 and family.partnerInYear and spouse.line.T1.14500 > 0)),
+      unsupported("Employment and Income Assistance or MSPD payments reduce the Manitoba credits by the number in box 14 of the T5007 (Form MB479, line 56), which this app doesn't read yet"),
+      line.MB479.55)
+    source: "MB479 lines 56 and 57"
+  MB479.79:
+    label: Teaching expense tax credit
+    formula: "round(min(answer.teacherSupplies, param.mbTeachingMax) * param.mbTeachingRate, 2)"
+    source: "MB479 line 79: eligible teaching supplies, up to $1,000, at 15%"
+  MB479.81:
+    label: Manitoba credits
+    formula: "line.MB479.57 + line.MB479.79"
+    source: "MB479 lines 58 to 81. The other credits there are for caregivers registered with Manitoba, fertility treatment, businesses and investors, and aren't handled by this app"

@@ -1,0 +1,301 @@
+# Yukon tax: Form YT428, Schedules YT(S2) and YT(S11), and Form YT479. Line ids are the line numbers in the forms'
+# right margin. Every number below was checked against the 2025 YT428 (5011-C), Worksheet YT428 (5011-D), YT(S2)
+# (5011-S2), YT(S11) (5011-S11) and YT479 (5011-TC). Yukon's personal amounts are the federal ones: YT428 takes them
+# from the lines of the return.
+
+params:
+  ytTaxBrackets:
+    label: Yukon tax brackets
+    source: "YT428 Part A, bases as printed on the form"
+    value:
+      - { upTo: 57375, rate: 6.4%, base: 0 }
+      - { upTo: 114750, rate: 9%, base: 3672 }
+      - { upTo: 177882, rate: 10.9%, base: 8835.75 }
+      - { upTo: 500000, rate: 12.8%, base: 15717.14 }
+      - { rate: 15%, base: 56948.24 }
+  ytFirstBracketTop:
+    label: Top of the first Yukon bracket
+    source: "YT428 Part A, YT(S2) line 7 and YT(S11) line 6: $57,375"
+    value: 57375
+  ytCreditRate:
+    label: Yukon credit rate
+    source: "YT428 line 44: 6.4%"
+    value: 6.4%
+  ytMedicalThresholdMax:
+    label: Yukon medical expense threshold, most
+    source: "YT428 line 39: whichever is less, $2,834 or 3% of net income"
+    value: 2834
+  ytDonationLowRate:
+    label: Yukon donation credit rate on the first $200
+    source: "YT428 line 46: 6.4%"
+    value: 6.4%
+  ytDonationHighRate:
+    label: Yukon donation credit rate above $200
+    source: "YT428 line 47: 12.8%"
+    value: 12.8%
+  ytDividendEligibleRate:
+    label: Yukon dividend tax credit rate, eligible dividends
+    source: "Worksheet YT428, line 61520: 12.02% of the taxable amount"
+    value: 12.02%
+  ytDividendOtherRate:
+    label: Yukon dividend tax credit rate, other dividends
+    source: "Worksheet YT428, line 61520: 0.67% of the taxable amount"
+    value: 0.67%
+  ytTuitionTransferMax:
+    label: Most Yukon tuition a student can transfer
+    source: "YT(S11) line 16: maximum $5,000"
+    value: 5000
+  ytFitnessRate:
+    label: Yukon children's fitness tax credit rate
+    source: "YT479 line 1: 6.4% of the eligible fees"
+    value: 6.4%
+  ytArtsMaxPerChild:
+    label: Most children's arts fees for each child
+    source: "canada.ca/yt-tax-info, line 58326: up to $500 per child under 16"
+    value: 500
+  ytPoliticalRates:
+    label: Yukon political contribution tax credit
+    source: "Worksheet YT428, line 78: 75% of the first $400, 50% of the next $350 and 33.33% of the rest"
+    value:
+      - { upTo: 400, rate: 75%, base: 0 }
+      - { upTo: 750, rate: 50%, base: 300 }
+      - { rate: 33.33%, base: 475 }
+  ytPoliticalMaxFrom:
+    label: Political contributions above which the Yukon credit is the most
+    source: "Worksheet YT428, line 78: more than $1,275"
+    value: 1275
+  ytPoliticalMax:
+    label: Most Yukon political contribution tax credit
+    source: "YT428 line 78: maximum $650"
+    value: 650
+  ytFertilityRate:
+    label: Yukon fertility and surrogacy tax credit rate
+    source: "YT479 line 5: 40% of the eligible expenses"
+    value: 40%
+  ytFertilityMax:
+    label: Most Yukon fertility and surrogacy tax credit
+    source: "YT479 line 5: maximum $10,000"
+    value: 10000
+  ytFitnessMaxPerChild:
+    label: Most eligible fitness fees for each child
+    source: "canada.ca/yt-tax-info, Form YT479, children's fitness tax credit: up to $1,000 per child under 16"
+    value: 1000
+
+lines:
+  # Part A – Yukon tax on taxable income
+  YT428.8:
+    label: Yukon tax on taxable income
+    formula: "round(bracket(param.ytTaxBrackets, line.T1.26000), 2)"
+
+  # Part B – Yukon non-refundable tax credits
+  YT428.9:
+    label: Yukon basic personal amount
+    formula: "line.T1.30000"
+    source: "YT428 line 9 (58040): line 30000 of your return"
+  YT428.10:
+    label: Yukon age amount
+    formula: "line.T1.30100"
+    source: "YT428 line 10 (58080): line 30100 of your return"
+  YT428.11:
+    label: Yukon spouse or common-law partner amount
+    formula: "line.T1.30300"
+    source: "YT428 line 11 (58120): line 30300 of your return"
+  YT428.12:
+    label: Yukon amount for an eligible dependant
+    formula: "line.T1.30400"
+    source: "YT428 line 12 (58160): line 30400 of your return"
+  YT428.13:
+    label: Yukon caregiver amount for spouse or common-law partner
+    formula: "line.T1.30425"
+    source: "YT428 line 13 (58170): line 30425 of your return"
+  YT428.14:
+    label: Yukon caregiver amount for infirm dependants age 18 or older
+    formula: "line.T1.30450"
+    source: "YT428 line 14 (58180): line 30450 of your return"
+  YT428.15:
+    label: Yukon caregiver amount for infirm children under 18
+    formula: "line.T1.30500"
+    source: "YT428 line 15 (58189): line 30500 of your return"
+  # The children's arts amount, like the fitness credit, is up to $500 for each child under 16; when both spouses
+  # claim more than that together, each claims a share of it.
+  YT428.22:
+    label: Children's arts amount
+    formula: >-
+      if(family.childrenUnder17 > 0, if(family.partnerInYear and line.HH.partner == 1
+      and answer.childArtsFees + spouse.answer.childArtsFees > param.ytArtsMaxPerChild * family.childrenUnder17,
+      round(answer.childArtsFees * param.ytArtsMaxPerChild * family.childrenUnder17 / (answer.childArtsFees + spouse.answer.childArtsFees), 2),
+      min(answer.childArtsFees, param.ytArtsMaxPerChild * family.childrenUnder17)), 0)
+    source: "YT428 line 22 (58326): fees for an artistic, cultural, recreational or developmental program for a child under 16, up to $500 each"
+  YT428.23:
+    label: Yukon adoption expenses
+    formula: "line.T1.31300"
+    source: "YT428 line 23 (58330): the rules and the $19,580 maximum of line 31300 (canada.ca/yt-tax-info)"
+  YT428.24:
+    label: CPP, EI, Canada employment, children's arts and adoption amounts
+    formula: "line.T1.30800 + line.T1.31000 + line.T1.31200 + line.T1.31260 + line.YT428.22 + line.YT428.23"
+    source: "YT428 lines 17 to 24: lines 30800, 31000 and 31200 of your return, the Canada employment amount, and lines 22 and 23"
+  YT428.25:
+    label: Yukon pension income amount
+    formula: "line.T1.31400"
+    source: "YT428 line 25 (58360): line 31400 of your return, up to $2,000"
+  YT428.26:
+    label: Yukon disability amount for self
+    formula: "line.T1.31600"
+    source: "YT428 line 26 (58440): line 31600 of your return"
+  YT428.27:
+    label: Yukon disability amount transferred from a dependant
+    formula: "line.T1.31800"
+    source: "YT428 line 27 (58480): line 31800 of your return"
+  YT428.28:
+    label: Yukon credit amounts before tuition and transfers
+    formula: >-
+      line.YT428.9 + line.YT428.10 + line.YT428.11 + line.YT428.12 + line.YT428.13 + line.YT428.14 + line.YT428.15
+      + line.YT428.24 + line.YT428.25 + line.YT428.26 + line.YT428.27
+    source: "YT428 line 28: lines 16 and 24 to 27"
+  YT428.30:
+    label: Interest paid on your student loans
+    formula: "line.T1.31900"
+    source: "YT428 line 30 (58520): line 31900 of your return"
+  YT428.31:
+    label: Yukon tuition amount
+    formula: "line.YTS11.12"
+    source: "YT428 line 31 (58560): Schedule YT(S11)"
+  YT428.32:
+    label: Yukon tuition amount transferred from a child or grandchild
+    formula: "line.CHILD.provincialTuition"
+    source: "YT428 line 32 (58600): the territorial amount designated to you on their T2202 (the app takes the federal one, line 32400)"
+  YT428.33:
+    label: Amounts transferred from your spouse or common-law partner
+    formula: "if(line.HH.partner == 1 and family.partnerInYear, line.YTS2.13, 0)"
+    source: "YT428 line 33 (58640): Schedule YT(S2)"
+  YT428.40:
+    label: Allowable medical expenses
+    formula: "max(0, line.T1.33099 - min(param.ytMedicalThresholdMax, round(line.T1.23600 * param.medicalThresholdRate, 2)))"
+    source: "YT428 lines 35 to 40: expenses over whichever is less, $2,834 or 3% of net income"
+  YT428.41:
+    label: Allowable amount of medical expenses for other dependants
+    formula: "line.T1.33199"
+    source: "YT428 line 41 (58729): line 33199 of your return"
+  YT428.43:
+    label: Yukon credit amounts
+    formula: "line.YT428.28 + line.YT428.30 + line.YT428.31 + line.YT428.32 + line.YT428.33 + line.YT428.40 + line.YT428.41"
+    source: "YT428 lines 34, 42 and 43"
+  YT428.45:
+    label: Yukon credit amounts at the credit rate
+    formula: "round(line.YT428.43 * param.ytCreditRate, 2)"
+  YT428.48:
+    label: Yukon donations credit
+    formula: "round(line.S9.13 * param.ytDonationLowRate, 2) + round(line.S9.14 * param.ytDonationHighRate, 2)"
+    source: "YT428 lines 46 to 48: Schedule 9 lines 13 and 14 at 6.4% and 12.8%"
+  YT428.49:
+    label: Yukon non-refundable tax credits
+    formula: "line.YT428.45 + line.YT428.48"
+
+  # Part C – Yukon tax
+  YT428.54:
+    label: Yukon dividend tax credit
+    formula: "round(line.T1.12010 * param.ytDividendOtherRate, 2) + round((line.T1.12000 - line.T1.12010) * param.ytDividendEligibleRate, 2)"
+    source: "Worksheet YT428, line 61520"
+  YT428.57:
+    label: Yukon tax after credits
+    formula: "max(0, line.YT428.8 - line.YT428.49 - line.YT428.54)"
+  # Form T2036 – the territorial foreign tax credit: the foreign tax left after the federal credit, up to the share of
+  # the territory's tax otherwise payable (YT428 line 60, which is line 57 here) on the foreign income.
+  YT428.61:
+    label: Territorial foreign tax credit
+    formula: >-
+      if(line.FTC.left > 0 and line.T1.23600 > 0, min(line.FTC.left,
+      round(min(line.FTC.netForeign, line.T1.23600) * line.YT428.57 / line.T1.23600, 2), line.YT428.57), 0)
+    source: "Form T2036, line 5; note 4: the tax before the foreign tax credit, YT428 line 60"
+  YT428.62:
+    label: Yukon tax after the foreign tax credit
+    formula: "max(0, line.YT428.57 - line.YT428.61)"
+  YT428.63850:
+    label: Yukon political contributions made in 2025
+    formula: "answer.provincialPoliticalContributions"
+  YT428.78:
+    label: Yukon political contribution tax credit
+    formula: "if(line.YT428.63850 > param.ytPoliticalMaxFrom, param.ytPoliticalMax, round(bracket(param.ytPoliticalRates, line.YT428.63850), 2))"
+    source: "Worksheet YT428, line 78: 75% of the first $400, 50% of the next $350 and 33.33% of the rest, up to $650"
+  YT428.79:
+    label: Yukon tax
+    formula: "max(0, line.YT428.62 - line.YT428.78)"
+    source: "YT428 lines 74 to 79: the business investment and First Nations credits aren't claimed"
+
+  # Schedule YT(S11) – Yukon tuition amounts (the student's own)
+  YTS11.1:
+    label: Unused Yukon tuition from your 2024 notice of assessment
+    formula: "answer.unusedProvincialTuition"
+  YTS11.4:
+    label: Tuition fees for 2025
+    formula: "line.S11.8"
+    source: "YT(S11) lines 2 to 4: lines 1 and 7 of your federal Schedule 11"
+  YTS11.8:
+    label: Income the Yukon tuition amount can reduce to zero tax
+    formula: "max(0, if(line.T1.26000 <= param.ytFirstBracketTop, line.T1.26000, round(line.YT428.8 / param.ytCreditRate, 2)) - line.YT428.28)"
+    source: "YT(S11) lines 6 to 8: taxable income, or above $57,375, YT428 line 8 ÷ 6.4%, less YT428 line 28"
+  YTS11.9:
+    label: Unused Yukon tuition claimed for 2025
+    formula: "min(line.YTS11.1, line.YTS11.8)"
+  YTS11.11:
+    label: 2025 Yukon tuition claimed
+    formula: "min(line.YTS11.4, line.YTS11.8 - line.YTS11.9)"
+  YTS11.12:
+    label: Yukon tuition amount claimed for 2025
+    formula: "line.YTS11.9 + line.YTS11.11"
+  YTS11.18:
+    label: Yukon tuition you can transfer
+    formula: "max(0, min(param.ytTuitionTransferMax, line.YTS11.4) - line.YTS11.11)"
+    source: "YT(S11) lines 16 to 18: this year's tuition up to $5,000, less what you used"
+  YTS11.19:
+    label: Yukon tuition transferred to your spouse or common-law partner
+    formula: "if(line.HH.partner == 1 and family.partnerInYear and line.YTS11.4 > 0, min(answer.tuitionTransfer, line.YTS11.18), 0)"
+    source: "YT(S11) line 19: the amount you designate on your T2202 (the app takes the federal one), up to line 18"
+
+  # Schedule YT(S2) – Yukon amounts transferred from your spouse (read from their YT428, whatever their province)
+  YTS2.6:
+    label: Their Yukon age, infirm children, pension and disability amounts, and the tuition they designate to you
+    formula: "spouse.line.YT428.10 + spouse.line.YT428.15 + spouse.line.YT428.25 + spouse.line.YT428.26 + spouse.line.YTS11.19"
+    source: "YT(S2) lines 1 to 5"
+  YTS2.7:
+    label: Their taxable income, for the transfer
+    formula: "if(spouse.line.T1.26000 <= param.ytFirstBracketTop, spouse.line.T1.26000, round(spouse.line.YT428.8 / param.ytCreditRate, 2))"
+    source: "YT(S2) line 7"
+  YTS2.11:
+    label: Their basic personal amount, CPP, EI and employment amounts, and tuition
+    formula: "spouse.line.YT428.9 + spouse.line.YT428.24 + spouse.line.YT428.31"
+    source: "YT(S2) lines 8 to 11: their YT428 lines 58040, 24 and 58560"
+  YTS2.12:
+    label: Their adjusted taxable income
+    formula: "max(0, line.YTS2.7 - line.YTS2.11)"
+  YTS2.13:
+    label: Yukon amounts transferred from your spouse or common-law partner
+    formula: "max(0, line.YTS2.6 - line.YTS2.12)"
+
+  # Form YT479 – Yukon credits: the children's fitness and the fertility and surrogacy tax credits. The research and
+  # development credit and the business carbon price rebate are business credits, not claimed here.
+  YT479.63800:
+    label: Eligible children's fitness fees
+    formula: >-
+      if(family.childrenUnder17 > 0, if(family.partnerInYear and line.HH.partner == 1
+      and answer.childFitnessFees + spouse.answer.childFitnessFees > param.ytFitnessMaxPerChild * family.childrenUnder17,
+      round(answer.childFitnessFees * param.ytFitnessMaxPerChild * family.childrenUnder17 / (answer.childFitnessFees + spouse.answer.childFitnessFees), 2),
+      min(answer.childFitnessFees, param.ytFitnessMaxPerChild * family.childrenUnder17)), 0)
+    source: >-
+      YT479 line 63800: fees for children under 16 at the start of the year, up to $1,000 each. When both spouses
+      claim more than that together, each claims a share of it
+  YT479.1:
+    label: Children's fitness tax credit
+    formula: "round(line.YT479.63800 * param.ytFitnessRate, 2)"
+  YT479.61268:
+    label: Eligible medical expenses for fertility treatments
+    formula: "answer.fertilityExpenses"
+    source: "YT479 line 61268: fertility or surrogacy expenses that are also medical expenses on line 33099 or 33199"
+  YT479.5:
+    label: Yukon fertility and surrogacy tax credit
+    formula: "min(param.ytFertilityMax, round(line.YT479.61268 * param.ytFertilityRate, 2))"
+    source: "YT479 line 5: 40% of the expenses, up to $10,000"
+  YT479.6:
+    label: Yukon credits
+    formula: "line.YT479.1 + line.YT479.5"
+    source: "YT479 line 6, entered on line 47900 of your return"

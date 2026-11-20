@@ -1,4 +1,5 @@
 import React from 'react';
+import {describePdfRefusal} from '../lib/upload-changes.ts';
 import {FieldEditor,type Field,type EditorHandle,type PrefillCatalogEntry} from './FieldEditor.ts';
 import {readSaveCall} from './editor-save-protocol.ts';
 import {consumeEditorFragment} from './editor-client.ts';
@@ -25,21 +26,30 @@ async function openSession(pageId:string,code:string):Promise<Session>{
   return {headers,details,initialFile:new File([blob],'source.pdf',{type:'application/pdf'})};
 }
 
-/** Why the server refused a save, as the editor shows it: nothing was saved, and the fields can be fixed. */
-export function refusal(body:{error?:unknown;message?:unknown}):Error&{refused:true}{
-  const text=body.error==='invalid_signing_fields'&&typeof body.message==='string'?`${body.message.replace(/^Role (\S+): missing Signature field$/,'Role $1: add a Signature field').replace(/^Role (\S+): no required Signature field$/,'Role $1: make at least one Signature field required')}.`
+/** Why the server refused a save, as the editor shows it: nothing was saved, and the fields can be fixed (or, for a
+ * document replaced meanwhile, placed again in an editor opened on it). */
+export function refusal(body:{error?:unknown;message?:unknown;reason?:unknown;page?:unknown}):Error&{refused:true}{
+  // A PDF chosen in the editor that Esign can't prepare for signing (server/esign/pdf-upload.ts) says why.
+  const pdf=typeof body.reason==='string'?describePdfRefusal(body.reason,typeof body.page==='number'?body.page:undefined):null;
+  const text=pdf?pdf:body.error==='invalid_signing_fields'&&typeof body.message==='string'?`${body.message.replace(/^Role (\S+): missing Signature field$/,'Role $1: add a Signature field').replace(/^Role (\S+): no required Signature field$/,'Role $1: make at least one Signature field required')}.`
     :body.error==='invalid_pdf_or_fields'?'Some fields overlap, or one doesn\'t fit on its page: move them apart and save again.'
     :body.error==='invalid_roles'?'The roles changed since the editor opened: close it and open it again.'
+    :body.error==='source_changed'?'The document was replaced since the editor opened: open the editor again to place the fields on it.'
     :'The fields weren\'t accepted. Check them and save again.';
   return Object.assign(new Error(text),{refused:true as const});
 }
+
+/** A failed save the editor explains: a 422 (but a draft where none is allowed), or a 409 for a document replaced
+ * since it opened. Any other failure leaves the save's result to be checked. */
+export const refusedSave=(status:number,body:{error?:unknown}):boolean=>(status===422&&body.error!=='draft_not_allowed')||(status===409&&body.error==='source_changed');
 
 function EmbeddedEditor({session}:{session:Session}){
   const editor=React.useRef<EditorHandle>(null);
   const {headers,details,initialFile}=session;
   // A draft save tells the parent only through its answer to the request: the one-key "saved" message means the editor is done.
-  // A save the server refused (422) saved nothing: it says why, and the fields can be changed and saved again.
-  const onSave=async(file:File|null,roles:string[],fields:Field[],draft=false)=>{const form=new FormData();if(file)form.set('file',file);form.set('roles',JSON.stringify(roles));form.set('fields',JSON.stringify(fields));if(draft)form.set('draft','true');const response=await fetch('/api/public/editor/save',{method:'POST',headers,body:form,cache:'no-store'});if(!response.ok){let body:{error?:unknown;message?:unknown}={};try{body=await response.json() as typeof body;}catch{/* no body */}if(response.status===422&&body.error!=='draft_not_allowed')throw refusal(body);if(draft)throw new Error(String(body.error??'')||'Save failed');throw new Error('Save failed');}const result=await response.json() as {id?:unknown};if(typeof result.id!=='string'||!/^[a-f0-9-]{36}$/.test(result.id))throw new Error('Invalid save result');if(!draft)window.parent.postMessage({type:'esign.editor.saved'},details.parentOrigin);return result.id;};
+  // A save the server refused (a 422, or a 409 for a document replaced meanwhile: refusedSave) saved nothing: it says why,
+  // and the fields can be changed and saved again, or placed in an editor opened again.
+  const onSave=async(file:File|null,roles:string[],fields:Field[],draft=false)=>{const form=new FormData();if(file)form.set('file',file);form.set('roles',JSON.stringify(roles));form.set('fields',JSON.stringify(fields));if(draft)form.set('draft','true');const response=await fetch('/api/public/editor/save',{method:'POST',headers,body:form,cache:'no-store'});if(!response.ok){let body:{error?:unknown;message?:unknown}={};try{body=await response.json() as typeof body;}catch{/* no body */}if(refusedSave(response.status,body))throw refusal(body);if(draft)throw new Error(String(body.error??'')||'Save failed');throw new Error('Save failed');}const result=await response.json() as {id?:unknown};if(typeof result.id!=='string'||!/^[a-f0-9-]{36}$/.test(result.id))throw new Error('Invalid save result');if(!draft)window.parent.postMessage({type:'esign.editor.saved'},details.parentOrigin);return result.id;};
   React.useEffect(()=>{
     let pending=false;
     const onMessage=(event:MessageEvent)=>{const call=readSaveCall(event,details.parentOrigin,window.parent);if(!call||pending)return;const {requestId,draft}=call;pending=true;void (async()=>{try{const result=await editor.current?.save(draft);if(!result)throw new Error('Editor is not ready');window.parent.postMessage(result.ok?{type:'esign.editor.saved',requestId,templateId:result.templateId}:{type:'esign.editor.save-error',requestId,message:result.message},details.parentOrigin);}catch{window.parent.postMessage({type:'esign.editor.save-error',requestId,message:'Save unavailable. Check the saved result before retrying.'},details.parentOrigin);}finally{pending=false;}})();};

@@ -4,11 +4,9 @@
 // ADMIN identity (x-suger-* headers, `x-suger-access-via: api`), without the key, as the gateway
 // forwards a real service-account token. A request on one of the declared public paths reaches the
 // app as production's gateway sends it: Authorization dropped, x-suger-* stripped, marked public.
-// The organizations' `editor_origins_json` stand for ESIGN_FRAME_ANCESTORS when a test doesn't set it.
 import { readFileSync } from 'node:fs';
 import './platform.ts';
 import app, { type Bindings } from '../../src/app/server/esign/app.ts';
-import { validEditorOrigin } from '../../src/app/server/esign/access.ts';
 
 const sha256 = async (value: string) => Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value))), (n) => n.toString(16).padStart(2, '0')).join('');
 
@@ -20,16 +18,6 @@ async function hostTenant(db: D1Database, request: Request): Promise<string | nu
     return row?.tenant_id ?? null;
   } catch {
     return null;
-  }
-}
-
-async function editorOrigins(db: D1Database): Promise<string> {
-  try {
-    const { results } = await db.prepare('SELECT editor_origins_json FROM tenants').all<{ editor_origins_json: string }>();
-    // Only entries that are bare origins, as the setting holds: anything else in the list never matches.
-    return [...new Set(results.flatMap((row) => (JSON.parse(row.editor_origins_json) as unknown[]).filter((o): o is string => typeof o === 'string' && validEditorOrigin(o))))].join(' ');
-  } catch {
-    return '';
   }
 }
 
@@ -51,8 +39,7 @@ export default {
       headers.delete('authorization');
       for (const name of [...headers.keys()]) if (name.startsWith('x-suger-')) headers.delete(name);
       headers.set('x-suger-access-via', 'public');
-      const ancestors = env.SIGNING_PAGE_FRAME_ANCESTORS ?? await editorOrigins(env.DB);
-      const bindings = { ...env, APP_ORIGIN: env.APP_ORIGIN ?? new URL(request.url).origin, ...(ancestors ? { SIGNING_PAGE_FRAME_ANCESTORS: ancestors } : {}) } as Bindings;
+      const bindings = { ...env, APP_ORIGIN: env.APP_ORIGIN ?? new URL(request.url).origin } as Bindings;
       return app.fetch(new Request(request, { headers }), bindings);
     }
     const tenant = await hostTenant(env.DB, request);
@@ -66,8 +53,7 @@ export default {
       headers.set('x-suger-user-name', encodeURIComponent('Host product'));
       headers.set('x-suger-access-via', 'api');
     }
-    const ancestors = env.SIGNING_PAGE_FRAME_ANCESTORS ?? await editorOrigins(env.DB);
-    const bindings = { ...env, APP_ORIGIN: env.APP_ORIGIN ?? new URL(request.url).origin, ...(ancestors ? { SIGNING_PAGE_FRAME_ANCESTORS: ancestors } : {}) } as Bindings;
+    const bindings = { ...env, APP_ORIGIN: env.APP_ORIGIN ?? new URL(request.url).origin } as Bindings;
     return app.fetch(new Request(request, { headers }), bindings);
   },
 };

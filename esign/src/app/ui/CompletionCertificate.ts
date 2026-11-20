@@ -1,4 +1,5 @@
 import React from 'react';
+import {describeUploadChanges,type UploadChanges} from '../lib/upload-changes.ts';
 /**
  * The completion certificate as the envelope page shows it (member/EnvelopePage.ts), from
  * `GET /api/envelopes/:id/certificate`: the seal, the envelope and document, each signer's recorded
@@ -16,6 +17,8 @@ type Certificate={
   /** template_id: null for an envelope whose document was uploaded with it. */
   envelope:{id:string;template_id:string|null;created_at:number;status:string};
   source:{id:string;sha256:string}; finalArtifactId:string; finalSha256:string;
+  /** When Esign flattened or reoriented the PDF on upload: the file as uploaded and what changed (a database record). */
+  upload?:{uploadedSha256:string;changes:UploadChanges;fromTemplate:boolean}|null;
   recipients:{id:string;role:string;recipient_name:string;recipient_email:string;routing_order:number;status:string}[];
   signatures:{id:string;sequence:number;task_id:string;recipient_name:string;input_artifact_id:string;input_sha256:string;otp_verified_at:number;consented_at:number;previous_hash:string;event_hash:string;artifact_id:string;sha256:string}[];
 };
@@ -38,7 +41,9 @@ export function CompletionCertificate({certificate:c}:{certificate:Certificate})
     ]),
     h('h3',null,'Envelope and document'),h('dl',null,
       field('Envelope ID',c.envelope.id),field('Status',c.envelope.status),field('Template ID (unsealed)',c.envelope.template_id??'None: the document was uploaded with the envelope'),field('Envelope created, server time (unsealed)',utc(c.envelope.created_at)),
-      field('Source artifact ID',c.source.id),field('Source SHA-256',c.source.sha256),field('Final artifact ID',c.finalArtifactId),field('Final artifact SHA-256',c.finalSha256)),
+      field('Source artifact ID',c.source.id),field('Source SHA-256',c.source.sha256),field('Final artifact ID',c.finalArtifactId),field('Final artifact SHA-256',c.finalSha256),
+      ...(c.upload?[field(c.upload.fromTemplate?'Template PDF as uploaded, SHA-256 (unsealed)':'PDF as uploaded, SHA-256 (unsealed)',c.upload.uploadedSha256),
+        field('Changed on upload (unsealed)',`${describeUploadChanges(c.upload.changes).join('; ')}. The source above is the changed PDF, which everyone saw and signed.`)]:[])),
     h('h3',null,'Signers and recorded events'),
     ...c.signatures.map(signature=>{const recipient=c.recipients.find(r=>r.id===signature.task_id), identity=c.identities?.find(i=>i.signatureId===signature.id), signedAs=[identity?.authority?.title,identity?.authority?.onBehalfOf].filter(Boolean).join(', ');return h('section',{key:signature.id,className:'flex flex-col gap-3 rounded-lg border p-4'},
       h('h4',null,`Signer ${signature.sequence}: `,signature.recipient_name),h('dl',null,

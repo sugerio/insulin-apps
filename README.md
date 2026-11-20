@@ -8,6 +8,7 @@ D1 database.
 |---|---|
 | [`captable/`](captable/) | Cap table and equity management: stakeholders, share classes, equity plans, option grants, vesting, exercises, terminations, 409A valuations, documents and a holder view, set up by importing Pulley's reports or a spreadsheet template. |
 | [`esign/`](esign/) | Electronic signatures: templates, envelopes signed in order on a public signing page after an emailed code, an embeddable template editor, hash-chained evidence, a signed and timestamped seal, and certificates of completion. Experimental: synthetic documents only. |
+| [`knowledge/`](knowledge/) | A team's knowledge, answered with sources: collections of files, web pages and notes, shared with people and AI assistants, answers that cite their passages or say they won't guess, facts to check, corrections that apply everywhere and a restore point after every change. Each collection is learned by its own engine in a Cloudflare Container, so it runs on insulinapps.com rather than in the Insulin console. |
 | [`taxi/`](taxi/) | Canadian personal income tax: your profile (you, your spouse, your dependants), AI-read slips, deductions and credits in every province and territory, and the CRA's and Revenu Québec's own forms filled in to sign and mail. Early: built in parts. |
 
 ## Use the apps online
@@ -65,10 +66,12 @@ tests, migration check and Cloudflare build, while repository-wide CI runs the p
 
 - `node .github/scripts/check-insulin-app.mjs <app>` checks that an app keeps the shape the platform expects: file limits, one
   npm package with an exact lockfile, the platform entry points, no unsupported Cloudflare bindings.
-- `.github/scripts/workerd-smoke/` runs Cap Table's production build the way Cloudflare does: it builds the app, applies its
-  migrations to a local D1 database, starts it in workerd with `wrangler dev --local`, and checks the main paths with
-  synthetic data. Run `npm ci` in `captable/` and in `.github/scripts/workerd-smoke/`, then `node smoke.mjs` there (`--skip-build`
-  reuses the last build).
+- `.github/scripts/workerd-smoke/` runs an app's production build the way Cloudflare does: it builds the app, applies
+  its migrations to a local D1 database, starts it in workerd with `wrangler dev --local`, and runs that app's own
+  checks of its main paths with synthetic data (`apps/<app>.mjs`). An app with an engine runs with its in-memory stub
+  engine beside it, bound as the deploy binds the real one. Cap Table's and Knowledge's workflows run it. Run `npm ci`
+  in the app's directory and in `.github/scripts/workerd-smoke/`, then `node smoke.mjs --app <app>` there (`--app`
+  defaults to `captable`; `--skip-build` reuses the last build).
 - `node .github/scripts/check-public-content.mjs` checks that nothing private is in this public repository: real e-mail
   addresses, local paths, cloud ids and private keys, also when split into string literals joined with `+` (its own
   tests: `node --test .github/scripts/check-public-content.test.mjs`). Names, domains and other terms specific to an

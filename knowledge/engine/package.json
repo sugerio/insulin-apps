@@ -1,0 +1,28 @@
+{
+  "name": "insulin-knowledge-engine",
+  "version": "0.1.0",
+  "description": "Insulin Knowledge's engine: a Worker with one Durable Object and Container per collection (Cognee inside), reached only by the Knowledge app",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "insulin": {
+    "serves": [
+      1,
+      1
+    ]
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "node --experimental-strip-types --disable-warning=ExperimentalWarning --test test/*.test.ts",
+    "test:python": "python3 -m unittest discover -s test/python -t test/python",
+    "check": "tsc --noEmit && wrangler deploy --config wrangler.jsonc --dry-run --containers-rollout none --outdir .wrangler/dry-run",
+    "harness": "node harness/run.mjs",
+    "test:container": "bash test/container-smoke.sh"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "5.20261006.1",
+    "@types/node": "22.20.4",
+    "typescript": "6.0.3",
+    "wrangler": "4.149.0"
+  }
+}

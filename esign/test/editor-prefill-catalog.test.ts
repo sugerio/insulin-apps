@@ -6,7 +6,6 @@ import {readFile,readdir} from 'node:fs/promises';
 import {Miniflare} from 'miniflare';
 import {blobStore,MIGRATIONS_DIR,splitSql} from './helpers/platform.ts';
 import app from './helpers/gateway.ts';
-import {setEditorOrigins} from './helpers/editor-origins.ts';
 
 const HOST='https://host.example.com',ORIGIN='https://esign.example.com';
 const CATALOG=[{name:'partner.name',label:'Partner name'},{name:'agreement.sentDate',label:'Sent date'}];
@@ -20,7 +19,6 @@ test('a host\'s pre-filled fields reach its editor page; malformed ones are refu
   const digest=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(key))),n=>n.toString(16).padStart(2,'0')).join('');
   await db.prepare("INSERT INTO tenants(id) VALUES ('t')").run();
   await db.prepare("INSERT INTO api_keys(key_hash,tenant_id) VALUES (?, 't')").bind(digest).run();
-  await setEditorOrigins(db,'t',[HOST]);
   const env={DB:db,ARTIFACTS:await blobStore(mf,'artifacts'),ASSETS:{fetch:async()=>new Response('<html>editor</html>',{headers:{'content-type':'text/html'}})}};
   const req=(path:string,init:RequestInit={})=>app.fetch(new Request(ORIGIN+path,init),env);
   const open=(body:Record<string,unknown>)=>req('/api/template-editing-sessions',{method:'POST',headers:{authorization:`Bearer ${key}`,'content-type':'application/json'},body:JSON.stringify({allowedParentOrigin:HOST,roles:['Partner'],...body})});

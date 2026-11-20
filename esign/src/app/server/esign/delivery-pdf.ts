@@ -5,6 +5,8 @@ import { AUDIT, auditTrail, type AuditEvent } from './audit.ts';
 import { describeHostAuthentication, parseHostAuthentication, sendFacts, versionedName } from './signer-facts.ts';
 import { envelopeDetails } from './details.ts';
 import type { BlobStore } from './blob-store.ts';
+import { documentUpload } from './envelope-documents.ts';
+import { describeUploadChanges } from '../../lib/upload-changes.ts';
 
 const hash = async (bytes: Uint8Array | ArrayBuffer) => Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', bytes instanceof Uint8Array ? Uint8Array.from(bytes) : bytes)), n => n.toString(16).padStart(2, '0')).join('');
 
@@ -123,6 +125,8 @@ export async function deliveryPdf(db: D1Database, bucket: BlobStore, tenantId: s
   // is rebuilt byte for byte: the sealed events (or, for the local seal, those up to the last
   // signature), and facts set when the envelope was created.
   const facts = await sendFacts(db, envelopeId);
+  // Set when the PDF was uploaded, before the envelope was sent (pdf-upload.ts); never changed after.
+  const upload = await documentUpload(db, envelopeId);
   const created = await db.prepare('SELECT created_at,details_json FROM envelopes WHERE id = ?').bind(envelopeId).first<{ created_at: number; details_json: string }>();
   const details = envelopeDetails(created?.details_json);
   const events = evidence.audit ? evidence.audit.sealed : await (async () => {
@@ -201,6 +205,10 @@ export async function deliveryPdf(db: D1Database, bucket: BlobStore, tenantId: s
     ...(evidence.seal ? [['Timestamp authority', ascii(evidence.seal.tsaUrl)], ['Seal key SHA-256', evidence.seal.keyId]] as [string, string][] : []),
     ['Original SHA-256', evidence.source.sha256],
     ['Signed SHA-256', evidence.finalSha256],
+    ...(upload ? [
+      ['Uploaded SHA-256', `${upload.uploadedSha256} (the ${upload.fromTemplate ? 'template\'s ' : ''}file as uploaded, before Esign changed it; a database record, not sealed)`],
+      ['Changed on upload', `${describeUploadChanges(upload.changes).join('; ')}.`],
+    ] as [string, string][] : []),
   ]]);
 
   section('Signers', evidence.signatures.map(row => {

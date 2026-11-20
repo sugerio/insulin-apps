@@ -66,7 +66,7 @@ export async function consumeSignIn(db: D1Database, idHash: string, bindingHash:
 export interface AuditEntry {
   operator: Operator
   action: string
-  targetType: 'org' | 'user' | null
+  targetType: 'org' | 'user' | 'app' | null
   targetId: string | null
   targetLabel: string | null
   reason: string | null
@@ -97,7 +97,7 @@ export interface AuditRow {
 }
 
 /** The audit log, newest first: everything, or one target's history. */
-export async function listAudit(db: D1Database, options: { target?: { type: 'org' | 'user'; id: string }; limit: number; before?: number }): Promise<AuditRow[]> {
+export async function listAudit(db: D1Database, options: { target?: { type: 'org' | 'user' | 'app'; id: string }; limit: number; before?: number }): Promise<AuditRow[]> {
   const { results } = await db.prepare(
     `SELECT id, at, operator_email, action, target_type, target_id, target_label, reason FROM super_audit
      WHERE (?1 IS NULL OR (target_type = ?1 AND target_id = ?2)) AND (?3 IS NULL OR id < ?3)
@@ -293,10 +293,12 @@ export async function signals(db: D1Database, now: number): Promise<Signals> {
 
 export const PAGE_SIZE = 50
 
-/** A search box's text as a LIKE pattern (its wildcards escaped), or null for none. */
-function likePattern(query: string): string | null {
-  const text = query.trim().toLowerCase()
-  return text ? `%${text.replace(/[\\%_]/g, (character) => `\\${character}`)}%` : null
+/**
+ * A search box's text, lower case, as instr() finds it in a lower-cased name, domain or address (as typed, wildcards
+ * and all), or null for none. Not LIKE: D1 refuses a LIKE pattern over 50 bytes, and a search may be 200 characters.
+ */
+function searchText(query: string): string | null {
+  return query.trim().toLowerCase() || null
 }
 
 export interface OrgListRow {
@@ -319,17 +321,17 @@ const ORG_ORDER: Record<OrgSort, string> = {
 
 /** Organizations matching a name, id, owner domain or member's address, in a standing, a page at a time. */
 export async function listOrgs(db: D1Database, options: { query: string; status: Status | null; sort: OrgSort; page: number }): Promise<{ rows: OrgListRow[]; total: number }> {
-  const pattern = likePattern(options.query)
-  const where = `(?1 IS NULL OR lower(o.name) LIKE ?1 ESCAPE '\\' OR o.id = ?2 OR o.owner_domain LIKE ?1 ESCAPE '\\'
-      OR EXISTS (SELECT 1 FROM memberships m JOIN users u ON u.id = m.user_id WHERE m.org_id = o.id AND u.email LIKE ?1 ESCAPE '\\'))
+  const text = searchText(options.query)
+  const where = `(?1 IS NULL OR instr(lower(o.name), ?1) > 0 OR o.id = ?2 OR instr(lower(o.owner_domain), ?1) > 0
+      OR EXISTS (SELECT 1 FROM memberships m JOIN users u ON u.id = m.user_id WHERE m.org_id = o.id AND instr(lower(u.email), ?1) > 0))
     AND (?3 IS NULL OR o.status = ?3)`
   const [rows, total] = await db.batch([
     db.prepare(
       `SELECT o.id, o.name, o.owner_domain, o.status, o.created_at, o.last_active_at,
          (SELECT COUNT(*) FROM memberships m WHERE m.org_id = o.id) AS members
        FROM orgs o WHERE ${where} ORDER BY ${ORG_ORDER[options.sort]} LIMIT ?4 OFFSET ?5`,
-    ).bind(pattern, options.query.trim().toLowerCase(), options.status, PAGE_SIZE, (options.page - 1) * PAGE_SIZE),
-    db.prepare(`SELECT COUNT(*) AS count FROM orgs o WHERE ${where}`).bind(pattern, options.query.trim().toLowerCase(), options.status),
+    ).bind(text, options.query.trim().toLowerCase(), options.status, PAGE_SIZE, (options.page - 1) * PAGE_SIZE),
+    db.prepare(`SELECT COUNT(*) AS count FROM orgs o WHERE ${where}`).bind(text, options.query.trim().toLowerCase(), options.status),
   ])
   return { rows: (rows?.results ?? []) as OrgListRow[], total: ((total?.results ?? [])[0] as { count: number } | undefined)?.count ?? 0 }
 }
@@ -355,15 +357,15 @@ const USER_ORDER: Record<UserSort, string> = {
 
 /** Accounts matching a name, address or id, in a standing, a page at a time. */
 export async function listUsers(db: D1Database, options: { query: string; status: Status | null; sort: UserSort; page: number }): Promise<{ rows: UserListRow[]; total: number }> {
-  const pattern = likePattern(options.query)
-  const where = `(?1 IS NULL OR lower(u.name) LIKE ?1 ESCAPE '\\' OR u.email LIKE ?1 ESCAPE '\\' OR u.id = ?2) AND (?3 IS NULL OR u.status = ?3)`
+  const text = searchText(options.query)
+  const where = `(?1 IS NULL OR instr(lower(u.name), ?1) > 0 OR instr(lower(u.email), ?1) > 0 OR u.id = ?2) AND (?3 IS NULL OR u.status = ?3)`
   const [rows, total] = await db.batch([
     db.prepare(
       `SELECT u.id, u.name, u.email, u.status, (u.email_verified_at IS NOT NULL) AS verified, u.created_at, u.last_active_at,
          (SELECT COUNT(*) FROM memberships m WHERE m.user_id = u.id) AS orgs
        FROM users u WHERE ${where} ORDER BY ${USER_ORDER[options.sort]} LIMIT ?4 OFFSET ?5`,
-    ).bind(pattern, options.query.trim().toLowerCase(), options.status, PAGE_SIZE, (options.page - 1) * PAGE_SIZE),
-    db.prepare(`SELECT COUNT(*) AS count FROM users u WHERE ${where}`).bind(pattern, options.query.trim().toLowerCase(), options.status),
+    ).bind(text, options.query.trim().toLowerCase(), options.status, PAGE_SIZE, (options.page - 1) * PAGE_SIZE),
+    db.prepare(`SELECT COUNT(*) AS count FROM users u WHERE ${where}`).bind(text, options.query.trim().toLowerCase(), options.status),
   ])
   return { rows: (rows?.results ?? []) as UserListRow[], total: ((total?.results ?? [])[0] as { count: number } | undefined)?.count ?? 0 }
 }

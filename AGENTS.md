@@ -1,13 +1,15 @@
 # AGENTS.md
 
-This repository holds open-source Insulin apps, one per top-level directory (today: `captable/` and `esign/`). These rules apply to
-every app. Each app also has its own `AGENTS.md` with app-specific rules; read both before changing anything.
+This repository holds open-source Insulin apps, one per top-level directory (today: `captable/`, `esign/` and
+`knowledge/`). These rules apply to every app. Each app also has its own `AGENTS.md` with app-specific rules; read
+both before changing anything.
 
 ## Every app
 
 1. **Insulin app layout.** One ordinary npm project (Vite, React and Nitro, with Drizzle on D1) that the Insulin
    AppBuilder can change, preview and publish. `node .github/scripts/check-insulin-app.mjs <app>` must pass, and with
-   `--built` after `NITRO_PRESET=cloudflare_module npm run build`.
+   `--built` after `NITRO_PRESET=cloudflare_module npm run build`. An app's engine, if it has one, is a second package
+   in its own directory, checked by rules of its own (below, "Beyond D1").
 2. **In-app Docs, required by default.** Every app ships a **Docs** entry in its navigation:
    - every role can open it, people who only view their own data and people who haven't finished setup included;
    - it covers getting started, the main tasks, what each kind of user sees, and the background a business user needs
@@ -70,21 +72,28 @@ or AI agent management.
 
 **What an app receives and must do.** Every request carries `x-suger-app-role` (`ADMIN`, `EDITOR` or `VIEWER`; the
 Insulin console may still send `OWNER`, treated as `ADMIN`, and `USER`, treated as `VIEWER`), `x-suger-app-permissions`
-and `x-suger-access-via`; a person's also `x-suger-org-role` (`OWNER`, `ADMIN`, `EDITOR`, `VIEWER`, or `APPS` for
-specific apps).
+and `x-suger-access-via`; a person's (browser and MCP) also `x-suger-org-role` (`OWNER`, `ADMIN`, `EDITOR`, `VIEWER`,
+or `APPS` for specific apps), and a browser's `x-suger-member-lookup` (DESIGN.md §2.4).
 
-- **Admin** can do everything in the app. **Editor** can use every function except people, roles, permissions and
-  integrations. **Viewer** is read only, and the app decides what reading shows (Cap Table shows a Viewer their own
-  holdings).
+- **Admin** can do everything in the app, except open records that have roles of their own (below). **Editor** can use
+  every function except people, roles, permissions and integrations. **Viewer** is read only, and the app decides what
+  reading shows (Cap Table shows a Viewer their own holdings).
 - **Custom roles need a permission catalog.** An app that wants them declares `insulin.permissions` in its
   `package.json`: entries `{ key, label, description, role }`, where `role` is the least built-in role that has the
   permission. Each route and command then checks permissions, not role names.
 - **Permissions only narrow.** Effective permissions are the role's permissions intersected with
   `x-suger-app-permissions`, and a missing header means the role's full set. Read both headers through one helper, as
   Cap Table does in `src/app/server/lib/identity.ts`.
-- **The organization role gives, so trust it only when told to.** An app may give organization owners or admins
-  powers no app role gives (an app Admin by grant is `APPS` there), only when the deploy sets `SUGER_TRUST_ORG_ROLE`,
-  treating a missing or unknown value as no organization role (DESIGN.md §2.4; Esign's `identity.ts`).
+- **The organization role can give powers**, so trust it only on purpose. `x-suger-org-role` (`OWNER`, `ADMIN`,
+  `EDITOR`, `VIEWER`, or `APPS` for specific apps) counts only when `SUGER_TRUST_ORG_ROLE` is `true` (the deploy sets
+  it) and only for people (API clients have none); a missing or unknown value is no organization role. Use it only for
+  powers over the app's records that no app role gives, such as Knowledge's owners seeing every collection's basic
+  information and deleting one, or Esign's owners taking over what someone owns. An app Admin by grant is `APPS` there,
+  not an organization admin. Esign's `identity.ts` and Knowledge's are the reference.
+- **Records with roles of their own** (DESIGN.md §2.5), such as Knowledge's collections, narrow Admin: an app role opens
+  no record by itself, so an app Admin without a role on a record can't read it. Without the app permission to change,
+  every resource role only reads. Sharing, unsharing and deleting such a record are browser-only (below). Say in the
+  app's Docs what happens to someone's records and shares when they leave and when they return.
 - **Enforce on the server.** Hiding a button isn't access control.
 
 **AI agents and API clients.** Each app is its own MCP server at `https://<app>.insulinapps.com/mcp`, with its own OAuth
@@ -107,7 +116,8 @@ client registration per agent, and API clients (OAuth clients, stored as service
   `User-Agent` naming the client (`Insulin Apps MCP: <client>` or `Insulin Apps API: <account>`) for its audit trail.
 - **Every API serves agents and clients alike**, under the same rules as the browser. The exception: mutations of
   people, roles, billing and integrations. They stay browser-only and owner- or admin-only; if an app implements any of
-  them, it refuses unless `x-suger-access-via` is `browser`.
+  them, it refuses unless `x-suger-access-via` is `browser`. In an app with resource roles, sharing, unsharing and
+  deleting a record are browser-only too, for whoever the app's own roles allow.
 - **Publish your API** at `GET /api/catalog` (`{ endpoints: [{ method, path, summary, query, body, idempotencyKey }] }`,
   only what the caller may use) so the MCP `endpoints` tool can show it, and keep it in step with the routes.
 - **Paths the gateway keeps on an app host.** Tokens reach only `/api/*`, never `/api/__suger/*`. Don't use these paths
@@ -118,8 +128,8 @@ client registration per agent, and API clients (OAuth clients, stored as service
 service with `integrationFetch(key)` from `@fours/app/server`, passing the request's `x-suger-organization-id`; never
 keep such secrets in the app's database or source.
 
-**Beyond D1** (`.github/hosting/DESIGN.md` §8). An app gets one D1 database and static assets, nothing else. It asks
-the platform for the rest in `package.json` under `insulin`:
+**Beyond D1** (`.github/hosting/DESIGN.md` §8). An app gets one D1 database and static assets, nothing else, unless it
+owns an engine (below), which only it reaches. It asks the platform for the rest in `package.json` under `insulin`:
 
 - **Public paths** (`insulin.publicPaths`) are only for people who have no account, such as an Esign recipient. The
   gateway forwards them with no identity (`x-suger-access-via: public`), so the app authenticates them with its own
@@ -136,10 +146,26 @@ the platform for the rest in `package.json` under `insulin`:
   `x-suger-access-via: schedule`, an empty body and a 25-second timeout. Refuse the route unless `x-suger-access-via` is
   exactly `schedule` and no identity is present, treat a request marked `schedule` as nobody on every other route,
   keep it out of `/api/catalog`, and do every organization's due work there, idempotent and bounded per tick.
-- **Accepted, not built yet** (DESIGN.md §12): an app-owned engine (Durable Objects, Containers, R2, Workers AI)
-  reached over `SUGER_ENGINE`, app limits set in the operator console, a member lookup for sharing (the signed one of
-  §12.3), member status and member events, and rules for apps that let people share their records. Don't build
-  against them until they ship.
+- **An engine** (`insulin.engine`, `insulin.engineApi`; DESIGN.md §8.7, §10.1), for compute D1 and a Worker can't
+  give: a second Worker in the app's directory (Durable Objects, Containers, R2, Workers AI) with its own package and
+  `wrangler.jsonc`, reached only by the app, over `SUGER_ENGINE`. The engine trusts its binding, so the app checks
+  permissions, roles and limits before every call and names the organization in it. The engine lists the API versions
+  it serves (`insulin.serves`) and the deploy refuses a pair that doesn't match, so a breaking change ships in steps.
+  Never write an account, a bucket or an image reference in it. Ship a stub engine for `npm run dev`, the preview and
+  the workerd smoke test. The Insulin console can't publish an app with an engine yet.
+- **Limits** (`insulin.limits`, DESIGN.md §8.8): at most 20 `{ key, label, unit, default }`, set by Insulin Apps'
+  operators. Pull them on the tick from `SUGER_LIMITS_URL` (save the cursor after each page; on anything but 200 keep
+  what you stored), enforce them for every way in, report usage under the same keys, and answer past one with 429
+  `{ "error": "quota_exceeded", "limit", "resets_at", "message" }`, the message naming Insulin Apps support from
+  `SUGER_SUPPORT_EMAIL`, never an address in source. Knowledge (`src/app/server/limits.ts`, `limits-sync.ts`) is the
+  reference.
+- **Members** (DESIGN.md §8.9). An app has no directory of its own. The member lookup (`SUGER_MEMBERS_URL`, with the
+  request's `x-suger-member-lookup`) fills a sharing dialog or checks the people someone typed, and nothing else;
+  member status (`SUGER_MEMBER_STATUS_URL`) and member events (`SUGER_MEMBER_EVENTS_URL`: save the cursor after each
+  page, resync after 410) keep the app's shares in step with who leaves, returns or changes role, and tell it whether
+  someone it acts for later may still do so. All with `SUGER_APP_TOKEN` over `SUGER_GATEWAY`, and only for
+  organizations where the app is used. Knowledge's `src/app/server/members.ts` and Esign's `directory.ts` are the
+  reference.
 - **Usage reports** are required of every app (DESIGN.md §8.6): Insulin Apps' operator console never reads an app's
   database, so each app declares `insulin.scheduled` and, on the first tick of each UTC hour, `POST`s its gauges to
   `SUGER_METRICS_URL` with `SUGER_APP_TOKEN` over the `SUGER_GATEWAY` binding: app-wide ones (`database_bytes`) and
@@ -179,9 +205,17 @@ workflows: the merge would start no push workflow and be neither checked on `mai
 commit doesn't stop, and never runs the pull request's code (the repository needs an Actions event policy allowing
 that event for this workflow alone: `.github/hosting/README.md`, "Owner setup").
 
+## Agent tools
+
+Every coding agent gets Playwright MCP from the repository, driving a Chrome on CDP port 9335 with a profile of its
+own (`/e2e-test` starts it): `.mcp.json` (Claude Code, turned on by `.claude/settings.json`), `.codex/config.toml`,
+`.gemini/settings.json`, `opencode.json`, `.cursor/mcp.json` and `.vscode/mcp.json`. Codex and Gemini CLI load it once
+the folder is trusted. Change all six together, with the same pinned version.
+
 ## Before you finish
 
-From the app's directory: `npm run typecheck`, `npm test` and `npm run build`. From the repository root:
+From the app's directory: `npm run typecheck`, `npm test` and `npm run build`, and for an app with an engine the
+same `typecheck` and `test` in the engine's directory. From the repository root:
 `node .github/scripts/check-insulin-app.mjs <app>` and `node .github/scripts/check-public-content.mjs`.
 
 A pull request is ready to merge only once `/review-pr` (`.claude/commands/review-pr.md`) and then `/e2e-test`

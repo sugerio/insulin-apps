@@ -1,14 +1,14 @@
 // /super/cloudflare: the Cloudflare resources the platform runs on (DESIGN.md §11.5), as the latest hourly snapshot
 // read them: the account against the plan's allowances with the month's projection, 30 days of requests, every
-// insulin-apps Worker and the D1 database it binds, and the inventory of everything else the platform uses (its
-// domains, the Email Service, rate limiters, static assets, crons and bindings), from the gateway's own
-// configuration.
+// insulin-apps Worker and the D1 database it binds, each app's engine with its container instances, container time and
+// R2 buckets, and the inventory of everything else the platform uses (its domains, the Email Service, rate limiters,
+// static assets, crons and bindings), from the gateway's own configuration and the engines the snapshot found.
 import { Card, CardContent } from "@/components/ui/card"
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Notice } from "@/components/forms"
 import type { Context } from "../../context.ts"
 import type { OperatorSession } from "../../super/auth.ts"
-import { GATEWAY_WORKER, RESOURCE_PREFIX, type Headroom, type Snapshot } from "../../super/cloudflare.ts"
+import { GATEWAY_WORKER, RESOURCE_PREFIX, type EngineUsage, type Headroom, type Snapshot } from "../../super/cloudflare.ts"
 import { HOUSEKEEPING_CRON, TICK_CRON } from "../../scheduled.ts"
 import { superPage } from "./layout.tsx"
 import { Bars, Meter, Section, ago, bytes, count, day, percent, when } from "./parts.tsx"
@@ -23,8 +23,11 @@ export interface CloudflareData {
   mail2d: number
 }
 
-/** Everything the platform uses on Cloudflare, from the gateway's configuration: what the deploy creates and binds. */
-function Inventory({ ctx, mail2d }: { ctx: Context; mail2d: number }) {
+/**
+ * Everything the platform uses on Cloudflare, from the gateway's configuration (what the deploy creates and binds) and
+ * the engine Workers the latest snapshot found.
+ */
+function Inventory({ ctx, mail2d, engines }: { ctx: Context; mail2d: number; engines: EngineUsage[] }) {
   const { domain, apps } = ctx.config
   const rows: { kind: string; name: string; detail: string }[] = [
     { kind: "Worker", name: GATEWAY_WORKER, detail: `Custom domains ${[domain, `www.${domain}`, `auth.${domain}`, ...apps.map((app) => app.host)].join(", ")}` },
@@ -32,6 +35,11 @@ function Inventory({ ctx, mail2d }: { ctx: Context; mail2d: number }) {
       kind: "Worker",
       name: `${RESOURCE_PREFIX}${app.name}`,
       detail: `${app.title}: no route of its own; the gateway reaches it through ${app.binding}${app.service ? "" : " (not deployed)"}, and it the gateway through SUGER_GATEWAY`,
+    })),
+    ...engines.map((engine) => ({
+      kind: "Engine Worker",
+      name: engine.name,
+      detail: `No route of its own; only ${engine.name.replace(/-engine$/, "")} reaches it, through SUGER_ENGINE. Durable Objects, containers, R2 buckets ${engine.name}-*, Workers AI`,
     })),
     { kind: "D1 database", name: `One per Worker, named after it`, detail: "Sizes and rows in the table below" },
     { kind: "Email Service", name: "EMAIL (send_email)", detail: `The gateway's mail and the apps' relay: ${count(mail2d)} messages in the last 48 hours` },
@@ -59,6 +67,52 @@ function Inventory({ ctx, mail2d }: { ctx: Context; mail2d: number }) {
                 <TableCell className="min-w-64 whitespace-normal">{row.detail}</TableCell>
               </TableRow>
             ))}
+          </TableBody>
+        </Table>
+      </CardContent>
+    </Card>
+  )
+}
+
+/** The engines' table: one row per engine Worker, every unread figure a dash. */
+function Engines({ engines }: { engines: EngineUsage[] | null }) {
+  return (
+    <Card className="py-0">
+      <CardContent className="px-0">
+        <Table>
+          <TableCaption className="text-left">App engines (containers and R2 buckets this month; instances running or starting now)</TableCaption>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Engine</TableHead>
+              <TableHead className="text-right">Container instances</TableHead>
+              <TableHead className="text-right">vCPU-seconds</TableHead>
+              <TableHead className="text-right">Memory, GiB-s</TableHead>
+              <TableHead className="text-right">Disk, GB-s</TableHead>
+              <TableHead className="text-right">R2 stored</TableHead>
+              <TableHead className="text-right">R2 objects</TableHead>
+              <TableHead className="text-right">R2 Class A</TableHead>
+              <TableHead className="text-right">R2 Class B</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {engines?.length ? engines.map((engine) => (
+              <TableRow key={engine.name}>
+                <TableCell className="font-mono text-xs">{engine.name}</TableCell>
+                <TableCell className="text-right tabular-nums">
+                  {count(engine.containerInstances)}
+                  {engine.containerApplications !== null ? <span className="block text-xs text-muted-foreground">{`${count(engine.containerApplications)} ${engine.containerApplications === 1 ? "application" : "applications"}`}</span> : null}
+                </TableCell>
+                <TableCell className="text-right tabular-nums">{count(engine.vcpuSecondsMonth)}</TableCell>
+                <TableCell className="text-right tabular-nums">{count(engine.memoryGibSecondsMonth)}</TableCell>
+                <TableCell className="text-right tabular-nums">{count(engine.diskGbSecondsMonth)}</TableCell>
+                <TableCell className="text-right tabular-nums">{bytes(engine.r2Bytes)}</TableCell>
+                <TableCell className="text-right tabular-nums">{count(engine.r2Objects)}</TableCell>
+                <TableCell className="text-right tabular-nums">{count(engine.r2ClassAMonth)}</TableCell>
+                <TableCell className="text-right tabular-nums">{count(engine.r2ClassBMonth)}</TableCell>
+              </TableRow>
+            )) : (
+              <TableRow><TableCell colSpan={9} className="text-muted-foreground">{engines ? "No app has an engine." : "None read."}</TableCell></TableRow>
+            )}
           </TableBody>
         </Table>
       </CardContent>
@@ -107,6 +161,12 @@ export function cloudflarePage(ctx: Context, session: OperatorSession, data: Clo
         ) : (
           <p className="text-sm text-muted-foreground">Nothing read yet.</p>
         )}
+        {latest?.engineTotals ? (
+          <p className="mt-5 text-sm text-muted-foreground">
+            Not measured: Durable Objects&apos; duration (GB-s) and Workers AI&apos;s neurons. Cloudflare documents no analytics field for
+            either, so they are unknown rather than guessed. The containers&apos; snapshots have no API either: the app&apos;s usage report counts them.
+          </p>
+        ) : null}
       </Section>
 
       {requests.length > 1 ? (
@@ -182,7 +242,9 @@ export function cloudflarePage(ctx: Context, session: OperatorSession, data: Clo
         </CardContent>
       </Card>
 
-      <Inventory ctx={ctx} mail2d={data.mail2d} />
+      {latest?.engines?.length || latest?.engineTotals ? <Engines engines={latest.engines} /> : null}
+
+      <Inventory ctx={ctx} mail2d={data.mail2d} engines={latest?.engines ?? []} />
     </>
   ))
 }

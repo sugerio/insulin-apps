@@ -3,12 +3,14 @@
 // previews and downloads); React's style attributes need 'unsafe-inline' for styles, and nothing needs eval.
 //
 // Who may frame a page depends on its audience:
-// - the signing page (/sign): this origin and the hosts in ESIGN_FRAME_ANCESTORS;
-// - the embedded editor (/editor/page/<id>): this origin and the session's parent (or ESIGN_FRAME_ANCESTORS);
+// - the signing page (/sign): this origin and the one its link names (`?host=`, the origin the host bound the page's
+//   code to; the code exchange refuses any other, esign/signing-page.ts);
+// - the embedded editor (/editor/page/<id>): this origin and its session's parent;
 // - the signed-copy page (/copy) and the members' pages: nobody, so a page elsewhere can't frame them and trick a
 //   signed-in member into sending or voiding (clickjacking).
 // frame-ancestors is sent only when the request came through insulinapps.com's gateway (it sets x-suger-access-via):
 // the Insulin console frames the app in its own preview, and decides that itself.
+import { validEditorOrigin } from './esign/access.ts'
 
 export type PageKind = 'signing' | 'editor' | 'copy' | 'member'
 
@@ -43,8 +45,8 @@ const BASE = [
 ]
 
 export type PageContext = {
-  /** ESIGN_FRAME_ANCESTORS: the hosts allowed to frame the signing page and, by default, the editor. */
-  frameAncestors: string
+  /** The signing link's `host` query parameter: the origin that frames the signing page, or null. */
+  signingHost: string | null
   /** The parent origin an editor session was opened for, or null. */
   editorParent: (pageId: string) => Promise<string | null>
   /** Whether the request came through insulinapps.com's gateway (x-suger-access-via is set). */
@@ -56,10 +58,12 @@ export async function pageHeaders(pathname: string, contentType: string | null, 
   const kind = pageKind(pathname)
   if (!kind || !/^text\/html\b/i.test(contentType ?? '')) return null
   let ancestors: string | null = null
-  if (kind === 'signing') ancestors = ["'self'", ...originsIn(context.frameAncestors)].join(' ')
+  // The link's `host` is anyone's to write: only an origin a code can be bound to (no wildcard, no stray characters a
+  // header can't carry) reaches frame-ancestors.
+  if (kind === 'signing') ancestors = ["'self'", ...originsIn(context.signingHost ?? '').filter(validEditorOrigin).slice(0, 1)].join(' ')
   else if (kind === 'editor') {
     const parent = await context.editorParent(EDITOR_PAGE.exec(pathname)![1]!)
-    ancestors = ["'self'", ...(parent && ORIGIN.test(parent) ? [parent] : originsIn(context.frameAncestors))].join(' ')
+    ancestors = ["'self'", ...(parent && ORIGIN.test(parent) ? [parent] : [])].join(' ')
   } else ancestors = "'none'"
   const policy = [...BASE, kind === 'member' ? "frame-src 'self' blob:" : "frame-src 'none'", ...(context.viaGateway ? [`frame-ancestors ${ancestors}`] : [])]
   const headers: Record<string, string> = {

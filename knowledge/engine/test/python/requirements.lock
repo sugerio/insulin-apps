@@ -1,0 +1,6 @@
+# What the Python tests install: pypdf, for extract.py's PDF tests. The same version and hashes as
+# container/requirements.lock, so the tests read PDFs exactly as the image does. Install with:
+#   python3 -m pip install --require-hashes -r test/python/requirements.lock
+pypdf==6.21.4 \
+    --hash=sha256:33e4fb41ca352810eb4e9838aa0d82d6888a5f8bf682f43e99cce5faa666255c \
+    --hash=sha256:c8817e3f888d47a087872ded69812c1ef30cacb871d6e053e0c00bbaf0bc2163

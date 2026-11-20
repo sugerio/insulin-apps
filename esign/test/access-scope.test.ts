@@ -9,7 +9,6 @@ import app from './helpers/gateway.ts';
 import {authorizeAccess,exchangeAccessCode,issueAccessCode} from '../src/app/server/esign/access.ts';
 import {authorizeRecipientSession,exchangeRecipientCode,issueRecipientCode,sendRecipientOtp,verifyRecipientOtp} from '../src/app/server/esign/otp.ts';
 import {editorPageContext,exchangeEditorPage} from '../src/app/server/esign/editor-session.ts';
-import {setEditorOrigins} from './helpers/editor-origins.ts';
 
 async function database(mf:Miniflare){
  const db=await mf.getD1Database('DB');
@@ -23,7 +22,7 @@ test('a code or token of one scope is refused by the other even when tenant, sub
  try{
   const db=await database(mf);
   // The same id names an ACTIVE task and an editor session of the same tenant, and the signing page
-  // origin is also the editor's allowed parent: only the scope tells the two credentials apart.
+  // origin is also the editor's parent: only the scope tells the two credentials apart.
   const id='c'.repeat(64),origin='https://host.example.com',now=1000;
   await db.exec(`INSERT INTO tenants (id) VALUES ('a');
 INSERT INTO templates (id,tenant_id,object_key,roles_json,created_at) VALUES ('template','a','source','["ana"]',1);
@@ -31,7 +30,6 @@ INSERT INTO envelopes (id,tenant_id,template_id,status,created_at,request_sha256
 INSERT INTO tasks (id,envelope_id,role,recipient_name,recipient_email,routing_order,status) VALUES ('${id}','env','ana','Ana','ana@example.com',1,'ACTIVE');
 INSERT INTO editor_sessions (id,tenant_id,parent_origin) VALUES ('${id}','a','${origin}');
 `);
-  await setEditorOrigins(db,'a',[origin]);
   const recipientCode=await issueRecipientCode(db,{tenantId:'a',envelopeId:'env',taskId:id,origin,now});
   const editorCode=await issueAccessCode(db,{scope:'editor',tenantId:'a',subjectId:id,origin,now});
   const scopes=async()=>(await db.prepare('SELECT scope,used_at FROM access_codes ORDER BY scope').all()).results;
@@ -83,9 +81,8 @@ test('signing APIs refuse editor codes and tokens, editor APIs refuse recipient 
   const keyHash=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(key))),n=>n.toString(16).padStart(2,'0')).join('');
   await db.prepare("INSERT INTO tenants (id) VALUES ('a')").run();
   await db.prepare("INSERT INTO api_keys (key_hash,tenant_id) VALUES (?,'a')").bind(keyHash).run();
-  // One origin is both the signing page origin and the editor's allowed parent.
+  // One origin is both the signing page origin and the editor's parent.
   const host='https://host.example.com',self='https://esign.example.com';
-  await setEditorOrigins(db,'a',[host]);
   const env={DB:db,ARTIFACTS:bucket,TEST_MAIL:mail,SIGNING_PAGE_ORIGINS:host,OTP_KEY:'local-test-pepper-at-least-32-bytes',TEST_SEAL_KEY:'local-test-seal-key-at-least-32-bytes',
    ASSETS:{fetch:async()=>new Response('<html>editor</html>',{headers:{'content-type':'text/html'}})}};
   const req=(path:string,init:RequestInit={})=>app.fetch(new Request(self+path,init),env);

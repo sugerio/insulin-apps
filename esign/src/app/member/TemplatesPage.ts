@@ -7,6 +7,7 @@
 // page is the API's alone), which this page hosts exactly as a host product would: a session for this origin, the source staged, then the
 // editor's own save, confirmed against the server.
 import React, { useEffect, useRef, useState } from 'react'
+import { describeUploadChanges, type UploadChanges } from '../lib/upload-changes.ts'
 import { Ellipsis, Eye, Pencil, Plus, Send, SquarePen, Tag, Trash2, Users } from 'lucide-react'
 import { Badge } from '../components/ui/badge.ts'
 import { DropdownMenu, type MenuItem } from '../components/ui/dropdown-menu.ts'
@@ -37,11 +38,11 @@ type Editor = { sessionId: string; url: string; ready: boolean; requestId: strin
 type Open = { kind: 'edit'; id: string; tab: 'details' | 'fields' } | { kind: 'tags' | 'share' | 'delete'; id: string }
 type Draft = { name: string; people: { name: string; email: string }[] }
 
-/** The roles a template form names, or the problem with them (the server's rule: letters, digits, - and _, unique). */
+/** The roles a template form names, or the problem with them (the server's rule: English letters, digits, hyphens and underscores, unique). */
 export function checkRoles(roles: string[]): string {
   const names = roles.map((r) => r.trim())
   if (!names.length || names.some((r) => !r)) return 'Name every role.'
-  if (names.some((r) => !ROLE.test(r))) return 'Use letters, digits, - and _ in role names (no spaces), at most 64 characters.'
+  if (names.some((r) => !ROLE.test(r))) return 'Use English letters, digits, hyphens (-) and underscores (_) in role names, with no spaces, at most 64 characters.'
   if (new Set(names.map((r) => r.toLowerCase())).size !== names.length) return 'Give each role a different name.'
   return ''
 }
@@ -134,7 +135,10 @@ export function TemplatesPage({ me }: { me: Me }) {
       const session = await apiJson<{ sessionId: string; url: string }>('/api/template-editing-sessions', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })
       const url = new URL(session.url)
       if (url.origin !== window.location.origin || url.pathname !== `/editor/page/${session.sessionId}`) throw new Error('Unexpected editor address.')
-      if ('file' in source) await api(`/api/template-editing-sessions/${session.sessionId}/source`, { method: 'POST', headers: { 'content-type': 'application/pdf' }, body: source.file })
+      // The PDF as Esign prepared it for signing (server/esign/pdf-upload.ts): the editor shows it, and this says what changed.
+      const staged = 'file' in source ? await apiJson<{ changes?: UploadChanges | null }>(`/api/template-editing-sessions/${session.sessionId}/source`, { method: 'POST', headers: { 'content-type': 'application/pdf' }, body: source.file }) : null
+      const changed = describeUploadChanges(staged?.changes)
+      if (changed.length) setMessage({ text: `Esign prepared this PDF for signing: ${changed.join('; ')}. The template keeps it as it is now.`, error: false })
       const replacingDraft = 'templateId' in source && templates?.find((t) => t.id === source.templateId)?.status === 'draft'
       setEditor({ sessionId: session.sessionId, url: url.href, ready: false, requestId: '', defaultSigners: 'defaultSigners' in source ? source.defaultSigners : null, ...('templateId' in source ? { replacing: source.templateId, replacingDraft } : {}) })
       setCreating(false)

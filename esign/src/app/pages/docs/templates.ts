@@ -15,9 +15,25 @@ export const templates: DocTopic = {
       body: [
         p('A template is a PDF and the ', b('roles'), ' that sign it, in signing order. A role is a name for a part in the document, such as ', code('partner'), ' or ', code('seller'), '; when you send an envelope, you name the person for each role.'),
         ul(
-          'The PDF can be up to 5 MB and 100 pages.',
-          'A template has 1 to 20 roles. Role names use letters, digits, - and _ (no spaces), up to 64 characters, and each is different.',
+          ['The PDF can be up to 5 MB and 100 pages. Esign prepares it for signing when you upload it: see ', h(DocLink, { to: 'templates', section: 'the-pdf' }, 'What Esign does to a PDF'), '.'],
+          'A template has 1 to 20 roles. Role names use English letters, digits, hyphens (-) and underscores (_), with no spaces, up to 64 characters, and each is different.',
         ),
+      ],
+    },
+    {
+      id: 'the-pdf',
+      title: 'What Esign does to a PDF',
+      body: [
+        p('Fields are drawn into the page itself, where the page shows them. So when you upload a PDF, for a template or with Upload and send, Esign changes what would get in the way, and keeps how the page looks:'),
+        ul(
+          [b('Form fields'), ' are flattened into the page: their values stay as you see them, and they can no longer be edited.'],
+          [b('Comments, highlights and stamps'), ' are flattened into the page the same way.'],
+          [b('Links'), ' are removed: their text stays, it no longer opens anything.'],
+          [b('Rotated or cropped pages'), ' are redrawn upright, at the size they are shown.'],
+          [b('Pages that share their content'), ' in the file each get their own copy, so a signature drawn on one never shows on another. Nothing you see changes.'],
+        ),
+        p('Esign tells you when it changed something. Signers see and sign the PDF as it is then, and the certificate of completion records the fingerprint (SHA-256) of the file as you uploaded it, with what was changed. A PDF that needed no change is kept exactly as uploaded.'),
+        p('Some PDFs can\'t be prepared, and Esign says why when you upload one: a password-protected or encrypted PDF, a damaged one, more than 100 pages, a dynamic (XFA) form, a filled-in form field or a comment that doesn\'t say how it looks, or a page in unusual units, at an odd angle or larger than 200 inches, more than 10,000 form fields and comments, or one that would be over 5 MB once prepared. Printing it to PDF (Save as PDF) usually makes one Esign can use.'),
       ],
     },
     {
@@ -25,7 +41,7 @@ export const templates: DocTopic = {
       title: 'A signature page, or placed fields',
       body: [
         p('On ', h(PageLink, { to: '/templates' }, 'Templates'), ', choose ', b('New template'), '; in the dialog, choose the PDF, name the template (it starts as the file\'s name) and its roles, then choose ', b('Upload and place fields'), ': the field editor opens, so you can put each role\'s signature, title and date exactly where they belong in the document.'),
-        p('A host product can also upload a template through the API without placing fields; its signers then sign on a page Esign adds after the document\'s last page, one after another.'),
+        p('A host product can also upload a template through the API without placing fields; its signers then sign on a page Esign adds after the document\'s last page, one after another. A PDF Esign can\'t prepare for placed fields is kept as uploaded then, since that page needs none of it.'),
         p('Templates lists each one by its name, when a host product gave it one through the API, then its id; a new envelope\'s template picker shows the name first too.'),
       ],
     },
@@ -77,7 +93,7 @@ export const templates: DocTopic = {
       id: 'in-a-host-product',
       title: 'The editor in a host product',
       body: [
-        p('A host product can show the same field editor inside its own pages. It opens an editing session for its own origin, which must be one the deployment allows; the editor refuses to work inside any other page. See ', h(DocLink, { to: 'roles', section: 'service-accounts-and-ai-agents' }, 'Service accounts and AI agents'), '.'),
+        p('A host product can show the same field editor inside its own pages. It opens an editing session for its own origin, and the editor refuses to work inside any other page. See ', h(DocLink, { to: 'roles', section: 'service-accounts-and-ai-agents' }, 'Service accounts and AI agents'), '.'),
       ],
     },
   ],

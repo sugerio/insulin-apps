@@ -18,7 +18,6 @@ import app from './helpers/gateway.ts';
 import {withLocalTestOtp} from './helpers/local-otp-display.ts';
 import {signedPdf} from './helpers/signed-pdf.ts';
 import {processEnvelopeStep,finalizeEnvelopeStep} from '../src/app/server/esign/envelope-completion.ts';
-import {setEditorOrigins} from './helpers/editor-origins.ts';
 import {pageHeaders} from '../src/app/server/page-policy.ts';
 const chrome=process.env.ESIGN_TEST_CHROME??['/Applications/Google Chrome.app/Contents/MacOS/Google Chrome','/usr/bin/google-chrome','/usr/bin/chromium'].find(existsSync);
 const sleep=(n:number)=>new Promise(r=>setTimeout(r,n));
@@ -37,7 +36,7 @@ test('cross-origin browser embeds, saves and reopens; hostile parent and spoofed
   await build({configFile:false,root:resolve('test/fixtures'),logLevel:'silent',build:{outDir:output,emptyOutDir:false,rollupOptions:{input:{host:resolve('test/fixtures/editor-host.html')}}}});
   const db=await mf.getD1Database('DB');for(const name of (await readdir(MIGRATIONS_DIR)).filter(n=>n.endsWith('.sql')).sort()){const sql=await readFile(new URL(name,MIGRATIONS_DIR),'utf8');await db.batch(unstable_splitSqlQuery(sql).map(s=>db.prepare(s)));}
   const key='local-test-key-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';const digest=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(key))),n=>n.toString(16).padStart(2,'0')).join('');
-  await db.prepare("INSERT INTO tenants (id) VALUES ('tenant')").run();await db.prepare("INSERT INTO api_keys (key_hash,tenant_id) VALUES (?, 'tenant')").bind(digest).run();await setEditorOrigins(db,'tenant',['http://127.0.0.1:5173']);
+  await db.prepare("INSERT INTO tenants (id) VALUES ('tenant')").run();await db.prepare("INSERT INTO api_keys (key_hash,tenant_id) VALUES (?, 'tenant')").bind(digest).run();
   const asset=async(path:string)=>{try{if(!/^\/(index\.html|assets\/[a-zA-Z0-9_.-]+)$/.test(path))return new Response(null,{status:404});const data=await readFile(join(output,path));const content=path.endsWith('.html')?'text/html':path.endsWith('.css')?'text/css':path.endsWith('.js')||path.endsWith('.mjs')?'text/javascript':'application/octet-stream';return new Response(data,{headers:{'content-type':content}});}catch{return new Response(null,{status:404});}};
   const env={DB:db,ARTIFACTS:await blobStore(mf,'artifacts'),TEST_MAIL:await blobStore(mf,'test-mail'),OTP_KEY:'local-test-pepper-at-least-32-bytes',TEST_SEAL_KEY:'local-test-seal-key-at-least-32-bytes',ASSETS:{fetch:(request:Request)=>asset(new URL(request.url).pathname)}};
   const signingApp=app;
@@ -60,7 +59,7 @@ test('cross-origin browser embeds, saves and reopens; hostile parent and spoofed
    else if(url.origin==='http://127.0.0.1:8787'&&!url.pathname.startsWith('/api/')){
     response=await asset(url.pathname.startsWith('/assets/')?url.pathname:'/index.html');
     // The headers the app's page middleware (src/app/server/page-headers.ts) adds behind the gateway.
-    const page=await pageHeaders(url.pathname,response.headers.get('content-type'),{frameAncestors:'',viaGateway:true,editorParent:async id=>(await db.prepare('SELECT parent_origin FROM editor_sessions WHERE id = ?').bind(id).first<{parent_origin:string}>())?.parent_origin??null});
+    const page=await pageHeaders(url.pathname,response.headers.get('content-type'),{signingHost:null,viaGateway:true,editorParent:async id=>(await db.prepare('SELECT parent_origin FROM editor_sessions WHERE id = ?').bind(id).first<{parent_origin:string}>())?.parent_origin??null});
     if(page)for(const [name,value] of Object.entries(page))response.headers.set(name,value);
    }
    else if(url.origin==='http://127.0.0.1:8787'){response=await signingApp.fetch(new Request(url,{method:req.method,headers,...(req.method==='POST'?{body:Buffer.concat(chunks)}:{})}),env);if(url.pathname==='/api/public/signing/otp'&&req.method==='POST')response=await withLocalTestOtp(response,env.TEST_MAIL);}

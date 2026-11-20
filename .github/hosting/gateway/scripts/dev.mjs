@@ -1,10 +1,12 @@
 #!/usr/bin/env node
 // npm run dev [-- --app captable [--app esign]] [-- --port 8787]: the gateway and its app Workers together in one
 // local `wrangler dev`, with local D1 databases (state in .dev/state). No Cloudflare account or network access needed.
-// Without --app it runs the stub app (dev/stub-app.mjs) as captable; each --app is a built app on its own host.
+// Without --app it runs the stub app (dev/stub-app.mjs) as captable; each --app is a built app on its own host, and an
+// app with an engine runs with its stub engine beside it. The apps' limit catalogs go to the gateway's local D1.
 import { spawn } from 'node:child_process'
+import { writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import { appsFromArgs, gatewayDir, writeDevConfigs } from './app-config.mjs'
+import { appsFromArgs, gatewayDir, limitCatalogsSql, writeDevConfigs } from './app-config.mjs'
 
 export const wrangler = join(gatewayDir, 'node_modules', '.bin', process.platform === 'win32' ? 'wrangler.cmd' : 'wrangler')
 export const DEV_STATE = join(gatewayDir, '.dev', 'state')
@@ -24,12 +26,20 @@ function run(args, { stdio = 'inherit', state }) {
  * directory, variables and stdio.
  */
 export async function startDev({ apps = ['stub'], port = '8787', state = DEV_STATE, gatewayVars, appVars, stdio = 'inherit', https = false } = {}) {
-  const configs = await writeDevConfigs(apps, { gatewayVars, appVars })
+  const configs = await writeDevConfigs(apps, { gatewayVars, appVars, port, https })
   await run(['d1', 'migrations', 'apply', 'DB', '--local', '--config', configs.gateway], { stdio, state })
+  // As the deploy does after the gateway's migrations (DESIGN.md §8.8), so the console manages the apps' limits.
+  const catalogs = await limitCatalogsSql(apps)
+  if (catalogs) {
+    const file = join(gatewayDir, '.dev', 'limit-catalogs.sql')
+    await writeFile(file, `${catalogs}\n`)
+    await run(['d1', 'execute', 'DB', '--local', '--config', configs.gateway, '--file', file], { stdio, state })
+  }
   for (const [index, app] of apps.entries()) {
     if (app !== 'stub') await run(['d1', 'migrations', 'apply', 'DB', '--local', '--config', configs.apps[index]], { stdio, state })
   }
-  const args = ['dev', '--config', configs.gateway, ...configs.apps.flatMap((config) => ['--config', config]), '--local', '--persist-to', state, '--ip', '127.0.0.1', '--port', port]
+  const workers = [configs.gateway, ...configs.apps, ...configs.engines]
+  const args = ['dev', ...workers.flatMap((config) => ['--config', config]), '--local', '--persist-to', state, '--ip', '127.0.0.1', '--port', port]
   // https (wrangler's self-signed certificate): what Esign needs to accept its own origin for the embedded editor.
   if (https) args.push('--local-protocol', 'https')
   return spawn(wrangler, args, { cwd: gatewayDir, stdio, env })

@@ -9,7 +9,6 @@ import { Miniflare } from 'miniflare';
 import { PDFDocument } from 'pdf-lib';
 import { blobStore, MIGRATIONS_DIR, splitSql } from './helpers/platform.ts';
 import app from './helpers/gateway.ts';
-import { setEditorOrigins } from './helpers/editor-origins.ts';
 
 const KEY = 'local-test-key-' + 'r'.repeat(32), HOST = 'https://host.example.com', ORIGIN = 'http://localhost';
 const TICK = { 'x-suger-app-id': 'insulin-apps-esign', 'x-suger-access-via': 'schedule' };
@@ -23,7 +22,6 @@ async function setup() {
   for (const name of (await readdir(MIGRATIONS_DIR)).filter((n) => n.endsWith('.sql')).sort()) await real.batch(splitSql(await readFile(new URL(name, MIGRATIONS_DIR), 'utf8')).map((s) => real.prepare(s)));
   const hash = Buffer.from(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(KEY))).toString('hex');
   await real.batch([real.prepare("INSERT INTO tenants (id) VALUES ('t')"), real.prepare("INSERT INTO api_keys (key_hash, tenant_id) VALUES (?, 't')").bind(hash)]);
-  await setEditorOrigins(real, 't', [HOST]);
   // The database as the app sees it: once a statement starting with a hook's text has read its row, the hook's
   // request runs, before the first request goes on; `failBatch` makes the next batch fail, as a D1 error would.
   const hooks: { match: string; run: () => Promise<void> }[] = [];

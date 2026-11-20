@@ -6,10 +6,9 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile, readdir } from 'node:fs/promises';
 import { Miniflare } from 'miniflare';
-import { PDFDocument } from 'pdf-lib';
+import { degrees, PDFDocument, PDFName, PDFString } from 'pdf-lib';
 import { blobStore, MIGRATIONS_DIR, splitSql } from './helpers/platform.ts';
 import app from './helpers/gateway.ts';
-import { setEditorOrigins } from './helpers/editor-origins.ts';
 
 const KEY = 'local-test-key-' + 'f'.repeat(32), HOST = 'https://host.example.com', ORIGIN = 'http://localhost';
 const signature = (id: string, role: string, x: number, required = true) => ({ id, type: 'Signature', role, page: 1, required, rect: { x, y: 0.2, width: 0.25, height: 0.06 } });
@@ -21,7 +20,6 @@ async function setup() {
   for (const name of (await readdir(MIGRATIONS_DIR)).filter((n) => n.endsWith('.sql')).sort()) await db.batch(splitSql(await readFile(new URL(name, MIGRATIONS_DIR), 'utf8')).map((s) => db.prepare(s)));
   const hash = Buffer.from(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(KEY))).toString('hex');
   await db.batch([db.prepare("INSERT INTO tenants (id) VALUES ('t')"), db.prepare("INSERT INTO api_keys (key_hash, tenant_id) VALUES (?, 't')").bind(hash)]);
-  await setEditorOrigins(db, 't', [HOST]);
   const bucket = await blobStore(mf, 'artifacts');
   const env = { DB: db, ARTIFACTS: bucket, TEST_MAIL: await blobStore(mf, 'test-mail'), SIGNING_PAGE_ORIGINS: HOST, OTP_KEY: 'local-test-pepper-at-least-32-bytes', TEST_SEAL_KEY: 'local-test-seal-key-at-least-32-bytes', ASSETS: { fetch: async () => new Response('<html></html>', { headers: { 'content-type': 'text/html' } }) } };
   const req = (path: string, init: RequestInit = {}) => app.fetch(new Request(ORIGIN + path, init), env);
@@ -57,7 +55,7 @@ test('an uploaded document is placed on and sent: the draft\'s signers and roles
   const h = await setup();
   try {
     const id = await h.draft('upload-1');
-    assert.deepEqual([(await h.shown(id)).templateId, (await h.shown(id)).upload], [null, { document: false, roles: [], fields: [] }]);
+    assert.deepEqual([(await h.shown(id)).templateId, (await h.shown(id)).upload], [null, { document: false, changes: null, roles: [], fields: [] }]);
     // No document yet: no editor, nothing to send.
     assert.equal((await h.editor(id)).status, 409);
     assert.deepEqual(await (await h.post(`/api/envelopes/${id}`, { recipients: RECIPIENTS })).json(), { error: 'document_required' });
@@ -66,7 +64,9 @@ test('an uploaded document is placed on and sent: the draft\'s signers and roles
     assert.equal((await h.upload(id, '%PDF-broken')).status, 422);
     const uploaded = await h.upload(id);
     assert.equal(uploaded.status, 201, await uploaded.clone().text());
-    assert.equal((await uploaded.json() as { pages: number }).pages, 1);
+    const answer = await uploaded.json() as { pages: number; sha256: string; uploadedSha256: string; changes: unknown };
+    assert.equal(answer.pages, 1);
+    assert.deepEqual([answer.changes, answer.uploadedSha256], [null, answer.sha256], 'a PDF that needs no change is stored as it came');
     assert.equal((await h.shown(id)).upload!.document, true);
     // Its fields, in the editor: the roles are its signers', with their names; the document is the one uploaded.
     const session = await h.editor(id);
@@ -124,6 +124,24 @@ test('only an upload draft takes a document; a new envelope needs a template; re
     assert.equal((await h.upload(id, await two.save())).status, 201);
     assert.deepEqual((await h.shown(id)).upload!.fields, []);
     assert.equal((await h.bucket.list({ prefix: `envelopes/${id}/` })).objects.length, 2, 'the one it replaced stays until the draft is sent or discarded');
+    // An editor opened on the document before it was replaced doesn't put its fields on the new one: it is told to
+    // open the editor again, and the new document keeps no fields until one opened on it saves.
+    const stale = await session.save!(['partner', 'seller'], [signature('a', 'partner', 0.1)], true);
+    assert.deepEqual([stale.status, await stale.json()], [409, { error: 'source_changed' }]);
+    assert.deepEqual((await h.shown(id)).upload!.fields, []);
+    const fresh = await h.editor(id);
+    assert.equal((await fresh.save!(['partner', 'seller'], [signature('a', 'partner', 0.1)], true)).status, 200);
+    assert.equal((await h.shown(id)).upload!.fields.length, 1);
+    // Also when the fields wouldn't fit the new document (a field on a page it no longer has), draft or ready: the
+    // editor is told to open again, not to move its fields.
+    const page2 = { ...signature('p', 'partner', 0.1), page: 2 };
+    const onTwo = await h.editor(id);
+    assert.equal((await h.upload(id)).status, 201, 'replaced by a one-page PDF');
+    for (const asDraft of [true, false]) {
+      const saved = await onTwo.save!(['partner', 'seller'], [page2, signature('b', 'seller', 0.5)], asDraft);
+      assert.deepEqual([saved.status, await saved.json()], [409, { error: 'source_changed' }], `draft: ${asDraft}`);
+    }
+    assert.deepEqual((await h.shown(id)).upload!.fields, []);
     // Discarded: the draft, its document's record and its stored file.
     assert.deepEqual(await (await h.post(`/api/envelopes/${id}/void`, {})).json(), { id, status: 'DISCARDED' });
     assert.equal((await h.db.prepare('SELECT count(*) AS n FROM artifacts WHERE envelope_id = ?').bind(id).first<{ n: number }>())!.n, 0);
@@ -166,4 +184,40 @@ test('save as template: an uploaded envelope\'s PDF and fields, roles renamed, i
     // An envelope sent from a template has one already.
     assert.deepEqual(await (await fromTemplate({ fromEnvelope: (await sent.json() as { id: string }).id })).json(), { error: 'not_an_uploaded_envelope' });
   } finally { await h.mf.dispose(); }
+});
+
+test('an uploaded PDF with a link and a rotated page is stored prepared for signing: the draft says what changed; a refused one says why', async () => {
+  const h = await setup();
+  const info = console.info, warn = console.warn;
+  console.info = () => {}; console.warn = () => {};
+  try {
+    const id = await h.draft('upload-prepared');
+    const pdf = await PDFDocument.create();
+    const page = pdf.addPage([600, 800]);
+    page.node.set(PDFName.of('Annots'), pdf.context.obj([pdf.context.obj({ Type: 'Annot', Subtype: 'Link', Rect: [20, 20, 120, 34], A: { S: 'URI', URI: PDFString.of('https://example.com/terms') } })]));
+    pdf.addPage([600, 800]).setRotation(degrees(270));
+    const original = await pdf.save();
+    const uploaded = await h.upload(id, original);
+    assert.equal(uploaded.status, 201, await uploaded.clone().text());
+    const answer = await uploaded.json() as { sha256: string; uploadedSha256: string; changes: unknown };
+    assert.deepEqual(answer.changes, { formFields: 0, annotations: 0, links: 1, pages: 1 });
+    assert.notEqual(answer.sha256, answer.uploadedSha256);
+    assert.deepEqual((await h.shown(id)).upload!.changes, answer.changes, 'the draft keeps saying what changed');
+    const row = await h.db.prepare('SELECT sha256, uploaded_sha256, upload_changes_json FROM artifacts WHERE envelope_id = ?').bind(id).first<{ sha256: string; uploaded_sha256: string; upload_changes_json: string }>();
+    assert.deepEqual([row!.sha256, row!.uploaded_sha256, JSON.parse(row!.upload_changes_json)], [answer.sha256, answer.uploadedSha256, answer.changes]);
+    // The editor shows the stored PDF: upright, without the link.
+    const session = await h.editor(id);
+    const stored = await PDFDocument.load(new Uint8Array(await (await h.req('/api/public/editor/pdf', { headers: session.headers! })).arrayBuffer()));
+    assert.deepEqual(stored.getPages().map((p) => [p.getRotation().angle, p.getWidth(), p.getHeight(), p.node.get(PDFName.of('Annots'))]), [[0, 600, 800, undefined], [0, 800, 600, undefined]]);
+    // Replaced by a PDF that needs no change: nothing is said any more.
+    assert.equal((await h.upload(id)).status, 201);
+    assert.equal((await h.shown(id)).upload!.changes, null);
+    // An encrypted one is refused, with the reason; the draft keeps its document.
+    const locked = await PDFDocument.create();
+    locked.addPage();
+    locked.context.trailerInfo.Encrypt = locked.context.register(locked.context.obj({ Filter: 'Standard', V: 2, R: 3, Length: 128 }));
+    const refused = await h.upload(id, await locked.save({ useObjectStreams: false }));
+    assert.deepEqual([refused.status, await refused.json()], [422, { error: 'unsupported_pdf', reason: 'pdf_encrypted' }]);
+    assert.equal((await h.shown(id)).upload!.document, true);
+  } finally { console.info = info; console.warn = warn; await h.mf.dispose(); }
 });

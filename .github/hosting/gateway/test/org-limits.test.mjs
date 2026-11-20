@@ -13,7 +13,7 @@ import { COMPATIBILITY_DATE, gatewayDir } from './helpers/bundle.mjs'
 import { splitStatements, startGateway } from './helpers/harness.mjs'
 import { canonicalAllowanceKey, createOrg, orgAllowance, reconcileOwnerDomains } from '../src/db/orgs.ts'
 import { orgRequestMail } from '../src/mail/templates.ts'
-import { PUBLIC_MAIL_DOMAINS, checkOwnerDomain, isPublicMailDomain, ownerDomainOf, subdomainPattern } from '../src/owner-domain.ts'
+import { PUBLIC_MAIL_DOMAINS, checkOwnerDomain, isPublicMailDomain, ownerDomainOf, subdomainSuffix } from '../src/owner-domain.ts'
 
 let h
 before(async () => { h = await startGateway({ vars: { SUPPORT_EMAIL: 'help@example.test' } }) })
@@ -62,10 +62,11 @@ test('owner domains: the registrable domain in lower case and punycode, or a pub
   for (const domain of ['example.com', 'example.org', 'example.net', 'acme.test']) assert.ok(!isPublicMailDomain(domain), domain)
   assert.ok([...PUBLIC_MAIL_DOMAINS].every((domain) => /^[a-z0-9.-]+$/.test(domain)), 'lower case and punycode')
 
-  // Older rows count with their domain through a LIKE pattern, escaped; never for an address or a non-registrable name.
-  assert.equal(subdomainPattern('example.com'), '%.example.com')
-  assert.equal(subdomainPattern('a_b%c.test'), '%.a\\_b\\%c.test')
-  for (const owned of [`ada@${OTHER_PROVIDER}`, 'co.uk', '10.0.0.1', 'eu.example.com']) assert.equal(subdomainPattern(owned), null, owned)
+  // Older rows count with their domain by its ending, compared as text (no wildcards); never for an address or a
+  // non-registrable name.
+  assert.equal(subdomainSuffix('example.com'), '.example.com')
+  assert.equal(subdomainSuffix('a_b%c.test'), '.a_b%c.test')
+  for (const owned of [`ada@${OTHER_PROVIDER}`, 'co.uk', '10.0.0.1', 'eu.example.com']) assert.equal(subdomainSuffix(owned), null, owned)
 })
 
 test('the strict owner-domain check that allow-orgs.mjs and the request to support apply', () => {
@@ -152,8 +153,8 @@ test('a subdomain counts as its registrable domain, organizations recorded with 
   assert.equal((await create(second, 'Sub Two')).status, 409)
   assert.equal((await create(await h.user({ email: address(domain) }), 'Sub Three')).status, 409)
 
-  // The pattern is escaped: _ and % in a domain match only themselves, and a domain that merely ends the same way
-  // (xunder_score.test) or an address isn't a subdomain.
+  // The ending is plain text: _ and % in a domain match only themselves, and a domain that merely ends the same way
+  // (xunder_score.test) or an address isn't a subdomain. Case doesn't matter, as it didn't to the LIKE before.
   const underscored = 'under_score.test'
   for (const owner of ['eu.underxscore.test', 'eu.under%score.test', `x${underscored}`, `someone@eu.${underscored}`]) {
     await h.sql("INSERT INTO orgs (id, name, owner_domain, created_at, updated_at) VALUES (?1, 'Not Counted', ?2, 1, 1)", crypto.randomUUID(), owner)
@@ -161,6 +162,21 @@ test('a subdomain counts as its registrable domain, organizations recorded with 
   assert.equal((await orgAllowance(h.db, address(underscored))).count, 0)
   await h.sql("INSERT INTO orgs (id, name, owner_domain, created_at, updated_at) VALUES (?1, 'Counted', ?2, 1, 1)", crypto.randomUUID(), `eu.${underscored}`)
   assert.equal((await orgAllowance(h.db, address(underscored))).count, 1)
+  await h.sql("INSERT INTO orgs (id, name, owner_domain, created_at, updated_at) VALUES (?1, 'Counted Too', ?2, 1, 1)", crypto.randomUUID(), `EU.${underscored.toUpperCase()}`)
+  assert.equal((await orgAllowance(h.db, address(underscored))).count, 2)
+})
+
+test('a long owner domain counts its organizations and subdomains too (D1 refuses a LIKE pattern over 50 bytes)', async () => {
+  // A registrable domain of 61 characters: a LIKE pattern for its subdomains would be 63 bytes.
+  const domain = `long-business-name-for-the-organization-limit-${'q'.repeat(10)}.test`
+  assert.ok(domain.length > 48)
+  const first = await h.user({ email: address(`one.${domain}`) })
+  // Must catch: creating an organization answered 500 whenever any other organization had a domain.
+  assert.equal((await create(first, 'Long One')).status, 303)
+  await h.sql("INSERT INTO orgs (id, name, owner_domain, created_at, updated_at) VALUES (?1, 'Legacy Long', ?2, 1, 1)", crypto.randomUUID(), `old.eu.${domain}`)
+  const second = await h.user({ email: address(domain) })
+  assert.deepEqual(await orgAllowance(h.db, second.email), { ownerDomain: domain, count: 2, max: 2 })
+  assert.equal((await create(second, 'Long Two')).status, 409)
 })
 
 test('one Gmail mailbox counts once: dots, +tags and googlemail.com included', async () => {

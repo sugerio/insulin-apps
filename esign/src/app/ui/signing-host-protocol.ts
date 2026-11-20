@@ -1,9 +1,9 @@
 /**
  * What the signing page tells the host application that embeds it: the signer closed the page,
  * or signed or declined. The messages carry no token, address or signing data. The page posts
- * them only to the host the signing link names (`#code=…&host=<origin>`), and only when that
- * origin is one the app allows to frame the page (`GET /api/public/signing-page`) and, where the
- * browser reports it, the origin of the page that frames it.
+ * them only to the origin its code was issued for (the host's `allowedParentOrigin`), which the
+ * code exchange returns as `host` when that origin frames the page, and, where the browser
+ * reports it, only while it is still the origin of the page that frames it.
  */
 export type SigningHostMessage =
   | { type: 'esign.signing.cancel' }
@@ -12,14 +12,13 @@ export type SigningHostMessage =
 const ORIGIN = /^https?:\/\/[^/?#\s]+$/;
 
 /**
- * The host to report to, or '' when the page must not report: not framed, no `host` in the link,
- * `host` not among the allowed origins, or not the origin of the framing page.
+ * The host to report to, or '' when the page must not report: not framed, no `host` from the
+ * exchange, or not the origin of the framing page.
  */
-export function signingHost(requested: string | null, allowed: string, framed: boolean, ancestor?: string): string {
-  if (!framed || !requested || !ORIGIN.test(requested)) return '';
-  if (!allowed.split(/\s+/).includes(requested)) return '';
-  if (ancestor !== undefined && ancestor !== requested) return '';
-  return requested;
+export function signingHost(given: unknown, framed: boolean, ancestor?: string): string {
+  if (!framed || typeof given !== 'string' || !ORIGIN.test(given)) return '';
+  if (ancestor !== undefined && ancestor !== given) return '';
+  return given;
 }
 
 /** Reads a host's incoming message: the signing page's own message from that frame, or null. */

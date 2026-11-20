@@ -1,0 +1,11 @@
+// The harness Worker for one Engine-lane run. run.mjs writes a copy with the run's names into harness/.run/
+// (git-ignored); this file is the template. It is public (workers.dev) so the runner can reach it, and it accepts
+// only requests with the run's bearer token (a secret, HARNESS_TOKEN).
+{
+  "name": "insulin-apps-knowledge-engine-e2e-harness-RUN",
+  "main": "worker.ts",
+  "compatibility_date": "2026-11-01",
+  "workers_dev": true,
+  "preview_urls": false,
+  "services": [{ "binding": "ENGINE", "service": "insulin-apps-knowledge-engine-e2e-RUN" }]
+}

@@ -8,8 +8,10 @@ import { DAY_MS, HOUR_MS } from "../../db/metrics.ts"
 import type { OperatorSession } from "../../super/auth.ts"
 import { isWarning, type Headroom } from "../../super/cloudflare.ts"
 import type { Overview, Signals } from "../../super/db.ts"
+import type { LimitWatchRow } from "../../db/limits.ts"
+import { limitValue } from "./limits.tsx"
 import { superPage } from "./layout.tsx"
-import { Bars, Meter, Section, Stat, ago, bytes, count, day, when } from "./parts.tsx"
+import { Bars, Meter, Section, Stat, ago, bytes, count, day, percent, when } from "./parts.tsx"
 
 export interface OverviewData {
   counts: Overview
@@ -22,6 +24,8 @@ export interface OverviewData {
   snapshotAt: number | null
   /** What the latest snapshot couldn't read, by part; its meters leave those figures out. */
   snapshotProblems: string[]
+  /** Organizations at 80% or more of an app's limit, from the app's latest report (DESIGN.md §11.7). */
+  limits: (LimitWatchRow & { appTitle: string })[]
 }
 
 /** An app's report is late when the latest one arrived more than two hours ago. */
@@ -37,7 +41,7 @@ export function overviewPage(ctx: Context, session: OperatorSession, data: Overv
     const report = data.reports.find((entry) => entry.app === app.name)
     return app.service && (!report || ctx.now - report.received_at > REPORT_STALE_MS)
   })
-  const signalCount = data.signals.domainsAtLimit.length + data.signals.signupBursts.length + warnings.length + late.length
+  const signalCount = data.signals.domainsAtLimit.length + data.signals.signupBursts.length + warnings.length + late.length + data.limits.length
   return superPage(ctx, session, { title: "Overview", current: "overview", description: "Usage of Insulin Apps across every organization, and what needs a look." }, (
     <>
       <section aria-label="Totals" className="grid grid-cols-2 gap-4 lg:grid-cols-4">
@@ -69,6 +73,16 @@ export function overviewPage(ctx: Context, session: OperatorSession, data: Overv
               <span>
                 <a href={`/super/apps/${app.name}`} className="font-medium underline underline-offset-4">{app.title}</a> hasn&apos;t reported its usage for over two hours
                 {app.scheduled ? "" : " (it declares no scheduled path, so the platform's tick never reaches it)"}.
+              </span>
+            </li>
+          ))}
+          {data.limits.map((row) => (
+            <li key={`${row.app} ${row.org_id} ${row.key}`} className="flex items-start gap-2">
+              <TriangleAlert aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-destructive" />
+              <span>
+                <a href={`/super/orgs/${row.org_id}#limits`} className="font-medium underline underline-offset-4">{row.org_name}</a> uses{" "}
+                {percent(row.used, row.limit_value)} of {row.appTitle}&apos;s {row.label.toLowerCase()}: {limitValue(row.unit, row.used)} of {limitValue(row.unit, row.limit_value)}
+                {row.key.endsWith("_month") ? " this month" : ""}.
               </span>
             </li>
           ))}

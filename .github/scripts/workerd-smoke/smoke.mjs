@@ -1,19 +1,33 @@
+// Runs an app's production build the way Cloudflare does: builds it, applies its migrations to a local D1 database,
+// starts it in workerd with `wrangler dev --local`, and runs the app's own checks (apps/<app>.mjs) with synthetic data.
+// An app with an engine (.github/hosting/DESIGN.md §8.7) runs with its in-memory stub engine
+// (<engine>/src/stub/worker.ts) as a second Worker in the same `wrangler dev`, bound as SUGER_ENGINE, as the deploy
+// binds the real one.
+//
+//   node smoke.mjs [--app captable] [--skip-build]     # --skip-build reuses the last build
 import { createServer } from 'node:net'
+import { existsSync } from 'node:fs'
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { spawn } from 'node:child_process'
-import { createHash, randomUUID } from 'node:crypto'
-import { fileURLToPath } from 'node:url'
+import { randomUUID } from 'node:crypto'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import { dirname, join, resolve } from 'node:path'
 import { tmpdir } from 'node:os'
-import { strToU8, unzipSync, zipSync } from 'fflate'
+import { platformAppBindings } from '../deploy-apps.mjs'
+import { ENGINE_CONFIG, engineWorkerName, parseJsonc } from '../engine.mjs'
+import { listApps } from '../list-apps.mjs'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const root = resolve(here, '../../..')
-const app = join(root, 'captable')
-const output = join(app, '.output')
-const wrangler = join(here, 'node_modules', '.bin', process.platform === 'win32' ? 'wrangler.cmd' : 'wrangler')
+const argument = (name, fallback) => {
+  const at = process.argv.indexOf(name)
+  return at === -1 ? fallback : process.argv[at + 1]
+}
+const appName = argument('--app', 'captable')
 const skipBuild = process.argv.includes('--skip-build')
-const AS_OF = '2026-10-27'
+const wrangler = join(here, 'node_modules', '.bin', process.platform === 'win32' ? 'wrangler.cmd' : 'wrangler')
+// Wrangler 4.149.0's bundled workerd supports dates through 2026-10-13. The production bundle itself is unchanged.
+const COMPATIBILITY_DATE = '2026-10-13'
 
 let worker
 let workerLog = ''
@@ -45,26 +59,6 @@ function freePort() {
   })
 }
 
-function identity(
-  role = 'OWNER',
-  email = 'owner@example.test',
-  userId = `smoke-${role.toLowerCase()}`,
-  organizationId = 'smoke-console-org',
-) {
-  return {
-    'x-suger-user-id': userId,
-    'x-suger-organization-id': organizationId,
-    'x-suger-app-id': 'captable-workerd-smoke',
-    'x-suger-app-role': role,
-    'x-suger-user-email': email,
-    'x-suger-user-name': 'Smoke Test User',
-  }
-}
-
-function sameOriginHeaders(base, headers = {}) {
-  return { ...identity(), Origin: base, 'Sec-Fetch-Site': 'same-origin', ...headers }
-}
-
 async function response(base, path, init = {}, expected = 200, label = `${init.method ?? 'GET'} ${path}`) {
   const answer = await fetch(`${base}${path}`, init)
   const body = new Uint8Array(await answer.arrayBuffer())
@@ -81,67 +75,13 @@ async function json(base, path, init = {}, expected = 200, label) {
   catch { throw new Error(`${label ?? path}: response was not JSON`) }
 }
 
-function xml(value) {
-  return String(value).replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;')
-}
-
-function column(index) {
-  let value = index + 1
-  let letters = ''
-  while (value > 0) {
-    value -= 1
-    letters = String.fromCharCode(65 + value % 26) + letters
-    value = Math.floor(value / 26)
-  }
-  return letters
-}
-
-function rowXml(row, values) {
-  const cells = values.map((value, index) => value === '' ? ''
-    : `<c r="${column(index)}${row}" t="inlineStr"><is><t>${xml(value)}</t></is></c>`).join('')
-  return `<row r="${row}">${cells}</row>`
-}
-
-/** Fill the app-generated workbook so the smoke always exercises the public template format. */
-function syntheticTemplate(blank) {
-  const archive = unzipSync(blank)
-  const rows = new Map([
-    [2, ['Smoke Example, Inc.', AS_OF, 'USD']],
-    [3, ['holder_1', 'Smoke Holder', 'Individual', 'Founder', 'smoke.holder@example.test', '', '']],
-    [4, ['common', 'Common Stock', 'Common', '1000', '', '0.01']],
-    [6, ['CS-1', 'holder_1', 'common', '', '100', '2024-01-02', '0.01']],
-  ])
-  for (const [sheet, values] of rows) {
-    const name = `xl/worksheets/sheet${sheet}.xml`
-    const current = new TextDecoder().decode(archive[name])
-    if (!current.includes('</sheetData>')) throw new Error(`Generated workbook is missing ${name}`)
-    archive[name] = strToU8(current.replace('</sheetData>', `${rowXml(2, values)}</sheetData>`))
-  }
-  return zipSync(archive, { level: 6 })
-}
-
-function sha256(bytes) {
-  return createHash('sha256').update(bytes).digest('hex')
-}
-
-function multipartTemplate(bytes, commit = false) {
-  const form = new FormData()
-  if (!commit) form.set('source', 'template')
-  form.set('asOfDate', AS_OF)
-  form.set('timezone', 'America/New_York')
-  form.set('jurisdiction', 'US-NY')
-  form.set('fiscalYearEnd', '09-30')
-  form.set('files', new Blob([bytes], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), 'smoke-cap-table.xlsx')
-  return form
-}
-
-async function waitUntilReady(base) {
+async function waitUntilReady(base, ready) {
   const deadline = Date.now() + 30_000
   while (Date.now() < deadline) {
     if (worker.exitCode !== null) throw new Error(`wrangler dev exited before becoming ready (${worker.exitCode})`)
     try {
-      const answer = await fetch(`${base}/api/health`)
-      if (answer.status === 200) return
+      const answer = await fetch(`${base}${ready.path}`, { headers: ready.headers ?? {} })
+      if (answer.status === ready.status) return
     } catch {}
     await new Promise((accept) => setTimeout(accept, 100))
   }
@@ -158,174 +98,93 @@ async function stopWorker() {
   if (worker.exitCode === null) worker.kill('SIGKILL')
 }
 
+/**
+ * The app's config, as the deploy writes it in what matters here: Nitro's generated config with absolute paths, a
+ * local D1 with the app's migrations, and the platform's variables and bindings (SUGER_ENGINE for an app with an
+ * engine; no gateway, so no SUGER_GATEWAY or its URLs).
+ */
+function appConfig(app, generated, appDirectory) {
+  const output = join(appDirectory, '.output')
+  const platform = platformAppBindings({ app })
+  return {
+    ...generated,
+    compatibility_date: COMPATIBILITY_DATE,
+    main: join(output, 'server', 'index.mjs'),
+    assets: { ...generated.assets, directory: join(output, 'public') },
+    d1_databases: [{
+      binding: 'DB', database_name: `${app.name}-workerd-smoke`,
+      database_id: randomUUID(),
+      migrations_dir: join(appDirectory, 'src', 'app', 'db', 'migrations'),
+    }],
+    vars: { SUGER_ACCESS_MODE: 'console', ...platform.vars },
+    ...(platform.services.length ? { services: platform.services } : {}),
+  }
+}
+
+/** The app's stub engine as a Worker named like the real one, with the variables the app's checks ask of it. */
+async function stubEngineConfig(app, vars = {}) {
+  const engineDirectory = join(root, app.name, app.engine)
+  const main = join(engineDirectory, 'src', 'stub', 'worker.ts')
+  if (!existsSync(main)) throw new Error(`${app.name}'s engine has no stub Worker at ${main}`)
+  const engine = parseJsonc(await readFile(join(engineDirectory, ENGINE_CONFIG), 'utf8'))
+  return {
+    name: engineWorkerName(app.name),
+    main,
+    compatibility_date: COMPATIBILITY_DATE,
+    ...(engine.compatibility_flags ? { compatibility_flags: engine.compatibility_flags } : {}),
+    vars,
+    workers_dev: false,
+  }
+}
+
 async function run() {
-  scratch = await mkdtemp(join(tmpdir(), 'captable-workerd-smoke-'))
+  const app = (await listApps(root)).find(({ name }) => name === appName)
+  if (!app) throw new Error(`Unknown app ${JSON.stringify(appName)}`)
+  const checksPath = join(here, 'apps', `${app.name}.mjs`)
+  if (!existsSync(checksPath)) throw new Error(`${app.name} has no smoke checks: add .github/scripts/workerd-smoke/apps/${app.name}.mjs`)
+  const checks = await import(pathToFileURL(checksPath).href)
+  const appDirectory = join(root, app.name)
+  scratch = await mkdtemp(join(tmpdir(), `${app.name}-workerd-smoke-`))
   if (!skipBuild) {
     await command('npm', ['run', 'build'], {
-      cwd: app,
+      cwd: appDirectory,
       env: { ...process.env, NODE_ENV: 'production', NITRO_PRESET: 'cloudflare_module' },
     })
     passed.push('production Cloudflare build')
   }
 
-  const generated = JSON.parse(await readFile(join(output, 'server', 'wrangler.json'), 'utf8'))
-  const config = {
-    ...generated,
-    // Wrangler 4.149.0's bundled workerd supports dates through 2026-10-13. The production bundle itself is unchanged.
-    compatibility_date: '2026-10-13',
-    main: join(output, 'server', 'index.mjs'),
-    assets: { ...generated.assets, directory: join(output, 'public') },
-    d1_databases: [{
-      binding: 'DB', database_name: 'captable-workerd-smoke',
-      database_id: randomUUID(),
-      migrations_dir: join(app, 'src', 'app', 'db', 'migrations'),
-    }],
-    vars: { SUGER_ACCESS_MODE: 'console' },
-  }
+  const generated = JSON.parse(await readFile(join(appDirectory, '.output', 'server', 'wrangler.json'), 'utf8'))
   const configPath = join(scratch, 'wrangler.json')
   const statePath = join(scratch, 'state')
-  await writeFile(configPath, `${JSON.stringify(config, null, 2)}\n`)
+  await writeFile(configPath, `${JSON.stringify(appConfig(app, generated, appDirectory), null, 2)}\n`)
+  const configs = ['--config', configPath]
+  if (app.engine) {
+    const enginePath = join(scratch, 'engine.wrangler.json')
+    await writeFile(enginePath, `${JSON.stringify(await stubEngineConfig(app, checks.stubEngineVars ?? {}), null, 2)}\n`)
+    configs.push('--config', enginePath)
+  }
   await command(wrangler, ['d1', 'migrations', 'apply', 'DB', '--local', '--config', configPath, '--persist-to', statePath])
   passed.push('local D1 migrations')
 
   const port = await freePort()
   const base = `http://127.0.0.1:${port}`
-  worker = spawn(wrangler, ['dev', '--local', '--config', configPath, '--persist-to', statePath, '--ip', '127.0.0.1', '--port', String(port)], {
+  worker = spawn(wrangler, ['dev', '--local', ...configs, '--persist-to', statePath, '--ip', '127.0.0.1', '--port', String(port)], {
     cwd: scratch, stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, NO_COLOR: '1' },
   })
   worker.stdout.on('data', (chunk) => { workerLog += chunk })
   worker.stderr.on('data', (chunk) => { workerLog += chunk })
-  await waitUntilReady(base)
+  await waitUntilReady(base, checks.ready)
 
-  await response(base, '/api/health', {}, 200, 'health')
-  await response(base, '/api/me', {}, 401, 'missing console identity')
-  const owner = sameOriginHeaders(base)
-  const setupMe = await json(base, '/api/me', { headers: owner }, 200, 'owner setup state')
-  if (setupMe.company !== null) throw new Error('owner setup state: expected no company')
-  await response(base, '/companies/deep-link', {}, 200, 'SPA deep link')
-  await response(base, '/api/__suger/version', { headers: owner }, 200, 'runtime version')
-  await response(base, '/api/__suger/app-builder/data', {}, 404, 'app builder data panel closed without identity')
-  await response(base, '/api/__suger/app-builder/data', { headers: owner }, 404, 'app builder data panel closed with identity')
-
-  await response(base, '/api/orgs', {
-    method: 'POST',
-    headers: sameOriginHeaders('https://outside.example.test', {
-      Origin: 'https://outside.example.test', 'Sec-Fetch-Site': 'cross-site',
-      'Content-Type': 'application/json', 'Idempotency-Key': randomUUID(),
-    }),
-    body: JSON.stringify({ orgKey: 'should-not-exist', legalName: 'Blocked, Inc.', displayName: 'Blocked', timezone: 'UTC' }),
-  }, 403, 'cross-origin write refused')
-
-  const placeholder = await json(base, '/api/orgs', {
-    method: 'POST', headers: sameOriginHeaders(base, { 'Content-Type': 'application/json', 'Idempotency-Key': randomUUID() }),
-    body: JSON.stringify({ orgKey: 'smoke-example', legalName: 'Smoke Placeholder, Inc.', displayName: 'Smoke Placeholder',
-      timezone: 'America/New_York', jurisdiction: 'US-NY', currency: 'USD', fiscalYearEnd: '09-30' }),
-  }, 201, 'empty company setup')
-  await response(base, `/api/orgs/${placeholder.id}/dashboard`, { headers: owner }, 200, 'empty dashboard')
-  await response(base, `/api/admin/orgs/${placeholder.id}/verify-ledger`, {
-    method: 'POST', headers: sameOriginHeaders(base, { 'Content-Type': 'application/json', 'Idempotency-Key': randomUUID() }), body: '{}',
-  }, 200, 'empty ledger verification')
-  await response(base, `/api/orgs/${placeholder.id}/process-due`, { method: 'POST', headers: owner }, 200, 'empty process-due')
-
-  const blank = await response(base, '/api/import/template', { headers: owner }, 200, 'template download')
-  const workbook = syntheticTemplate(blank.body)
-  const preview = await json(base, '/api/import/preview', {
-    method: 'POST', headers: owner, body: multipartTemplate(workbook),
-  }, 201, 'template import preview')
-  if (!preview.preview.canImport || preview.preview.problems.some((problem) => problem.severity === 'error')) {
-    throw new Error(`template import preview was not ready: ${JSON.stringify(preview.preview.problems)}`)
-  }
-  if (preview.preview.counts.stakeholders !== 1 || preview.preview.counts.securities !== 1) {
-    throw new Error(`template import preview had wrong counts: ${JSON.stringify(preview.preview.counts)}`)
-  }
-  const secondIdentity = identity('OWNER', 'second.owner@example.test', 'smoke-second-owner', 'smoke-console-org-2')
-  const secondOwner = sameOriginHeaders(base, secondIdentity)
-  const secondSetup = await json(base, '/api/me', { headers: secondOwner }, 200, 'second organization setup state')
-  if (secondSetup.company !== null) throw new Error('second organization setup state: expected no company')
-  await response(base, `/api/orgs/${placeholder.id}/dashboard`, { headers: secondOwner }, 404, 'second organization cannot read first dashboard')
-  await response(base, `/api/import/runs/${preview.runId}/commit`, {
-    method: 'POST',
-    headers: sameOriginHeaders(base, { ...secondIdentity, 'Idempotency-Key': randomUUID() }),
-    body: multipartTemplate(workbook, true),
-  }, 404, 'second organization cannot commit first import')
-  await response(base, `/api/import/runs/${preview.runId}`, {
-    headers: secondOwner,
-  }, 404, 'second organization cannot read first import')
-  const secondCompany = await json(base, '/api/orgs', {
-    method: 'POST',
-    headers: sameOriginHeaders(base, {
-      ...secondIdentity, 'Content-Type': 'application/json', 'Idempotency-Key': randomUUID(),
-    }),
-    body: JSON.stringify({ orgKey: 'smoke-example', legalName: 'Second Smoke Example, Inc.', displayName: 'Second Smoke Example',
-      timezone: 'UTC', jurisdiction: 'US-DE', currency: 'USD', fiscalYearEnd: '12-31' }),
-  }, 201, 'second organization company setup')
-  await response(base, `/api/orgs/${secondCompany.id}/dashboard`, { headers: secondOwner }, 200, 'second organization dashboard')
-  await response(base, `/api/admin/orgs/${placeholder.id}/verify-ledger`, {
-    method: 'POST',
-    headers: sameOriginHeaders(base, { ...secondIdentity, 'Content-Type': 'application/json', 'Idempotency-Key': randomUUID() }),
-    body: '{}',
-  }, 404, 'second organization cannot verify first ledger')
-  const imported = await json(base, `/api/import/runs/${preview.runId}/commit`, {
-    method: 'POST', headers: sameOriginHeaders(base, { 'Idempotency-Key': randomUUID() }), body: multipartTemplate(workbook, true),
-  }, 200, 'template import commit')
-  await response(base, `/api/orgs/${imported.orgId}/cap-table?asOf=${AS_OF}`, { headers: owner }, 200, 'cap table after import')
-  await response(base, `/api/orgs/${imported.orgId}/dashboard`, { headers: owner }, 200, 'dashboard after import')
-  await response(base, `/api/orgs/${imported.orgId}/dashboard`, { headers: secondOwner }, 404, 'second organization remains isolated')
-  await response(base, `/api/orgs/${secondCompany.id}/dashboard`, { headers: owner }, 404, 'first organization remains isolated')
-  const holderHeaders = sameOriginHeaders(base, identity('USER', 'smoke.holder@example.test', 'smoke-holder'))
-  const holderOverview = await json(base, '/api/portal/overview', { headers: holderHeaders }, 200, 'matching holder view')
-  const secondHolderHeaders = sameOriginHeaders(base, identity(
-    'USER', 'smoke.holder@example.test', 'smoke-holder', 'smoke-console-org-2',
-  ))
-  await response(base, '/api/portal/overview', { headers: secondHolderHeaders }, 404, 'second organization holder remains isolated')
-  await response(base, `/api/admin/orgs/${imported.orgId}/verify-ledger`, {
-    method: 'POST', headers: sameOriginHeaders(base, { 'Content-Type': 'application/json', 'Idempotency-Key': randomUUID() }), body: '{}',
-  }, 200, 'imported ledger verification')
-
-  const secondPreview = await json(base, '/api/import/preview', {
-    method: 'POST', headers: owner, body: multipartTemplate(workbook),
-  }, 201, 'second import preview')
-  await response(base, `/api/import/runs/${secondPreview.runId}/commit`, {
-    method: 'POST', headers: sameOriginHeaders(base, { 'Idempotency-Key': randomUUID() }), body: multipartTemplate(workbook, true),
-  }, 409, 'second import refused')
-
-  const documentBytes = new Uint8Array(1_600_000)
-  for (let index = 0; index < documentBytes.length; index += 1) documentBytes[index] = index % 251
-  documentBytes.set(new TextEncoder().encode('%PDF-1.7\n% synthetic workerd smoke\n'))
-  const uploaded = await json(base, `/api/orgs/${imported.orgId}/documents`, {
-    method: 'POST',
-    headers: sameOriginHeaders(base, {
-      'Content-Type': 'application/pdf', 'X-Filename': 'synthetic-smoke.pdf', 'X-Document-Kind': 'GRANT_AGREEMENT',
-      'X-Content-SHA256': sha256(documentBytes), 'Idempotency-Key': randomUUID(),
-      'X-Link-Target': 'stakeholder', 'X-Link-Id': holderOverview.holdings[0].stakeholderId, 'X-Link-Role': 'AGREEMENT',
-    }),
-    body: documentBytes,
-  }, 201, 'chunked document upload')
-  await response(base, `/api/orgs/${imported.orgId}/documents/${uploaded.id}/holder-visibility`, {
-    method: 'POST',
-    headers: sameOriginHeaders(base, { 'Content-Type': 'application/json', 'Idempotency-Key': randomUUID() }),
-    body: JSON.stringify({ version: 1, visible: true }),
-  }, 200, 'holder document visibility')
-  const editor = sameOriginHeaders(base, identity('EDITOR', 'editor@example.test', 'smoke-editor'))
-  const downloaded = await response(base, `/api/orgs/${imported.orgId}/documents/${uploaded.id}/download`, { headers: editor }, 200, 'EDITOR document download')
-  if (sha256(downloaded.body) !== sha256(documentBytes)) throw new Error('Document download bytes differed from the upload')
-  await response(base, `/api/portal/documents/${uploaded.id}/download`, {
-    headers: holderHeaders,
-  }, 200, 'matching holder document download')
-  await response(base, `/api/portal/documents/${uploaded.id}/download`, {
-    headers: secondHolderHeaders,
-  }, 404, 'second organization cannot download first holder document')
-  const viewer = sameOriginHeaders(base, identity('VIEWER', 'unmatched@example.test', 'smoke-viewer'))
-  await response(base, '/api/portal/overview', { headers: viewer }, 404, 'unmatched VIEWER refused')
+  await checks.default({ base, response, json })
 }
 
 try {
   await run()
-  console.log(`workerd smoke passed (${passed.length} checks)\n${passed.map((label) => `  ✓ ${label}`).join('\n')}`)
+  console.log(`workerd smoke of ${appName} passed (${passed.length} checks)\n${passed.map((label) => `  ✓ ${label}`).join('\n')}`)
 } catch (error) {
   // Workerd can flush the request log just after fetch resolves; include it in the failure report.
   await new Promise((accept) => setTimeout(accept, 250))
-  console.error(`workerd smoke failed after ${passed.length} checks: ${error instanceof Error ? error.stack : error}`)
+  console.error(`workerd smoke of ${appName} failed after ${passed.length} checks: ${error instanceof Error ? error.stack : error}`)
   if (workerLog) console.error(`\n--- wrangler dev log ---\n${workerLog}`)
   process.exitCode = 1
 } finally {

@@ -4,6 +4,7 @@ import type { AppAccess } from '../access.ts'
 import type { HostedApp } from '../config.ts'
 import { withoutCookies } from './cookies.ts'
 import { SESSION_COOKIE } from '../auth/session.ts'
+import { MEMBER_LOOKUP_HEADER } from '../members/lookup-token.ts'
 
 // Lower-case names of the gateway's own cookies: never forwarded to an app, never set by one.
 export const GATEWAY_COOKIES: ReadonlySet<string> = new Set([
@@ -31,9 +32,12 @@ export interface Actor {
 
 /**
  * The identity contract of `@fours/app` (`getCurrentUser` with SUGER_ACCESS_MODE=console), plus the permissions of an
- * app with a catalog, how the request came and, for a person, their organization role (DESIGN.md §2.4).
+ * app with a catalog and how the request came (DESIGN.md §2.4). A person (in a browser or through an AI agent) also
+ * comes with their organization role, `x-suger-org-role`: OWNER, ADMIN, EDITOR, VIEWER or APPS; an API client, which
+ * has none, without it (DESIGN.md §2.4). `memberLookup` is the signed x-suger-member-lookup header
+ * (members/lookup-token.ts), for browser requests only.
  */
-export function identityHeaders(actor: Actor, orgId: string, app: HostedApp, access: AppAccess, via: AccessVia): Record<string, string> {
+export function identityHeaders(actor: Actor, orgId: string, app: HostedApp, access: AppAccess, via: AccessVia, { memberLookup }: { memberLookup?: string | null } = {}): Record<string, string> {
   const headers: Record<string, string> = {
     'x-suger-user-id': actor.id,
     'x-suger-organization-id': orgId,
@@ -45,7 +49,8 @@ export function identityHeaders(actor: Actor, orgId: string, app: HostedApp, acc
   }
   if (app.permissions.length) headers['x-suger-app-permissions'] = access.permissions.join(' ')
   // It can give an app's owners powers no app role gives, so apps honour it only with SUGER_TRUST_ORG_ROLE.
-  if (access.orgRole) headers['x-suger-org-role'] = access.orgRole
+  if ((via === 'browser' || via === 'mcp') && access.orgRole) headers['x-suger-org-role'] = access.orgRole
+  if (via === 'browser' && memberLookup) headers[MEMBER_LOOKUP_HEADER] = memberLookup
   return headers
 }
 

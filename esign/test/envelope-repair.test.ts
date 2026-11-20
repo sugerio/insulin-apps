@@ -42,7 +42,7 @@ INSERT INTO templates (id,tenant_id,object_key,roles_json,created_at) VALUES ('t
 INSERT INTO envelopes (id,tenant_id,template_id,status,created_at,request_sha256) VALUES ('env','a','template','IN_PROGRESS',1,'hash');
 INSERT INTO tasks (id,envelope_id,role,recipient_name,recipient_email,routing_order,status) VALUES ('ana','env','ana','Ana','ana@example.com',1,'ACTIVE');
 INSERT INTO tasks (id,envelope_id,role,recipient_name,recipient_email,routing_order,status) VALUES ('marcus','env','marcus','Marcus','marcus@example.com',2,'PENDING');`);
-    await db.prepare("INSERT INTO artifacts VALUES ('d0','env','envelopes/env/d0.pdf',?)").bind(d0Hash).run();
+    await db.prepare("INSERT INTO artifacts (id, envelope_id, object_key, sha256) VALUES ('d0','env','envelopes/env/d0.pdf',?)").bind(d0Hash).run();
     const env = { DB: db, ARTIFACTS: bucket };
     const status = async () => (await db.prepare("SELECT status FROM envelopes WHERE id='env'").first<{ status: string }>())!.status;
     const tasks = async () => Object.fromEntries((await db.prepare("SELECT id,status FROM tasks WHERE envelope_id='env'").all<{ id: string; status: string }>()).results.map(t => [t.id, t.status]));

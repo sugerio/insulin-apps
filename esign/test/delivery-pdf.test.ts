@@ -27,7 +27,7 @@ test('delivery retries concurrent creation and completed finalization with long 
     const names=Array.from({length:11},(_,i)=>`${'i'.repeat(i===7?160:100)}${i}`);
     for(const [i,name] of names.entries()) await db.prepare('INSERT INTO tasks (id,envelope_id,role,recipient_name,recipient_email,routing_order,status) VALUES (?,?,?,?,?,?,?)').bind(`task-${i}`,'env',`role-${i}`,name,`signer${i}@example.com`,i+1,i===0?'ACTIVE':'PENDING').run();
     await bucket.put('source.pdf',d0);let inputId='d0',inputHash=await sha(d0);
-    await db.prepare('INSERT INTO artifacts VALUES (?,?,?,?)').bind(inputId,'env','source.pdf',inputHash).run();
+    await db.prepare('INSERT INTO artifacts (id, envelope_id, object_key, sha256) VALUES (?,?,?,?)').bind(inputId,'env','source.pdf',inputHash).run();
     const originalObjects=new Map<string,ArrayBuffer>([['source.pdf',await (await bucket.get('source.pdf'))!.arrayBuffer()]]);
     const origin='https://host.example.com',key=new TextEncoder().encode('local-test-seal-key-at-least-32-bytes'),pepper=new TextEncoder().encode('local-test-pepper-at-least-32-bytes');
     for(const i of names.keys()) {

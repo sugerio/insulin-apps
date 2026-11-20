@@ -16,14 +16,20 @@ const describe = (contact: Contact) => [contact.email, contact.title, contact.co
 /**
  * A signer's Name or Email field that suggests contacts as it is typed (from two characters on, names and emails
  * containing it, most recently used first). Arrow keys move through the suggestions, Enter or a click chooses one,
- * Escape or leaving the field closes them; typing on is never held up.
+ * Escape or leaving the field closes them; typing on is never held up. The suggestions open only while the field has
+ * the focus: an answer that comes after the focus moved on (to Email, Add signer) or after Escape is dropped, so the list
+ * never opens over the rest of the form.
  */
 export function ContactField({ id, label, type = 'text', value, required = true, onChange, onChoose }: { id: string; label: string; type?: string; value: string; required?: boolean; onChange: (value: string) => void; onChoose: (contact: Contact) => void }) {
   const [found, setFound] = useState<Contact[]>([])
   const [open, setOpen] = useState(false)
   const [active, setActive] = useState(-1)
-  // Only the latest keystroke's answer is shown, however the answers arrive.
+  // Only the latest keystroke's answer is shown, however the answers arrive; leaving the field or Escape drops the one
+  // still on its way.
   const latest = useRef(0)
+  const input = useRef<HTMLInputElement | null>(null)
+  /** Whether the field still has the focus (where the page has a document to ask). */
+  const focused = () => { const el = input.current; return !el?.ownerDocument || el.ownerDocument.activeElement === el }
   const listId = `${id}-suggestions`
 
   function typed(text: string) {
@@ -33,7 +39,7 @@ export function ContactField({ id, label, type = 'text', value, required = true,
     if (q.length < MIN_TYPED) { setFound([]); setOpen(false); return }
     apiJson<{ contacts: Contact[] }>(contactsPath(q, SUGGESTED))
       .then((page) => {
-        if (ask !== latest.current) return
+        if (ask !== latest.current || !focused()) return
         // Nothing to suggest once the field holds a contact's email exactly.
         const shown = page.contacts.filter((c) => c.email.toLowerCase() !== q.toLowerCase())
         setFound(shown); setOpen(shown.length > 0); setActive(-1)
@@ -45,7 +51,11 @@ export function ContactField({ id, label, type = 'text', value, required = true,
     setOpen(false); setFound([]); setActive(-1)
     onChoose(contact)
   }
+  /** Closes the suggestions and drops an answer still on its way. */
+  function close() { latest.current++; setOpen(false); setActive(-1) }
   function keyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    // Escape with nothing shown yet only drops the answer on its way, and is left to the page (a dialog closes on it).
+    if (e.key === 'Escape' && !(open && found.length)) { close(); return }
     if (!open || !found.length) return
     if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
       e.preventDefault()
@@ -55,19 +65,19 @@ export function ContactField({ id, label, type = 'text', value, required = true,
       choose(found[active]!)
     } else if (e.key === 'Escape') {
       e.preventDefault()
-      setOpen(false)
+      close()
     }
   }
 
   return h(Field, { label, htmlFor: id },
     h('div', { className: 'relative' },
       h(Input, {
-        id, type, value, required, autoComplete: 'off',
+        id, ref: input, type, value, required, autoComplete: 'off',
         role: 'combobox', 'aria-autocomplete': 'list', 'aria-expanded': open, 'aria-controls': listId,
         ...(open && active >= 0 ? { 'aria-activedescendant': `${listId}-${active}` } : {}),
         onChange: (e: React.ChangeEvent<HTMLInputElement>) => typed(e.target.value),
         onKeyDown: keyDown,
-        onBlur: () => setOpen(false),
+        onBlur: close,
       }),
       open ? h('ul', { id: listId, role: 'listbox', 'aria-label': `Contacts matching ${label.toLowerCase()}`, className: 'absolute z-20 mt-1 max-h-72 w-full overflow-auto rounded-md border bg-popover p-1 text-popover-foreground shadow-md' },
         ...found.map((contact, i) => h('li', {

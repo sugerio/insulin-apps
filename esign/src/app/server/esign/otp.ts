@@ -4,7 +4,7 @@
  * and sending and checking the emailed code. Each takes the token and origin the route read from
  * the request; the routes decide which steps a request needs.
  */
-import { accessHash, authorizeAccess, exchangeAccessCode, issueAccessCode, RECIPIENT_SESSION_FROM } from './access.ts';
+import { accessHash, authorizeAccess, exchangeAccessCode, issueAccessCode, RECIPIENT_SESSION_FROM, validEditorOrigin } from './access.ts';
 const encoder = new TextEncoder();
 /** How long an emailed code stays valid: 10 minutes, inside the 15-minute page session. */
 export const OTP_TTL_MS = 10 * 60 * 1000;
@@ -28,6 +28,20 @@ export async function issueRecipientCode(db: D1Database, view: View): Promise<st
   return issueAccessCode(db, { scope: 'recipient', tenantId: view.tenantId, subjectId: view.taskId, origin: view.origin, now: view.now,
     ...(view.entry && Object.keys(view.entry).length ? { entry: JSON.stringify(view.entry) } : {}),
     where: { sql: 'EXISTS (SELECT 1 FROM tasks WHERE id=v.subject_id AND envelope_id=?)', binds: [view.envelopeId] } });
+}
+/**
+ * The origin a recipient code was issued to be framed by (the host's `allowedParentOrigin` on recipient-view, kept in
+ * the code's entry as `parentOrigin`), or null when it has none: the page may then be framed only by the app itself.
+ * Read before the exchange, which refuses a page framed by any other origin (signing-page.ts).
+ */
+export async function recipientCodeParent(db: D1Database, code: string, now: number): Promise<string | null> {
+  if (!/^[a-f0-9]{64}$/.test(code)) return null;
+  const row = await db.prepare("SELECT entry_json FROM access_codes WHERE scope='recipient' AND code_hash=? AND used_at IS NULL AND expires_at>?")
+    .bind(await accessHash(code), now).first<{ entry_json: string | null }>();
+  try {
+    const parent = (JSON.parse(row?.entry_json ?? '{}') as { parentOrigin?: unknown }).parentOrigin;
+    return typeof parent === 'string' && validEditorOrigin(parent) ? parent : null;
+  } catch { return null; }
 }
 /** Exchanges a recipient code, only at the origin it was issued for, for a page session token. */
 export async function exchangeRecipientCode(db: D1Database, code: string, origin: string, now: number): Promise<string> {

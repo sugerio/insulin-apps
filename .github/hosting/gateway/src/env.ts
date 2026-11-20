@@ -22,10 +22,11 @@ export interface Env {
 
   SITE_DOMAIN?: string
   /**
-   * JSON: [{ name, title, summary, binding, source, permissions, publicPaths, scheduled }]. A wrangler `vars` object
-   * arrives already parsed.
+   * One per app, named SITE_ plus its binding (SITE_APP_CAPTABLE): JSON `{ name, title, summary, binding, source,
+   * permissions, publicPaths, scheduled, clientSettings, navigation }`. A wrangler `vars` object arrives already parsed.
+   * One variable per app because Cloudflare holds each to 5 KB.
    */
-  SITE_APPS?: unknown
+  [siteApp: `SITE_APP_${string}`]: unknown
   GOOGLE_CLIENT_ID?: string
   GOOGLE_CLIENT_SECRET?: string
   TURNSTILE_SITE_KEY?: string

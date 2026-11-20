@@ -329,9 +329,9 @@ export function readNavigation(app, raw) {
 }
 
 /**
- * An app's navigation as the gateway gets it in SITE_APPS: level 1 without children, and without the fields that hold
+ * An app's navigation as the gateway gets it in its SITE_APP_<APP> variable: level 1 without children, and without the fields that hold
  * their defaults (no group, role VIEWER, maxRole ADMIN), which the gateway fills in again. The gateway draws only an
- * app's level 1 (DESIGN.md §3.2), and a Worker variable is limited to 5 KB, which SITE_APPS passed with the children.
+ * app's level 1 (DESIGN.md §3.2), and a Worker variable is limited to 5 KB, which one list of every app's entry passed with the children.
  */
 export function gatewayNavigation(navigation) {
   return navigation.map(({ children: _children, group, role, maxRole, ...item }) => ({
@@ -372,7 +372,7 @@ export function readEngine(app, raw, rawApi) {
  * unit, default }, keys unique and named like usage metrics, a label of 1 to 80 characters on one line, `unit` one of
  * count, bytes, hours or days, and `default` a whole number from 0 to 10^15. It is checked by the gateway's own rule
  * (limitsProblems in gateway scripts/limits-catalog.mjs, which writes the catalog to the gateway's D1), so what passes
- * here the deploy can write. It doesn't go to the gateway in SITE_APPS (5 KB).
+ * here the deploy can write. It doesn't go to the gateway in its SITE_APP_<APP> variable (5 KB).
  */
 export function readLimits(app, raw) {
   if (raw === undefined) return []

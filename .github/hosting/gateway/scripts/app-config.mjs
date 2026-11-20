@@ -5,7 +5,7 @@
 //   node scripts/app-config.mjs --app captable            # a built Cap Table: NITRO_PRESET=cloudflare_module npm run build first
 //   node scripts/app-config.mjs --app captable --app esign  # several built apps, each on its own host
 //
-// The gateway's config is wrangler.local.jsonc with a service binding (APP_<NAME>) and a SITE_APPS entry per app, the
+// The gateway's config is wrangler.local.jsonc with a service binding (APP_<NAME>) and a SITE_APP_<NAME> variable per app, the
 // entries read from each app's package.json by list-apps.mjs, as the deploy does, and a local GATEWAY_SECRET_KEY. An
 // app's config is shaped like the one .github/scripts/workerd-smoke/smoke.mjs writes: Nitro's generated wrangler.json
 // plus the name, absolute paths, a local D1 with the app's migrations and SUGER_ACCESS_MODE=console, and what the deploy
@@ -19,7 +19,7 @@ import { createHash } from 'node:crypto'
 import { existsSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
-import { appToken, gatewayUrls, platformAppBindings, siteAppEntry } from '../../../scripts/deploy-apps.mjs'
+import { appToken, gatewayUrls, platformAppBindings, siteAppEntry, siteAppVariables } from '../../../scripts/deploy-apps.mjs'
 import { ENGINE_CONFIG, engineWorkerName, parseJsonc } from '../../../scripts/engine.mjs'
 import { listApps } from '../../../scripts/list-apps.mjs'
 
@@ -98,7 +98,7 @@ export async function engineConfig(app) {
 }
 
 /**
- * The gateway's config for these apps: wrangler.local.jsonc with absolute paths, a binding and a SITE_APPS entry per
+ * The gateway's config for these apps: wrangler.local.jsonc with absolute paths, a binding and a SITE_APP_<NAME> variable per
  * app, and the local GATEWAY_SECRET_KEY the apps' tokens are derived from. With only the stub it is
  * wrangler.local.jsonc as it stands. `vars` are added to the gateway's vars.
  */
@@ -114,9 +114,10 @@ export async function gatewayConfig(apps = ['stub'], vars = {}) {
   if (apps.includes('stub')) return config
   const known = await listApps(repositoryDir)
   config.services = apps.map((app) => ({ binding: bindingName(app), service: workerName(app) }))
-  // As the deploy's SITE_APPS (siteAppEntry): never an app's secret names, engine or limit catalog (the catalogs go to
-  // the local D1).
-  config.vars.SITE_APPS = apps.map((app) => siteAppEntry(known.find(({ name }) => name === app)))
+  // As the deploy's SITE_APP_<NAME> variables (siteAppEntry): never an app's secret names, engine or limit catalog (the
+  // catalogs go to the local D1). The stub's own variable goes: these apps replace it.
+  for (const name of Object.keys(config.vars)) if (/^SITE_APP_/.test(name)) delete config.vars[name]
+  Object.assign(config.vars, siteAppVariables(apps.map((app) => siteAppEntry(known.find(({ name }) => name === app)))))
   config.vars.GATEWAY_SECRET_KEY ??= LOCAL_GATEWAY_SECRET_KEY
   return config
 }

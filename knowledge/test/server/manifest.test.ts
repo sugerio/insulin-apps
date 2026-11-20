@@ -23,7 +23,7 @@ describe('the insulin manifest', () => {
       const role = permission.role as 'ADMIN' | 'EDITOR' | 'VIEWER'
       expect(rolePermissions(role)).toContain(permission.key)
       if (role !== 'VIEWER') expect(rolePermissions(role === 'ADMIN' ? 'EDITOR' : 'VIEWER')).not.toContain(permission.key)
-      // SITE_APPS carries the catalog and is limited to 5 KB: keep the words short.
+      // The app's SITE_APP_KNOWLEDGE variable carries the catalog and is limited to 5 KB: keep the words short.
       expect(permission.label.length).toBeLessThanOrEqual(20)
       expect(permission.description.length).toBeLessThanOrEqual(90)
     }

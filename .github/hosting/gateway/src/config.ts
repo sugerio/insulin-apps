@@ -70,7 +70,7 @@ export interface HostedApp {
   clientSettings: { path: string; description: string | null } | null
   /**
    * The app's level 1 (DESIGN.md §3.2), which the gateway renders on the app's settings pages so they read as part of
-   * the app; empty for an app without a manifest (or a SITE_APPS from before it existed).
+   * the app; empty for an app without a manifest.
    */
   navigation: NavigationItem[]
 }
@@ -152,6 +152,13 @@ export function isAppName(name: unknown): name is string {
 export function bindingName(app: string): string {
   return `APP_${app.toUpperCase().replaceAll('-', '_')}`
 }
+
+/** The variable that holds an app's entry: SITE_ plus its binding (SITE_APP_CAPTABLE). */
+export function siteAppVariable(app: string): string {
+  return `SITE_${bindingName(app)}`
+}
+
+const SITE_APP_VARIABLE = /^SITE_APP_[A-Z0-9_]+$/
 
 /** `Name <address>` or a bare address. */
 export function parseSender(input: unknown): { email: string; name: string } | null {
@@ -498,40 +505,47 @@ function hasMethod(value: unknown, method: string): boolean {
   return typeof value === 'object' && value !== null && typeof (value as Record<string, unknown>)[method] === 'function'
 }
 
+/**
+ * The hosted apps, one SITE_APP_<NAME> variable each, in the order of their names. An entry that isn't valid JSON or
+ * an object, or whose name isn't the one its variable is for, fails the config closed, like every other field.
+ */
 function parseApps(env: Env, domain: string, problems: string[]): HostedApp[] {
-  let raw = env.SITE_APPS
-  if (typeof raw === 'string') {
-    try {
-      raw = JSON.parse(raw)
-    } catch {
-      problems.push('SITE_APPS (not valid JSON)')
-      return []
+  const entries: { variable: string; item: Record<string, unknown> }[] = []
+  for (const variable of Object.keys(env).filter((key) => SITE_APP_VARIABLE.test(key)).sort()) {
+    let raw = env[variable as `SITE_APP_${string}`]
+    if (typeof raw === 'string') {
+      try {
+        raw = JSON.parse(raw)
+      } catch {
+        problems.push(`${variable} (not valid JSON)`)
+        continue
+      }
     }
-  }
-  if (!Array.isArray(raw)) {
-    problems.push('SITE_APPS (expected a JSON array)')
-    return []
+    if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
+      problems.push(`${variable} (expected a JSON object)`)
+      continue
+    }
+    entries.push({ variable, item: raw as Record<string, unknown> })
   }
   const apps: HostedApp[] = []
-  raw.forEach((entry: unknown, index) => {
-    const item = (typeof entry === 'object' && entry !== null ? entry : {}) as Record<string, unknown>
+  for (const { variable, item } of entries.sort((a, b) => String(a.item.name).localeCompare(String(b.item.name)))) {
     const name = item.name
     if (!isAppName(name)) {
-      problems.push(`SITE_APPS[${index}].name`)
-      return
+      problems.push(`${variable}.name`)
+      continue
     }
-    if (apps.some((app) => app.name === name)) {
-      problems.push(`SITE_APPS[${index}].name (duplicate)`)
-      return
+    if (siteAppVariable(name) !== variable) {
+      problems.push(`${variable}.name (expected the app of ${variable}, not ${name})`)
+      continue
     }
     const binding = bindingName(name)
     if (item.binding !== undefined && item.binding !== binding) {
-      problems.push(`SITE_APPS[${index}].binding (expected ${binding})`)
-      return
+      problems.push(`${variable}.binding (expected ${binding})`)
+      continue
     }
     const service = env[binding as `APP_${string}`]
     if (!hasMethod(service, 'fetch')) log('config_app_binding_missing', { app: name, binding })
-    const publicPaths = parsePublicPaths(item.publicPaths, `SITE_APPS[${index}].publicPaths`, problems)
+    const publicPaths = parsePublicPaths(item.publicPaths, `${variable}.publicPaths`, problems)
     apps.push({
       name,
       title: truncate(cleanText(item.title), 80) || name,
@@ -541,13 +555,13 @@ function parseApps(env: Env, domain: string, problems: string[]): HostedApp[] {
       host: `${name}.${domain}`,
       appId: `insulin-apps-${name}`,
       service: hasMethod(service, 'fetch') ? (service as Fetcher) : null,
-      permissions: parsePermissions(item.permissions, `SITE_APPS[${index}].permissions`, problems),
+      permissions: parsePermissions(item.permissions, `${variable}.permissions`, problems),
       publicPaths,
-      scheduled: parseScheduled(item.scheduled, publicPaths, `SITE_APPS[${index}].scheduled`, problems),
-      clientSettings: parseClientSettings(item.clientSettings, publicPaths, `SITE_APPS[${index}].clientSettings`, problems),
-      navigation: parseNavigation(item.navigation, `SITE_APPS[${index}].navigation`, problems),
+      scheduled: parseScheduled(item.scheduled, publicPaths, `${variable}.scheduled`, problems),
+      clientSettings: parseClientSettings(item.clientSettings, publicPaths, `${variable}.clientSettings`, problems),
+      navigation: parseNavigation(item.navigation, `${variable}.navigation`, problems),
     })
-  })
+  }
   return apps
 }
 

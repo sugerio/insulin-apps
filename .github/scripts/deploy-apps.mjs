@@ -322,15 +322,29 @@ export function sanitizeAppBaseConfig(baseConfig) {
 }
 
 /**
- * An app's SITE_APPS entry, for the deploy and the local stack alike: what the gateway needs (the permissions, public
- * paths, scheduled path, client settings page and level 1 of the navigation), never the names of an app's secrets, its
- * engine or its limit catalog (that goes to the gateway's D1, writeLimitCatalogs). Cloudflare holds a variable to 5 KB,
- * so what the gateway works out for itself is left out too: the binding (APP_<NAME>, from the name) and every field
- * that is null or an empty list (no public paths, tick, client settings page, permissions or navigation).
+ * An app's entry for the gateway (its SITE_APP_<NAME> variable), for the deploy and the local stack alike: what the
+ * gateway needs (the permissions, public paths, scheduled path, client settings page and level 1 of the navigation),
+ * never the names of an app's secrets, its engine or its limit catalog (that goes to the gateway's D1,
+ * writeLimitCatalogs). Cloudflare holds a variable to 5 KB, so what the gateway works out for itself is left out too:
+ * the binding (APP_<NAME>, from the name) and every field that is null or an empty list (no public paths, tick, client
+ * settings page, permissions or navigation).
  */
 export function siteAppEntry({ secrets: _secrets, engine: _engine, engineApi: _engineApi, limits: _limits, binding: _binding, ...app }, extra = {}) {
   const entry = { ...app, navigation: gatewayNavigation(app.navigation ?? []), ...extra }
   return Object.fromEntries(Object.entries(entry).filter(([, value]) => value !== null && value !== undefined && !(Array.isArray(value) && value.length === 0)))
+}
+
+/**
+ * The gateway variable that holds an app's entry: SITE_ plus its service binding, so SITE_APP_CAP_TABLE for cap-table.
+ * One variable per app, because Cloudflare holds each variable to 5 KB and one list of every app outgrew it.
+ */
+export function siteAppVariable(appName) {
+  return `SITE_${serviceBinding(appName)}`
+}
+
+/** The apps' entries as the gateway's variables, one each (siteAppVariable). */
+export function siteAppVariables(entries) {
+  return Object.fromEntries(entries.map((entry) => [siteAppVariable(entry.name), entry]))
 }
 
 export function buildGatewayConfig({ root, apps, settings, databaseId }) {
@@ -371,7 +385,7 @@ export function buildGatewayConfig({ root, apps, settings, databaseId }) {
     assets: { directory: resolve(root, '.github', 'hosting', 'docs', 'assets'), binding: 'DOCS_ASSETS', run_worker_first: true },
     vars: {
       SITE_DOMAIN: settings.siteDomain,
-      SITE_APPS: siteApps,
+      ...siteAppVariables(siteApps),
       GOOGLE_CLIENT_ID: settings.googleClientId,
       TURNSTILE_SITE_KEY: settings.turnstileSiteKey,
       EMAIL_FROM: settings.emailFrom,
@@ -566,7 +580,7 @@ export async function deployApps({
       cwd: root,
       env: childEnvironment,
     })
-    // What SITE_APPS can't hold (5 KB): the limit catalogs of the apps this deploy put in production (DESIGN.md §8.8).
+    // What an app's SITE_APP_<APP> variable can't hold (5 KB): the limit catalogs of the apps this deploy put in production (DESIGN.md §8.8).
     if (catalogApps.length) {
       await writeLimitCatalogs({ runner, wrangler, root, outputDirectory, apps: catalogApps, catalogs, env: childEnvironment, dryRun, configPath: gatewayConfigPath })
     }

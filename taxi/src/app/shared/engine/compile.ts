@@ -89,6 +89,8 @@ const sourceField = z.union([
 const sourceForm = z.strictObject({
   title: z.string().min(1),
   url: z.url(),
+  /** The publisher's French version of the form: its title and url. It is placed by the layout `<id>-fr`. */
+  french: z.strictObject({ title: z.string().min(1), url: z.url() }).optional(),
   applies: z.string().min(1),
   fields: z.record(z.string(), sourceField),
   tables: z
@@ -217,11 +219,27 @@ export function compileRules(chain: SourceYear[], hash: (text: string) => string
       printedYears: slip.printedYears ?? [0],
     })),
     hints: merged.hints as CompiledRules["hints"],
-    forms: mapValues(merged.forms as Record<string, z.infer<typeof sourceForm>>, (form, id) =>
-      placeForm(form, (merged.formLayout as Record<string, z.infer<typeof sourceLayout>>)[id], (message) => {
+    forms: mapValues(merged.forms as Record<string, z.infer<typeof sourceForm>>, (form, id) => {
+      const layouts = merged.formLayout as Record<string, z.infer<typeof sourceLayout>>;
+      const fail = (message: string): never => {
         throw new RuleError({ file: where(`forms.${id}`), entry: `forms.${id}` }, message);
-      }),
-    ),
+      };
+      const placed = placeForm(form, layouts[id], fail);
+      if (!form.french) return placed;
+      // The French version has the same fields, in the same order, each at its place on that version's PDF.
+      const french = placeForm({ ...form, ...form.french }, layouts[`${id}-fr`], (message) => fail(`French version: ${message}`));
+      return {
+        ...placed,
+        french: {
+          title: french.title,
+          url: french.url,
+          sha256: french.sha256,
+          pages: french.pages,
+          places: french.fields.map(({ page, x, y, plain, width, cell }) => ({ page, x, y, ...(plain ? { plain } : {}), ...(width === undefined ? {} : { width }), ...(cell === undefined ? {} : { cell }) })),
+          tables: french.tables.map((table) => table.parts),
+        },
+      };
+    }),
     ...(outcome === undefined ? {} : { outcome }),
   };
   const compiled: CompiledRules = { ...content, version: hash(JSON.stringify(content)) };

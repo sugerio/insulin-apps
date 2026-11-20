@@ -1,6 +1,9 @@
 import type { PersonResult } from "./engine/evaluate.ts";
 import type { Slip } from "./returns.ts";
 
+/** The languages a return's forms print in (`?language=` on the forms' URL): Revenu Québec's forms have a French version. */
+export { FORM_LANGUAGES, type FormLanguage } from "./engine/rules.ts";
+
 // What stands between a return and its filled-in CRA forms. The forms are printed only from a finished return: every
 // slip confirmed, every result line worked out from answers (no usual answer assumed), and nothing the app doesn't
 // handle. A couple's returns read each other (the spouse amount reads the other's net income), so a question left on

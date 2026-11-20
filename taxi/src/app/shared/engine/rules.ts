@@ -187,19 +187,34 @@ export interface FormTable {
   parts: { page: number; columns: number[]; amount: number; over: number; times: number; tax: number; rows: [string, string, string, string] }[];
 }
 
-/** A CRA print form the app fills in (forms.yaml), measured in form-layout.yaml. */
-export interface FormSpec {
-  id: string;
+/** A version of a print form: its file, and what goes where on it. */
+export interface FormVersion {
   title: string;
-  /** Where the CRA publishes it, and the SHA-256 of the file the layout was measured on. */
+  /** Where the CRA or Revenu Québec publishes it, and the SHA-256 of the file the layout was measured on. */
   url: string;
   sha256: string;
   pages: number;
+  fields: FormField[];
+  tables: FormTable[];
+}
+
+/** A CRA or Revenu Québec print form the app fills in (forms.yaml), measured in form-layout.yaml. */
+export interface FormSpec extends FormVersion {
+  id: string;
   /** Which returns get it. */
   applies: Formula;
   appliesText: string;
-  fields: FormField[];
-  tables: FormTable[];
+  /** The publisher's French version, with the same fields at that version's places. */
+  french?: FormVersion;
+}
+
+/** The languages a return's forms print in: English, or French where the form has a French version. */
+export const FORM_LANGUAGES = ["en", "fr"] as const;
+export type FormLanguage = (typeof FORM_LANGUAGES)[number];
+
+/** The version of a form to print in a language: its French version when asked for and it has one. */
+export function formIn(form: FormSpec, language: FormLanguage): FormSpec {
+  return language === "fr" && form.french ? { ...form, ...form.french } : form;
 }
 
 /** What to call a document of this type on screen: a slip by its type (T4), a receipt or notice by its title. */
@@ -236,6 +251,17 @@ export interface RuleSet {
 
 const decimalText = z.string().regex(/^-?\d+(\.\d+)?$/);
 const bracketRowSchema = z.strictObject({ upTo: decimalText.nullable(), rate: decimalText, base: decimalText.optional() });
+/** A printed bracket table's part: its page, each column's cents line, its rows' baselines and their numbers. */
+const tablePartSchema = z.strictObject({
+  page: z.number().int().min(1),
+  columns: z.array(z.number()).min(1),
+  amount: z.number(),
+  over: z.number(),
+  times: z.number(),
+  tax: z.number(),
+  rows: z.tuple([z.string(), z.string(), z.string(), z.string()]),
+});
+
 export const compiledRulesSchema = z.strictObject({
   country: z.string().regex(/^[a-z]{2}$/),
   year: z.number().int(),
@@ -302,21 +328,31 @@ export const compiledRulesSchema = z.strictObject({
           cell: z.number().optional(),
         }),
       ),
+      /** The French version: its file, and each field's place on it (in the fields' order), and each table's parts. */
+      french: z
+        .strictObject({
+          title: z.string(),
+          url: z.url(),
+          sha256: z.string().regex(/^[0-9a-f]{64}$/),
+          pages: z.number().int().min(1),
+          places: z.array(
+            z.strictObject({
+              page: z.number().int().min(1),
+              x: z.number(),
+              y: z.number(),
+              plain: z.boolean().optional(),
+              width: z.number().optional(),
+              cell: z.number().optional(),
+            }),
+          ),
+          tables: z.array(z.array(tablePartSchema)),
+        })
+        .optional(),
       tables: z.array(
         z.strictObject({
           brackets: z.string(),
           amount: z.string(),
-          parts: z.array(
-            z.strictObject({
-              page: z.number().int().min(1),
-              columns: z.array(z.number()).min(1),
-              amount: z.number(),
-              over: z.number(),
-              times: z.number(),
-              tax: z.number(),
-              rows: z.tuple([z.string(), z.string(), z.string(), z.string()]),
-            }),
-          ),
+          parts: z.array(tablePartSchema),
         }),
       ),
     }),
@@ -458,6 +494,25 @@ export function loadRuleSet(json: unknown, where: (entry: string) => string = ()
           }),
           tables: form.tables.map((table) => ({ brackets: table.brackets, amount: parse(entry, table.amount), amountText: table.amount, parts: table.parts })),
         };
+        if (form.french) {
+          const { french } = form;
+          if (french.places.length !== spec.fields.length || french.tables.length !== spec.tables.length) fail(entry, "The French version places each field and table");
+          spec.french = {
+            title: french.title,
+            url: french.url,
+            sha256: french.sha256,
+            pages: french.pages,
+            fields: spec.fields.map((field, index): FormField => {
+              const { page, x, y, plain, width, cell } = french.places[index]!;
+              const placed = { ...field, page, x, y };
+              if (placed.kind === "amount") return { ...placed, plain: plain ?? false };
+              if (placed.kind !== "text") return placed;
+              const { width: _width, cell: _cell, ...text } = placed;
+              return { ...text, ...(width === undefined ? {} : { width }), ...(cell === undefined ? {} : { cell }) };
+            }),
+            tables: spec.tables.map((table, index) => ({ ...table, parts: french.tables[index]! })),
+          };
+        }
         return [id, spec];
       }),
     ),
@@ -616,6 +671,9 @@ function checkRuleSet(ruleSet: RuleSet, fail: (entry: string, message: string, c
     const entry = `forms.${form.id}`;
     const at = (where: string) => (message: string, column?: number) => fail(where, message, column);
     if (formulaType(ruleSet, form.applies, at(entry), new Set()) !== "boolean") fail(entry, "applies must be a yes/no value");
+    for (const field of form.french?.fields ?? []) {
+      if (field.page > form.french!.pages) fail(`${entry}.fields.${field.key}`, `The French version has ${form.french!.pages} pages`);
+    }
     for (const field of form.fields) {
       const where = `${entry}.fields.${field.key}`;
       if (field.page > form.pages) fail(where, `The form has ${form.pages} pages`);

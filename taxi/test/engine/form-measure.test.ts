@@ -241,4 +241,17 @@ describe("measuring Revenu Québec's boxes", () => {
     expect(measured.rows).toEqual({});
     expect(() => measureRqForm([], [], { x: { kind: "text", page: 1, line: "1" } })).toThrow(/no line 1 on page 1/);
   });
+
+  it("takes the tick box before its label, even an outlined one, not the next option's box after it (Schedule J)", () => {
+    // "You: [ ] non-dependent [ ] dependent": the first box is an outline, the second a filled square nearer the label.
+    const measured = measureRqForm(
+      [text(30, 675.6, "Level of dependence", 114), text(444.4, 633.6, "non-dependent", 50.2), text(520, 633.6, "dependent", 35.3)],
+      [stroke(428.7, 633.8, 440.2, 645.3), fill(504.3, 633.8, 515.8, 645.3), stroke(504.3, 633.8, 515.8, 645.3)],
+      {
+        youNonDependent: { kind: "tick", page: 1, label: "non-dependent", below: "Level of dependence" },
+        youDependent: { kind: "tick", page: 1, label: "dependent", below: "Level of dependence" },
+      },
+    );
+    expect(measured.ticks).toEqual({ youNonDependent: [1, 434.5, 639.6], youDependent: [1, 510.1, 639.6] });
+  });
 });

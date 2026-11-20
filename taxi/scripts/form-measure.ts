@@ -461,7 +461,9 @@ export function measureRqForm(items: TextItem[], shapes: Shape[], places: Record
     if ("label" in spec) {
       // An answer's tick box ("Yes", "No"), by the option's label.
       if (spec.kind !== "tick") throw new Error(`${key}: a Revenu Québec form's boxes are found by their line numbers`);
-      tickBoxes[key] = tickBy(fills, spec, labelOf(items, spec, key)) ?? fail(key, `no tick box near "${spec.label}" on page ${spec.page}`);
+      // Revenu Québec prints a tick box before its label ("1 [ ] Yes"): the nearest box after it is the next option's. The
+      // box can be drawn as an outline only.
+      tickBoxes[key] = tickBy(shapes, spec, labelOf(items, spec, key), "before") ?? fail(key, `no tick box before "${spec.label}" on page ${spec.page}`);
       continue;
     }
     const number = numbers.find((each) => each.page === spec.page && each.line === spec.line) ?? fail(key, `no line ${spec.line} on page ${spec.page}`);
@@ -540,11 +542,12 @@ function fail(key: string, message: string): never {
   throw new Error(`${key}: ${message}`);
 }
 
-/** The small square on a label's line, the nearest one to it: its centre. */
-function tickBy(fills: Shape[], spec: LabelPlace, label: TextItem): Point | undefined {
+/** The small square on a label's line, the nearest one to it (or the nearest one before it): its centre. */
+function tickBy(fills: Shape[], spec: LabelPlace, label: TextItem, side: "either" | "before" = "either"): Point | undefined {
   const square = fills
     .filter((fill) => {
       const size = fill.x1 - fill.x0;
+      if (side === "before" && fill.x1 > label.x + 1) return false;
       return fill.page === spec.page && size >= 7 && size <= 13 && Math.abs(fill.y1 - fill.y0 - size) < 1 && Math.abs((fill.y0 + fill.y1) / 2 - (label.y + 3)) <= 6;
     })
     .sort((a, b) => gap(a, label) - gap(b, label))[0];

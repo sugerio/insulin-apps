@@ -1,12 +1,12 @@
-import { createHash } from "node:crypto";
+import { createCipheriv, createHash } from "node:crypto";
 import { PDFDocument } from "pdf-lib";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { describe, expect, it } from "vitest";
 import { decryptPdf, md5, rc4 } from "../../src/app/server/lib/pdf-decrypt.ts";
 
-// Revenu Québec's forms are encrypted with an empty password (AES-128, standard security handler revision 4), which
-// pdf-lib can't read. Its PDFs aren't in the repository, so these tests encrypt a small PDF the same way, check that a
-// PDF reader opens it, then that pdf-lib reads it once decrypted.
+// Revenu Québec's forms are encrypted with an empty password (AES-128, standard security handler revision 4; some
+// French ones AES-256, revision 6), which pdf-lib can't read. Its PDFs aren't in the repository, so these tests encrypt
+// a small PDF the same way, check that a PDF reader opens it, then that pdf-lib reads it once decrypted.
 
 const PADDING = Uint8Array.from([
   0x28, 0xbf, 0x4e, 0x5e, 0x4e, 0x75, 0x8a, 0x41, 0x64, 0x00, 0x4e, 0x56, 0xff, 0xfa, 0x01, 0x08, 0x2e, 0x2e, 0x00, 0xb6, 0xd0, 0x68, 0x3e, 0x80, 0x2f, 0x0c,
@@ -20,8 +20,34 @@ const join = (...parts: Uint8Array[]) => {
   return out;
 };
 
-/** A one-page PDF saying "Revenu Quebec", encrypted as Revenu Québec's forms are; `password` makes it need one. */
-async function encryptedPdf(options: { password?: string } = {}): Promise<Uint8Array> {
+/** Algorithm 2.B of ISO 32000-2 (revision 6), written apart from the app's, with Node's own hashes and AES. */
+function hash2B(password: Uint8Array, salt: Uint8Array): Uint8Array {
+  let hash = new Uint8Array(createHash("sha256").update(join(password, salt)).digest());
+  for (let round = 0; ; round += 1) {
+    const block = join(...Array.from({ length: 64 }, () => join(password, hash)));
+    const cipher = createCipheriv("aes-128-cbc", hash.subarray(0, 16), hash.subarray(16, 32)).setAutoPadding(false);
+    const encrypted = new Uint8Array(Buffer.concat([cipher.update(block), cipher.final()]));
+    const sum = encrypted.subarray(0, 16).reduce((total, byte) => total + byte, 0);
+    hash = new Uint8Array(createHash(["sha256", "sha384", "sha512"][sum % 3]!).update(encrypted).digest());
+    if (round >= 63 && encrypted.at(-1)! <= round - 31) return hash.subarray(0, 32);
+  }
+}
+
+/** The encryption dictionary of revision 6 (AES-256) for a file key and a user password, and its object cipher. */
+function aes256Security(fileKey: Uint8Array, password: string) {
+  const [validation, keySalt] = [Uint8Array.from({ length: 8 }, (_, index) => index + 1), Uint8Array.from({ length: 8 }, (_, index) => index + 11)];
+  const user = join(hash2B(bytes(password), validation), validation, keySalt);
+  const wrap = createCipheriv("aes-256-cbc", hash2B(bytes(password), keySalt), new Uint8Array(16)).setAutoPadding(false);
+  const userKey = new Uint8Array(Buffer.concat([wrap.update(fileKey), wrap.final()]));
+  const filler = (length: number) => Uint8Array.from({ length }, (_, index) => (index * 13) & 255);
+  return `<< /Filter /Standard /V 5 /R 6 /Length 256 /CF << /StdCF << /AuthEvent /DocOpen /CFM /AESV3 /Length 32 >> >> /StmF /StdCF /StrF /StdCF /O <${hex(filler(48))}> /U <${hex(user)}> /OE <${hex(filler(32))}> /UE <${hex(userKey)}> /Perms <${hex(filler(16))}> /P -1036 >>`;
+}
+
+/**
+ * A one-page PDF saying "Revenu Quebec", encrypted as Revenu Québec's forms are (AES-128, or AES-256 with `aes256`);
+ * `password` makes it need one.
+ */
+async function encryptedPdf(options: { password?: string; aes256?: boolean } = {}): Promise<Uint8Array> {
   const id = Uint8Array.from({ length: 16 }, (_, index) => index * 7);
   const owner = Uint8Array.from({ length: 32 }, (_, index) => 255 - index);
   const permissions = new Uint8Array(4);
@@ -33,8 +59,10 @@ async function encryptedPdf(options: { password?: string } = {}): Promise<Uint8A
     [...Array(20).keys()].reduce((data, round) => rc4(key.map((byte) => byte ^ round), data), md5(join(PADDING, id))),
     new Uint8Array(16),
   );
+  const fileKey = Uint8Array.from({ length: 32 }, (_, index) => (index * 29 + 3) & 255);
   const aes = async (num: number, plain: Uint8Array) => {
-    const objectKey = md5(join(key, Uint8Array.of(num, 0, 0, 0, 0), bytes("sAlT")));
+    // Revision 6 encrypts every object with the file key itself.
+    const objectKey = options.aes256 ? fileKey : md5(join(key, Uint8Array.of(num, 0, 0, 0, 0), bytes("sAlT")));
     const iv = Uint8Array.from({ length: 16 }, (_, index) => index + num);
     const cipher = await crypto.subtle.importKey("raw", new Uint8Array(objectKey), "AES-CBC", false, ["encrypt"]);
     return join(iv, new Uint8Array(await crypto.subtle.encrypt({ name: "AES-CBC", iv }, cipher, new Uint8Array(plain))));
@@ -50,7 +78,9 @@ async function encryptedPdf(options: { password?: string } = {}): Promise<Uint8A
     bytes(String(content.length)),
     bytes(`<< /Title <${hex(await aes(7, bytes("Schedule (test)")))}> >>`),
     bytes(
-      `<< /Filter /Standard /V 4 /R 4 /Length 128 /CF << /StdCF << /AuthEvent /DocOpen /CFM /AESV2 /Length 16 >> >> /StmF /StdCF /StrF /StdCF /O <${hex(owner)}> /U <${hex(user)}> /P -1036 >>`,
+      options.aes256
+        ? aes256Security(fileKey, options.password ?? "")
+        : `<< /Filter /Standard /V 4 /R 4 /Length 128 /CF << /StdCF << /AuthEvent /DocOpen /CFM /AESV2 /Length 16 >> >> /StmF /StdCF /StrF /StdCF /O <${hex(owner)}> /U <${hex(user)}> /P -1036 >>`,
     ),
   ];
   const parts: Uint8Array[] = [bytes("%PDF-1.7\n")];
@@ -79,8 +109,11 @@ describe("decrypting a PDF to fill it", () => {
     expect(hex(rc4(bytes("Key"), bytes("Plaintext")))).toBe("bbf316e8d940af0ad3");
   });
 
-  it("decrypts a file anyone may open, so pdf-lib reads it: its page and its strings", async () => {
-    const encrypted = await encryptedPdf();
+  it.each([
+    ["AES-128", false],
+    ["AES-256", true],
+  ])("decrypts a file anyone may open (%s), so pdf-lib reads it: its page and its strings", async (_, aes256) => {
+    const encrypted = await encryptedPdf({ aes256 });
     // A PDF reader opens it as it is; pdf-lib refuses it.
     expect(await textOf(encrypted)).toBe("Revenu Quebec");
     await expect(PDFDocument.load(encrypted)).rejects.toThrow(/encrypted/);
@@ -97,5 +130,6 @@ describe("decrypting a PDF to fill it", () => {
     const plain = await (await PDFDocument.create()).save();
     expect(await decryptPdf(plain)).toBe(plain);
     await expect(decryptPdf(await encryptedPdf({ password: "secret" }))).rejects.toThrow(/needs a password/);
+    await expect(decryptPdf(await encryptedPdf({ password: "secret", aes256: true }))).rejects.toThrow(/needs a password/);
   });
 });

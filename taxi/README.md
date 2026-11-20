@@ -48,7 +48,8 @@ uploaded slips read by AI (or typed in), income, deductions, credits, the result
   own T1 and provincial form (ON428, BC428 or AB428) with the amounts written in, then a worksheet with the slips, the
   answers, the applied hints and how each line was worked out. The CRA's print PDFs come from canada.ca on first use
   and are kept in the database; they are never in the repository. Where each amount goes is measured from the PDFs by
-  `npm run form-layout` (`rules/ca/2025/form-layout.yaml`); what goes there is in `rules/ca/2025/forms.yaml`.
+  `npm run form-layout` (`rules/ca/2025/form-layout.yaml`); what goes there is in `rules/ca/2025/forms.yaml`. Revenu
+  Québec's forms also print in French, on their French versions, each measured on its own.
 - **Roles.** Owners, admins and editors prepare returns; viewers see everything and change nothing. Custom roles pick
   from two permissions: Prepare returns and View returns.
 - **Built-in Docs.** **Docs**, in everyone's navigation, explains the app and covers Canadian tax basics in plain words,

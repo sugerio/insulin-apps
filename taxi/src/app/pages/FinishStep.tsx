@@ -1,9 +1,11 @@
-import { useMemo } from "react";
+import { useId, useMemo, useState } from "react";
 import { Link } from "react-router";
 import { ExternalLink, FileDown } from "lucide-react";
-import { printBlockers, spouseOf, type Estimate, type SlipList, type Step } from "#shared";
+import { printBlockers, spouseOf, type Estimate, type FormLanguage, type SlipList, type Step } from "#shared";
 import { Button } from "@/components/ui/button.tsx";
 import { Card, CardContent } from "@/components/ui/card.tsx";
+import { Label } from "@/components/ui/label.tsx";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group.tsx";
 import { ResultLine } from "../components/EstimateCard.tsx";
 import { HintList } from "../components/HintList.tsx";
 import { ResourceView } from "../components/Feedback.tsx";
@@ -124,9 +126,15 @@ function Headline({ title, refund, owing }: { title?: string; refund: string | n
 
 /**
  * The return on the CRA's forms (and, for a resident of Quebec, on Revenu Québec's TP-1 after them), with its
- * worksheet: only a finished return can be printed.
+ * worksheet: only a finished return can be printed. Revenu Québec's forms print in English or in French.
  */
 function Download({ ready, quebec, href }: { ready: boolean; quebec: boolean; href: string }) {
+  const [language, setLanguage] = useState<FormLanguage>("en");
+  const url = (download: boolean) => {
+    const query = new URLSearchParams({ ...(quebec && language === "fr" ? { language } : {}), ...(download ? { download: "1" } : {}) }).toString();
+    return query ? `${href}?${query}` : href;
+  };
+  const languageLabel = useId();
   return (
     <section aria-label="Your forms" className="flex flex-col gap-2 rounded-lg border p-4">
       <h2 className="text-sm font-medium">Your forms</h2>
@@ -135,7 +143,8 @@ function Download({ ready, quebec, href }: { ready: boolean; quebec: boolean; hr
           Both of your returns, filled in with what Taxi knows: the CRA's T1 for residents of Quebec with the schedules and forms it uses, then Revenu
           Québec's TP-1 with its schedules, and a worksheet that shows how each amount was worked out. Add your social insurance number, address and the
           other answers on the first pages by hand. Mail them in two parts, each signed: the federal return to the CRA, the TP-1 to Revenu Québec. Or copy
-          the amounts into tax software certified for both.
+          the amounts into tax software certified for both. Revenu Québec's forms can be printed in French; the CRA's forms and the worksheet stay in
+          English.
         </p>
       ) : (
         <p className="text-xs text-muted-foreground">
@@ -144,16 +153,29 @@ function Download({ ready, quebec, href }: { ready: boolean; quebec: boolean; hr
           amounts into NETFILE-certified software.
         </p>
       )}
+      {quebec && ready ? (
+        <div className="flex flex-wrap items-center gap-3 text-sm">
+          <span id={languageLabel}>Revenu Québec's forms in</span>
+          <RadioGroup aria-labelledby={languageLabel} value={language} onValueChange={(value) => setLanguage(value as FormLanguage)} className="flex gap-3">
+            {(["en", "fr"] as const).map((each) => (
+              <Label key={each} className="flex cursor-pointer items-center gap-1.5 font-normal">
+                <RadioGroupItem value={each} />
+                <span lang={each}>{each === "en" ? "English" : "Français"}</span>
+              </Label>
+            ))}
+          </RadioGroup>
+        </div>
+      ) : null}
       {ready ? (
         <div className="flex flex-wrap gap-2">
           <Button asChild size="sm">
-            <a href={href} target="_blank" rel="noreferrer">
+            <a href={url(false)} target="_blank" rel="noreferrer">
               <ExternalLink aria-hidden="true" />
               Open the forms (PDF)
             </a>
           </Button>
           <Button asChild size="sm" variant="outline">
-            <a href={`${href}?download=1`} download>
+            <a href={url(true)} download>
               <FileDown aria-hidden="true" />
               Download
             </a>

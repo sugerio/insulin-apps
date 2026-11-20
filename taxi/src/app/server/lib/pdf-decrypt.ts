@@ -4,7 +4,8 @@
 // on without its encryption. The CRA's forms aren't encrypted and pass through unchanged.
 //
 // Only what such a file needs is handled: the standard security handler, revisions 2 to 4, with RC4 or AES-128 (ISO
-// 32000-1, 7.6). A file that needs a password, or uses AES-256, is refused. The objects are read in the order they
+// 32000-1, 7.6), and revision 6 with AES-256 (ISO 32000-2, 7.6.4.3.3), which some of Revenu Québec's French forms use.
+// A file that needs a password is refused. The objects are read in the order they
 // are in the file, so the offsets in its cross-reference sections are left as they are: they no longer match once
 // the objects are decrypted, but pdf-lib reads the objects in order too and doesn't use them.
 
@@ -56,7 +57,7 @@ export async function decryptPdf(bytes: Uint8Array): Promise<Uint8Array> {
   const ids = sections.map((dict) => entry(dict, "ID")).find((value) => value?.kind === "array") as Extract<Value, { kind: "array" }> | undefined;
   const firstId = ids?.items[0]?.kind === "string" ? ids.items[0].bytes : new Uint8Array();
   if (!encryptObject) throw new Error("The PDF's encryption dictionary is missing");
-  const crypt = standardSecurity(encryptObject.value, firstId);
+  const crypt = await standardSecurity(encryptObject.value, firstId);
 
   const edits: Edit[] = [];
   // The encryption entry comes out of every trailer, so the result reads as an unencrypted file.
@@ -84,8 +85,17 @@ export async function decryptPdf(bytes: Uint8Array): Promise<Uint8Array> {
   return splice(bytes, edits);
 }
 
-/** The file key from the standard security handler's dictionary, with the empty password (algorithms 2, 4 and 5). */
-function standardSecurity(dict: Value, firstId: Uint8Array): { key: Uint8Array; streams: Method; strings: Method; encryptMetadata: boolean } {
+interface Crypt {
+  key: Uint8Array;
+  streams: Method;
+  strings: Method;
+  encryptMetadata: boolean;
+  /** Revision 6 (AES-256): every object is encrypted with the file key itself. */
+  aes256: boolean;
+}
+
+/** The file key from the standard security handler's dictionary, with the empty password (algorithms 2, 4 and 5; 2.A). */
+async function standardSecurity(dict: Value, firstId: Uint8Array): Promise<Crypt> {
   const number = (key: string, fallback: number) => {
     const value = entry(dict, key);
     return value?.kind === "number" ? value.value : fallback;
@@ -97,11 +107,33 @@ function standardSecurity(dict: Value, firstId: Uint8Array): { key: Uint8Array; 
   };
   const filter = entry(dict, "Filter");
   const [version, revision] = [number("V", 0), number("R", 2)];
-  if (filter?.kind !== "name" || filter.name !== "Standard" || version < 1 || version > 4 || revision < 2 || revision > 4) {
+  const aes256 = version === 5 && revision === 6;
+  if (filter?.kind !== "name" || filter.name !== "Standard" || !(aes256 || (version >= 1 && version <= 4 && revision >= 2 && revision <= 4))) {
     throw new Error("The PDF uses an encryption this app doesn't read");
   }
   const metadata = entry(dict, "EncryptMetadata");
   const encryptMetadata = !(metadata?.kind === "word" && metadata.word === "false");
+  const method = (name: string): Method => {
+    if (version < 4) return "rc4";
+    const filterName = entry(dict, name);
+    if (filterName?.kind !== "name" || filterName.name === "Identity") return "none";
+    const filters = entry(dict, "CF");
+    const crypt = filters?.kind === "dict" ? entry(filters, filterName.name) : undefined;
+    const cfm = crypt ? entry(crypt, "CFM") : undefined;
+    if (cfm?.kind === "name" && cfm.name === (aes256 ? "AESV3" : "AESV2")) return "aes";
+    if (cfm?.kind === "name" && cfm.name === "V2" && !aes256) return "rc4";
+    if (cfm?.kind === "name" && cfm.name === "None") return "none";
+    throw new Error("The PDF uses an encryption this app doesn't read");
+  };
+  if (aes256) {
+    // Algorithm 2.A: the empty password opens the file if its hash with U's validation salt is U's first 32 bytes; the
+    // file key is UE decrypted with its hash with U's key salt.
+    const user = string("U");
+    const valid = await hash2B(user.subarray(32, 40));
+    if (!valid.every((byte, index) => byte === user[index])) throw new Error("The PDF needs a password to open");
+    const key = await aesCbcRaw(await hash2B(user.subarray(40, 48)), new Uint8Array(16), string("UE").subarray(0, 32));
+    return { key, streams: method("StmF"), strings: method("StrF"), encryptMetadata, aes256 };
+  }
   const length = version === 1 ? 5 : number("Length", 40) / 8;
   const permissions = new Uint8Array(4);
   new DataView(permissions.buffer).setInt32(0, number("P", 0), true);
@@ -112,23 +144,40 @@ function standardSecurity(dict: Value, firstId: Uint8Array): { key: Uint8Array; 
   const user = string("U");
   const check = revision === 2 ? rc4(key, PADDING) : [...Array(20).keys()].reduce((data, round) => rc4(key.map((byte) => byte ^ round), data), md5(concat(PADDING, firstId)));
   if (!check.every((byte, index) => index >= (revision === 2 ? 32 : 16) || byte === user[index])) throw new Error("The PDF needs a password to open");
-  const method = (name: string): Method => {
-    if (version < 4) return "rc4";
-    const filterName = entry(dict, name);
-    if (filterName?.kind !== "name" || filterName.name === "Identity") return "none";
-    const filters = entry(dict, "CF");
-    const crypt = filters?.kind === "dict" ? entry(filters, filterName.name) : undefined;
-    const cfm = crypt ? entry(crypt, "CFM") : undefined;
-    if (cfm?.kind === "name" && cfm.name === "AESV2") return "aes";
-    if (cfm?.kind === "name" && cfm.name === "V2") return "rc4";
-    if (cfm?.kind === "name" && cfm.name === "None") return "none";
-    throw new Error("The PDF uses an encryption this app doesn't read");
-  };
-  return { key, streams: method("StmF"), strings: method("StrF"), encryptMetadata };
+  return { key, streams: method("StmF"), strings: method("StrF"), encryptMetadata, aes256: false };
 }
 
-/** Each object's own key (algorithm 1). */
-function objectKey(crypt: { key: Uint8Array; streams: Method; strings: Method }, num: number, gen: number): Uint8Array {
+/**
+ * Algorithm 2.B, the hash of revision 6, for the empty password and no user key: SHA-256 of the salt, then rounds of
+ * AES-128 over 64 copies of the hash, each hashed again with SHA-256, -384 or -512 as the encrypted bytes say, until
+ * at least 64 rounds are done and the last byte allows it.
+ */
+async function hash2B(salt: Uint8Array): Promise<Uint8Array> {
+  let hash = new Uint8Array(await crypto.subtle.digest("SHA-256", new Uint8Array(salt)));
+  for (let round = 0; ; round += 1) {
+    const block = concat(...Array.from({ length: 64 }, () => hash));
+    const key = await crypto.subtle.importKey("raw", hash.slice(0, 16), "AES-CBC", false, ["encrypt"]);
+    // Web Crypto pads; the data is whole blocks, so the padding is one more block at the end, left off.
+    const encrypted = new Uint8Array(await crypto.subtle.encrypt({ name: "AES-CBC", iv: hash.slice(16, 32) }, key, new Uint8Array(block))).subarray(0, block.length);
+    const sum = encrypted.subarray(0, 16).reduce((total, byte) => total + byte, 0);
+    hash = new Uint8Array(await crypto.subtle.digest(["SHA-256", "SHA-384", "SHA-512"][sum % 3]!, new Uint8Array(encrypted)));
+    if (round >= 63 && encrypted.at(-1)! <= round - 31) return hash.slice(0, 32);
+  }
+}
+
+/**
+ * AES-CBC decryption of whole blocks without padding. Web Crypto checks the padding, so one more block is added: the
+ * encryption of an empty message after the last block, which decrypts to a full block of padding.
+ */
+async function aesCbcRaw(keyBytes: Uint8Array, iv: Uint8Array, data: Uint8Array): Promise<Uint8Array> {
+  const key = await crypto.subtle.importKey("raw", new Uint8Array(keyBytes), "AES-CBC", false, ["encrypt", "decrypt"]);
+  const pad = new Uint8Array(await crypto.subtle.encrypt({ name: "AES-CBC", iv: data.slice(-16) }, key, new Uint8Array()));
+  return new Uint8Array(await crypto.subtle.decrypt({ name: "AES-CBC", iv: new Uint8Array(iv) }, key, new Uint8Array(concat(data, pad))));
+}
+
+/** Each object's own key (algorithm 1); with AES-256, the file key. */
+function objectKey(crypt: Crypt, num: number, gen: number): Uint8Array {
+  if (crypt.aes256) return crypt.key;
   const salt = crypt.streams === "aes" || crypt.strings === "aes" ? bytesOf("sAlT") : new Uint8Array();
   const id = Uint8Array.of(num & 255, (num >> 8) & 255, (num >> 16) & 255, gen & 255, (gen >> 8) & 255);
   return md5(concat(crypt.key, id, salt)).slice(0, Math.min(crypt.key.length + 5, 16));
@@ -137,7 +186,7 @@ function objectKey(crypt: { key: Uint8Array; streams: Method; strings: Method },
 async function decrypt(method: Method, key: Uint8Array, data: Uint8Array): Promise<Uint8Array> {
   if (method === "none") return data;
   if (method === "rc4") return rc4(key, data);
-  // AES-128 in CBC mode, its first 16 bytes the initialization vector, padded as PKCS #7.
+  // AES-128 (or AES-256) in CBC mode, its first 16 bytes the initialization vector, padded as PKCS #7.
   if (data.length <= 16) return new Uint8Array();
   const aes = await crypto.subtle.importKey("raw", new Uint8Array(key), "AES-CBC", false, ["decrypt"]);
   return new Uint8Array(await crypto.subtle.decrypt({ name: "AES-CBC", iv: data.slice(0, 16) }, aes, data.slice(16)));

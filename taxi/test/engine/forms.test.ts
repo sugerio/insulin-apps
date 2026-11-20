@@ -261,13 +261,34 @@ describe("2025 forms", () => {
     expect(formAmount(Dec.from("1234567.5"))).toEqual({ dollars: "1,234,567", cents: "50" });
     expect(formAmount(Dec.from("12"))).toEqual({ dollars: "12", cents: "00" });
     expect(formAmount(Dec.from("-3472.91"))).toEqual({ dollars: "(3,472", cents: "91)" });
-    // Revenu Québec's forms ask for a minus sign.
+    // Revenu Québec's forms ask for a minus sign; their French versions separate the thousands with a space.
     expect(formAmount(Dec.from("-3572.36"), "minus")).toEqual({ dollars: "-3,572", cents: "36" });
+    expect(formAmount(Dec.from("-1234567.5"), "minus", "fr")).toEqual({ dollars: "-1 234 567", cents: "50" });
+  });
+
+  it("prints Revenu Québec's forms on their French versions in French, with the same rows, and the CRA's in English", () => {
+    const household = golden("senior-couple-qc");
+    const evaluation = new Evaluation(rules, household.input);
+    const facts = personalFacts(evaluation.input, "p1");
+    const english = fillForms(rules, evaluation, "p1", facts);
+    const french = fillForms(rules, evaluation, "p1", facts, "fr");
+    expect(french.map((each) => each.form.id)).toEqual(english.map((each) => each.form.id));
+    for (const [index, filled] of french.entries()) {
+      const spec = rules.forms.get(filled.form.id)!;
+      expect(filled.language).toBe(spec.french ? "fr" : "en");
+      expect(filled.form.url).toBe(spec.french?.url ?? spec.url);
+      // The same rows and marks, each at the version's own place.
+      expect(filled.amounts.map((amount) => [amount.key, amount.value.toString()])).toEqual(english[index]!.amounts.map((amount) => [amount.key, amount.value.toString()]));
+      expect(filled.marks.map((mark) => mark.key)).toEqual(english[index]!.marks.map((mark) => mark.key));
+    }
+    expect(french.find((each) => each.form.id === "TP1")!.form.title).toBe("TP-1 Déclaration de revenus (Revenu Québec)");
+    // Every Revenu Québec form has a French version; no CRA form has one.
+    for (const form of rules.forms.values()) expect(form.french !== undefined, form.id).toBe(form.url.includes("revenuquebec.ca"));
   });
 });
 
 describe("form rules", () => {
-  const compile = (form: object, layout: object = {}) =>
+  const compile = (form: object, layout: object = {}, layouts: object = {}) =>
     compileRules(
       [
         {
@@ -294,6 +315,7 @@ describe("form rules", () => {
                     ticks: { yes: [1, 479, 600] },
                     ...layout,
                   },
+                  ...layouts,
                 },
               },
             },
@@ -302,6 +324,15 @@ describe("form rules", () => {
       ],
       () => "test",
     );
+
+  it("places a form's French version by its own layout, and refuses one with no layout", () => {
+    const french = { title: "F (fr)", url: "https://example.com/f-fr.pdf" };
+    const layout = { sha256: "b".repeat(64), pages: 2, rows: { "1": [2, 540, 300] }, text: { name: [1, 40, 590, 120] } };
+    const compiled = compile({ french, fields: { "1": "line.R.net", name: { text: "firstName" } } }, {}, { "F1-fr": layout }).forms.F1!;
+    expect(compiled.french).toEqual({ ...french, sha256: "b".repeat(64), pages: 2, places: [{ page: 2, x: 540, y: 300 }, { page: 1, x: 40, y: 590, width: 120 }], tables: [] });
+    expect(() => compile({ french, fields: { "1": "line.R.net" } })).toThrow(/French version: form-layout.yaml has no layout/);
+    expect(() => compile({ french, fields: { "2@1": "line.R.net" } }, {}, { "F1-fr": layout })).toThrow(/French version: The form has no row 2/);
+  });
 
   it("places each row where the layout measured it", () => {
     expect(compile({ fields: { "1": "line.R.net" } }).forms.F1!.fields).toEqual([{ key: "1", kind: "amount", page: 1, x: 552, y: 700, value: "line.R.net" }]);

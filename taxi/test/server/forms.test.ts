@@ -22,7 +22,7 @@ function standIn(): FormSource & { fetched: string[] } {
     checkHash: false,
     async fetch(url) {
       fetched.push(url);
-      const form = [...rules.forms.values()].find((each) => each.url === url)!;
+      const form = versionAt(url);
       const pdf = await PDFDocument.create();
       // Revenu Québec's pages are a little smaller than the CRA's.
       const size: [number, number] = url.includes("revenuquebec.ca") ? [603, 774] : [612, 792];
@@ -30,6 +30,12 @@ function standIn(): FormSource & { fetched: string[] } {
       return pdf.save();
     },
   };
+}
+
+/** The form, in English or in French, published at a url. */
+function versionAt(url: string) {
+  const form = [...rules.forms.values()].find((each) => each.url === url || each.french?.url === url)!;
+  return form.french?.url === url ? { ...form, ...form.french } : form;
 }
 
 async function json<T>(response: Response | Promise<Response>, status = 200): Promise<T> {
@@ -73,7 +79,30 @@ async function pagesOf(bytes: ArrayBuffer) {
   return pages;
 }
 
-const download = (personId: string, as?: typeof VIEWER) => server.call("GET", `/api/years/2025/returns/${personId}/forms`, as ? { as } : {});
+const download = (personId: string, as?: typeof VIEWER, query = "") => server.call("GET", `/api/years/2025/returns/${personId}/forms${query}`, as ? { as } : {});
+
+/** Camille, single in Quebec, with a T4 and an RL-1 for the same pay: the return is finished. */
+async function camilleInQuebec(): Promise<Person> {
+  const camille = await json<Person>(server.call("POST", "/api/people", { body: { name: "Camille Roy", relationship: "self", birthDate: "1991-03-14" } }), 201);
+  await json<TaxYear>(server.call("POST", "/api/years", { body: { year: 2025, people: [camille.id] } }), 201);
+  let year = await json<TaxYear>(
+    server.call("PUT", "/api/years/2025/household", { body: { revision: 1, maritalStatus: "single", adults: [{ personId: camille.id, province: "QC", residentAllYear: true }] } }),
+  );
+  year = await json<TaxYear>(
+    server.call("POST", "/api/years/2025/slips", {
+      body: { revision: year.revision, personId: camille.id, type: "T4", issuer: "Érable Conseil inc.", boxes: { 14: "62000", 17: "3744", 22: "7400", 26: "62000", 55: "306.28", 56: "62000" } },
+    }),
+    201,
+  );
+  year = await json<TaxYear>(
+    server.call("POST", "/api/years/2025/slips", {
+      body: { revision: year.revision, personId: camille.id, type: "RL1", issuer: "Érable Conseil inc.", boxes: { A: "62000", B_A: "3744", E: "6900", G: "62000", H: "306.28", I: "62000" } },
+    }),
+    201,
+  );
+  await finish(camille, year.revision);
+  return camille;
+}
 
 describe("printing a return", () => {
   it("refuses a return that isn't finished, saying what is left", async () => {
@@ -169,25 +198,7 @@ describe("printing a return", () => {
   it("prints a Quebec resident's two returns: the T1 for residents of Quebec, then Revenu Québec's TP-1, then the worksheet", async () => {
     const source = standIn();
     server = await startServer({ forms: source });
-    const camille = await json<Person>(server.call("POST", "/api/people", { body: { name: "Camille Roy", relationship: "self", birthDate: "1991-03-14" } }), 201);
-    await json<TaxYear>(server.call("POST", "/api/years", { body: { year: 2025, people: [camille.id] } }), 201);
-    let year = await json<TaxYear>(
-      server.call("PUT", "/api/years/2025/household", { body: { revision: 1, maritalStatus: "single", adults: [{ personId: camille.id, province: "QC", residentAllYear: true }] } }),
-    );
-    // An employer in Quebec issues a T4 and an RL-1 for the same pay.
-    year = await json<TaxYear>(
-      server.call("POST", "/api/years/2025/slips", {
-        body: { revision: year.revision, personId: camille.id, type: "T4", issuer: "Érable Conseil inc.", boxes: { 14: "62000", 17: "3744", 22: "7400", 26: "62000", 55: "306.28", 56: "62000" } },
-      }),
-      201,
-    );
-    year = await json<TaxYear>(
-      server.call("POST", "/api/years/2025/slips", {
-        body: { revision: year.revision, personId: camille.id, type: "RL1", issuer: "Érable Conseil inc.", boxes: { A: "62000", B_A: "3744", E: "6900", G: "62000", H: "306.28", I: "62000" } },
-      }),
-      201,
-    );
-    await finish(camille, year.revision);
+    const camille = await camilleInQuebec();
 
     const pages = await pagesOf(await (await download(camille.id)).arrayBuffer());
     // The federal forms first, then the TP-1 and its schedules (no group drug plan was said, so Schedule K's premium).
@@ -212,6 +223,27 @@ describe("printing a return", () => {
     expect(worksheet).toContain("Camille Roy: 2025 return worksheet");
     expect(worksheet.some((text) => text.startsWith("Quebec refund (TP-1 line 478)") || text.startsWith("Quebec balance due (TP-1 line 479)"))).toBe(true);
     expect(worksheet.join(" ")).toMatch(/Mail the two returns in two parts, each signed/);
+  });
+
+  it("prints Revenu Québec's forms in French when asked, the CRA's in English, and refuses another language", async () => {
+    const source = standIn();
+    server = await startServer({ forms: source });
+    const camille = await camilleInQuebec();
+
+    const pages = await pagesOf(await (await download(camille.id, undefined, "?language=fr")).arrayBuffer());
+    const printed = source.fetched.map(versionAt);
+    expect(printed.map((form) => form.id)).toEqual(["T1QC", "TP1", "QCK", "QCU"]);
+    expect(source.fetched[0]).toBe(rules.forms.get("T1QC")!.url);
+    expect(source.fetched.slice(1)).toEqual(["TP1", "QCK", "QCU"].map((id) => rules.forms.get(id)!.french!.url));
+    // Line 101 on the French TP-1, at that version's place, written the French way.
+    const tp1 = { ...rules.forms.get("TP1")!, ...rules.forms.get("TP1")!.french! };
+    const line101 = tp1.fields.find((field) => field.key === "101")!;
+    const offset = rules.forms.get("T1QC")!.pages;
+    expect(pages[offset + line101.page - 1]!.filter((item) => Math.abs(item.y - line101.y) < 0.5).map((item) => item.text)).toEqual(["62 000", "00"]);
+    expect(pages.slice(printed.reduce((sum, form) => sum + form.pages, 0)).flat().map((item) => item.text).join(" ")).toMatch(/TP-1 Déclaration de revenus/);
+
+    const refused = await json<{ error: { code: string } }>(download(camille.id, undefined, "?language=de"), 400);
+    expect(refused.error.code).toBe("validation_failed");
   });
 
   it("refuses a form that isn't the one the layout was measured on", async () => {

@@ -3,14 +3,15 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { OPS, getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { Document, parse, visit } from "yaml";
-import { measureForm, measureRqForm, type PlaceSpec, type Shape, type TextItem } from "./form-measure.ts";
+import { measureForm, measureRqForm, type LabelPlace, type PlaceSpec, type Shape, type TextItem } from "./form-measure.ts";
 import { RULES_ROOT } from "./rules-source.ts";
 
-// npm run form-layout -- <country>/<year> <FORM>=<print PDF> ...
+// npm run form-layout -- <country>/<year> <FORM>=<print PDF> <FORM>-fr=<French print PDF> ...
 //
 // Measures where each amount, name, date and tick goes on the CRA's print version of a form (for example
 // 5006-r-25e.pdf, downloaded from canada.ca) or on Revenu Québec's form (TP-1.D-V(2025-12).pdf, from revenuquebec.ca),
-// and writes rules/<country>/<year>/form-layout.yaml. This file reads the PDF (its text, and the lines and boxes it
+// and writes rules/<country>/<year>/form-layout.yaml. A form with a French version (`french` in forms.yaml, such as
+// TP-1.D(2025-12).pdf) is measured again from that PDF as <FORM>-fr: the two versions' boxes are not in the same places. This file reads the PDF (its text, and the lines and boxes it
 // draws); scripts/form-measure.ts says how a place is found from them. The two publishers draw their boxes differently,
 // so a form whose url in forms.yaml is on revenuquebec.ca is measured Revenu Québec's way.
 //
@@ -77,9 +78,34 @@ const PLACES: Record<string, Record<string, PlaceSpec>> = {
   },
 };
 
+/**
+ * The French versions' places found by a label, in French; a place found by its line number is the same in both. On
+ * Schedule J, "autonome" is the English "non-dependent".
+ */
+const FRENCH_LABELS: Record<string, Record<string, Pick<LabelPlace, "label" | "below">>> = {
+  TP1: {
+    spouseNo: { label: "sans", below: "Situation" },
+    spouseYes: { label: "avec", below: "Situation" },
+    foreignPropertyYes: { label: "Oui", below: "Biens étrangers" },
+    foreignPropertyNo: { label: "Non", below: "Biens étrangers" },
+  },
+  QCJ: {
+    youNonDependent: { label: "autonome", below: "Niveau d’autonomie" },
+  },
+};
+
+/** A form's places: for a French version (`<FORM>-fr`), the English ones with their French labels. */
+function placesOf(form: string): Record<string, PlaceSpec> | undefined {
+  const base = baseOf(form);
+  if (base === form) return PLACES[form];
+  const french = FRENCH_LABELS[base] ?? {};
+  return Object.fromEntries(Object.entries(PLACES[base] ?? {}).map(([key, place]) => [key, { ...place, ...french[key] } as PlaceSpec]));
+}
+const baseOf = (form: string) => form.replace(/-fr$/, "");
+
 const [target, ...specs] = process.argv.slice(2);
-if (!target || specs.length === 0 || specs.some((spec) => !/^[A-Z0-9-]+=.+\.pdf$/i.test(spec))) {
-  console.error("usage: npm run form-layout -- ca/2025 T1=5006-r-25e.pdf ON428=5006-c-25e.pdf ...");
+if (!target || specs.length === 0 || specs.some((spec) => !/^[A-Z0-9]+(-fr)?=.+\.pdf$/i.test(spec))) {
+  console.error("usage: npm run form-layout -- ca/2025 T1=5006-r-25e.pdf ON428=5006-c-25e.pdf TP1-fr='TP-1.D(2025-12).pdf' ...");
   process.exit(1);
 }
 const file = join(RULES_ROOT, target, "form-layout.yaml");
@@ -87,7 +113,7 @@ const current = existsSync(file) ? ((parse(readFileSync(file, "utf8")) as { form
 const formsFile = join(RULES_ROOT, target, "forms.yaml");
 const urls = existsSync(formsFile) ? ((parse(readFileSync(formsFile, "utf8")) as { forms?: Record<string, { url?: string } | null> }).forms ?? {}) : {};
 const isRevenuQuebec = (form: string) => {
-  const url = urls[form]?.url;
+  const url = urls[baseOf(form)]?.url;
   return url !== undefined && new URL(url).hostname.endsWith("revenuquebec.ca");
 };
 
@@ -105,7 +131,7 @@ for (const spec of specs) {
     }
     shapes.push(...shapesOf(page, await pdfPage.getOperatorList()));
   }
-  const measured = (isRevenuQuebec(form) ? measureRqForm : measureForm)(items, shapes, PLACES[form]);
+  const measured = (isRevenuQuebec(form) ? measureRqForm : measureForm)(items, shapes, placesOf(form));
   current[form] = { sha256: createHash("sha256").update(bytes).digest("hex"), pages: doc.numPages, ...measured };
   console.log(`form-layout: ${form}: ${doc.numPages} pages, ${Object.keys(measured.rows).length} rows, ${Object.keys(measured.columns ?? {}).length} rows with columns`);
 }

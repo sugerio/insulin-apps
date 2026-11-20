@@ -1,6 +1,6 @@
 import { Dec } from "./decimal.ts";
 import type { EngineInput, Evaluation } from "./evaluate.ts";
-import type { FormSpec, PersonalFact, RuleSet } from "./rules.ts";
+import { formIn, type FormLanguage, type FormSpec, type PersonalFact, type RuleSet } from "./rules.ts";
 
 // What a return puts on each CRA or Revenu Québec form (forms.yaml), and where: the amounts and counts worked out by the
 // same engine as the return's lines, ticks from yes/no formulas, and Step 1's name, birth date and province from the
@@ -31,7 +31,10 @@ export type PlacedMark =
   | { kind: "tick"; key: string; page: number; x: number; y: number };
 
 export interface FilledForm {
+  /** The version of the form printed: in French when asked for and the form has a French version. */
   form: FormSpec;
+  /** The language of that version: amounts on a French form are written the French way (1 234,56). */
+  language: FormLanguage;
   amounts: PlacedAmount[];
   marks: PlacedMark[];
 }
@@ -76,12 +79,16 @@ export function personalFacts(
   };
 }
 
-/** The forms a person's return is printed on, in the rules' order, with what goes on each. */
-export function fillForms(rules: RuleSet, evaluation: Evaluation, personId: string, facts: PersonalFacts): FilledForm[] {
+/**
+ * The forms a person's return is printed on, in the rules' order, with what goes on each. In French, a form with a
+ * French version (Revenu Québec's) is printed on it; the CRA's forms stay in English.
+ */
+export function fillForms(rules: RuleSet, evaluation: Evaluation, personId: string, facts: PersonalFacts, language: FormLanguage = "en"): FilledForm[] {
   const filled: FilledForm[] = [];
   const evaluate = (formula: Parameters<Evaluation["evaluate"]>[1]) => evaluation.evaluate(personId, formula).value;
-  for (const form of rules.forms.values()) {
-    if (evaluate(form.applies) !== true) continue;
+  for (const spec of rules.forms.values()) {
+    if (evaluate(spec.applies) !== true) continue;
+    const form = formIn(spec, language);
     const amounts: PlacedAmount[] = [];
     const marks: PlacedMark[] = [];
     const place = (key: string, page: number, x: number, y: number, value: Dec | null, zero = false, plain = false) => {
@@ -133,19 +140,20 @@ export function fillForms(rules: RuleSet, evaluation: Evaluation, personId: stri
         first += part.columns.length;
       }
     }
-    filled.push({ form, amounts, marks });
+    filled.push({ form, language: form.french && language === "fr" ? "fr" : "en", amounts, marks });
   }
   return filled;
 }
 
 /**
  * An amount as written in a form's box: dollars with thousands separators, and cents. A negative one is in brackets on
- * the CRA's forms ("if negative, show in brackets") and has a minus sign on Revenu Québec's.
+ * the CRA's forms ("if negative, show in brackets") and has a minus sign on Revenu Québec's. A French form separates
+ * the thousands with a space.
  */
-export function formAmount(value: Dec, negativeStyle: "brackets" | "minus" = "brackets"): { dollars: string; cents: string } {
+export function formAmount(value: Dec, negativeStyle: "brackets" | "minus" = "brackets", language: FormLanguage = "en"): { dollars: string; cents: string } {
   const negative = value.isNegative();
   const [whole, fraction = ""] = value.abs().roundTo(2, "HALF_UP").toString().split(".");
-  const dollars = whole!.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  const dollars = whole!.replace(/\B(?=(\d{3})+(?!\d))/g, language === "fr" ? " " : ",");
   const cents = fraction.padEnd(2, "0");
   if (!negative) return { dollars, cents };
   return negativeStyle === "minus" ? { dollars: `-${dollars}`, cents } : { dollars: `(${dollars}`, cents: `${cents})` };

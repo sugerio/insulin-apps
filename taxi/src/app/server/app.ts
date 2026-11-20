@@ -1,6 +1,6 @@
 import { Hono, type Context } from "hono";
 import { z } from "zod";
-import { ROUTE_TABLE, SUPPORTED_YEARS, routes, type AnyRoute, type ApiCatalog, type Me } from "#shared";
+import { FORM_LANGUAGES, ROUTE_TABLE, SUPPORTED_YEARS, routes, type AnyRoute, type ApiCatalog, type Me } from "#shared";
 import { platformReader } from "./lib/ai.ts";
 import * as documents from "./lib/documents.ts";
 import { getEstimate } from "./lib/estimate.ts";
@@ -126,12 +126,14 @@ export function createApp(options: AppOptions = {}) {
     });
   });
   // A return printed on the CRA's forms, with its worksheet, as a PDF to save: not JSON, so outside the route table.
+  // ?language=fr prints Revenu Québec's forms on their French versions.
   app.get("/api/years/:year/returns/:personId/forms", async (c) => {
     const caller = c.get("caller");
     if (!caller.permissions.has("taxi.view")) throw forbidden();
     const year = Number(c.req.param("year"));
     if (!(SUPPORTED_YEARS as readonly number[]).includes(year)) throw notFound();
-    const pdf = await printReturn(c.env.DB, caller.orgId, year, c.req.param("personId"), options.forms ?? craForms, now());
+    const language = parseOr400(z.enum(FORM_LANGUAGES).default("en"), c.req.query("language"), "language");
+    const pdf = await printReturn(c.env.DB, caller.orgId, year, c.req.param("personId"), options.forms ?? craForms, now(), language);
     return new Response(pdf.bytes, {
       headers: {
         "Content-Type": "application/pdf",

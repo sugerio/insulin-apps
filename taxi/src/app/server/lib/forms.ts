@@ -2,7 +2,7 @@ import { PROVINCE_NAMES, isAdult, printBlockers, type Province, type Slip, type 
 import { Dec } from "../../shared/engine/decimal.ts";
 import { Evaluation } from "../../shared/engine/evaluate.ts";
 import { fillForms, personalFacts } from "../../shared/engine/forms.ts";
-import { documentName, type FormSpec, type RuleSet } from "../../shared/engine/rules.ts";
+import { documentName, type FormLanguage, type FormSpec, type RuleSet } from "../../shared/engine/rules.ts";
 import { rulesFor } from "../../shared/rules/index.ts";
 import { buildReturnPdf, type Worksheet, type WorksheetRow } from "./forms-pdf.ts";
 import { ApiError, conflict, notFound } from "./http.ts";
@@ -46,7 +46,19 @@ export const craForms: FormSource = {
   },
 };
 
-export async function printReturn(db: Db, orgId: string, year: number, personId: string, source: FormSource, now: number): Promise<{ bytes: Uint8Array<ArrayBuffer>; name: string }> {
+/**
+ * A person's return on the forms, with the worksheet. In French (`language` fr), Revenu Québec's forms are printed on
+ * their French versions; the CRA's forms and the worksheet stay in English.
+ */
+export async function printReturn(
+  db: Db,
+  orgId: string,
+  year: number,
+  personId: string,
+  source: FormSource,
+  now: number,
+  language: FormLanguage = "en",
+): Promise<{ bytes: Uint8Array<ArrayBuffer>; name: string }> {
   const { row, view } = await openYear(db, orgId, year);
   if (!view.adults.some((adult) => adult.personId === personId)) throw notFound("There is no such return in this year");
   const rules = rulesFor(year);
@@ -66,7 +78,7 @@ export async function printReturn(db: Db, orgId: string, year: number, personId:
     spouseBirthDate: partner?.birthDate,
     provinceName: (code) => PROVINCE_NAMES[code as Province] ?? code,
   });
-  const filled = fillForms(rules, evaluation, personId, facts);
+  const filled = fillForms(rules, evaluation, personId, facts, language);
   const forms = [];
   for (const each of filled) forms.push({ filled: each, template: await formTemplate(db, orgId, each.form, source, now) });
   const person = view.people.find((each) => each.id === personId)!;

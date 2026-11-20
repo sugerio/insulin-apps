@@ -19,6 +19,10 @@
 #
 # The PDFs come from canada.ca (or revenuquebec.ca) on first use (url) and must match the layout's SHA-256: a form the
 # CRA or Revenu Québec changes is measured again with npm run form-layout before it is filled.
+#
+# Revenu Québec publishes each form in French too: `french` gives that version's title and url. It has the same rows
+# and fields, placed by its own layout (<FORM>-fr in form-layout.yaml); a return is printed on it when its forms are
+# asked for in French.
 
 forms:
   T1:
@@ -2761,6 +2765,7 @@ forms:
   TP1:
     title: TP-1 Income Tax Return (Revenu Québec)
     url: https://www.revenuquebec.ca/documents/en/formulaires/tp/2025-12/TP-1.D-V%282025-12%29.pdf
+    french: { title: "TP-1 Déclaration de revenus (Revenu Québec)", url: https://www.revenuquebec.ca/documents/fr/formulaires/tp/2025-12/TP-1.D%282025-12%29.pdf }
     applies: person.province == "QC"
     fields:
       # Information about you and your spouse: what the app knows. The SIN, address, sex, language, the first-return
@@ -2886,6 +2891,7 @@ forms:
   QCB:
     title: Schedule B, Tax Relief Measures (Revenu Québec)
     url: https://www.revenuquebec.ca/documents/en/formulaires/tp/2025-12/TP-1.D.B-V%282025-12%29.pdf
+    french: { title: "Annexe B, Allègements fiscaux (Revenu Québec)", url: https://www.revenuquebec.ca/documents/fr/formulaires/tp/2025-12/TP-1.D.B%282025-12%29.pdf }
     applies: 'person.province == "QC" and (line.TP1.361 > 0 or line.TP1.381 > 0 or line.QCB.50 > 0)'
     fields:
       # Part A – Family income
@@ -2938,6 +2944,7 @@ forms:
   QCC:
     title: Schedule C, Tax Credit for Childcare Expenses (Revenu Québec)
     url: https://www.revenuquebec.ca/documents/en/formulaires/tp/2025-12/TP-1.D.C-V%282025-12%29.pdf
+    french: { title: "Annexe C, Crédit d’impôt pour frais de garde d’enfants (Revenu Québec)", url: https://www.revenuquebec.ca/documents/fr/formulaires/tp/2025-12/TP-1.D.C%282025-12%29.pdf }
     applies: 'person.province == "QC" and line.TP1.455 > 0'
     fields:
       "41": line.QCC.41
@@ -2960,6 +2967,7 @@ forms:
   QCF:
     title: Schedule F, Contribution to the Health Services Fund (Revenu Québec)
     url: https://www.revenuquebec.ca/documents/en/formulaires/tp/2025-12/TP-1.D.F-V%282025-12%29.pdf
+    french: { title: "Annexe F, Cotisation au Fonds des services de santé (Revenu Québec)", url: https://www.revenuquebec.ca/documents/fr/formulaires/tp/2025-12/TP-1.D.F%282025-12%29.pdf }
     applies: 'person.province == "QC" and line.TP1.446 > 0'
     fields:
       # Part A – Income subject to the contribution
@@ -2997,6 +3005,7 @@ forms:
   QCG:
     title: Schedule G, Capital Gains and Losses (Revenu Québec)
     url: https://www.revenuquebec.ca/documents/en/formulaires/tp/2025-12/TP-1.D.G-V%282025-12%29.pdf
+    french: { title: "Annexe G, Gains et pertes en capital (Revenu Québec)", url: https://www.revenuquebec.ca/documents/fr/formulaires/tp/2025-12/TP-1.D.G%282025-12%29.pdf }
     applies: >-
       person.province == "QC" and (line.QCG.gains != 0
       or (answer.soldProperty and answer.propertyUse == "principal_residence"))
@@ -3023,6 +3032,7 @@ forms:
   QCJ:
     title: Schedule J, Tax Credit for Home-Support Services for Seniors (Revenu Québec)
     url: https://www.revenuquebec.ca/documents/en/formulaires/tp/2025-12/TP-1.D.J-V%282025-12%29.pdf
+    french: { title: "Annexe J, Crédit d’impôt pour maintien à domicile des aînés (Revenu Québec)", url: https://www.revenuquebec.ca/documents/fr/formulaires/tp/2025-12/TP-1.D.J%282025-12%29.pdf }
     applies: 'person.province == "QC" and line.TP1.458 > 0'
     fields:
       youNonDependent: { tick: answer.hasHomeSupport }
@@ -3046,6 +3056,7 @@ forms:
   QCK:
     title: Schedule K, Premium Payable Under the Québec Prescription Drug Insurance Plan (Revenu Québec)
     url: https://www.revenuquebec.ca/documents/en/formulaires/tp/2025-12/TP-1.D.K-V%282025-12%29.pdf
+    french: { title: "Annexe K, Cotisation au régime d’assurance médicaments du Québec (Revenu Québec)", url: https://www.revenuquebec.ca/documents/fr/formulaires/tp/2025-12/TP-1.D.K%282025-12%29.pdf }
     applies: 'person.province == "QC" and line.TP1.447 > 0'
     fields:
       # Part A – Income used to calculate the premium
@@ -3096,6 +3107,7 @@ forms:
   QCL:
     title: Schedule L, Business Income (Revenu Québec)
     url: https://www.revenuquebec.ca/documents/en/formulaires/tp/2025-12/TP-1.D.L-V%282025-12%29.pdf
+    french: { title: "Annexe L, Revenus d’entreprise (Revenu Québec)", url: https://www.revenuquebec.ca/documents/fr/formulaires/tp/2025-12/TP-1.D.L%282025-12%29.pdf }
     applies: 'person.province == "QC" and line.TP1.164 != 0'
     fields:
       "12": line.T1.13499
@@ -3117,6 +3129,7 @@ forms:
   QCP:
     title: Schedule P, Tax Credits Respecting the Work Premium (Revenu Québec)
     url: https://www.revenuquebec.ca/documents/en/formulaires/tp/2025-12/TP-1.D.P-V%282025-12%29.pdf
+    french: { title: "Annexe P, Crédits d’impôt relatifs à la prime au travail (Revenu Québec)", url: https://www.revenuquebec.ca/documents/fr/formulaires/tp/2025-12/TP-1.D.P%282025-12%29.pdf }
     applies: 'person.province == "QC" and line.TP1.456 > 0'
     fields:
       # Part A – Work income
@@ -3180,6 +3193,7 @@ forms:
   QCQ:
     title: Schedule Q, Retirement Income Transferred to Your Spouse (Revenu Québec)
     url: https://www.revenuquebec.ca/documents/en/formulaires/tp/2025-12/TP-1.D.Q-V%282025-12%29.pdf
+    french: { title: "Annexe Q, Revenus de retraite transférés à votre conjoint au 31 décembre (Revenu Québec)", url: https://www.revenuquebec.ca/documents/fr/formulaires/tp/2025-12/TP-1.D.Q%282025-12%29.pdf }
     applies: 'person.province == "QC" and line.TP1.245 > 0'
     fields:
       "10": line.TP1.122
@@ -3194,6 +3208,7 @@ forms:
   QCR:
     title: Schedule R, Québec Parental Insurance Plan (QPIP) Premium (Revenu Québec)
     url: https://www.revenuquebec.ca/documents/en/formulaires/tp/2025-12/TP-1.D.R-V%282025-12%29.pdf
+    french: { title: "Annexe R, Cotisation au Régime québécois d’assurance parentale (Revenu Québec)", url: https://www.revenuquebec.ca/documents/fr/formulaires/tp/2025-12/TP-1.D.R%282025-12%29.pdf }
     applies: 'person.province == "QC" and line.TP1.439 > 0'
     fields:
       "10": line.QCR.12
@@ -3210,6 +3225,7 @@ forms:
   QCT:
     title: Schedule T, Tax Credit for Tuition or Examination Fees (Revenu Québec)
     url: https://www.revenuquebec.ca/documents/en/formulaires/tp/2025-12/TP-1.D.T-V%282025-12%29.pdf
+    french: { title: "Annexe T, Crédit d’impôt pour frais de scolarité ou d’examen (Revenu Québec)", url: https://www.revenuquebec.ca/documents/fr/formulaires/tp/2025-12/TP-1.D.T%282025-12%29.pdf }
     applies: 'person.province == "QC" and line.QCT.45 > 0'
     fields:
       "40.6": { value: sum(RL8.boxB), when: "line.QCT.41 > 0" }
@@ -3229,6 +3245,7 @@ forms:
   QCU:
     title: Schedule U, Québec Pension Plan (QPP) Contribution and Deduction (Revenu Québec)
     url: https://www.revenuquebec.ca/documents/en/formulaires/tp/2025-12/TP-1.D.U-V%282025-12%29.pdf
+    french: { title: "Annexe U, Cotisation et déduction relatives au Régime de rentes du Québec (Revenu Québec)", url: https://www.revenuquebec.ca/documents/fr/formulaires/tp/2025-12/TP-1.D.U%282025-12%29.pdf }
     applies: 'person.province == "QC" and (line.QCU.23 > 0 or line.QCU.33 > 0)'
     fields:
       # Part B – Deduction for QPP contributions on employment income

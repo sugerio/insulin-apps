@@ -132,7 +132,7 @@ a name, a birth date, an amount or a document.
     T2121, T776, T777, T778, T1-M, T1032, T2091(IND), T2204, T2209, T2036 and T2222;
   - the Form 428 of each province and territory, with its S2 and S11 schedules and its Form 479 credits;
   - for a resident of Quebec, Revenu Québec's TP-1 with Schedules B, C, D, F, J, K, P, Q, R, T and U, from the RL
-    slips;
+    slips. You can print Revenu Québec's forms in English or in French;
   - people who moved to or from Canada during the year: the personal amounts are reduced by the days in Canada, unless
     at least 90% of their income for the rest of the year came from Canada.
 - Not handled, and said so when it applies: property treated as sold when you leave Canada (Forms T1243 and T1161), a

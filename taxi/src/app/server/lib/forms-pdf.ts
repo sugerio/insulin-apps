@@ -40,9 +40,9 @@ export async function buildReturnPdf(forms: { filled: FilledForm; template: Uint
     for (const amount of filled.amounts) {
       const page = pages[amount.page - 1];
       if (!page) continue;
-      const { dollars, cents } = formAmount(amount.value, filled.form.url.includes("revenuquebec.ca") ? "minus" : "brackets");
+      const { dollars, cents } = formAmount(amount.value, filled.form.url.includes("revenuquebec.ca") ? "minus" : "brackets", filled.language);
       if (amount.plain) {
-        const text = `${dollars}.${cents}`;
+        const text = `${dollars}${filled.language === "fr" ? "," : "."}${cents}`;
         page.drawText(text, { x: amount.x - 2.5 - font.widthOfTextAtSize(text, SIZE), y: amount.y, size: SIZE, font, color: INK });
         continue;
       }

@@ -8,3 +8,6 @@ node_modules
 .DS_Store
 /.claude/worktrees
 /.claude/tmp
+/knowledge/engine/test
+/knowledge/engine/container/__pycache__
+/knowledge/engine/harness/report

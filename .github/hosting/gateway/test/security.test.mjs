@@ -231,12 +231,12 @@ test('without required configuration every host answers 503 and redirects nowher
   for (const options of [
     { vars: { TURNSTILE_SECRET_KEY: undefined } },
     { vars: { GOOGLE_CLIENT_SECRET: undefined } },
-    { vars: { SITE_APPS: '{"not": "a list"}' } },
+    { vars: { SITE_APP_CAPTABLE: '["not an object"]' } },
     { mode: 'production', omit: ['EMAIL'] },
     { omit: ['DB'] },
     { omit: ['RL_APP'] },
     { omit: ['RL_PUBLIC'] },
-    { vars: { SITE_APPS: JSON.stringify([{ name: 'captable', scheduled: '/settings/tick' }]) } },
+    { vars: { SITE_APP_CAPTABLE: JSON.stringify({ name: 'captable', scheduled: '/settings/tick' }) } },
   ]) {
     const broken = await startGateway(options)
     try {

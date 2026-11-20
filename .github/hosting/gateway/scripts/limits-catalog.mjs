@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Each app's limit catalog in the gateway's D1 (DESIGN.md §8.8). An app's package.json lists its limits under
-// `insulin.limits` ({ key, label, unit, default }); they may not fit SITE_APPS, so the deploy writes them to the
+// `insulin.limits` ({ key, label, unit, default }); they may not fit an app's SITE_APP_<APP> variable, so the deploy writes them to the
 // gateway's `app_limit_catalog` table (migration 0012) once the gateway's migrations are applied, for the app version
 // in production, and the local run (scripts/dev.mjs) does the same for its local D1. The console shows the catalog, and
 // GET /__insulin/limits serves its defaults unless an admin set another.

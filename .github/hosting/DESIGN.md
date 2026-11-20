@@ -72,7 +72,7 @@ An app may declare a permission catalog in its `package.json`:
 ```
 
 `role` is the least built-in role that has the permission (Viewer < Editor < Admin, and Admin has every permission).
-The deploy reads the catalog into `SITE_APPS`. Only the organization's owners create, edit and delete custom roles,
+The deploy reads the catalog into the app's `SITE_APP_<APP>` variable. Only the organization's owners create, edit and delete custom roles,
 each for one app, choosing permissions from that app's catalog; owners and admins (and app admins, for their app) give
 them to people. A custom role can't be deleted while anyone, an invitation or a service account still uses it.
 
@@ -288,14 +288,14 @@ consecutive items with the same group share (an item without one has none); `rol
 that sees it (VIEWER by default), and `maxRole` (optional) the most (ADMIN by default; an item for viewers only, such
 as a holder's own pages, says VIEWER); `children` holds level 2, the same fields without `children`. At most 12 items,
 and 12 children each. `list-apps.mjs` refuses a malformed manifest, and the deploy passes its level 1 to the gateway
-in `SITE_APPS`, without children: the gateway never draws an app's level 2, and a Worker variable holds at most 5 KB
+in its `SITE_APP_<APP>` variable, without children: the gateway never draws an app's level 2, and a Worker variable holds at most 5 KB
 (`deploy-apps.test.mjs` keeps every gateway variable for this repository's apps under it). Docs and Settings are added
 by the platform and aren't in the manifest.
 In detail: a key has at most 40 characters and is unique across items and children; a `group` is 1 to 40 characters;
 any other field is refused; a `path` may carry a query but no fragment, before its query holds no `%`, empty or dot
 segment, and stays off `/api/__suger/*` too; `home` and `check-circle`, Lucide's older names for `house` and
 `circle-check`, are accepted as well. `check-insulin-app.mjs` checks it as the deploy does; the gateway checks it again
-(a malformed one fails it closed, like the other fields), and a `SITE_APPS` from before the manifest loads with none.
+(a malformed one fails it closed, like the other fields), and an app without a manifest loads with none.
 
 ## 4. What tokens may reach
 
@@ -742,7 +742,7 @@ app enforces them.
   for usage metric names (§8.6) and appears once, `label` is 1 to 80 characters, `unit` is `count`, `bytes`, `hours` or
   `days`, and `default` is a whole number from 0 to 10^15; any other field is refused. `list-apps.mjs` and
   `check-insulin-app.mjs` check it, and the gateway's `scripts/limits-catalog.mjs` again before writing it.
-- **The catalog in the gateway.** It may not fit `SITE_APPS` (5 KB), so the deploy writes each app's catalog to the
+- **The catalog in the gateway.** It may not fit the app's `SITE_APP_<APP>` variable (5 KB), so the deploy writes each app's catalog to the
   gateway's D1 (`app_limit_catalog`), replacing the app's whole catalog: a key the app no longer lists goes, and a
   default or override set for it stays stored, unused, and applies again if the key returns. It writes the catalog of
   the app version in production. The deploy job of every app writes its catalog (an empty one for an app without limits)
@@ -890,7 +890,7 @@ All in the gateway's D1 database; migrations are forward-only.
 | Name | Kind | Notes |
 |---|---|---|
 | `GATEWAY_SECRET_KEY` | secret | 32 random bytes, base64. Encrypts TOTP secrets, stored credentials and OIDC client secrets; derives the apps' `SUGER_APP_TOKEN`; signs `x-suger-member-lookup` (§8.9). Without it MFA, stored credentials and OIDC can't be set up, browser requests carry no member lookup and the apps' endpoints answer 503 (the rest works) |
-| `SITE_APPS[].permissions`, `SITE_APPS[].publicPaths`, `SITE_APPS[].scheduled`, `SITE_APPS[].clientSettings` | var | From each app's `package.json` (§2.3, §8.1, §8.5, §5.3.1). An app's engine and limits stay out of it: the limits go to the gateway's D1 (§8.8) |
+| `SITE_APP_<APP>.permissions`, `.publicPaths`, `.scheduled`, `.clientSettings` | var | From each app's `package.json` (§2.3, §8.1, §8.5, §5.3.1). An app's engine and limits stay out of it: the limits go to the gateway's D1 (§8.8) |
 | `RL_PUBLIC` | ratelimit | Requests to public paths that aren't GET or HEAD, per app and IP; 60 a minute suggested (§8.1) |
 | `ORG_REQUEST_EMAIL` | var | Optional: Insulin Apps support's address for requests for more organizations (§3.1). A GitHub variable, never written in the repository |
 | Cron triggers | trigger | `*/5 * * * *` (the apps' tick, §8.5, and the console's hourly work, §11.5) and `17 3 * * *` (the daily cleanup) |

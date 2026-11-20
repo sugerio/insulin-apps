@@ -20,7 +20,7 @@ export default defineConfig({
       },
       {
         extends: true,
-        test: { name: 'web', environment: 'jsdom', include: ['test/web/**/*.test.{ts,tsx}'] },
+        test: { name: 'web', environment: './test/web/jsdom-server.ts', include: ['test/web/**/*.test.{ts,tsx}'] },
       },
     ],
   },

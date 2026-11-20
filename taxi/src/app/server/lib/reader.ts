@@ -16,7 +16,7 @@ export interface FileToRead {
 export interface ReadContext {
   year: number;
   rules: RuleSet;
-  /** The household's people, so the model can say whose slip it is. */
+  /** The people in the profile, so the model can say whose slip it is. */
   people: { name: string; relationship: string }[];
 }
 
@@ -85,7 +85,7 @@ const answerSchema = z.object({
   ),
 });
 
-/** The instructions for one file: the year, the household's names, and each slip type with its boxes. */
+/** The instructions for one file: the year, the names in the profile, and each slip type with its boxes. */
 export function promptFor(context: ReadContext): string {
   const types = [...context.rules.slips.values()].map(
     (slip) =>
@@ -95,7 +95,7 @@ export function promptFor(context: ReadContext): string {
   );
   return [
     `You read Canadian personal tax slips, receipts and notices for the ${context.year} tax year.`,
-    `The household: ${context.people.map((person) => `${person.name} (${person.relationship})`).join(", ")}.`,
+    `The people: ${context.people.map((person) => `${person.name} (${person.relationship})`).join(", ")}.`,
     "Document types this app reads:",
     ...types,
     "",

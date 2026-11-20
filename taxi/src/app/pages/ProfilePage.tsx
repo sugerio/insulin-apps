@@ -10,7 +10,7 @@ import { Page, PageHead } from "../components/Page.tsx";
 import { PeopleEditor } from "../components/PeopleEditor.tsx";
 import { useResource } from "../lib/useResource.ts";
 
-// `/household`: everyone in the household, the same every year. Pages that send someone here to add a person pass
+// `/profile`: everyone in the profile, the same every year. Pages that send someone here to add a person pass
 // `?back=` (Start a year, step 1 of a year), and the page offers the way back.
 
 /** Where "Back" may lead: only a page of the returns, never another site. */
@@ -22,15 +22,15 @@ export function backTarget(value: string | null): { to: string; label: string } 
   return { to: value, label: year ? `Back to ${year}` : "Back to returns" };
 }
 
-export function HouseholdPage() {
+export function ProfilePage() {
   const me = useMe();
   const [search] = useSearchParams();
   const back = backTarget(search.get("back"));
   const resource = useResource("people", (signal) => apiRequest(routes.listPeople, { signal }));
   return (
-    <Page title="Household" crumbs={[["Household"]]}>
+    <Page title="Profile" crumbs={[["Profile"]]}>
       <PageHead
-        title="Household"
+        title="Profile"
         actions={
           back ? (
             <Button asChild variant="outline">

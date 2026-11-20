@@ -1,13 +1,13 @@
 import type { ConfirmSlips, CreateSlip, SaveAnswers, SlipList, TaxYear, UpdateSlip } from "#shared";
 import { Dec } from "../../shared/engine/decimal.ts";
 import { rulesFor } from "../../shared/rules/index.ts";
-import { audit, bumpRevision, getYear, runGuarded, yearRow, type YearRow } from "./household.ts";
+import { audit, bumpRevision, getYear, runGuarded, yearRow, type YearRow } from "./people.ts";
 import { ApiError, notFound } from "./http.ts";
 import type { Caller } from "./identity.ts";
 import { loadWorkspace } from "./workspace.ts";
 
 // Each adult's answers and slips for a year. Every change is one batch under the year's revision (the same guard as
-// the household facts), with its audit event, and answers with the year: its new revision and steps.
+// the family facts), with its audit event, and answers with the year: its new revision and steps.
 
 type Db = D1Database;
 

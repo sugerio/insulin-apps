@@ -36,15 +36,15 @@ const REQUESTS_BUDGET_MS = 15_000
 export const ORGANIZATIONS_PER_REQUEST = 500
 
 /** Each organization's metrics, in the order they are sent. */
-export const ORGANIZATION_METRICS = ['households', 'people', 'tax_years', 'returns'] as const
+export const ORGANIZATION_METRICS = ['profiles', 'people', 'tax_years', 'returns'] as const
 export type OrganizationMetric = (typeof ORGANIZATION_METRICS)[number]
 
 /**
  * One GROUP BY over a whole table per query, so the work doesn't grow with the number of organizations; each column
- * other than `organization_id` is a metric. The first query lists every organization with a household (one each).
+ * other than `organization_id` is a metric. The first query lists every organization with a profile (one each).
  */
 const QUERIES = [
-  'SELECT org_id AS organization_id, count(*) AS households FROM households GROUP BY org_id',
+  'SELECT org_id AS organization_id, count(*) AS profiles FROM households GROUP BY org_id',
   'SELECT org_id AS organization_id, count(*) AS people FROM people GROUP BY org_id',
   'SELECT org_id AS organization_id, count(*) AS tax_years FROM tax_years GROUP BY org_id',
   'SELECT org_id AS organization_id, count(*) AS returns FROM returns GROUP BY org_id',
@@ -55,7 +55,7 @@ export interface UsageReport {
   hour: number
   /** The database's size from D1, when it gave one. */
   databaseBytes: number | null
-  /** Every organization with a household, by id, with every metric (0 when it has none of those records). */
+  /** Every organization with a profile, by id, with every metric (0 when it has none of those records). */
   organizations: { id: string; metrics: Record<OrganizationMetric, number> }[]
 }
 
@@ -80,7 +80,7 @@ export const hourOf = (now: number) => Math.floor(now / HOUR_MS) * HOUR_MS
 export async function measureUsage(db: D1Database, hour: number, databaseBytes: number | null): Promise<UsageReport> {
   const results = await db.batch<Record<string, unknown>>(QUERIES.map((query) => db.prepare(query)))
   const byId = new Map<string, Record<OrganizationMetric, number>>()
-  // The first query lists every organization with a household; the others only add to them.
+  // The first query lists every organization with a profile; the others only add to them.
   for (const [index, result] of results.entries()) {
     for (const row of result.results) {
       const id = String(row.organization_id)

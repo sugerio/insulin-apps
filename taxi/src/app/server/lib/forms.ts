@@ -71,7 +71,7 @@ export async function printReturn(
   if (blockers.length > 0) {
     throw conflict(`The return isn't finished, so its forms can't be printed yet: ${blockers.map((blocker) => blocker.text).join(" ")}`);
   }
-  // Step 1 names the spouse even when their return isn't prepared here: the household's other adult.
+  // Step 1 names the spouse even when their return isn't prepared here: the other adult in the profile.
   const partner = view.people.find((each) => each.id !== personId && isAdult(each.relationship));
   const facts = personalFacts(evaluation.input, personId, {
     spouseName: partner?.name,

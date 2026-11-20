@@ -156,7 +156,7 @@ lines:
   NT428.16:
     label: Northwest Territories amount for an eligible dependant
     formula: >-
-      round((if(line.HH.partner == 0 and household.childrenUnder18 > 0, param.ntSpouseBase, 0)) * line.RES.factor, 2)
+      round((if(line.HH.partner == 0 and family.childrenUnder18 > 0, param.ntSpouseBase, 0)) * line.RES.factor, 2)
     source: "NT428 lines 14 to 16. The app assumes the child had no income"
   # The worksheet's infirm dependant amount, which needn't live with you, rather than the caregiver amount (line 27),
   # which needs a dependant living with you: the app doesn't ask where they live. One dependant, as line 30450.
@@ -197,7 +197,7 @@ lines:
     source: "NT428 line 33 (58560): Schedule NT(S11)"
   NT428.35:
     label: Amounts transferred from your spouse or common-law partner
-    formula: "if(line.HH.partner == 1 and household.partnerInYear, line.NTS2.12, 0)"
+    formula: "if(line.HH.partner == 1 and family.partnerInYear, line.NTS2.12, 0)"
     source: "NT428 line 35 (58640): Schedule NT(S2)"
   NT428.34:
     label: Northwest Territories tuition and education amounts transferred from a child or grandchild
@@ -290,7 +290,7 @@ lines:
     source: "NT(S11) lines 17 to 19: this year's amounts up to $5,000, less what you used"
   NTS11.20:
     label: Northwest Territories tuition and education transferred to your spouse or common-law partner
-    formula: "if(line.HH.partner == 1 and household.partnerInYear and line.NTS11.5 > 0, min(answer.tuitionTransfer, line.NTS11.19), 0)"
+    formula: "if(line.HH.partner == 1 and family.partnerInYear and line.NTS11.5 > 0, min(answer.tuitionTransfer, line.NTS11.19), 0)"
     source: "NT(S11) line 20: the amount you designate on your T2202 (the app takes the federal one), up to line 19"
 
   # Schedule NT(S2) – Northwest Territories amounts transferred from your spouse (read from their NT428, whatever
@@ -331,7 +331,7 @@ lines:
     label: Your spouse's or partner's basic cost of living credit
     formula: >-
       if(line.HH.partner == 1, min(param.ntCostOfLivingMax, round(bracket(param.ntCostOfLivingBrackets,
-      if(household.partnerInYear, spouse.line.NT479.5, line.HH.spouseNetIncome)), 2)), 0)
+      if(family.partnerInYear, spouse.line.NT479.5, line.HH.spouseNetIncome)), 2)), 0)
     source: "NT479 line 18: line 13 of their NT479, worked out from their adjusted net income (or your answer for their net income)"
   # Only one spouse claims the supplement for the family; it comes to the same either way. The one with the higher net
   # income claims it (the person preparing when they are equal), unless the other can't: a spouse living outside the
@@ -339,7 +339,7 @@ lines:
   NTCOL.claimant:
     label: This return claims the family's cost of living supplement (1 for yes)
     formula: >-
-      if(line.HH.partner == 0 or not household.partnerInYear, 1, if(spouse.person.province != "NT" or spouse.person.age < 18, 1,
+      if(line.HH.partner == 0 or not family.partnerInYear, 1, if(spouse.person.province != "NT" or spouse.person.age < 18, 1,
       if(line.T1.23600 > spouse.line.T1.23600 or (line.T1.23600 == spouse.line.T1.23600 and person.role == "self"), 1, 0)))
   NT479.20:
     label: Cost of living tax credit supplement

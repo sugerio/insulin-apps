@@ -53,7 +53,7 @@ describe("permissions", () => {
   it("publishes only the routes the caller may use", async () => {
     const catalog = async (as: typeof OWNER) => ((await (await server.call("GET", "/api/catalog", { as })).json()) as ApiCatalog).endpoints;
     const ownerPaths = (await catalog(OWNER)).map((endpoint) => `${endpoint.method} ${endpoint.path}`);
-    expect(ownerPaths).toContain("PUT /api/years/{year}/household");
+    expect(ownerPaths).toContain("PUT /api/years/{year}/personal-info");
     expect(ownerPaths).not.toContain("POST /api/scheduled");
     const viewerMethods = new Set((await catalog(VIEWER)).map((endpoint) => endpoint.method));
     expect([...viewerMethods]).toEqual(["GET"]);
@@ -69,14 +69,14 @@ describe("permissions", () => {
 });
 
 describe("tenancy", () => {
-  it("never shows or changes another organization's household", async () => {
+  it("never shows or changes another organization's people", async () => {
     const alex = await seed();
     expect((await server.call("GET", "/api/years/2025", { as: OTHER_ORG })).status).toBe(404);
     expect((await server.call("PATCH", `/api/people/${alex.id}`, { as: OTHER_ORG, body: { name: "Taken" } })).status).toBe(404);
     expect((await server.call("DELETE", `/api/people/${alex.id}`, { as: OTHER_ORG })).status).toBe(404);
     const theirs = (await (await server.call("GET", "/api/years", { as: OTHER_ORG })).json()) as { years: unknown[]; people: unknown[] };
     expect(theirs).toMatchObject({ years: [], people: [] });
-    // Each organization has a household of its own.
+    // Each organization has a profile of its own.
     expect((await server.call("POST", "/api/people", { as: OTHER_ORG, body: { name: "Olive", relationship: "self", birthDate: "1980-01-01" } })).status).toBe(201);
   });
 });

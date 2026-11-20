@@ -22,14 +22,14 @@ The base URL is `https://taxi.insulinapps.com`, and every endpoint is under `/ap
 |---|---|---|
 | `GET /api/me` | any | Who is calling: their role and permissions. |
 | `GET /api/catalog` | any | The endpoints the caller may use, with request bodies as JSON Schema. |
-| `GET /api/years` | View returns | The household's people and tax years, with each adult's return and its steps. |
+| `GET /api/years` | View returns | The people in the profile and tax years, with each adult's return and its steps. |
 | `POST /api/years` | Prepare returns | Start a tax year with the people in it: `{"year": 2025, "people": ["…"]}`. You must be one of them; your spouse in it prepares both returns together. Starting one that exists returns it unchanged. |
-| `GET /api/years/{year}` | View returns | A tax year: who is in it, the marital status, each adult's province and residency, open issues, and each adult's return with the state of its seven steps (`returns`: household, upload, income, deductions, credits, confirm, finish). |
+| `GET /api/years/{year}` | View returns | A tax year: who is in it, the marital status, each adult's province and residency, open issues, and each adult's return with the state of its seven steps (`returns`: personal, upload, income, deductions, credits, confirm, finish). |
 | `GET /api/years/{year}/estimate` | View returns | What the engine computes for each return of the year (below). |
 | `GET /api/years/{year}/hints` | View returns | Each return's hints (below), with their state: `open`, `applied` (an accepted saving) or `dismissed`. |
 | `POST /api/years/{year}/hints/{hint}` | Prepare returns | Decide on a hint of an adult's return: `{"revision", "personId", "decision"}`, where `decision` is `accept` (a saving: its answers are saved), `dismiss`, or `undo` (puts back the answers an accepted saving changed, or shows a dismissed hint again). A saving that no longer applies is refused with 409. |
 | `PUT /api/years/{year}/people` | Prepare returns | Change who is in the year: `{"revision", "people"}`. Someone taken out loses their facts for that year. |
-| `PUT /api/years/{year}/household` | Prepare returns | Save the year's facts (below). |
+| `PUT /api/years/{year}/personal-info` | Prepare returns | Save the year's facts (below). |
 | `GET /api/years/{year}/documents` | View returns | The files uploaded for the year, with what reading each one found and the slips it added. |
 | `POST /api/years/{year}/documents` | Prepare returns | Upload one file for AI to read: its bytes as the body, its `Content-Type` (`application/pdf`, `image/png` or `image/jpeg`), its name in an `X-File-Name` header (URI-encoded), and the adult whose return it is uploaded in as `X-Person-Id` (the person preparing without it). Up to 10 MiB. A slip with the other adult's name goes to their return; one with no name that matches stays in this return. Answers with what reading gave (`status`, `message`), the file as saved, the files it `replaced`, and the year. A file with the name of one in the same return, changed or not, replaces it and its slips once it is read into slips; if it can't be, the earlier one is kept and the file is null. Otherwise the same file under another name, or a file whose slips are all in the year already, isn't saved: `status` is `duplicate` and the file is null. |
 | `POST /api/years/{year}/documents/{id}/read` | Prepare returns | Read a file again that couldn't be read (`failed` or `not_available`), from its stored bytes. Answers like an upload. |
@@ -42,7 +42,7 @@ The base URL is `https://taxi.insulinapps.com`, and every endpoint is under `/ap
 | `PATCH /api/years/{year}/slips/{id}` | Prepare returns | Change whose slip it is, its issuer or its boxes: `{"revision", "personId"?, "issuer"?, "boxes"?}`. It goes back to unconfirmed. |
 | `DELETE /api/years/{year}/slips/{id}` | Prepare returns | Remove a slip: `{"revision"}`. |
 | `POST /api/years/{year}/slips/confirm` | Prepare returns | Confirm one adult's unconfirmed slips: `{"revision", "personId"}`; without `personId`, every adult's. |
-| `GET /api/people` | View returns | Everyone in the household, the same every year. |
+| `GET /api/people` | View returns | Everyone in the profile, the same every year. |
 | `POST /api/people` | Prepare returns | Add a person: `{"name", "relationship", "birthDate"}`. |
 | `PATCH /api/people/{id}` | Prepare returns | Change a person's name, relationship or birth date. |
 | `DELETE /api/people/{id}` | Prepare returns | Remove a person, with their facts in every year. You can't remove yourself. |
@@ -64,7 +64,7 @@ The base URL is `https://taxi.insulinapps.com`, and every endpoint is under `/ap
 
 `adults` are you, and your spouse when they are in the year. Send the `revision` from your last read of the year (the
 same for `PUT /api/years/{year}/people`). If someone changed the year since, the save is refused with `409`
-and nothing is changed: read the year again and retry. `maritalStatus` is `married` or `common_law` when the household
+and nothing is changed: read the year again and retry. `maritalStatus` is `married` or `common_law` when the profile
 has a spouse, and `single`, `widowed`, `divorced` or `separated` when it has none; another value is refused with `400`.
 `province` is a two-letter code.
 
@@ -97,7 +97,7 @@ the same rules. A slip's box must be one its type has, and an amount is dollars 
 - `id`, the hint in the year's rules (`poolDonations`), and `personId`, the return it is about;
 - `kind`: `saving`, `info` or `warning`; `title` and `text`;
 - `amount`: a number shown with it, `{"label", "value"}`, or null;
-- `effect`: for a saving, what the household's refund less balance owing goes up by with its change (for an applied
+- `effect`: for a saving, what the combined refund less balance owing of the year's returns goes up by with its change (for an applied
   one, what it saved when accepted); for an info hint with a change, what the change makes, named by `effectLabel`;
 - `state`: `open`, `applied` or `dismissed`.
 

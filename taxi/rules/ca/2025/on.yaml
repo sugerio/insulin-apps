@@ -301,7 +301,7 @@ lines:
   ON428.16:
     label: Ontario amount for an eligible dependant
     formula: >-
-      round((if(line.HH.partner == 0 and household.childrenUnder18 > 0, min(param.onSpouseMax, param.onSpouseBase), 0)) * line.RES.factor, 2)
+      round((if(line.HH.partner == 0 and family.childrenUnder18 > 0, min(param.onSpouseMax, param.onSpouseBase), 0)) * line.RES.factor, 2)
     source: "ON428 lines 14 to 16. The app assumes the child had no income"
   ON428.17:
     label: Ontario caregiver amount
@@ -360,7 +360,7 @@ lines:
     source: "Schedule ON(S11), line 5: the unused amounts from your notice of assessment, up to line 4"
   ON428.34:
     label: Ontario amounts transferred from your spouse or common-law partner
-    formula: "if(line.HH.partner == 1 and household.partnerInYear, if(line.ONS2.4 == 0, 0, line.ONS2.11), 0)"
+    formula: "if(line.HH.partner == 1 and family.partnerInYear, if(line.ONS2.4 == 0, 0, line.ONS2.11), 0)"
     source: "Schedule ON(S2): their unused Ontario age, pension income and disability amounts. A spouse living in another province is read as if they lived in Ontario, as the schedule asks: the engine works out Ontario's lines for anyone"
   ON428.35:
     label: Ontario amounts before medical expenses
@@ -417,11 +417,11 @@ lines:
     label: This return claims the Ontario tax reductions for dependants (1 for yes)
     formula: >-
       if(line.HH.partner == 0, 1, if(line.HH.spouseNetIncome > line.T1.23600, 0,
-      if(line.HH.spouseNetIncome == line.T1.23600 and household.partnerInYear and person.role == "spouse", 0, 1)))
+      if(line.HH.spouseNetIncome == line.T1.23600 and family.partnerInYear and person.role == "spouse", 0, 1)))
     source: "ON428 lines 75 and 76: only the spouse with the higher net income claims them; with equal incomes, the person preparing"
   ON428.75:
     label: Ontario tax reduction for dependent children
-    formula: "if(line.ON.reductionClaimant == 1, param.onTaxReductionChild * household.childrenUnder19, 0)"
+    formula: "if(line.ON.reductionClaimant == 1, param.onTaxReductionChild * family.childrenUnder19, 0)"
     source: "ON428 line 75: $544 per child born in 2007 or later, claimed by the spouse with the higher net income"
   # Line 76 counts each dependant with an impairment that either spouse claims on line 58160, 58185 or 58480, each
   # dependent child with an impairment counted on line 75, and a spouse whose disability amount moves on ON(S2). One
@@ -438,11 +438,11 @@ lines:
   ON.impairedDependants:
     label: Dependants with an impairment for the Ontario tax reduction
     formula: >-
-      min(household.childrenUnder19, if(line.HH.partner == 1 and household.partnerInYear,
+      min(family.childrenUnder19, if(line.HH.partner == 1 and family.partnerInYear,
       max(line.ON.impairedChildren, spouse.line.ON.impairedChildren), line.ON.impairedChildren))
-      + line.ON.impairedAdults + if(line.HH.partner == 1 and household.partnerInYear, spouse.line.ON.impairedAdults, 0)
+      + line.ON.impairedAdults + if(line.HH.partner == 1 and family.partnerInYear, spouse.line.ON.impairedAdults, 0)
       + if(line.ON428.34 > 0 and line.ONS2.3 > 0, 1, 0)
-    source: "ON428 line 60970: the household's children (counted once for both spouses), each spouse's adult dependants, and a spouse with an impairment"
+    source: "ON428 line 60970: the children (counted once for both spouses), each spouse's adult dependants, and a spouse with an impairment"
   ON428.76:
     label: Ontario tax reduction for dependants with an impairment
     formula: "if(line.ON.reductionClaimant == 1, param.onTaxReductionImpairment * line.ON.impairedDependants, 0)"
@@ -512,7 +512,7 @@ lines:
     formula: "max(0, line.ON428A.5 - line.ON428A.19)"
   ON428A.28:
     label: Your spouse's or partner's adjusted net income
-    formula: "if(household.partnerInYear, spouse.line.ON428A.13, answer.spouseNetIncome)"
+    formula: "if(family.partnerInYear, spouse.line.ON428A.13, answer.spouseNetIncome)"
     source: "ON428-A line 28: from their return, or your answer for their net income"
   ON428A.38:
     label: Income over the LIFT thresholds
@@ -562,7 +562,7 @@ lines:
   ON479.1:
     label: Ontario fertility treatment tax credit
     formula: >-
-      if(line.ON479.61268 == 0, 0, if(line.HH.partner == 1 and household.partnerInYear and spouse.answer.fertilityExpenses > 0,
+      if(line.ON479.61268 == 0, 0, if(line.HH.partner == 1 and family.partnerInYear and spouse.answer.fertilityExpenses > 0,
       unsupported("Only one spouse can claim the Ontario fertility treatment tax credit. Enter the fertility treatment expenses on one return only"),
       min(param.onFertilityMax, round(line.ON479.61268 * param.onFertilityRate, 2))))
     source: "ON479 line 1: 25% of the expenses, up to $5,000. Only one spouse may claim it, and the claim can't be split"
@@ -577,7 +577,7 @@ lines:
   ON479.13:
     label: Ontario seniors care at home tax credit
     formula: >-
-      if((person.age >= param.onSeniorsCareAge or (line.HH.partner == 1 and household.partnerInYear and spouse.person.age >= param.onSeniorsCareAge))
+      if((person.age >= param.onSeniorsCareAge or (line.HH.partner == 1 and family.partnerInYear and spouse.person.age >= param.onSeniorsCareAge))
       and line.ON479.8 <= param.onSeniorsCareFamilyLimit,
       max(0, line.ON479.5 - round(max(0, line.ON479.8 - param.onSeniorsCareBase) * param.onSeniorsCareReductionRate, 2)), 0)
     source: >-
@@ -616,7 +616,7 @@ lines:
     source: "ON479-A lines 1 to 4: net income before it is floored at zero (line 23400 less 23500), plus lines 21400 and 23500"
   ON479A.supporting:
     label: Your spouse's or partner's adjusted income
-    formula: "if(line.HH.partner == 1, if(household.partnerInYear, spouse.line.ON479A.4, answer.spouseNetIncome), 0)"
+    formula: "if(line.HH.partner == 1, if(family.partnerInYear, spouse.line.ON479A.4, answer.spouseNetIncome), 0)"
     source: "ON479-A line 4, column 2: from their return, or your answer for their net income"
   ON479A.5:
     label: Family adjusted income

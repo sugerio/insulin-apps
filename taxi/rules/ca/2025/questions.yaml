@@ -415,7 +415,7 @@ questions:
     receipts: CHILDCARE
     ask: Child care paid
     help: Uploaded receipts are added; enter what isn't on one.
-  # The limit is by birth year (Form T778, Part B): the household's dependants give the age bands, and these counts
+  # The limit is by birth year (Form T778, Part B): the dependants of the year give the age bands, and these counts
   # move a child with the disability tax credit to the $11,000 limit, or an older infirm child to the $5,000 one.
   childCareDisabledUnder7:
     type: count

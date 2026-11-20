@@ -168,7 +168,7 @@ lines:
   PE428.16:
     label: Prince Edward Island amount for an eligible dependant
     formula: >-
-      round((if(line.HH.partner == 0 and household.childrenUnder18 > 0, min(param.peSpouseMax, param.peSpouseBase), 0)) * line.RES.factor, 2)
+      round((if(line.HH.partner == 0 and family.childrenUnder18 > 0, min(param.peSpouseMax, param.peSpouseBase), 0)) * line.RES.factor, 2)
     source: "PE428 lines 14 to 16. The app assumes the child had no income"
   # The amount for infirm dependants needs no shared home, unlike the caregiver amount (line 29), which the app can't
   # tell; so the infirm amount is claimed for an adult relative with an impairment.
@@ -184,7 +184,7 @@ lines:
     formula: >-
       if(line.HH.partner == 1 and (line.T1.23600 > line.HH.spouseNetIncome
       or (line.T1.23600 == line.HH.spouseNetIncome and person.role == "spouse")), 0,
-      sum(household.childMonthsUnder6) - if(line.PE428.16 > 0, min(household.childMonthsUnder6), 0))
+      sum(family.childMonthsUnder6) - if(line.PE428.16 > 0, min(family.childMonthsUnder6), 0))
     source: "PE428 line 58229: each month a child was under 6 on its first day; with a spouse or partner, only the one with the lower net income claims (with equal incomes, the person preparing)"
   PE428.18:
     label: Prince Edward Island amount for young children
@@ -199,7 +199,7 @@ lines:
     source: "PE428 line 27 (58360): line 31400 of your return, up to $1,000"
   PE428.28:
     label: Children's wellness tax credit
-    formula: "if(household.childrenUnder19 > 0, min(answer.childActivityFees, param.peWellnessMaxPerChild * household.childrenUnder19), 0)"
+    formula: "if(family.childrenUnder19 > 0, min(answer.childActivityFees, param.peWellnessMaxPerChild * family.childrenUnder19), 0)"
     source: "PE428 line 28 (58365): program fees for children under 18 at the start of the year, up to $1,000 per child"
   PE428.31:
     label: Prince Edward Island disability amount for self
@@ -235,7 +235,7 @@ lines:
     source: "PE428 line 37 (58600): the provincial amount they designate on their T2202, taken as the federal one"
   PE428.38:
     label: Prince Edward Island amounts transferred from your spouse or common-law partner
-    formula: "if(line.HH.partner == 1 and household.partnerInYear and line.PES2.5 > 0, line.PES2.12, 0)"
+    formula: "if(line.HH.partner == 1 and family.partnerInYear and line.PES2.5 > 0, line.PES2.12, 0)"
     source: "Schedule PE(S2): their unused Prince Edward Island age, pension, disability and tuition amounts"
   PE428.45:
     label: Allowable medical expenses
@@ -281,14 +281,14 @@ lines:
   PE.claimsReduction:
     label: This return claims the family's low-income tax reduction (1 for yes)
     formula: >-
-      if(person.age >= 19 or line.HH.partner == 1 or household.childrenUnder19 > 0,
-      if(line.HH.partner == 1 and household.partnerInYear and spouse.person.province == "PE"
+      if(person.age >= 19 or line.HH.partner == 1 or family.childrenUnder19 > 0,
+      if(line.HH.partner == 1 and family.partnerInYear and spouse.person.province == "PE"
       and (spouse.line.PE428.63 > line.PE428.63 or (spouse.line.PE428.63 == line.PE428.63
       and (spouse.line.T1.23600 > line.T1.23600 or (spouse.line.T1.23600 == line.T1.23600 and person.role == "spouse")))), 0, 1), 0)
     source: "PE428 line 87: for someone 19 or older, with a spouse or partner, or a parent; a couple claims it on one return"
   PE428.66:
     label: Unused low-income tax reduction from your spouse or common-law partner
-    formula: 'if(line.HH.partner == 1 and household.partnerInYear and spouse.person.province == "PE" and line.PE.claimsReduction == 0, spouse.line.PE428.101, 0)'
+    formula: 'if(line.HH.partner == 1 and family.partnerInYear and spouse.person.province == "PE" and line.PE.claimsReduction == 0, spouse.line.PE428.101, 0)'
     source: "PE428 line 66: line 101 of their PE428"
   PE428.67:
     label: Prince Edward Island tax after your spouse's unused reduction
@@ -299,7 +299,7 @@ lines:
     source: "PE428 lines 68 to 73: both net incomes. UCCB amounts aren't handled"
   PE428.78:
     label: Age reduction for your spouse or common-law partner
-    formula: "if(line.HH.partner == 1 and household.partnerInYear, if(spouse.person.age >= 65, param.peTaxReductionAge, 0), 0)"
+    formula: "if(line.HH.partner == 1 and family.partnerInYear, if(spouse.person.age >= 65, param.peTaxReductionAge, 0), 0)"
     source: "PE428 line 78: $250 if they were born in 1960 or earlier. Their age is known only when their return is prepared here"
   PE428.81:
     label: Prince Edward Island tax reductions
@@ -307,7 +307,7 @@ lines:
       param.peTaxReductionBasic + if(person.age >= 65, param.peTaxReductionAge, 0)
       + if(line.HH.partner == 1, param.peTaxReductionBasic, 0) + line.PE428.78
       + if(line.PE428.16 > 0, param.peTaxReductionBasic, 0)
-      + param.peTaxReductionChild * max(0, household.childrenUnder19 - if(line.PE428.16 > 0, 1, 0))
+      + param.peTaxReductionChild * max(0, family.childrenUnder19 - if(line.PE428.16 > 0, 1, 0))
     source: "PE428 lines 75 to 81"
   PE428.86:
     label: Prince Edward Island tax reduction clawback
@@ -383,7 +383,7 @@ lines:
     source: "PE(S11) lines 17 to 19: this year's amounts up to $5,000, less what you used"
   PES11.20:
     label: Prince Edward Island tuition and education amounts transferred to your spouse or common-law partner
-    formula: "if(line.HH.partner == 1 and household.partnerInYear and line.PES11.5 > 0, min(answer.tuitionTransfer, line.PES11.19), 0)"
+    formula: "if(line.HH.partner == 1 and family.partnerInYear and line.PES11.5 > 0, min(answer.tuitionTransfer, line.PES11.19), 0)"
     source: "PE(S11) line 20: the amount you designate on your T2202 (the same as federally), up to line 19"
 
   # Schedule PE(S2) – Prince Edward Island amounts transferred from your spouse (read from their PE428, as if they lived

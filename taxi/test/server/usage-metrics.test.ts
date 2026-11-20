@@ -17,8 +17,8 @@ describe("the hourly usage report", () => {
   it("counts each organization's records, and nothing else", async () => {
     const report = await measureUsage(server.db, hourOf(NOW), null);
     expect(report.organizations).toEqual([
-      { id: "org-a", metrics: { households: 1, people: 2, tax_years: 1, returns: 0 } },
-      { id: "org-b", metrics: { households: 1, people: 1, tax_years: 0, returns: 0 } },
+      { id: "org-a", metrics: { profiles: 1, people: 2, tax_years: 1, returns: 0 } },
+      { id: "org-b", metrics: { profiles: 1, people: 1, tax_years: 0, returns: 0 } },
     ]);
   });
 

@@ -1,7 +1,7 @@
 import { z } from "zod";
 
-// The household and its tax years, as the browser, the server and API clients see them. A household is the people of
-// one organization, the same every year. Each tax year names who is in it (the person preparing always; their spouse
+// The people and their tax years, as the browser, the server and API clients see them. The people (the profile)
+// belong to one organization and are the same every year. Each tax year names who is in it (the person preparing always; their spouse
 // when the two returns are prepared together; the dependants who lived with them) and records the facts that can
 // change from year to year: marital status on December 31, each adult's province, whether they lived in Canada all
 // year.
@@ -23,9 +23,9 @@ export const MARITAL_STATUSES = ["married", "common_law", "widowed", "divorced",
 export const maritalStatusSchema = z.enum(MARITAL_STATUSES);
 export type MaritalStatus = z.infer<typeof maritalStatusSchema>;
 /**
- * The statuses a year may record, from the Household: with a spouse or partner in it, married or living common-law
+ * The statuses a year may record, from the Profile: with a spouse or partner in it, married or living common-law
  * (the tax treats both the same; the T1 has a box for each); without one, the other four. A separation during the
- * year isn't handled yet, so a household with a spouse never records one.
+ * year isn't handled yet, so a profile with a spouse never records one.
  */
 export function maritalStatusesFor(hasSpouse: boolean): readonly MaritalStatus[] {
   return hasSpouse ? ["married", "common_law"] : ["single", "widowed", "divorced", "separated"];
@@ -114,7 +114,7 @@ const SHARED_ISSUES: ReadonlySet<Issue["code"]> = new Set(["no_self", "no_marita
 /** Whether an issue is one of an adult's return: about that adult, or about a fact the year's returns share. */
 export const isIssueOf = (issue: Issue, personId: string) => SHARED_ISSUES.has(issue.code) || issue.personId === personId;
 
-export const STEPS = ["household", "upload", "income", "deductions", "credits", "confirm", "finish"] as const;
+export const STEPS = ["personal", "upload", "income", "deductions", "credits", "confirm", "finish"] as const;
 export const stepSchema = z.enum(STEPS);
 export type Step = z.infer<typeof stepSchema>;
 export const stepStatusSchema = z.enum(["done", "todo", "not_built"]);
@@ -130,14 +130,14 @@ export type ReturnProgress = z.infer<typeof returnProgressSchema>;
 
 export const taxYearSchema = z.strictObject({
   year: z.number().int(),
-  /** Bumped on every change to the year's household facts; a save names the revision it started from. */
+  /** Bumped on every change to the year's personal info; a save names the revision it started from. */
   revision: z.number().int().min(1),
   maritalStatus: maritalStatusSchema.nullable(),
   /** Whether both adults' returns are prepared: the spouse is one of the year's people. */
   prepareTogether: z.boolean(),
-  /** Everyone in the household, in or out of this year. */
+  /** Everyone in the profile, in or out of this year. */
   people: z.array(personSchema),
-  /** The ids of the year's people, in the household's order. */
+  /** The ids of the year's people, in the profile's order. */
   members: z.array(idSchema),
   /** The year's adults (you, and your spouse when in the year). */
   adults: z.array(adultYearSchema),
@@ -161,7 +161,7 @@ export const startYearSchema = z.strictObject({ year: yearSchema, people: member
 export const setYearPeopleSchema = z.strictObject({ revision: z.number().int().min(1), people: memberIdsSchema });
 export type SetYearPeople = z.infer<typeof setYearPeopleSchema>;
 
-export const saveHouseholdSchema = z.strictObject({
+export const savePersonalInfoSchema = z.strictObject({
   revision: z.number().int().min(1),
   maritalStatus: maritalStatusSchema.nullable(),
   adults: z
@@ -174,13 +174,13 @@ export const saveHouseholdSchema = z.strictObject({
     )
     .max(2),
 });
-export type SaveHousehold = z.infer<typeof saveHouseholdSchema>;
+export type SavePersonalInfo = z.infer<typeof savePersonalInfoSchema>;
 
 export const yearSummarySchema = z.strictObject({
   year: z.number().int(),
   /** The year's revision, to change who is in it from the list of years. */
   revision: z.number().int().min(1),
-  /** The ids of the year's people, in the household's order. */
+  /** The ids of the year's people, in the profile's order. */
   members: z.array(idSchema),
   /** Each adult's return: whose it is, by name, and its steps' states. */
   returns: z.array(returnProgressSchema.extend({ name: z.string() })),

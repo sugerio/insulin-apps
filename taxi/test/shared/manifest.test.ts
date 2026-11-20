@@ -14,8 +14,8 @@ describe("the package.json manifest", () => {
     expect(rolePermissions("VIEWER")).not.toContain("taxi.prepare");
   });
 
-  it("has a navigation every role sees, with Returns and Household", () => {
-    expect(NAVIGATION.map((item) => item.path)).toEqual(["/returns", "/household"]);
+  it("has a navigation every role sees, with Returns and Profile", () => {
+    expect(NAVIGATION.map((item) => item.path)).toEqual(["/returns", "/profile"]);
     expect(navigationFor(NAVIGATION, "VIEWER")).toHaveLength(2);
   });
 });

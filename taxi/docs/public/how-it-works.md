@@ -9,7 +9,7 @@ and for AI agents answering questions about the app.
 
 ## What is stored
 
-Taxi keeps its own database. Each organization has one household, with:
+Taxi keeps its own database. Each organization has one profile, with:
 
 - **People:** name, relationship and birth date.
 - **Tax years:** who is in each one, the marital status on December 31, and a revision number that changes with each
@@ -78,7 +78,7 @@ Hints are checks on each return, in `rules/ca/2025/hints.yaml` next to the other
 holds for the return. It is one of:
 
 - **A saving:** a change of answers, such as claiming both spouses' donations on one return. The engine computes both
-  returns again with the change, and the hint shows only when the household's refund, less any balance owing, goes up by
+  returns again with the change, and the hint shows only when the combined refund, less any balance owing, of the year's returns goes up by
   $1 or more. The saving shown is that difference, never an estimate.
 - **Something to know or check:** for example, that interest is taxable even without a T5, or that RRSP contributions
   are over the limit on last year's notice of assessment plus $2,000.
@@ -113,13 +113,13 @@ Form T778, each only when it applies), the provincial forms, then a worksheet.
 
 ## How saves stay consistent
 
-Each change is written in one step with its history entry: either all of it is saved, or none of it. A year's household
-facts are saved under the year's revision. A save based on an older revision is refused, so two people editing the same
+Each change is written in one step with its history entry: either all of it is saved, or none of it. A year's personal
+info is saved under the year's revision. A save based on an older revision is refused, so two people editing the same
 year never overwrite each other without knowing.
 
 ## Usage reports
 
-Once an hour, Taxi sends Insulin Apps a count of its records for each organization (households, people, tax
+Once an hour, Taxi sends Insulin Apps a count of its records for each organization (profiles, people, tax
 years and returns) and the size of its database, so that Insulin Apps can watch usage and plan capacity. It never sends
 a name, a birth date, an amount or a document.
 

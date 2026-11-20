@@ -165,7 +165,7 @@ lines:
   NU428.16:
     label: Nunavut amount for an eligible dependant
     formula: >-
-      round((if(line.HH.partner == 0 and household.childrenUnder18 > 0, param.nuSpouseBase, 0)) * line.RES.factor, 2)
+      round((if(line.HH.partner == 0 and family.childrenUnder18 > 0, param.nuSpouseBase, 0)) * line.RES.factor, 2)
     source: "NU428 lines 14 to 16. The app assumes the child had no income"
   # The worksheet's infirm dependant amount, which needn't live with you, rather than the caregiver amount (line 28),
   # which needs a dependant living with you: the app doesn't ask where they live. One dependant, as line 30450.
@@ -180,13 +180,13 @@ lines:
   NUYC.claimant:
     label: This return claims the amount for young children (1 for yes)
     formula: >-
-      if(line.HH.partner == 0 or not household.partnerInYear, 1, if(spouse.person.province != "NU", 1,
+      if(line.HH.partner == 0 or not family.partnerInYear, 1, if(spouse.person.province != "NU", 1,
       if(line.T1.23600 < spouse.line.T1.23600 or (line.T1.23600 == spouse.line.T1.23600 and person.role == "self"), 1, 0)))
     source: "canada.ca/nu-tax-info, line 58230: the spouse with the lower net income makes the first claim; the other claims the unused part on NU(S2)"
   NU428.18:
     label: Nunavut amount for young children less than 6 years of age
     formula: >-
-      round((if(household.childrenUnder6 > 0, if(line.NUYC.claimant == 1, param.nuYoungChildAmount * household.childrenUnder6, 0), 0)) * line.RES.factor, 2)
+      round((if(family.childrenUnder6 > 0, if(line.NUYC.claimant == 1, param.nuYoungChildAmount * family.childrenUnder6, 0), 0)) * line.RES.factor, 2)
     source: "NU428 line 18 (58230): $1,200 for each child under 6 at the end of the year"
   NU428.24:
     label: CPP and EI credit amounts
@@ -226,7 +226,7 @@ lines:
     source: "NU428 line 35 (58600): the territorial amount designated to you on their T2202 (the app takes the federal one, line 32400)"
   NU428.36:
     label: Amounts transferred from your spouse or common-law partner
-    formula: "if(line.HH.partner == 1 and household.partnerInYear, line.NUS2.13, 0)"
+    formula: "if(line.HH.partner == 1 and family.partnerInYear, line.NUS2.13, 0)"
     source: "NU428 line 36 (58640): Schedule NU(S2)"
   NU428.43:
     label: Allowable medical expenses
@@ -309,7 +309,7 @@ lines:
     source: "NU(S11) lines 21 to 23: this year's amounts up to $5,000, less what you used"
   NUS11.24:
     label: Nunavut amounts transferred to your spouse or common-law partner
-    formula: "if(line.HH.partner == 1 and household.partnerInYear and line.NUS11.9 > 0, min(answer.tuitionTransfer, line.NUS11.23), 0)"
+    formula: "if(line.HH.partner == 1 and family.partnerInYear and line.NUS11.9 > 0, min(answer.tuitionTransfer, line.NUS11.23), 0)"
     source: "NU(S11) line 24: the amount you designate on your T2202 (the app takes the federal one), up to line 23"
 
   # Schedule NU(S2) – Nunavut amounts transferred from your spouse (read from their NU428, whatever their province)
@@ -343,7 +343,7 @@ lines:
     source: "NU479 lines 6 to 8: 2% of adjusted net income, up to $1,500"
   NU479.13:
     label: Cost of living supplement for single parents
-    formula: "if(line.HH.partner == 0 and household.childrenUnder18 > 0, min(param.nuSingleParentMax, round(max(0, line.NU479.5 - param.nuSingleParentThreshold) * param.nuSingleParentRate, 2)), 0)"
+    formula: "if(line.HH.partner == 0 and family.childrenUnder18 > 0, min(param.nuSingleParentMax, round(max(0, line.NU479.5 - param.nuSingleParentThreshold) * param.nuSingleParentRate, 2)), 0)"
     source: "NU479 lines 9 to 13: 2% of adjusted net income over $60,000, up to $255.12. The app takes a single parent to be a person without a spouse who has a child under 18"
   NU479.14:
     label: Total cost of living tax credit

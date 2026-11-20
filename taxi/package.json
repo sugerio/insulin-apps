@@ -2,7 +2,7 @@
   "name": "insulin-taxi",
   "displayName": "Taxi",
   "version": "0.1.0",
-  "description": "Prepare a Canadian household's T1 returns: the household, AI-read tax slips, deductions, and the CRA's own forms filled in to sign and mail",
+  "description": "Prepare Canadian personal T1 returns: your profile, AI-read tax slips, deductions, and the CRA's own forms filled in to sign and mail",
   "license": "MIT",
   "private": true,
   "type": "module",
@@ -11,13 +11,13 @@
       {
         "key": "taxi.prepare",
         "label": "Prepare returns",
-        "description": "Change the household, add and confirm documents and answers, and download the filled-in forms. Includes viewing.",
+        "description": "Change the profile, add and confirm documents and answers, and download the filled-in forms. Includes viewing.",
         "role": "EDITOR"
       },
       {
         "key": "taxi.view",
         "label": "View returns",
-        "description": "See the household, its documents and every number on its returns, read only.",
+        "description": "See the profile, its documents and every number on its returns, read only.",
         "role": "VIEWER"
       }
     ],
@@ -30,10 +30,10 @@
         "group": "Taxi"
       },
       {
-        "key": "household",
-        "label": "Household",
+        "key": "profile",
+        "label": "Profile",
         "icon": "users",
-        "path": "/household",
+        "path": "/profile",
         "group": "Taxi"
       }
     ],

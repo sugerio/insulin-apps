@@ -2859,7 +2859,7 @@
     },
     "AB428.23": {
       "label": "Alberta amount for an eligible dependant",
-      "formula": "round((if(line.HH.partner == 0 and household.childrenUnder18 > 0, param.abSpouseBase, 0)) * line.RES.factor, 2)",
+      "formula": "round((if(line.HH.partner == 0 and family.childrenUnder18 > 0, param.abSpouseBase, 0)) * line.RES.factor, 2)",
       "source": "AB428 lines 21 to 23. The app assumes the child had no income"
     },
     "AB428.24": {
@@ -2924,7 +2924,7 @@
     },
     "AB428.42": {
       "label": "Amounts transferred from your spouse or common-law partner",
-      "formula": "if(line.HH.partner == 1 and household.partnerInYear, if(line.ABS2.4 == 0, 0, line.ABS2.11), 0)",
+      "formula": "if(line.HH.partner == 1 and family.partnerInYear, if(line.ABS2.4 == 0, 0, line.ABS2.11), 0)",
       "source": "Schedule AB(S2): their unused Alberta age, pension income and disability amounts"
     },
     "AB428.43": {
@@ -3029,7 +3029,7 @@
     },
     "BC428.23": {
       "label": "British Columbia amount for an eligible dependant",
-      "formula": "round((if(line.HH.partner == 0 and household.childrenUnder18 > 0, min(param.bcSpouseMax, param.bcSpouseBase), 0)) * line.RES.factor, 2)",
+      "formula": "round((if(line.HH.partner == 0 and family.childrenUnder18 > 0, min(param.bcSpouseMax, param.bcSpouseBase), 0)) * line.RES.factor, 2)",
       "source": "BC428 lines 21 to 23. The app assumes the child had no income"
     },
     "BC428.24": {
@@ -3104,7 +3104,7 @@
     },
     "BC428.44": {
       "label": "Amounts transferred from your spouse or common-law partner",
-      "formula": "if(line.HH.partner == 1 and household.partnerInYear, if(line.BCS2.5 == 0, 0, line.BCS2.12), 0)",
+      "formula": "if(line.HH.partner == 1 and family.partnerInYear, if(line.BCS2.5 == 0, 0, line.BCS2.12), 0)",
       "source": "Schedule BC(S2): their unused British Columbia age, pension income and disability amounts, and the tuition they designate to you"
     },
     "BC428.45": {
@@ -3247,17 +3247,17 @@
     },
     "BC.eligible": {
       "label": "Old enough for the British Columbia sales tax and renter's credits (1 for yes)",
-      "formula": "if(person.age >= param.bcAdultAge or line.HH.partner == 1 or household.childrenUnder19 > 0, 1, 0)",
+      "formula": "if(person.age >= param.bcAdultAge or line.HH.partner == 1 or family.childrenUnder19 > 0, 1, 0)",
       "source": "5010-PC: 19 or older on December 31, or with a spouse or partner, or a parent"
     },
     "BC.spouseInBC": {
       "label": "Your spouse or partner lived in British Columbia (1 for yes)",
-      "formula": "if(line.HH.partner == 0, 0, if(household.partnerInYear, if(spouse.person.province == \"BC\", 1, 0), 1))",
+      "formula": "if(line.HH.partner == 0, 0, if(family.partnerInYear, if(spouse.person.province == \"BC\", 1, 0), 1))",
       "source": "From their return when it is prepared here; otherwise the app assumes they lived with you, in British Columbia"
     },
     "BC.claimsSalesCredit": {
       "label": "This return claims the British Columbia sales tax credit for the couple (1 for yes)",
-      "formula": "if(line.BC.eligible == 0, 0, if(line.HH.partner == 0 or not household.partnerInYear, 1, if(spouse.person.province != \"BC\" or person.role == \"self\", 1, 0)))",
+      "formula": "if(line.BC.eligible == 0, 0, if(line.HH.partner == 0 or not family.partnerInYear, 1, if(spouse.person.province != \"BC\" or person.role == \"self\", 1, 0)))",
       "source": "BC479, sales tax credit: only one of a couple claims it, for both"
     },
     "BC.renter": {
@@ -3267,7 +3267,7 @@
     },
     "BC.claimsRentersCredit": {
       "label": "This return claims the British Columbia renter's tax credit for the couple (1 for yes)",
-      "formula": "if(line.BC.renter == 0, 0, if(line.HH.partner == 0 or not household.partnerInYear, 1, if(spouse.person.province != \"BC\" or spouse.line.BC.renter == 0 or person.role == \"self\", 1, 0)))",
+      "formula": "if(line.BC.renter == 0, 0, if(line.HH.partner == 0 or not family.partnerInYear, 1, if(spouse.person.province != \"BC\" or spouse.line.BC.renter == 0 or person.role == \"self\", 1, 0)))",
       "source": "BC479, renter's tax credit: only one credit for a couple, even if both rent their own homes"
     },
     "BC479.5": {
@@ -3277,7 +3277,7 @@
     },
     "BC479.6": {
       "label": "Adjusted family net income",
-      "formula": "line.BC479.5 + if(line.HH.partner == 1, if(household.partnerInYear, spouse.line.BC479.5, answer.spouseNetIncome), 0)",
+      "formula": "line.BC479.5 + if(line.HH.partner == 1, if(family.partnerInYear, spouse.line.BC479.5, answer.spouseNetIncome), 0)",
       "source": "BC479 line 6: yours and your spouse's or partner's, from their return or your answer for their net income"
     },
     "BC479.7": {
@@ -3303,7 +3303,7 @@
     },
     "BC479.60480": {
       "label": "Home renovation expenses",
-      "formula": "min(answer.homeAccessibility, param.bcRenovationMax, if(line.HH.partner == 1 and household.partnerInYear and person.role == \"spouse\" and spouse.person.province == \"BC\", max(0, param.bcRenovationMax - min(spouse.answer.homeAccessibility, param.bcRenovationMax)), param.bcRenovationMax))",
+      "formula": "min(answer.homeAccessibility, param.bcRenovationMax, if(line.HH.partner == 1 and family.partnerInYear and person.role == \"spouse\" and spouse.person.province == \"BC\", max(0, param.bcRenovationMax - min(spouse.answer.homeAccessibility, param.bcRenovationMax)), param.bcRenovationMax))",
       "source": "BC479 line 60480 and Schedule BC(S12) line 5: eligible expenses up to $10,000 for you and your spouse or partner together"
     },
     "BC479.14": {
@@ -3333,15 +3333,15 @@
     },
     "HH.partner": {
       "label": "Spouse or common-law partner on December 31 (1 for yes)",
-      "formula": "if(household.maritalStatus == \"married\" or household.maritalStatus == \"common_law\", 1, 0)"
+      "formula": "if(family.maritalStatus == \"married\" or family.maritalStatus == \"common_law\", 1, 0)"
     },
     "SPOUSES.together": {
       "label": "Both spouses' returns are prepared here (1 for yes)",
-      "formula": "if(household.partnerInYear and line.HH.partner == 1, 1, 0)"
+      "formula": "if(family.partnerInYear and line.HH.partner == 1, 1, 0)"
     },
     "HH.spouseNetIncome": {
       "label": "Your spouse's or partner's net income",
-      "formula": "if(line.HH.partner == 1, if(household.partnerInYear, spouse.line.T1.23600, answer.spouseNetIncome), 0)",
+      "formula": "if(line.HH.partner == 1, if(family.partnerInYear, spouse.line.T1.23600, answer.spouseNetIncome), 0)",
       "source": "From their return when both returns are prepared here; otherwise from your answer"
     },
     "T1.10100": {"label":"Employment income","formula":"sum(T4.box14)"},
@@ -3365,7 +3365,7 @@
     },
     "T1.11600": {
       "label": "Elected split-pension amount",
-      "formula": "if(line.HH.partner == 1 and household.partnerInYear, spouse.line.T1.21000, 0)",
+      "formula": "if(line.HH.partner == 1 and family.partnerInYear, spouse.line.T1.21000, 0)",
       "source": "Form T1032, line 22: the amount your spouse or partner splits with you"
     },
     "T1.11900": {
@@ -3625,7 +3625,7 @@
     "T1.20805": {"label":"FHSA deduction","formula":"answer.fhsaDeduction"},
     "T1.21000": {
       "label": "Deduction for elected split-pension amount",
-      "formula": "if(answer.pensionSplit > 0 and line.HH.partner == 1 and household.partnerInYear, if(spouse.answer.pensionSplit > 0, unsupported(\"Only one spouse can split pension income with the other for a year. Undo one of the two splits\"), min(answer.pensionSplit, line.PEN.splitMax)), 0)",
+      "formula": "if(answer.pensionSplit > 0 and line.HH.partner == 1 and family.partnerInYear, if(spouse.answer.pensionSplit > 0, unsupported(\"Only one spouse can split pension income with the other for a year. Undo one of the two splits\"), min(answer.pensionSplit, line.PEN.splitMax)), 0)",
       "source": "Form T1032, line 22, up to the maximum on line 21"
     },
     "PEN.eligible": {
@@ -3675,12 +3675,12 @@
       "source": "Form T778, line 67950 (line 5): the expenses both of you paid, when both returns are prepared here"
     },
     "CC.family": {
-      "label": "Child care is claimed in this household (1 for yes)",
+      "label": "Child care is claimed on one of the year's returns (1 for yes)",
       "formula": "if(answer.hasChildCare or (line.SPOUSES.together == 1 and spouse.answer.hasChildCare), 1, 0)"
     },
     "T778.1": {
       "label": "Basic limit for children born in 2019 or later",
-      "formula": "param.childCareUnder7 * (household.childrenUnder7 - if(answer.hasChildCare, answer.childCareDisabledUnder7, if(line.SPOUSES.together == 1, if(spouse.answer.hasChildCare, spouse.answer.childCareDisabledUnder7, 0), 0)))",
+      "formula": "param.childCareUnder7 * (family.childrenUnder7 - if(answer.hasChildCare, answer.childCareDisabledUnder7, if(line.SPOUSES.together == 1, if(spouse.answer.hasChildCare, spouse.answer.childCareDisabledUnder7, 0), 0)))",
       "source": "Form T778, Part B, line 1: $8,000 for each child born in 2019 or later the disability amount can't be claimed for. The counts come from the return that entered child care"
     },
     "T778.2": {
@@ -3690,12 +3690,12 @@
     },
     "T778.3": {
       "label": "Basic limit for children born from 2009 to 2018, and older infirm children",
-      "formula": "param.childCare7to16 * (household.childrenUnder17 - household.childrenUnder7 + if(answer.hasChildCare, answer.childCareInfirmOlder - answer.childCareDisabled7to16, if(line.SPOUSES.together == 1, if(spouse.answer.hasChildCare, spouse.answer.childCareInfirmOlder - spouse.answer.childCareDisabled7to16, 0), 0)))",
+      "formula": "param.childCare7to16 * (family.childrenUnder17 - family.childrenUnder7 + if(answer.hasChildCare, answer.childCareInfirmOlder - answer.childCareDisabled7to16, if(line.SPOUSES.together == 1, if(spouse.answer.hasChildCare, spouse.answer.childCareInfirmOlder - spouse.answer.childCareDisabled7to16, 0), 0)))",
       "source": "Form T778, Part B, line 3: $5,000 for each child born from 2009 to 2018, and born in 2008 or earlier with an infirmity, the disability amount can't be claimed for"
     },
     "CC.limit": {
       "label": "Basic limit for child care expenses",
-      "formula": "if(line.T778.1 < 0 or line.T778.3 < 0, unsupported(\"More children have the disability tax credit than the household's dependants born in those years. Check the counts under child care, or the people in the year\"), line.T778.1 + line.T778.2 + line.T778.3)",
+      "formula": "if(line.T778.1 < 0 or line.T778.3 < 0, unsupported(\"More children have the disability tax credit than the dependants born in those years. Check the counts under child care, or the people in the year\"), line.T778.1 + line.T778.2 + line.T778.3)",
       "source": "Form T778, Part B, line 4: lines 1 to 3"
     },
     "CC.earned": {
@@ -3711,11 +3711,11 @@
     "CC.netIncome": {"label":"Net income without the child care deduction","formula":"line.T1.15000 - line.DED.other"},
     "CC.spouseNetIncome": {
       "label": "Your spouse's or partner's net income without it",
-      "formula": "if(household.partnerInYear, spouse.line.CC.netIncome, answer.spouseNetIncome)"
+      "formula": "if(family.partnerInYear, spouse.line.CC.netIncome, answer.spouseNetIncome)"
     },
     "CC.higher": {
       "label": "This return has the higher net income of the couple (1 for yes)",
-      "formula": "if(line.HH.partner == 1, if(line.CC.netIncome > line.CC.spouseNetIncome, 1, if(line.CC.netIncome == line.CC.spouseNetIncome and household.partnerInYear and person.role == \"spouse\", 1, 0)), 0)",
+      "formula": "if(line.HH.partner == 1, if(line.CC.netIncome > line.CC.spouseNetIncome, 1, if(line.CC.netIncome == line.CC.spouseNetIncome and family.partnerInYear and person.role == \"spouse\", 1, 0)), 0)",
       "source": "Form T778, page 1: the person with the lower net income claims. With equal incomes the couple agrees: here the person preparing claims"
     },
     "CC.weekly": {
@@ -3996,7 +3996,7 @@
     },
     "NRD.shared": {
       "label": "Both spouses lived in a northern zone (1 for yes)",
-      "formula": "if(line.HH.partner == 1 and household.partnerInYear, if(line.NRD.days > 0 and spouse.line.NRD.days > 0, 1, 0), 0)"
+      "formula": "if(line.HH.partner == 1 and family.partnerInYear, if(line.NRD.days > 0 and spouse.line.NRD.days > 0, 1, 0), 0)"
     },
     "NRD.first": {
       "label": "This return is the one that would claim both amounts (1 for yes)",
@@ -4080,7 +4080,7 @@
     },
     "T1.30400": {
       "label": "Amount for an eligible dependant",
-      "formula": "round((if(line.HH.partner == 0 and household.childrenUnder18 > 0, line.FULL.30000, 0)) * line.RES.factor, 2)",
+      "formula": "round((if(line.HH.partner == 0 and family.childrenUnder18 > 0, line.FULL.30000, 0)) * line.RES.factor, 2)",
       "source": "Schedule 5 line 30400: for a single parent, one child under 18 who lived with you. The app assumes the child had no income"
     },
     "T1.30425": {
@@ -4171,7 +4171,7 @@
     },
     "T1.31270": {
       "label": "Home buyers' amount",
-      "formula": "if(household.partnerInYear and line.HH.partner == 1 and answer.homeBuyers + spouse.answer.homeBuyers > param.homeBuyersMax, unsupported(\"You and your spouse or partner can claim at most $10,000 together for the home buyers' amount. Lower one of the claims\"), min(answer.homeBuyers, param.homeBuyersMax))"
+      "formula": "if(family.partnerInYear and line.HH.partner == 1 and answer.homeBuyers + spouse.answer.homeBuyers > param.homeBuyersMax, unsupported(\"You and your spouse or partner can claim at most $10,000 together for the home buyers' amount. Lower one of the claims\"), min(answer.homeBuyers, param.homeBuyersMax))"
     },
     "T1.31285": {"label":"Home accessibility expenses","formula":"min(answer.homeAccessibility, param.homeAccessibilityMax)"},
     "T1.31300": {
@@ -4212,12 +4212,12 @@
     },
     "T1.32600": {
       "label": "Amounts transferred from your spouse or common-law partner",
-      "formula": "if(line.HH.partner == 1 and household.partnerInYear, line.S2.13, 0)",
+      "formula": "if(line.HH.partner == 1 and family.partnerInYear, line.S2.13, 0)",
       "source": "Schedule 2: their unused age amount and the tuition they designate to you"
     },
     "T1.33099": {
       "label": "Medical expenses for you, your spouse and your children",
-      "formula": "if(household.partnerInYear and spouse.answer.claimSpouseMedical and line.HH.partner == 1, 0, line.OWN.medical) + if(household.partnerInYear and answer.claimSpouseMedical and line.HH.partner == 1, spouse.line.OWN.medical, 0)",
+      "formula": "if(family.partnerInYear and spouse.answer.claimSpouseMedical and line.HH.partner == 1, 0, line.OWN.medical) + if(family.partnerInYear and answer.claimSpouseMedical and line.HH.partner == 1, spouse.line.OWN.medical, 0)",
       "source": "Either spouse can claim the family's medical expenses: this return's own, unless the spouse claims them, and the spouse's when this return claims them"
     },
     "OWN.medical": {
@@ -4303,7 +4303,7 @@
     "T1.43500": {"label":"Total payable","formula":"line.T1.42000 + line.T1.42100 + line.T1.42200 + line.T1.42800"},
     "T1.43700": {
       "label": "Total income tax deducted",
-      "formula": "sum(T4.box22) + sum(T4A.box022) + sum(T4AP.box22) + sum(T4AOAS.box22) + sum(T4E.box22) + sum(T4RIF.box28) + sum(T4RSP.box30) + sum(T4FHSA.box30) - line.PEN.taxSplit + if(line.HH.partner == 1 and household.partnerInYear, spouse.line.PEN.taxSplit, 0)",
+      "formula": "sum(T4.box22) + sum(T4A.box022) + sum(T4AP.box22) + sum(T4AOAS.box22) + sum(T4E.box22) + sum(T4RIF.box28) + sum(T4RSP.box30) + sum(T4FHSA.box30) - line.PEN.taxSplit + if(line.HH.partner == 1 and family.partnerInYear, spouse.line.PEN.taxSplit, 0)",
       "source": "The income tax deducted on all slips; with pension splitting, the tax that goes with the split (Form T1032, lines 39 and 42)"
     },
     "T1.44800": {
@@ -4333,7 +4333,7 @@
     },
     "MED.familyIncome": {
       "label": "Adjusted family net income for the refundable medical expense supplement",
-      "formula": "max(0, line.T1.23600 - line.T1.12500) + if(line.HH.partner == 1, if(household.partnerInYear, max(0, spouse.line.T1.23600 - spouse.line.T1.12500), line.HH.spouseNetIncome), 0)",
+      "formula": "max(0, line.T1.23600 - line.T1.12500) + if(line.HH.partner == 1, if(family.partnerInYear, max(0, spouse.line.T1.23600 - spouse.line.T1.12500), line.HH.spouseNetIncome), 0)",
       "source": "Federal Worksheet, line 45200, lines 1 to 6"
     },
     "T1.45200": {
@@ -4353,7 +4353,7 @@
     },
     "CWB.dependant": {
       "label": "An eligible dependant (1 for yes)",
-      "formula": "if(household.childrenUnder19 > 0, 1, 0)",
+      "formula": "if(family.childrenUnder19 > 0, 1, 0)",
       "source": "Schedule 6: a child under 19 who lived with you on December 31"
     },
     "CWB.student": {
@@ -4362,7 +4362,7 @@
     },
     "CWB.spouse": {
       "label": "An eligible spouse (1 for yes)",
-      "formula": "if(line.HH.partner == 1, if(household.partnerInYear, if(spouse.line.CWB.student == 1, 0, 1), 1), 0)"
+      "formula": "if(line.HH.partner == 1, if(family.partnerInYear, if(spouse.line.CWB.student == 1, 0, 1), 1), 0)"
     },
     "CWB.eligible": {
       "label": "Eligible for the Canada workers benefit (1 for yes)",
@@ -4371,12 +4371,12 @@
     },
     "CWB.familyWorking": {
       "label": "Family working income",
-      "formula": "line.CWB.working + if(line.CWB.spouse == 1 and household.partnerInYear, spouse.line.CWB.working, 0)",
+      "formula": "line.CWB.working + if(line.CWB.spouse == 1 and family.partnerInYear, spouse.line.CWB.working, 0)",
       "source": "Schedule 6, line 6"
     },
     "CWB.familyIncome": {
       "label": "Adjusted family net income",
-      "formula": "if(line.CWB.spouse == 1, if(household.partnerInYear, line.CWB.netIncome + spouse.line.CWB.netIncome - min(param.cwbSecondaryEarnerMax, if(line.CWB.working < spouse.line.CWB.working, min(line.CWB.working, line.CWB.netIncome), min(spouse.line.CWB.working, spouse.line.CWB.netIncome))), if(line.CWB.netIncome + line.HH.spouseNetIncome - min(param.cwbSecondaryEarnerMax, line.CWB.netIncome, line.HH.spouseNetIncome) < line.CWB.familyLimit and line.CWB.working > 0, unsupported(\"The Canada workers benefit for a couple needs your spouse's or partner's working income: prepare their return here too\"), line.CWB.familyLimit)), line.CWB.netIncome)",
+      "formula": "if(line.CWB.spouse == 1, if(family.partnerInYear, line.CWB.netIncome + spouse.line.CWB.netIncome - min(param.cwbSecondaryEarnerMax, if(line.CWB.working < spouse.line.CWB.working, min(line.CWB.working, line.CWB.netIncome), min(spouse.line.CWB.working, spouse.line.CWB.netIncome))), if(line.CWB.netIncome + line.HH.spouseNetIncome - min(param.cwbSecondaryEarnerMax, line.CWB.netIncome, line.HH.spouseNetIncome) < line.CWB.familyLimit and line.CWB.working > 0, unsupported(\"The Canada workers benefit for a couple needs your spouse's or partner's working income: prepare their return here too\"), line.CWB.familyLimit)), line.CWB.netIncome)",
       "source": "Schedule 6, lines 13 to 15: with the secondary earner exemption (up to $16,386). With a spouse whose return isn't prepared here, a family that might get the benefit is asked to prepare it; one that can't is put at the limit"
     },
     "CWB.familyLimit": {
@@ -4431,12 +4431,12 @@
     },
     "CWB.disabilityReductionRate": {
       "label": "Disability supplement reduction rate",
-      "formula": "if(line.CWB.spouse == 1 and household.partnerInYear and spouse.answer.hasDisability, if(person.province == \"QC\", param.cwbQcReductionRateBothDisabled, param.cwbReductionRateBothDisabled), if(person.province == \"QC\", param.cwbQcReductionRate, param.cwbReductionRate))",
+      "formula": "if(line.CWB.spouse == 1 and family.partnerInYear and spouse.answer.hasDisability, if(person.province == \"QC\", param.cwbQcReductionRateBothDisabled, param.cwbReductionRateBothDisabled), if(person.province == \"QC\", param.cwbQcReductionRate, param.cwbReductionRate))",
       "source": "Schedule 6, line 38: 15% (7.5% when both spouses have the disability tax credit). In Quebec, 5005-S6 line 38: 20% (10%)"
     },
     "CWB.claimsBasic": {
       "label": "This return claims the couple's basic benefit (1 for yes)",
-      "formula": "if(line.CWB.eligible == 0, 0, if(line.CWB.spouse == 0 or not household.partnerInYear, 1, if(spouse.line.CWB.eligible == 0 or line.CWB.working > spouse.line.CWB.working or (line.CWB.working == spouse.line.CWB.working and person.role == \"self\"), 1, 0)))"
+      "formula": "if(line.CWB.eligible == 0, 0, if(line.CWB.spouse == 0 or not family.partnerInYear, 1, if(spouse.line.CWB.eligible == 0 or line.CWB.working > spouse.line.CWB.working or (line.CWB.working == spouse.line.CWB.working and person.role == \"self\"), 1, 0)))"
     },
     "CWB.basic": {
       "label": "Basic Canada workers benefit",
@@ -4451,7 +4451,7 @@
     "T1.45300": {"label":"Canada workers benefit","formula":"line.CWB.basic + line.CWB.disability","source":"Schedule 6, line 42"},
     "T1.41500": {
       "label": "Advanced Canada workers benefit",
-      "formula": "min(max(line.CWB.basic, line.T1.45300), if(line.CWB.claimsBasic == 1, sum(RC210.box10) + if(household.partnerInYear and line.HH.partner == 1, sum(spouse.RC210.box10), 0), 0) + sum(RC210.box11))",
+      "formula": "min(max(line.CWB.basic, line.T1.45300), if(line.CWB.claimsBasic == 1, sum(RC210.box10) + if(family.partnerInYear and line.HH.partner == 1, sum(spouse.RC210.box10), 0), 0) + sum(RC210.box11))",
       "source": "Schedule 6, Step 4: the advance payments (RC210 box 10 of both spouses, on the return claiming the basic benefit, and box 11), up to the benefit"
     },
     "T1.45350": {
@@ -4553,7 +4553,7 @@
     },
     "S9.5": {
       "label": "Total eligible amount of charitable donations",
-      "formula": "if(household.partnerInYear and spouse.answer.claimSpouseDonations and line.HH.partner == 1, 0, line.OWN.donations) + if(household.partnerInYear and answer.claimSpouseDonations and line.HH.partner == 1, spouse.line.OWN.donations, 0)",
+      "formula": "if(family.partnerInYear and spouse.answer.claimSpouseDonations and line.HH.partner == 1, 0, line.OWN.donations) + if(family.partnerInYear and answer.claimSpouseDonations and line.HH.partner == 1, spouse.line.OWN.donations, 0)",
       "source": "Schedule 9 line 5: either spouse can claim both spouses' donations"
     },
     "OWN.donations": {
@@ -4596,7 +4596,7 @@
     },
     "S11.24": {
       "label": "Tuition transferred to your spouse or common-law partner",
-      "formula": "if(line.HH.partner == 1 and household.partnerInYear and line.S11.8 > 0, min(answer.tuitionTransfer, line.S11.23), 0)",
+      "formula": "if(line.HH.partner == 1 and family.partnerInYear and line.S11.8 > 0, min(answer.tuitionTransfer, line.S11.23), 0)",
       "source": "Schedule 11 line 24: the amount you designate on your T2202, up to line 23"
     },
     "RESULT.net": {
@@ -4637,7 +4637,7 @@
     },
     "MB428.16": {
       "label": "Manitoba amount for an eligible dependant",
-      "formula": "round((if(line.HH.partner == 0 and household.childrenUnder18 > 0, param.mbSpouseBase, 0)) * line.RES.factor, 2)",
+      "formula": "round((if(line.HH.partner == 0 and family.childrenUnder18 > 0, param.mbSpouseBase, 0)) * line.RES.factor, 2)",
       "source": "MB428 lines 14 to 16. The app assumes the child had no income"
     },
     "MB428.17": {
@@ -4657,17 +4657,17 @@
     },
     "MB.fitnessPeople": {
       "label": "People the Manitoba fitness amount can be claimed for",
-      "formula": "if(person.age < param.mbFitnessAgeLimit, 1, 0) + household.childrenUnder18 + if(line.HH.partner == 1 and household.partnerInYear, if(spouse.person.age >= 18 and spouse.person.age < param.mbFitnessAgeLimit, 1, 0), 0)",
+      "formula": "if(person.age < param.mbFitnessAgeLimit, 1, 0) + family.childrenUnder18 + if(line.HH.partner == 1 and family.partnerInYear, if(spouse.person.age >= 18 and spouse.person.age < param.mbFitnessAgeLimit, 1, 0), 0)",
       "source": "Manitoba information guide, line 58325"
     },
     "MB428.25": {
       "label": "Fitness amount",
-      "formula": "if(line.MB.fitnessPeople == 0, 0, if(line.HH.partner == 1 and household.partnerInYear and spouse.person.province == \"MB\" and answer.physicalActivityFees + spouse.answer.physicalActivityFees > param.mbFitnessMax * line.MB.fitnessPeople, unsupported(\"Only one of you can claim the Manitoba fitness amount for a person, up to $500 each. Together you claim more: enter each person's fees on one return\"), min(answer.physicalActivityFees, param.mbFitnessMax * line.MB.fitnessPeople)))",
+      "formula": "if(line.MB.fitnessPeople == 0, 0, if(line.HH.partner == 1 and family.partnerInYear and spouse.person.province == \"MB\" and answer.physicalActivityFees + spouse.answer.physicalActivityFees > param.mbFitnessMax * line.MB.fitnessPeople, unsupported(\"Only one of you can claim the Manitoba fitness amount for a person, up to $500 each. Together you claim more: enter each person's fees on one return\"), min(answer.physicalActivityFees, param.mbFitnessMax * line.MB.fitnessPeople)))",
       "source": "Manitoba information guide, line 58325: fees for a program of physical activity, up to $500 a person. The extra $500 for a person with a disability isn't handled"
     },
     "MB428.26": {
       "label": "Children's arts amount",
-      "formula": "if(household.childrenUnder17 == 0, 0, if(line.HH.partner == 1 and household.partnerInYear and spouse.person.province == \"MB\" and answer.childArtsFees + spouse.answer.childArtsFees > param.mbArtsMax * household.childrenUnder17, unsupported(\"Only one of you can claim the Manitoba children's arts amount for a child, up to $500 each. Together you claim more: enter each child's fees on one return\"), min(answer.childArtsFees, param.mbArtsMax * household.childrenUnder17)))",
+      "formula": "if(family.childrenUnder17 == 0, 0, if(line.HH.partner == 1 and family.partnerInYear and spouse.person.province == \"MB\" and answer.childArtsFees + spouse.answer.childArtsFees > param.mbArtsMax * family.childrenUnder17, unsupported(\"Only one of you can claim the Manitoba children's arts amount for a child, up to $500 each. Together you claim more: enter each child's fees on one return\"), min(answer.childArtsFees, param.mbArtsMax * family.childrenUnder17)))",
       "source": "Manitoba information guide, line 58326: up to $500 for each child under 16 at the start of the year (born in 2009 or later). The extra $500 for a child with a disability isn't handled"
     },
     "MB428.27": {
@@ -4713,7 +4713,7 @@
     },
     "MB428.40": {
       "label": "Manitoba amounts transferred from your spouse or common-law partner",
-      "formula": "if(line.HH.partner == 1 and household.partnerInYear, line.MBS2.12, 0)",
+      "formula": "if(line.HH.partner == 1 and family.partnerInYear, line.MBS2.12, 0)",
       "source": "Schedule MB(S2): their unused Manitoba age, pension, and tuition and education amounts"
     },
     "MB428.41": {
@@ -4776,27 +4776,27 @@
     },
     "MB.higherIncome": {
       "label": "This return claims the Manitoba credits for the children (1 for yes)",
-      "formula": "if(line.HH.partner == 0, 1, if(not household.partnerInYear, if(line.T1.23600 >= line.HH.spouseNetIncome, 1, 0), if(spouse.person.province != \"MB\", 1, if(line.T1.23600 > line.HH.spouseNetIncome, 1, if(line.T1.23600 < line.HH.spouseNetIncome, 0, if(person.age > spouse.person.age, 1, if(person.age < spouse.person.age, 0, if(person.role == \"self\", 1, 0))))))))",
+      "formula": "if(line.HH.partner == 0, 1, if(not family.partnerInYear, if(line.T1.23600 >= line.HH.spouseNetIncome, 1, 0), if(spouse.person.province != \"MB\", 1, if(line.T1.23600 > line.HH.spouseNetIncome, 1, if(line.T1.23600 < line.HH.spouseNetIncome, 0, if(person.age > spouse.person.age, 1, if(person.age < spouse.person.age, 0, if(person.role == \"self\", 1, 0))))))))",
       "source": "Manitoba information guide, Schedule MB428-A line 9: only the spouse or partner with the higher net income can claim it"
     },
     "MB.claimsPersonalCredit": {
       "label": "This return claims the Manitoba personal tax credit for the family (1 for yes)",
-      "formula": "if(line.HH.partner == 0, 1, if(not household.partnerInYear, 1, if(spouse.person.province != \"MB\", 1, if(spouse.line.MB428.40 > 0 and line.MB428.10 > 0 and not (line.MB428.40 > 0 and spouse.line.MB428.10 > 0), 0, if(line.MB428.40 > 0 and spouse.line.MB428.10 > 0 and not (spouse.line.MB428.40 > 0 and line.MB428.10 > 0), 1, line.MB.higherIncome)))))",
+      "formula": "if(line.HH.partner == 0, 1, if(not family.partnerInYear, 1, if(spouse.person.province != \"MB\", 1, if(spouse.line.MB428.40 > 0 and line.MB428.10 > 0 and not (line.MB428.40 > 0 and spouse.line.MB428.10 > 0), 0, if(line.MB428.40 > 0 and spouse.line.MB428.10 > 0 and not (spouse.line.MB428.40 > 0 and line.MB428.10 > 0), 1, line.MB.higherIncome)))))",
       "source": "Manitoba information guide, Form MB479, personal tax credit: only one of a couple claims it, for both"
     },
     "MB.disabledDependants": {
       "label": "Dependants whose disability amount you or your spouse claim (line 58480)",
-      "formula": "if(answer.hasDisabledDependant, answer.disabledChildren + answer.disabledAdults, 0) + if(line.HH.partner == 1 and household.partnerInYear, if(spouse.answer.hasDisabledDependant, spouse.answer.disabledChildren + spouse.answer.disabledAdults, 0), 0)",
+      "formula": "if(answer.hasDisabledDependant, answer.disabledChildren + answer.disabledAdults, 0) + if(line.HH.partner == 1 and family.partnerInYear, if(spouse.answer.hasDisabledDependant, spouse.answer.disabledChildren + spouse.answer.disabledAdults, 0), 0)",
       "source": "MB428-A line 7 and MB479 line 14"
     },
     "MB.infirmDependants": {
       "label": "Infirm dependants 18 or older you or your spouse claim (line 58200)",
-      "formula": "if(answer.hasInfirmDependant, answer.infirmDependants, 0) + if(line.HH.partner == 1 and household.partnerInYear, if(spouse.answer.hasInfirmDependant, spouse.answer.infirmDependants, 0), 0)",
+      "formula": "if(answer.hasInfirmDependant, answer.infirmDependants, 0) + if(line.HH.partner == 1 and family.partnerInYear, if(spouse.answer.hasInfirmDependant, spouse.answer.infirmDependants, 0), 0)",
       "source": "MB428-A line 8 and MB479 line 15"
     },
     "MB428A.9": {
       "label": "Amount for dependent children",
-      "formula": "if(household.childrenUnder19 - if(line.MB428.16 > 0, 1, 0) > 0, if(line.MB.higherIncome == 1, param.mbFamilyBenefitChild * (household.childrenUnder19 - if(line.MB428.16 > 0, 1, 0)), 0), 0)",
+      "formula": "if(family.childrenUnder19 - if(line.MB428.16 > 0, 1, 0) > 0, if(line.MB.higherIncome == 1, param.mbFamilyBenefitChild * (family.childrenUnder19 - if(line.MB428.16 > 0, 1, 0)), 0), 0)",
       "source": "MB428-A line 9: children born in 2007 or later, other than the one claimed as an eligible dependant"
     },
     "MB428A.6": {
@@ -4893,12 +4893,12 @@
     },
     "MB479.6": {
       "label": "Family income",
-      "formula": "line.MB479.5 + if(line.HH.partner == 1, if(household.partnerInYear, spouse.line.MB479.5, answer.spouseNetIncome), 0)",
+      "formula": "line.MB479.5 + if(line.HH.partner == 1, if(family.partnerInYear, spouse.line.MB479.5, answer.spouseNetIncome), 0)",
       "source": "MB479 line 6: yours and your spouse's or partner's, from their return or your answer for their net income"
     },
     "MB479.12": {
       "label": "Credits for your spouse or common-law partner",
-      "formula": "if(line.HH.partner == 1, param.mbPersonalCreditBasic + if(household.partnerInYear, if(spouse.person.age >= 65, param.mbPersonalCreditAge, 0) + if(spouse.answer.hasDisability, param.mbPersonalCreditDisability, 0), 0), 0)",
+      "formula": "if(line.HH.partner == 1, param.mbPersonalCreditBasic + if(family.partnerInYear, if(spouse.person.age >= 65, param.mbPersonalCreditAge, 0) + if(spouse.answer.hasDisability, param.mbPersonalCreditDisability, 0), 0), 0)",
       "source": "MB479 lines 9 to 12: $195, $113 if they were born in 1960 or earlier and $113 if they have the disability amount (counted only when their return is prepared here)"
     },
     "MB479.14": {
@@ -4913,7 +4913,7 @@
     },
     "MB479.16": {
       "label": "Credit for dependent children",
-      "formula": "param.mbPersonalCreditChild * (household.childrenUnder19 - if(line.MB428.16 > 0, 1, 0))",
+      "formula": "param.mbPersonalCreditChild * (family.childrenUnder19 - if(line.MB428.16 > 0, 1, 0))",
       "source": "MB479 line 16: children born in 2007 or later, other than the one claimed as an eligible dependant"
     },
     "MB479.17": {
@@ -4928,7 +4928,7 @@
     },
     "MB479.22": {
       "label": "School taxes on your principal residence",
-      "formula": "if(answer.paidSchoolTaxes, if(line.HH.partner == 1 and household.partnerInYear and spouse.person.province == \"MB\" and spouse.answer.paidSchoolTaxes, unsupported(\"Only one of you claims the Manitoba homeowners affordability tax credit for both of you. Enter the school taxes on one return\"), answer.schoolTaxes), 0)",
+      "formula": "if(answer.paidSchoolTaxes, if(line.HH.partner == 1 and family.partnerInYear and spouse.person.province == \"MB\" and spouse.answer.paidSchoolTaxes, unsupported(\"Only one of you claims the Manitoba homeowners affordability tax credit for both of you. Enter the school taxes on one return\"), answer.schoolTaxes), 0)",
       "source": "MB479 lines 20 to 22: the school taxes after the advance, plus the advance (the gross school taxes)"
     },
     "MB479.24": {
@@ -4949,12 +4949,12 @@
     "MB479.28": {"label":"Homeowners affordability tax credit","formula":"max(0, line.MB479.26 - line.MB479.27)"},
     "MB479.30": {
       "label": "Rent paid",
-      "formula": "if(line.HH.partner == 1 and household.partnerInYear and spouse.person.province == \"MB\" and line.RENT.paid > 0 and spouse.line.RENT.paid > 0, unsupported(\"Only one of you claims the Manitoba renters affordability tax credit for both of you. Enter the rent on one return\"), line.RENT.paid)",
+      "formula": "if(line.HH.partner == 1 and family.partnerInYear and spouse.person.province == \"MB\" and line.RENT.paid > 0 and spouse.line.RENT.paid > 0, unsupported(\"Only one of you claims the Manitoba renters affordability tax credit for both of you. Enter the rent on one return\"), line.RENT.paid)",
       "source": "MB479 line 30"
     },
     "MB.senior": {
       "label": "You or your spouse were 65 or older (1 for yes)",
-      "formula": "if(person.age >= 65, 1, if(line.HH.partner == 1 and household.partnerInYear, if(spouse.person.age >= 65, 1, 0), 0))",
+      "formula": "if(person.age >= 65, 1, if(line.HH.partner == 1 and family.partnerInYear, if(spouse.person.age >= 65, 1, 0), 0))",
       "source": "MB479 lines 31 and 42: at the end of the year"
     },
     "MB479.35": {
@@ -4995,7 +4995,7 @@
     },
     "MB479.57": {
       "label": "Manitoba credits after assistance payments",
-      "formula": "if(line.MB479.55 > 0 and (line.T1.14500 > 0 or (line.HH.partner == 1 and household.partnerInYear and spouse.line.T1.14500 > 0)), unsupported(\"Employment and Income Assistance or MSPD payments reduce the Manitoba credits by the number in box 14 of the T5007 (Form MB479, line 56), which this app doesn't read yet\"), line.MB479.55)",
+      "formula": "if(line.MB479.55 > 0 and (line.T1.14500 > 0 or (line.HH.partner == 1 and family.partnerInYear and spouse.line.T1.14500 > 0)), unsupported(\"Employment and Income Assistance or MSPD payments reduce the Manitoba credits by the number in box 14 of the T5007 (Form MB479, line 56), which this app doesn't read yet\"), line.MB479.55)",
       "source": "MB479 lines 56 and 57"
     },
     "MB479.79": {
@@ -5024,7 +5024,7 @@
     },
     "NB428.16": {
       "label": "New Brunswick amount for an eligible dependant",
-      "formula": "round((if(line.HH.partner == 0 and household.childrenUnder18 > 0, min(param.nbSpouseMax, param.nbSpouseBase), 0)) * line.RES.factor, 2)",
+      "formula": "round((if(line.HH.partner == 0 and family.childrenUnder18 > 0, min(param.nbSpouseMax, param.nbSpouseBase), 0)) * line.RES.factor, 2)",
       "source": "NB428 lines 14 to 16. The app assumes the child had no income"
     },
     "NB.infirmAmount": {
@@ -5099,7 +5099,7 @@
     },
     "NB428.37": {
       "label": "New Brunswick amounts transferred from your spouse or common-law partner",
-      "formula": "if(line.HH.partner == 1 and household.partnerInYear, line.NBS2.12, 0)",
+      "formula": "if(line.HH.partner == 1 and family.partnerInYear, line.NBS2.12, 0)",
       "source": "NB428 line 58640, from Schedule NB(S2)"
     },
     "NB428.38": {
@@ -5149,7 +5149,7 @@
     "NB428.67": {"label":"New Brunswick tax after the foreign tax credit","formula":"max(0, line.NB428.63 - line.NB428.66)"},
     "NB.claimsReduction": {
       "label": "This return claims the family's New Brunswick low-income tax reduction (1 for yes)",
-      "formula": "if(line.HH.partner == 0 or not household.partnerInYear, 1, if(spouse.person.province != \"NB\", 1, if(line.NB428.67 != spouse.line.NB428.67, if(line.NB428.67 > spouse.line.NB428.67, 1, 0), if(line.T1.23600 != spouse.line.T1.23600, if(line.T1.23600 > spouse.line.T1.23600, 1, 0), if(person.age != spouse.person.age, if(person.age > spouse.person.age, 1, 0), if(person.role == \"self\", 1, 0))))))",
+      "formula": "if(line.HH.partner == 0 or not family.partnerInYear, 1, if(spouse.person.province != \"NB\", 1, if(line.NB428.67 != spouse.line.NB428.67, if(line.NB428.67 > spouse.line.NB428.67, 1, 0), if(line.T1.23600 != spouse.line.T1.23600, if(line.T1.23600 > spouse.line.T1.23600, 1, 0), if(person.age != spouse.person.age, if(person.age > spouse.person.age, 1, 0), if(person.role == \"self\", 1, 0))))))",
       "source": "NB428 lines 68 to 90: you and your spouse decide who claims the reduction for your family"
     },
     "NB428.68": {
@@ -5232,7 +5232,7 @@
     },
     "NBS11.17": {
       "label": "New Brunswick tuition transferred to your spouse or common-law partner",
-      "formula": "if(line.HH.partner == 1 and household.partnerInYear and line.NBS11.2 > 0, min(answer.tuitionTransfer, line.NBS11.16), 0)",
+      "formula": "if(line.HH.partner == 1 and family.partnerInYear and line.NBS11.2 > 0, min(answer.tuitionTransfer, line.NBS11.16), 0)",
       "source": "NB(S11) line 17: the amount you designate on your T2202 (the same as federally), up to line 16"
     },
     "NBS2.5": {
@@ -5254,12 +5254,12 @@
     "NBS2.12": {"label":"New Brunswick amounts transferred from your spouse","formula":"max(0, line.NBS2.5 - line.NBS2.11)"},
     "NBS12.3": {
       "label": "Eligible home renovation expenses, up to $10,000",
-      "formula": "if(person.age >= 65 or (line.HH.partner == 1 and household.partnerInYear and spouse.person.age >= 65), min(param.nbSeniorsRenovationMax, answer.homeAccessibility), 0)",
+      "formula": "if(person.age >= 65 or (line.HH.partner == 1 and family.partnerInYear and spouse.person.age >= 65), min(param.nbSeniorsRenovationMax, answer.homeAccessibility), 0)",
       "source": "NB(S12) lines 1 to 3: for a senior 65 or older, or someone living with a family member who is"
     },
     "NBS12.5": {
       "label": "Home renovation expenses",
-      "formula": "if(line.HH.partner == 1 and household.partnerInYear and spouse.person.province == \"NB\" and line.NBS12.3 + spouse.line.NBS12.3 > param.nbSeniorsRenovationMax, unsupported(\"You and your spouse or partner can claim at most $10,000 together for the New Brunswick seniors' home renovation tax credit. Lower one of the claims\"), line.NBS12.3)",
+      "formula": "if(line.HH.partner == 1 and family.partnerInYear and spouse.person.province == \"NB\" and line.NBS12.3 + spouse.line.NBS12.3 > param.nbSeniorsRenovationMax, unsupported(\"You and your spouse or partner can claim at most $10,000 together for the New Brunswick seniors' home renovation tax credit. Lower one of the claims\"), line.NBS12.3)",
       "source": "NB(S12) lines 4 and 5 (60360): less what another person living with you claims"
     },
     "NBS12.7": {
@@ -5287,7 +5287,7 @@
     },
     "NL428.23": {
       "label": "Newfoundland and Labrador amount for an eligible dependant",
-      "formula": "round((if(line.HH.partner == 0 and household.childrenUnder18 > 0, min(param.nlSpouseMax, param.nlSpouseBase), 0)) * line.RES.factor, 2)",
+      "formula": "round((if(line.HH.partner == 0 and family.childrenUnder18 > 0, min(param.nlSpouseMax, param.nlSpouseBase), 0)) * line.RES.factor, 2)",
       "source": "NL428 lines 21 to 23. The app assumes the child had no income"
     },
     "NL.infirmAmount": {
@@ -5372,7 +5372,7 @@
     },
     "NL428.46": {
       "label": "Newfoundland and Labrador amounts transferred from your spouse or common-law partner",
-      "formula": "if(line.HH.partner == 1 and household.partnerInYear, line.NLS2.12, 0)",
+      "formula": "if(line.HH.partner == 1 and family.partnerInYear, line.NLS2.12, 0)",
       "source": "NL428 line 58640, from Schedule NL(S2)"
     },
     "NL428.47": {
@@ -5442,7 +5442,7 @@
     },
     "NL.claimsReduction": {
       "label": "This return claims the family's Newfoundland and Labrador low-income tax reduction (1 for yes)",
-      "formula": "if(line.HH.partner == 0 or not household.partnerInYear, 1, if(spouse.person.province != \"NL\", 1, if(line.NL428.85 != spouse.line.NL428.85, if(line.NL428.85 > spouse.line.NL428.85, 1, 0), if(line.T1.23600 != spouse.line.T1.23600, if(line.T1.23600 > spouse.line.T1.23600, 1, 0), if(person.age != spouse.person.age, if(person.age > spouse.person.age, 1, 0), if(person.role == \"self\", 1, 0))))))",
+      "formula": "if(line.HH.partner == 0 or not family.partnerInYear, 1, if(spouse.person.province != \"NL\", 1, if(line.NL428.85 != spouse.line.NL428.85, if(line.NL428.85 > spouse.line.NL428.85, 1, 0), if(line.T1.23600 != spouse.line.T1.23600, if(line.T1.23600 > spouse.line.T1.23600, 1, 0), if(person.age != spouse.person.age, if(person.age > spouse.person.age, 1, 0), if(person.role == \"self\", 1, 0))))))",
       "source": "NL428 lines 86 to 108: you and your spouse decide who claims the reduction for your family"
     },
     "NL428.86": {
@@ -5528,7 +5528,7 @@
     },
     "NLS11.20": {
       "label": "Newfoundland and Labrador tuition and education amounts transferred to your spouse or common-law partner",
-      "formula": "if(line.HH.partner == 1 and household.partnerInYear and line.NLS11.5 > 0, min(answer.tuitionTransfer, line.NLS11.19), 0)",
+      "formula": "if(line.HH.partner == 1 and family.partnerInYear and line.NLS11.5 > 0, min(answer.tuitionTransfer, line.NLS11.19), 0)",
       "source": "NL(S11) line 20: the amount you designate on your T2202 (the same as federally), up to line 19"
     },
     "NLS2.5": {
@@ -5553,7 +5553,7 @@
     },
     "NL479.5": {
       "label": "Physical activity expenses",
-      "formula": "if(line.HH.partner == 1 and household.partnerInYear, if(spouse.person.province == \"NL\", if(answer.physicalActivityFees + spouse.answer.physicalActivityFees > param.nlPhysicalActivityMax, unsupported(\"Your family can claim up to $2,000 of physical activity fees in all. Split them between your two returns so they add up to $2,000 or less\"), answer.physicalActivityFees), min(param.nlPhysicalActivityMax, answer.physicalActivityFees)), min(param.nlPhysicalActivityMax, answer.physicalActivityFees))",
+      "formula": "if(line.HH.partner == 1 and family.partnerInYear, if(spouse.person.province == \"NL\", if(answer.physicalActivityFees + spouse.answer.physicalActivityFees > param.nlPhysicalActivityMax, unsupported(\"Your family can claim up to $2,000 of physical activity fees in all. Split them between your two returns so they add up to $2,000 or less\"), answer.physicalActivityFees), min(param.nlPhysicalActivityMax, answer.physicalActivityFees)), min(param.nlPhysicalActivityMax, answer.physicalActivityFees))",
       "source": "NL479 lines 1 to 5: the family's fees, up to $2,000, less what another family member claims"
     },
     "NL479.7": {
@@ -5580,7 +5580,7 @@
     },
     "NS428.16": {
       "label": "Nova Scotia amount for an eligible dependant",
-      "formula": "round((if(line.HH.partner == 0 and household.childrenUnder18 > 0, min(param.nsSpouseMax, param.nsSpouseBase - param.nsSpouseIncomeFloor), 0)) * line.RES.factor, 2)",
+      "formula": "round((if(line.HH.partner == 0 and family.childrenUnder18 > 0, min(param.nsSpouseMax, param.nsSpouseBase - param.nsSpouseIncomeFloor), 0)) * line.RES.factor, 2)",
       "source": "NS428 lines 14 to 16. The app assumes the child had no income, so $874 is taken off"
     },
     "NS428.17": {
@@ -5590,7 +5590,7 @@
     },
     "NS428.58229": {
       "label": "Months claimed for the amount for young children",
-      "formula": "if(line.HH.partner == 1 and (line.T1.23600 > line.HH.spouseNetIncome or (line.T1.23600 == line.HH.spouseNetIncome and person.role == \"spouse\")), 0, sum(household.childMonthsUnder6) - if(line.NS428.16 > 0, min(household.childMonthsUnder6), 0))",
+      "formula": "if(line.HH.partner == 1 and (line.T1.23600 > line.HH.spouseNetIncome or (line.T1.23600 == line.HH.spouseNetIncome and person.role == \"spouse\")), 0, sum(family.childMonthsUnder6) - if(line.NS428.16 > 0, min(family.childMonthsUnder6), 0))",
       "source": "NS428 line 58229: each month a child was under 6 on its first day; with a spouse or partner, only the one with the lower net income claims (with equal incomes, the person preparing)"
     },
     "NS428.18": {"label":"Nova Scotia amount for young children","formula":"line.NS428.58229 * param.nsYoungChildAmount"},
@@ -5632,7 +5632,7 @@
     },
     "NS428.36": {
       "label": "Nova Scotia amounts transferred from your spouse or common-law partner",
-      "formula": "if(line.HH.partner == 1 and household.partnerInYear and line.NSS2.5 > 0, line.NSS2.12, 0)",
+      "formula": "if(line.HH.partner == 1 and family.partnerInYear and line.NSS2.5 > 0, line.NSS2.12, 0)",
       "source": "Schedule NS(S2): their unused Nova Scotia age, pension, disability and tuition amounts"
     },
     "NS428.43": {
@@ -5680,7 +5680,7 @@
     },
     "NS428.75": {
       "label": "Reduction for dependent children",
-      "formula": "param.nsTaxReductionChild * max(0, household.childrenUnder19 - if(line.NS428.16 > 0, 1, 0))",
+      "formula": "param.nsTaxReductionChild * max(0, family.childrenUnder19 - if(line.NS428.16 > 0, 1, 0))",
       "source": "NS428 line 75: $165 for each child born in 2007 or later, other than the one claimed on line 73"
     },
     "NS428.76": {"label":"Nova Scotia tax reductions","formula":"line.NS428.74 + line.NS428.75"},
@@ -5691,7 +5691,7 @@
     },
     "NS.claimsReduction": {
       "label": "This return claims the family's low-income tax reduction (1 for yes)",
-      "formula": "if(person.age >= 19 or line.HH.partner == 1 or household.childrenUnder19 > 0, if(line.HH.partner == 1 and household.partnerInYear and spouse.person.province == \"NS\" and (spouse.line.NS428.64 > line.NS428.64 or (spouse.line.NS428.64 == line.NS428.64 and (spouse.line.T1.23600 > line.T1.23600 or (spouse.line.T1.23600 == line.T1.23600 and person.role == \"spouse\")))), 0, 1), 0)",
+      "formula": "if(person.age >= 19 or line.HH.partner == 1 or family.childrenUnder19 > 0, if(line.HH.partner == 1 and family.partnerInYear and spouse.person.province == \"NS\" and (spouse.line.NS428.64 > line.NS428.64 or (spouse.line.NS428.64 == line.NS428.64 and (spouse.line.T1.23600 > line.T1.23600 or (spouse.line.T1.23600 == line.T1.23600 and person.role == \"spouse\")))), 0, 1), 0)",
       "source": "Nova Scotia low-income tax reduction: for someone 19 or older, with a spouse or partner, or a parent; a couple claims it on one return"
     },
     "NS428.84": {
@@ -5739,7 +5739,7 @@
     },
     "NSS11.20": {
       "label": "Nova Scotia tuition and education amounts transferred to your spouse or common-law partner",
-      "formula": "if(line.HH.partner == 1 and household.partnerInYear and line.NSS11.5 > 0, min(answer.tuitionTransfer, line.NSS11.19), 0)",
+      "formula": "if(line.HH.partner == 1 and family.partnerInYear and line.NSS11.5 > 0, min(answer.tuitionTransfer, line.NSS11.19), 0)",
       "source": "NS(S11) line 20: the amount you designate on your T2202 (the same as federally), up to line 19"
     },
     "NSS2.5": {
@@ -5765,7 +5765,7 @@
     },
     "NS479.2": {
       "label": "Your children's sports and arts expenses",
-      "formula": "if(household.childrenUnder19 > 0, min(answer.childActivityFees, param.nsActivityMaxPerChild * household.childrenUnder19), 0)",
+      "formula": "if(family.childrenUnder19 > 0, min(answer.childActivityFees, param.nsActivityMaxPerChild * family.childrenUnder19), 0)",
       "source": "NS479 line 2: fees for children under 19 at the end of the year, less assistance, up to $500 per child"
     },
     "NS479.4": {
@@ -5793,7 +5793,7 @@
     },
     "NT428.16": {
       "label": "Northwest Territories amount for an eligible dependant",
-      "formula": "round((if(line.HH.partner == 0 and household.childrenUnder18 > 0, param.ntSpouseBase, 0)) * line.RES.factor, 2)",
+      "formula": "round((if(line.HH.partner == 0 and family.childrenUnder18 > 0, param.ntSpouseBase, 0)) * line.RES.factor, 2)",
       "source": "NT428 lines 14 to 16. The app assumes the child had no income"
     },
     "NT428.17": {
@@ -5838,7 +5838,7 @@
     },
     "NT428.35": {
       "label": "Amounts transferred from your spouse or common-law partner",
-      "formula": "if(line.HH.partner == 1 and household.partnerInYear, line.NTS2.12, 0)",
+      "formula": "if(line.HH.partner == 1 and family.partnerInYear, line.NTS2.12, 0)",
       "source": "NT428 line 35 (58640): Schedule NT(S2)"
     },
     "NT428.34": {
@@ -5929,7 +5929,7 @@
     },
     "NTS11.20": {
       "label": "Northwest Territories tuition and education transferred to your spouse or common-law partner",
-      "formula": "if(line.HH.partner == 1 and household.partnerInYear and line.NTS11.5 > 0, min(answer.tuitionTransfer, line.NTS11.19), 0)",
+      "formula": "if(line.HH.partner == 1 and family.partnerInYear and line.NTS11.5 > 0, min(answer.tuitionTransfer, line.NTS11.19), 0)",
       "source": "NT(S11) line 20: the amount you designate on your T2202 (the app takes the federal one), up to line 19"
     },
     "NTS2.5": {
@@ -5969,12 +5969,12 @@
     },
     "NT479.18": {
       "label": "Your spouse's or partner's basic cost of living credit",
-      "formula": "if(line.HH.partner == 1, min(param.ntCostOfLivingMax, round(bracket(param.ntCostOfLivingBrackets, if(household.partnerInYear, spouse.line.NT479.5, line.HH.spouseNetIncome)), 2)), 0)",
+      "formula": "if(line.HH.partner == 1, min(param.ntCostOfLivingMax, round(bracket(param.ntCostOfLivingBrackets, if(family.partnerInYear, spouse.line.NT479.5, line.HH.spouseNetIncome)), 2)), 0)",
       "source": "NT479 line 18: line 13 of their NT479, worked out from their adjusted net income (or your answer for their net income)"
     },
     "NTCOL.claimant": {
       "label": "This return claims the family's cost of living supplement (1 for yes)",
-      "formula": "if(line.HH.partner == 0 or not household.partnerInYear, 1, if(spouse.person.province != \"NT\" or spouse.person.age < 18, 1, if(line.T1.23600 > spouse.line.T1.23600 or (line.T1.23600 == spouse.line.T1.23600 and person.role == \"self\"), 1, 0)))"
+      "formula": "if(line.HH.partner == 0 or not family.partnerInYear, 1, if(spouse.person.province != \"NT\" or spouse.person.age < 18, 1, if(line.T1.23600 > spouse.line.T1.23600 or (line.T1.23600 == spouse.line.T1.23600 and person.role == \"self\"), 1, 0)))"
     },
     "NT479.20": {
       "label": "Cost of living tax credit supplement",
@@ -5999,7 +5999,7 @@
     },
     "NU428.16": {
       "label": "Nunavut amount for an eligible dependant",
-      "formula": "round((if(line.HH.partner == 0 and household.childrenUnder18 > 0, param.nuSpouseBase, 0)) * line.RES.factor, 2)",
+      "formula": "round((if(line.HH.partner == 0 and family.childrenUnder18 > 0, param.nuSpouseBase, 0)) * line.RES.factor, 2)",
       "source": "NU428 lines 14 to 16. The app assumes the child had no income"
     },
     "NU428.17": {
@@ -6009,12 +6009,12 @@
     },
     "NUYC.claimant": {
       "label": "This return claims the amount for young children (1 for yes)",
-      "formula": "if(line.HH.partner == 0 or not household.partnerInYear, 1, if(spouse.person.province != \"NU\", 1, if(line.T1.23600 < spouse.line.T1.23600 or (line.T1.23600 == spouse.line.T1.23600 and person.role == \"self\"), 1, 0)))",
+      "formula": "if(line.HH.partner == 0 or not family.partnerInYear, 1, if(spouse.person.province != \"NU\", 1, if(line.T1.23600 < spouse.line.T1.23600 or (line.T1.23600 == spouse.line.T1.23600 and person.role == \"self\"), 1, 0)))",
       "source": "canada.ca/nu-tax-info, line 58230: the spouse with the lower net income makes the first claim; the other claims the unused part on NU(S2)"
     },
     "NU428.18": {
       "label": "Nunavut amount for young children less than 6 years of age",
-      "formula": "round((if(household.childrenUnder6 > 0, if(line.NUYC.claimant == 1, param.nuYoungChildAmount * household.childrenUnder6, 0), 0)) * line.RES.factor, 2)",
+      "formula": "round((if(family.childrenUnder6 > 0, if(line.NUYC.claimant == 1, param.nuYoungChildAmount * family.childrenUnder6, 0), 0)) * line.RES.factor, 2)",
       "source": "NU428 line 18 (58230): $1,200 for each child under 6 at the end of the year"
     },
     "NU428.24": {
@@ -6059,7 +6059,7 @@
     },
     "NU428.36": {
       "label": "Amounts transferred from your spouse or common-law partner",
-      "formula": "if(line.HH.partner == 1 and household.partnerInYear, line.NUS2.13, 0)",
+      "formula": "if(line.HH.partner == 1 and family.partnerInYear, line.NUS2.13, 0)",
       "source": "NU428 line 36 (58640): Schedule NU(S2)"
     },
     "NU428.43": {
@@ -6132,7 +6132,7 @@
     },
     "NUS11.24": {
       "label": "Nunavut amounts transferred to your spouse or common-law partner",
-      "formula": "if(line.HH.partner == 1 and household.partnerInYear and line.NUS11.9 > 0, min(answer.tuitionTransfer, line.NUS11.23), 0)",
+      "formula": "if(line.HH.partner == 1 and family.partnerInYear and line.NUS11.9 > 0, min(answer.tuitionTransfer, line.NUS11.23), 0)",
       "source": "NU(S11) line 24: the amount you designate on your T2202 (the app takes the federal one), up to line 23"
     },
     "NUS2.6": {
@@ -6167,7 +6167,7 @@
     },
     "NU479.13": {
       "label": "Cost of living supplement for single parents",
-      "formula": "if(line.HH.partner == 0 and household.childrenUnder18 > 0, min(param.nuSingleParentMax, round(max(0, line.NU479.5 - param.nuSingleParentThreshold) * param.nuSingleParentRate, 2)), 0)",
+      "formula": "if(line.HH.partner == 0 and family.childrenUnder18 > 0, min(param.nuSingleParentMax, round(max(0, line.NU479.5 - param.nuSingleParentThreshold) * param.nuSingleParentRate, 2)), 0)",
       "source": "NU479 lines 9 to 13: 2% of adjusted net income over $60,000, up to $255.12. The app takes a single parent to be a person without a spouse who has a child under 18"
     },
     "NU479.14": {
@@ -6204,7 +6204,7 @@
     },
     "ON428.16": {
       "label": "Ontario amount for an eligible dependant",
-      "formula": "round((if(line.HH.partner == 0 and household.childrenUnder18 > 0, min(param.onSpouseMax, param.onSpouseBase), 0)) * line.RES.factor, 2)",
+      "formula": "round((if(line.HH.partner == 0 and family.childrenUnder18 > 0, min(param.onSpouseMax, param.onSpouseBase), 0)) * line.RES.factor, 2)",
       "source": "ON428 lines 14 to 16. The app assumes the child had no income"
     },
     "ON428.17": {
@@ -6264,7 +6264,7 @@
     },
     "ON428.34": {
       "label": "Ontario amounts transferred from your spouse or common-law partner",
-      "formula": "if(line.HH.partner == 1 and household.partnerInYear, if(line.ONS2.4 == 0, 0, line.ONS2.11), 0)",
+      "formula": "if(line.HH.partner == 1 and family.partnerInYear, if(line.ONS2.4 == 0, 0, line.ONS2.11), 0)",
       "source": "Schedule ON(S2): their unused Ontario age, pension income and disability amounts. A spouse living in another province is read as if they lived in Ontario, as the schedule asks: the engine works out Ontario's lines for anyone"
     },
     "ON428.35": {
@@ -6314,12 +6314,12 @@
     },
     "ON.reductionClaimant": {
       "label": "This return claims the Ontario tax reductions for dependants (1 for yes)",
-      "formula": "if(line.HH.partner == 0, 1, if(line.HH.spouseNetIncome > line.T1.23600, 0, if(line.HH.spouseNetIncome == line.T1.23600 and household.partnerInYear and person.role == \"spouse\", 0, 1)))",
+      "formula": "if(line.HH.partner == 0, 1, if(line.HH.spouseNetIncome > line.T1.23600, 0, if(line.HH.spouseNetIncome == line.T1.23600 and family.partnerInYear and person.role == \"spouse\", 0, 1)))",
       "source": "ON428 lines 75 and 76: only the spouse with the higher net income claims them; with equal incomes, the person preparing"
     },
     "ON428.75": {
       "label": "Ontario tax reduction for dependent children",
-      "formula": "if(line.ON.reductionClaimant == 1, param.onTaxReductionChild * household.childrenUnder19, 0)",
+      "formula": "if(line.ON.reductionClaimant == 1, param.onTaxReductionChild * family.childrenUnder19, 0)",
       "source": "ON428 line 75: $544 per child born in 2007 or later, claimed by the spouse with the higher net income"
     },
     "ON.impairedChildren": {
@@ -6334,8 +6334,8 @@
     },
     "ON.impairedDependants": {
       "label": "Dependants with an impairment for the Ontario tax reduction",
-      "formula": "min(household.childrenUnder19, if(line.HH.partner == 1 and household.partnerInYear, max(line.ON.impairedChildren, spouse.line.ON.impairedChildren), line.ON.impairedChildren)) + line.ON.impairedAdults + if(line.HH.partner == 1 and household.partnerInYear, spouse.line.ON.impairedAdults, 0) + if(line.ON428.34 > 0 and line.ONS2.3 > 0, 1, 0)",
-      "source": "ON428 line 60970: the household's children (counted once for both spouses), each spouse's adult dependants, and a spouse with an impairment"
+      "formula": "min(family.childrenUnder19, if(line.HH.partner == 1 and family.partnerInYear, max(line.ON.impairedChildren, spouse.line.ON.impairedChildren), line.ON.impairedChildren)) + line.ON.impairedAdults + if(line.HH.partner == 1 and family.partnerInYear, spouse.line.ON.impairedAdults, 0) + if(line.ON428.34 > 0 and line.ONS2.3 > 0, 1, 0)",
+      "source": "ON428 line 60970: the children (counted once for both spouses), each spouse's adult dependants, and a spouse with an impairment"
     },
     "ON428.76": {
       "label": "Ontario tax reduction for dependants with an impairment",
@@ -6393,7 +6393,7 @@
     "ON428A.20": {"label":"LIFT credit, single","formula":"max(0, line.ON428A.5 - line.ON428A.19)"},
     "ON428A.28": {
       "label": "Your spouse's or partner's adjusted net income",
-      "formula": "if(household.partnerInYear, spouse.line.ON428A.13, answer.spouseNetIncome)",
+      "formula": "if(family.partnerInYear, spouse.line.ON428A.13, answer.spouseNetIncome)",
       "source": "ON428-A line 28: from their return, or your answer for their net income"
     },
     "ON428A.38": {
@@ -6447,7 +6447,7 @@
     },
     "ON479.1": {
       "label": "Ontario fertility treatment tax credit",
-      "formula": "if(line.ON479.61268 == 0, 0, if(line.HH.partner == 1 and household.partnerInYear and spouse.answer.fertilityExpenses > 0, unsupported(\"Only one spouse can claim the Ontario fertility treatment tax credit. Enter the fertility treatment expenses on one return only\"), min(param.onFertilityMax, round(line.ON479.61268 * param.onFertilityRate, 2))))",
+      "formula": "if(line.ON479.61268 == 0, 0, if(line.HH.partner == 1 and family.partnerInYear and spouse.answer.fertilityExpenses > 0, unsupported(\"Only one spouse can claim the Ontario fertility treatment tax credit. Enter the fertility treatment expenses on one return only\"), min(param.onFertilityMax, round(line.ON479.61268 * param.onFertilityRate, 2))))",
       "source": "ON479 line 1: 25% of the expenses, up to $5,000. Only one spouse may claim it, and the claim can't be split"
     },
     "ON479.5": {
@@ -6458,7 +6458,7 @@
     "ON479.8": {"label":"Family net income","formula":"line.T1.23600 + line.HH.spouseNetIncome","source":"ON479 lines 6 to 8"},
     "ON479.13": {
       "label": "Ontario seniors care at home tax credit",
-      "formula": "if((person.age >= param.onSeniorsCareAge or (line.HH.partner == 1 and household.partnerInYear and spouse.person.age >= param.onSeniorsCareAge)) and line.ON479.8 <= param.onSeniorsCareFamilyLimit, max(0, line.ON479.5 - round(max(0, line.ON479.8 - param.onSeniorsCareBase) * param.onSeniorsCareReductionRate, 2)), 0)",
+      "formula": "if((person.age >= param.onSeniorsCareAge or (line.HH.partner == 1 and family.partnerInYear and spouse.person.age >= param.onSeniorsCareAge)) and line.ON479.8 <= param.onSeniorsCareFamilyLimit, max(0, line.ON479.5 - round(max(0, line.ON479.8 - param.onSeniorsCareBase) * param.onSeniorsCareReductionRate, 2)), 0)",
       "source": "ON479 lines 9 to 13: line 5 less 5% of family net income over $35,000; nothing above $65,000. You or your spouse must be 70 or older. The app knows a spouse's age only when their return is prepared here"
     },
     "ON479.14": {
@@ -6493,7 +6493,7 @@
     },
     "ON479A.supporting": {
       "label": "Your spouse's or partner's adjusted income",
-      "formula": "if(line.HH.partner == 1, if(household.partnerInYear, spouse.line.ON479A.4, answer.spouseNetIncome), 0)",
+      "formula": "if(line.HH.partner == 1, if(family.partnerInYear, spouse.line.ON479A.4, answer.spouseNetIncome), 0)",
       "source": "ON479-A line 4, column 2: from their return, or your answer for their net income"
     },
     "ON479A.5": {"label":"Family adjusted income","formula":"line.ON479A.4 + line.ON479A.supporting","source":"ON479-A line 5"},
@@ -6521,7 +6521,7 @@
     },
     "PE428.16": {
       "label": "Prince Edward Island amount for an eligible dependant",
-      "formula": "round((if(line.HH.partner == 0 and household.childrenUnder18 > 0, min(param.peSpouseMax, param.peSpouseBase), 0)) * line.RES.factor, 2)",
+      "formula": "round((if(line.HH.partner == 0 and family.childrenUnder18 > 0, min(param.peSpouseMax, param.peSpouseBase), 0)) * line.RES.factor, 2)",
       "source": "PE428 lines 14 to 16. The app assumes the child had no income"
     },
     "PE428.17": {
@@ -6531,7 +6531,7 @@
     },
     "PE428.58229": {
       "label": "Months claimed for the amount for young children",
-      "formula": "if(line.HH.partner == 1 and (line.T1.23600 > line.HH.spouseNetIncome or (line.T1.23600 == line.HH.spouseNetIncome and person.role == \"spouse\")), 0, sum(household.childMonthsUnder6) - if(line.PE428.16 > 0, min(household.childMonthsUnder6), 0))",
+      "formula": "if(line.HH.partner == 1 and (line.T1.23600 > line.HH.spouseNetIncome or (line.T1.23600 == line.HH.spouseNetIncome and person.role == \"spouse\")), 0, sum(family.childMonthsUnder6) - if(line.PE428.16 > 0, min(family.childMonthsUnder6), 0))",
       "source": "PE428 line 58229: each month a child was under 6 on its first day; with a spouse or partner, only the one with the lower net income claims (with equal incomes, the person preparing)"
     },
     "PE428.18": {"label":"Prince Edward Island amount for young children","formula":"line.PE428.58229 * param.peYoungChildAmount"},
@@ -6547,7 +6547,7 @@
     },
     "PE428.28": {
       "label": "Children's wellness tax credit",
-      "formula": "if(household.childrenUnder19 > 0, min(answer.childActivityFees, param.peWellnessMaxPerChild * household.childrenUnder19), 0)",
+      "formula": "if(family.childrenUnder19 > 0, min(answer.childActivityFees, param.peWellnessMaxPerChild * family.childrenUnder19), 0)",
       "source": "PE428 line 28 (58365): program fees for children under 18 at the start of the year, up to $1,000 per child"
     },
     "PE428.31": {
@@ -6587,7 +6587,7 @@
     },
     "PE428.38": {
       "label": "Prince Edward Island amounts transferred from your spouse or common-law partner",
-      "formula": "if(line.HH.partner == 1 and household.partnerInYear and line.PES2.5 > 0, line.PES2.12, 0)",
+      "formula": "if(line.HH.partner == 1 and family.partnerInYear and line.PES2.5 > 0, line.PES2.12, 0)",
       "source": "Schedule PE(S2): their unused Prince Edward Island age, pension, disability and tuition amounts"
     },
     "PE428.45": {
@@ -6627,12 +6627,12 @@
     },
     "PE.claimsReduction": {
       "label": "This return claims the family's low-income tax reduction (1 for yes)",
-      "formula": "if(person.age >= 19 or line.HH.partner == 1 or household.childrenUnder19 > 0, if(line.HH.partner == 1 and household.partnerInYear and spouse.person.province == \"PE\" and (spouse.line.PE428.63 > line.PE428.63 or (spouse.line.PE428.63 == line.PE428.63 and (spouse.line.T1.23600 > line.T1.23600 or (spouse.line.T1.23600 == line.T1.23600 and person.role == \"spouse\")))), 0, 1), 0)",
+      "formula": "if(person.age >= 19 or line.HH.partner == 1 or family.childrenUnder19 > 0, if(line.HH.partner == 1 and family.partnerInYear and spouse.person.province == \"PE\" and (spouse.line.PE428.63 > line.PE428.63 or (spouse.line.PE428.63 == line.PE428.63 and (spouse.line.T1.23600 > line.T1.23600 or (spouse.line.T1.23600 == line.T1.23600 and person.role == \"spouse\")))), 0, 1), 0)",
       "source": "PE428 line 87: for someone 19 or older, with a spouse or partner, or a parent; a couple claims it on one return"
     },
     "PE428.66": {
       "label": "Unused low-income tax reduction from your spouse or common-law partner",
-      "formula": "if(line.HH.partner == 1 and household.partnerInYear and spouse.person.province == \"PE\" and line.PE.claimsReduction == 0, spouse.line.PE428.101, 0)",
+      "formula": "if(line.HH.partner == 1 and family.partnerInYear and spouse.person.province == \"PE\" and line.PE.claimsReduction == 0, spouse.line.PE428.101, 0)",
       "source": "PE428 line 66: line 101 of their PE428"
     },
     "PE428.67": {
@@ -6646,12 +6646,12 @@
     },
     "PE428.78": {
       "label": "Age reduction for your spouse or common-law partner",
-      "formula": "if(line.HH.partner == 1 and household.partnerInYear, if(spouse.person.age >= 65, param.peTaxReductionAge, 0), 0)",
+      "formula": "if(line.HH.partner == 1 and family.partnerInYear, if(spouse.person.age >= 65, param.peTaxReductionAge, 0), 0)",
       "source": "PE428 line 78: $250 if they were born in 1960 or earlier. Their age is known only when their return is prepared here"
     },
     "PE428.81": {
       "label": "Prince Edward Island tax reductions",
-      "formula": "param.peTaxReductionBasic + if(person.age >= 65, param.peTaxReductionAge, 0) + if(line.HH.partner == 1, param.peTaxReductionBasic, 0) + line.PE428.78 + if(line.PE428.16 > 0, param.peTaxReductionBasic, 0) + param.peTaxReductionChild * max(0, household.childrenUnder19 - if(line.PE428.16 > 0, 1, 0))",
+      "formula": "param.peTaxReductionBasic + if(person.age >= 65, param.peTaxReductionAge, 0) + if(line.HH.partner == 1, param.peTaxReductionBasic, 0) + line.PE428.78 + if(line.PE428.16 > 0, param.peTaxReductionBasic, 0) + param.peTaxReductionChild * max(0, family.childrenUnder19 - if(line.PE428.16 > 0, 1, 0))",
       "source": "PE428 lines 75 to 81"
     },
     "PE428.86": {
@@ -6720,7 +6720,7 @@
     },
     "PES11.20": {
       "label": "Prince Edward Island tuition and education amounts transferred to your spouse or common-law partner",
-      "formula": "if(line.HH.partner == 1 and household.partnerInYear and line.PES11.5 > 0, min(answer.tuitionTransfer, line.PES11.19), 0)",
+      "formula": "if(line.HH.partner == 1 and family.partnerInYear and line.PES11.5 > 0, min(answer.tuitionTransfer, line.PES11.19), 0)",
       "source": "PE(S11) line 20: the amount you designate on your T2202 (the same as federally), up to line 19"
     },
     "PES2.5": {
@@ -6756,7 +6756,7 @@
     },
     "QCB.23": {
       "label": "Age amount of your spouse",
-      "formula": "if(line.HH.partner == 1 and household.partnerInYear, if(spouse.person.age >= 65, param.qcAgeAmount, 0), 0)",
+      "formula": "if(line.HH.partner == 1 and family.partnerInYear, if(spouse.person.age >= 65, param.qcAgeAmount, 0), 0)",
       "source": "Schedule B, line 23: your spouse born before January 1, 1961"
     },
     "QCB.27": {
@@ -6821,7 +6821,7 @@
     },
     "QCC.own": {
       "label": "Childcare expenses this return paid",
-      "formula": "if(household.childrenUnder17 > 0, max(0, sum(RL24.boxE) + answer.qcChildCareReceipts - sum(RL1.box201) - sum(RL5.boxJ)), 0)",
+      "formula": "if(family.childrenUnder17 > 0, max(0, sum(RL24.boxE) + answer.qcChildCareReceipts - sum(RL1.box201) - sum(RL5.boxJ)), 0)",
       "source": "Schedule C, lines 26.1 to 41: box E of the RL-24 slips and the receipts without one, less the allowance in box 201 of the RL-1 or box J of the RL-5"
     },
     "QCC.41": {
@@ -6831,7 +6831,7 @@
     },
     "QCC.50": {
       "label": "Childcare expense limit",
-      "formula": "param.qcChildCareUnder7 * household.childrenUnder7 + param.qcChildCare7to16 * (household.childrenUnder17 - household.childrenUnder7)",
+      "formula": "param.qcChildCareUnder7 * family.childrenUnder7 + param.qcChildCare7to16 * (family.childrenUnder17 - family.childrenUnder7)",
       "source": "Schedule C, lines 44 to 50: $12,275 for each child born after 2018 and $6,180 for each child born after 2008 (the $16,800 limit for a child with an impairment isn't handled)"
     },
     "QCC.85": {
@@ -6927,7 +6927,7 @@
     "QCK.40": {"label":"Family income for the drug premium","formula":"line.QC.family","source":"Schedule K, line 40"},
     "QCK.46": {
       "label": "Income not subject to the premium",
-      "formula": "if(line.HH.partner == 1, param.drugIncomeCouple + if(household.childrenUnder18 >= 2, param.drugChildrenCouple, if(household.childrenUnder18 == 1, param.drugChildCouple, 0)), param.drugIncomeSingle + if(household.childrenUnder18 >= 2, param.drugChildrenSingle, if(household.childrenUnder18 == 1, param.drugChildSingle, 0)))",
+      "formula": "if(line.HH.partner == 1, param.drugIncomeCouple + if(family.childrenUnder18 >= 2, param.drugChildrenCouple, if(family.childrenUnder18 == 1, param.drugChildCouple, 0)), param.drugIncomeSingle + if(family.childrenUnder18 >= 2, param.drugChildrenSingle, if(family.childrenUnder18 == 1, param.drugChildSingle, 0)))",
       "source": "Schedule K, lines 41 to 46 (a dependent child: under 18 at the end of the year)"
     },
     "QCK.48": {
@@ -6972,7 +6972,7 @@
     },
     "QCP.49": {
       "label": "Your spouse's work income",
-      "formula": "if(line.HH.partner == 1, if(household.partnerInYear, if(spouse.person.province == \"QC\", spouse.line.QC.work, spouse.line.CWB.working), if(line.QC.family < param.workPremiumMaxFamilyCouple, unsupported(\"The work premium for a couple needs your spouse's work income: prepare their return here too\"), 0)), 0)",
+      "formula": "if(line.HH.partner == 1, if(family.partnerInYear, if(spouse.person.province == \"QC\", spouse.line.QC.work, spouse.line.CWB.working), if(line.QC.family < param.workPremiumMaxFamilyCouple, unsupported(\"The work premium for a couple needs your spouse's work income: prepare their return here too\"), 0)), 0)",
       "source": "Schedule P, line 49; a couple whose family income is over the most can't get the premium, so the spouse's income isn't needed"
     },
     "QCP.64": {"label":"Work income","formula":"line.QC.work + line.QCP.49","source":"Schedule P, line 64: lines 29 and 49"},
@@ -6983,7 +6983,7 @@
     },
     "QCP.76": {
       "label": "Work premium before reduction",
-      "formula": "round(line.QCP.72 * if(household.childrenUnder18 > 0, if(line.HH.partner == 1, param.workPremiumRateChildCouple, param.workPremiumRateChildSingle), param.workPremiumRate), 2)",
+      "formula": "round(line.QCP.72 * if(family.childrenUnder18 > 0, if(line.HH.partner == 1, param.workPremiumRateChildCouple, param.workPremiumRateChildSingle), param.workPremiumRate), 2)",
       "source": "Schedule P, lines 74 and 76: 25% (couple) or 30% (single parent) with a designated dependent child (a child under 18 who lived with you), else 11.6%"
     },
     "QCP.83": {
@@ -7004,7 +7004,7 @@
     },
     "QCP.76_2": {
       "label": "Adapted work premium before reduction",
-      "formula": "round(line.QCP.72_2 * if(household.childrenUnder18 > 0, if(line.HH.partner == 1, param.adaptedWorkPremiumRateChildCouple, param.adaptedWorkPremiumRateChildSingle), param.adaptedWorkPremiumRate), 2)",
+      "formula": "round(line.QCP.72_2 * if(family.childrenUnder18 > 0, if(line.HH.partner == 1, param.adaptedWorkPremiumRateChildCouple, param.adaptedWorkPremiumRateChildSingle), param.adaptedWorkPremiumRate), 2)",
       "source": "Schedule P, Part E, column 2, lines 75 and 76"
     },
     "QCP.83_2": {
@@ -7170,7 +7170,7 @@
     },
     "QC.childActivities": {
       "label": "Tax credit for children's activities",
-      "formula": "if(household.childrenUnder17 - household.childrenUnder6 > 0 and line.QC.family <= param.childActivitiesMaxIncome, round(min(answer.childActivityFees, param.childActivitiesMaxFees * (household.childrenUnder17 - household.childrenUnder6)) * param.childActivitiesRate, 2), 0)",
+      "formula": "if(family.childrenUnder17 - family.childrenUnder6 > 0 and line.QC.family <= param.childActivitiesMaxIncome, round(min(answer.childActivityFees, param.childActivitiesMaxFees * (family.childrenUnder17 - family.childrenUnder6)) * param.childActivitiesRate, 2), 0)",
       "source": "Guide, line 462, point 25: 20% of fees up to $500 for each child born from 2009 to 2019, with family income of $168,470 or less (the extra for a child with an impairment isn't handled)"
     },
     "QC.seniorAssistance": {
@@ -7180,11 +7180,11 @@
     },
     "QC.couple": {
       "label": "Both spouses file a Quebec return prepared here (1 for yes)",
-      "formula": "if(line.HH.partner == 1 and household.partnerInYear, if(spouse.person.province == \"QC\", 1, 0), 0)"
+      "formula": "if(line.HH.partner == 1 and family.partnerInYear, if(spouse.person.province == \"QC\", 1, 0), 0)"
     },
     "QC.spouseNet": {
       "label": "Your spouse's net income, for the Quebec family income",
-      "formula": "if(line.HH.partner == 1, if(household.partnerInYear, if(spouse.person.province == \"QC\", spouse.line.TP1.275, spouse.line.T1.23600), answer.spouseNetIncome), 0)",
+      "formula": "if(line.HH.partner == 1, if(family.partnerInYear, if(spouse.person.province == \"QC\", spouse.line.TP1.275, spouse.line.T1.23600), answer.spouseNetIncome), 0)",
       "source": "TP-1 line 51: your spouse's net income (line 275 of their TP-1); for a spouse who doesn't file one, their federal net income"
     },
     "QC.family": {
@@ -7429,7 +7429,7 @@
     },
     "TP1.393": {
       "label": "Donations and gifts",
-      "formula": "if(household.partnerInYear and spouse.answer.claimSpouseDonations and line.HH.partner == 1, 0, line.QC.ownDonations) + if(household.partnerInYear and answer.claimSpouseDonations and line.HH.partner == 1, spouse.line.QC.ownDonations, 0)",
+      "formula": "if(family.partnerInYear and spouse.answer.claimSpouseDonations and line.HH.partner == 1, 0, line.QC.ownDonations) + if(family.partnerInYear and answer.claimSpouseDonations and line.HH.partner == 1, spouse.line.QC.ownDonations, 0)",
       "source": "Work Chart 395, line 1: monetary donations made in 2025. Whoever claims both spouses' donations on the federal return claims them here too"
     },
     "TP1.395": {
@@ -7618,7 +7618,7 @@
     },
     "SK428.16": {
       "label": "Saskatchewan amount for an eligible dependant",
-      "formula": "round((if(line.HH.partner == 0 and household.childrenUnder18 > 0, min(param.skSpouseMax, param.skSpouseBase), 0)) * line.RES.factor, 2)",
+      "formula": "round((if(line.HH.partner == 0 and family.childrenUnder18 > 0, min(param.skSpouseMax, param.skSpouseBase), 0)) * line.RES.factor, 2)",
       "source": "SK428 lines 14 to 16. The app assumes the child had no income"
     },
     "SK428.17": {
@@ -7628,12 +7628,12 @@
     },
     "SK.childClaimant": {
       "label": "This return claims the amount for dependent children (1 for yes)",
-      "formula": "if(person.province != \"SK\", 0, if(line.HH.partner == 0, 1, if(not household.partnerInYear, if(line.T1.26000 <= line.HH.spouseNetIncome, 1, 0), if(spouse.person.province != \"SK\", 1, if(line.T1.26000 < spouse.line.T1.26000, 1, if(line.T1.26000 > spouse.line.T1.26000, 0, if(person.role == \"self\", 1, 0)))))))",
+      "formula": "if(person.province != \"SK\", 0, if(line.HH.partner == 0, 1, if(not family.partnerInYear, if(line.T1.26000 <= line.HH.spouseNetIncome, 1, 0), if(spouse.person.province != \"SK\", 1, if(line.T1.26000 < spouse.line.T1.26000, 1, if(line.T1.26000 > spouse.line.T1.26000, 0, if(person.role == \"self\", 1, 0)))))))",
       "source": "Line 58210 of the CRA's Saskatchewan information: the spouse with the lower taxable income claims it. Without their return here, their net income stands in for their taxable income; with equal incomes, the person preparing claims it"
     },
     "SK428.18": {
       "label": "Saskatchewan amount for dependent children born in 2007 or later",
-      "formula": "round((if(household.childrenUnder19 == 0, 0, if(line.SK.childClaimant == 1, param.skChildAmount * max(0, household.childrenUnder19 - if(line.SK428.16 > 0, 1, 0)), 0))) * line.RES.factor, 2)",
+      "formula": "round((if(family.childrenUnder19 == 0, 0, if(line.SK.childClaimant == 1, param.skChildAmount * max(0, family.childrenUnder19 - if(line.SK428.16 > 0, 1, 0)), 0))) * line.RES.factor, 2)",
       "source": "SK428 line 18 (58210): $7,704 a child, except a child claimed as an eligible dependant"
     },
     "SK428.19": {
@@ -7658,7 +7658,7 @@
     },
     "SK428.29": {
       "label": "Saskatchewan home renovation expenses",
-      "formula": "if(answer.homeRenovationExpenses == 0, 0, if(line.HH.partner == 1 and household.partnerInYear and spouse.answer.homeRenovationExpenses > 0, unsupported(\"The Saskatchewan home renovation tax credit is for the family: claim your renovation expenses on one of your returns\"), max(0, min(answer.homeRenovationExpenses, if(person.age >= 65 and household.childrenUnder18 == 0 and (line.HH.partner == 0 or (household.partnerInYear and spouse.person.age >= 65)), param.skHomeRenovationSeniorMax, param.skHomeRenovationMax)) - param.skHomeRenovationBase)))",
+      "formula": "if(answer.homeRenovationExpenses == 0, 0, if(line.HH.partner == 1 and family.partnerInYear and spouse.answer.homeRenovationExpenses > 0, unsupported(\"The Saskatchewan home renovation tax credit is for the family: claim your renovation expenses on one of your returns\"), max(0, min(answer.homeRenovationExpenses, if(person.age >= 65 and family.childrenUnder18 == 0 and (line.HH.partner == 0 or (family.partnerInYear and spouse.person.age >= 65)), param.skHomeRenovationSeniorMax, param.skHomeRenovationMax)) - param.skHomeRenovationBase)))",
       "source": "SK(S12) lines 1 to 5: expenses up to $5,000 ($6,000 when the whole family is 65 or older), less $1,000"
     },
     "SK428.30": {
@@ -7708,7 +7708,7 @@
     },
     "SK428.41": {
       "label": "Amounts transferred from your spouse or common-law partner",
-      "formula": "if(line.HH.partner == 1 and household.partnerInYear, line.SKS2.13, 0)",
+      "formula": "if(line.HH.partner == 1 and family.partnerInYear, line.SKS2.13, 0)",
       "source": "Schedule SK(S2): their unused Saskatchewan child, age, senior supplementary, pension income and disability amounts"
     },
     "SK428.48": {
@@ -7803,12 +7803,12 @@
     },
     "SK.activeFamiliesLimit": {
       "label": "Most active families benefit for your children",
-      "formula": "param.skActiveFamiliesPerChild * household.childrenUnder19 + (param.skActiveFamiliesPerDisabledChild - param.skActiveFamiliesPerChild) * min(household.childrenUnder19, if(answer.hasDisabledDependant, answer.disabledChildren, 0) + if(line.HH.partner == 1 and household.partnerInYear and spouse.answer.hasDisabledDependant, spouse.answer.disabledChildren, 0))",
+      "formula": "param.skActiveFamiliesPerChild * family.childrenUnder19 + (param.skActiveFamiliesPerDisabledChild - param.skActiveFamiliesPerChild) * min(family.childrenUnder19, if(answer.hasDisabledDependant, answer.disabledChildren, 0) + if(line.HH.partner == 1 and family.partnerInYear and spouse.answer.hasDisabledDependant, spouse.answer.disabledChildren, 0))",
       "source": "SK479 active families benefit worksheet, column 5: $300 a child born in 2007 or later, $400 for a child eligible for the disability tax credit"
     },
     "SK479.7": {
       "label": "Children's activity fees claimed",
-      "formula": "if(household.childrenUnder19 == 0, 0, if(line.HH.partner == 1 and household.partnerInYear and answer.childActivityFees + spouse.answer.childActivityFees > line.SK.activeFamiliesLimit, unsupported(\"Only one of you can claim the active families benefit for a child, up to $300 a child ($400 for a child with the disability tax credit). Together you claim more: enter each child's fees on one return\"), min(answer.childActivityFees, line.SK.activeFamiliesLimit)))",
+      "formula": "if(family.childrenUnder19 == 0, 0, if(line.HH.partner == 1 and family.partnerInYear and answer.childActivityFees + spouse.answer.childActivityFees > line.SK.activeFamiliesLimit, unsupported(\"Only one of you can claim the active families benefit for a child, up to $300 a child ($400 for a child with the disability tax credit). Together you claim more: enter each child's fees on one return\"), min(answer.childActivityFees, line.SK.activeFamiliesLimit)))",
       "source": "SK479 active families benefit worksheet: fees for children born in 2007 or later, less reimbursements"
     },
     "SK479.8": {
@@ -7818,7 +7818,7 @@
     },
     "SK479.9": {
       "label": "Fertility treatment tax credit",
-      "formula": "if(answer.fertilityExpenses == 0, 0, if(line.HH.partner == 1 and household.partnerInYear and spouse.answer.fertilityExpenses > 0, unsupported(\"You or your spouse or partner can claim the Saskatchewan fertility treatment tax credit, but not both: enter the expenses on one return\"), min(param.skFertilityMax, round(answer.fertilityExpenses * param.skFertilityRate, 2))))",
+      "formula": "if(answer.fertilityExpenses == 0, 0, if(line.HH.partner == 1 and family.partnerInYear and spouse.answer.fertilityExpenses > 0, unsupported(\"You or your spouse or partner can claim the Saskatchewan fertility treatment tax credit, but not both: enter the expenses on one return\"), min(param.skFertilityMax, round(answer.fertilityExpenses * param.skFertilityRate, 2))))",
       "source": "SK479 line 9 (61268): 50% of the expenses, up to $10,000"
     },
     "SK479.10": {
@@ -7860,7 +7860,7 @@
     },
     "YT428.22": {
       "label": "Children's arts amount",
-      "formula": "if(household.childrenUnder17 > 0, if(household.partnerInYear and line.HH.partner == 1 and answer.childArtsFees + spouse.answer.childArtsFees > param.ytArtsMaxPerChild * household.childrenUnder17, round(answer.childArtsFees * param.ytArtsMaxPerChild * household.childrenUnder17 / (answer.childArtsFees + spouse.answer.childArtsFees), 2), min(answer.childArtsFees, param.ytArtsMaxPerChild * household.childrenUnder17)), 0)",
+      "formula": "if(family.childrenUnder17 > 0, if(family.partnerInYear and line.HH.partner == 1 and answer.childArtsFees + spouse.answer.childArtsFees > param.ytArtsMaxPerChild * family.childrenUnder17, round(answer.childArtsFees * param.ytArtsMaxPerChild * family.childrenUnder17 / (answer.childArtsFees + spouse.answer.childArtsFees), 2), min(answer.childArtsFees, param.ytArtsMaxPerChild * family.childrenUnder17)), 0)",
       "source": "YT428 line 22 (58326): fees for an artistic, cultural, recreational or developmental program for a child under 16, up to $500 each"
     },
     "YT428.23": {
@@ -7906,7 +7906,7 @@
     },
     "YT428.33": {
       "label": "Amounts transferred from your spouse or common-law partner",
-      "formula": "if(line.HH.partner == 1 and household.partnerInYear, line.YTS2.13, 0)",
+      "formula": "if(line.HH.partner == 1 and family.partnerInYear, line.YTS2.13, 0)",
       "source": "YT428 line 33 (58640): Schedule YT(S2)"
     },
     "YT428.40": {
@@ -7975,7 +7975,7 @@
     },
     "YTS11.19": {
       "label": "Yukon tuition transferred to your spouse or common-law partner",
-      "formula": "if(line.HH.partner == 1 and household.partnerInYear and line.YTS11.4 > 0, min(answer.tuitionTransfer, line.YTS11.18), 0)",
+      "formula": "if(line.HH.partner == 1 and family.partnerInYear and line.YTS11.4 > 0, min(answer.tuitionTransfer, line.YTS11.18), 0)",
       "source": "YT(S11) line 19: the amount you designate on your T2202 (the app takes the federal one), up to line 18"
     },
     "YTS2.6": {
@@ -8000,7 +8000,7 @@
     },
     "YT479.63800": {
       "label": "Eligible children's fitness fees",
-      "formula": "if(household.childrenUnder17 > 0, if(household.partnerInYear and line.HH.partner == 1 and answer.childFitnessFees + spouse.answer.childFitnessFees > param.ytFitnessMaxPerChild * household.childrenUnder17, round(answer.childFitnessFees * param.ytFitnessMaxPerChild * household.childrenUnder17 / (answer.childFitnessFees + spouse.answer.childFitnessFees), 2), min(answer.childFitnessFees, param.ytFitnessMaxPerChild * household.childrenUnder17)), 0)",
+      "formula": "if(family.childrenUnder17 > 0, if(family.partnerInYear and line.HH.partner == 1 and answer.childFitnessFees + spouse.answer.childFitnessFees > param.ytFitnessMaxPerChild * family.childrenUnder17, round(answer.childFitnessFees * param.ytFitnessMaxPerChild * family.childrenUnder17 / (answer.childFitnessFees + spouse.answer.childFitnessFees), 2), min(answer.childFitnessFees, param.ytFitnessMaxPerChild * family.childrenUnder17)), 0)",
       "source": "YT479 line 63800: fees for children under 16 at the start of the year, up to $1,000 each. When both spouses claim more than that together, each claims a share of it"
     },
     "YT479.1": {"label":"Children's fitness tax credit","formula":"round(line.YT479.63800 * param.ytFitnessRate, 2)"},
@@ -9554,7 +9554,7 @@
     "pensionSplit": {
       "kind": "saving",
       "title": "Split your pension income with your spouse or partner",
-      "text": "You can move up to half of your eligible pension income to your spouse's or partner's return (Form T1032). With the lower income taxed there, the household usually pays less, and a spouse with no pension of their own can claim the pension income amount. The split brings your two net incomes as close as the limit allows. Both of you sign Form T1032 and attach it to both returns if you file on paper.",
+      "text": "You can move up to half of your eligible pension income to your spouse's or partner's return (Form T1032). With the lower income taxed there, the couple usually pays less, and a spouse with no pension of their own can claim the pension income amount. The split brings your two net incomes as close as the limit allows. Both of you sign Form T1032 and attach it to both returns if you file on paper.",
       "when": "line.SPOUSES.together == 1 and line.PEN.splitMax > 0 and answer.pensionSplit == 0 and spouse.answer.pensionSplit == 0 and line.T1.23600 > spouse.line.T1.23600",
       "change": {"answer.pensionSplit":"min(line.PEN.splitMax, round((line.T1.23600 - spouse.line.T1.23600) / 2, 2))"},
       "amount": "min(line.PEN.splitMax, round((line.T1.23600 - spouse.line.T1.23600) / 2, 2))",
@@ -9782,12 +9782,12 @@
         {"key":"firstName","kind":"text","page":1,"x":32,"y":591.2,"value":"firstName","width":128},
         {"key":"lastName","kind":"text","page":1,"x":170,"y":591.2,"value":"lastName","width":134},
         {"key":"birthDate","kind":"text","page":1,"x":333,"y":531.7,"value":"birthDate","cell":12},
-        {"key":"married","kind":"tick","page":1,"x":479,"y":600.9,"value":"household.maritalStatus == \"married\""},
-        {"key":"commonLaw","kind":"tick","page":1,"x":479,"y":585.7,"value":"household.maritalStatus == \"common_law\""},
-        {"key":"widowed","kind":"tick","page":1,"x":479,"y":570.6,"value":"household.maritalStatus == \"widowed\""},
-        {"key":"divorced","kind":"tick","page":1,"x":479,"y":555.4,"value":"household.maritalStatus == \"divorced\""},
-        {"key":"separated","kind":"tick","page":1,"x":479,"y":540.2,"value":"household.maritalStatus == \"separated\""},
-        {"key":"single","kind":"tick","page":1,"x":479,"y":525.1,"value":"household.maritalStatus == \"single\""},
+        {"key":"married","kind":"tick","page":1,"x":479,"y":600.9,"value":"family.maritalStatus == \"married\""},
+        {"key":"commonLaw","kind":"tick","page":1,"x":479,"y":585.7,"value":"family.maritalStatus == \"common_law\""},
+        {"key":"widowed","kind":"tick","page":1,"x":479,"y":570.6,"value":"family.maritalStatus == \"widowed\""},
+        {"key":"divorced","kind":"tick","page":1,"x":479,"y":555.4,"value":"family.maritalStatus == \"divorced\""},
+        {"key":"separated","kind":"tick","page":1,"x":479,"y":540.2,"value":"family.maritalStatus == \"separated\""},
+        {"key":"single","kind":"tick","page":1,"x":479,"y":525.1,"value":"family.maritalStatus == \"single\""},
         {"key":"province","kind":"text","page":1,"x":31.9,"y":344.6,"value":"province","width":272},
         {
           "key": "spouseFirstName",
@@ -10020,12 +10020,12 @@
         {"key":"firstName","kind":"text","page":1,"x":32,"y":591.2,"value":"firstName","width":128},
         {"key":"lastName","kind":"text","page":1,"x":170,"y":591.2,"value":"lastName","width":134},
         {"key":"birthDate","kind":"text","page":1,"x":333,"y":531.7,"value":"birthDate","cell":12},
-        {"key":"married","kind":"tick","page":1,"x":479,"y":600.9,"value":"household.maritalStatus == \"married\""},
-        {"key":"commonLaw","kind":"tick","page":1,"x":479,"y":585.7,"value":"household.maritalStatus == \"common_law\""},
-        {"key":"widowed","kind":"tick","page":1,"x":479,"y":570.6,"value":"household.maritalStatus == \"widowed\""},
-        {"key":"divorced","kind":"tick","page":1,"x":479,"y":555.4,"value":"household.maritalStatus == \"divorced\""},
-        {"key":"separated","kind":"tick","page":1,"x":479,"y":540.2,"value":"household.maritalStatus == \"separated\""},
-        {"key":"single","kind":"tick","page":1,"x":479,"y":525.1,"value":"household.maritalStatus == \"single\""},
+        {"key":"married","kind":"tick","page":1,"x":479,"y":600.9,"value":"family.maritalStatus == \"married\""},
+        {"key":"commonLaw","kind":"tick","page":1,"x":479,"y":585.7,"value":"family.maritalStatus == \"common_law\""},
+        {"key":"widowed","kind":"tick","page":1,"x":479,"y":570.6,"value":"family.maritalStatus == \"widowed\""},
+        {"key":"divorced","kind":"tick","page":1,"x":479,"y":555.4,"value":"family.maritalStatus == \"divorced\""},
+        {"key":"separated","kind":"tick","page":1,"x":479,"y":540.2,"value":"family.maritalStatus == \"separated\""},
+        {"key":"single","kind":"tick","page":1,"x":479,"y":525.1,"value":"family.maritalStatus == \"single\""},
         {"key":"province","kind":"text","page":1,"x":31.9,"y":344.6,"value":"province","width":272},
         {
           "key": "spouseFirstName",
@@ -10255,7 +10255,7 @@
           "page": 3,
           "x": 552,
           "y": 494.3,
-          "value": "line.CWB.netIncome + if(line.CWB.spouse == 1 and household.partnerInYear, spouse.line.CWB.netIncome, 0)"
+          "value": "line.CWB.netIncome + if(line.CWB.spouse == 1 and family.partnerInYear, spouse.line.CWB.netIncome, 0)"
         },
         {
           "key": "14",
@@ -10264,7 +10264,7 @@
           "x": 552,
           "y": 425.3,
           "value": "min(param.cwbSecondaryEarnerMax, if(line.CWB.working < spouse.line.CWB.working, min(line.CWB.working, line.CWB.netIncome), min(spouse.line.CWB.working, spouse.line.CWB.netIncome)))",
-          "when": "line.CWB.spouse == 1 and household.partnerInYear"
+          "when": "line.CWB.spouse == 1 and family.partnerInYear"
         },
         {"key":"15","kind":"amount","page":3,"x":552,"y":398.3,"value":"line.CWB.familyIncome"},
         {
@@ -10418,7 +10418,7 @@
           "page": 4,
           "x": 462.3,
           "y": 140.3,
-          "value": "100 * if(line.CWB.spouse == 1 and household.partnerInYear and spouse.answer.hasDisability, param.cwbReductionRateBothDisabled, param.cwbReductionRate)",
+          "value": "100 * if(line.CWB.spouse == 1 and family.partnerInYear and spouse.answer.hasDisability, param.cwbReductionRateBothDisabled, param.cwbReductionRate)",
           "when": "line.CWB.eligible == 1 and answer.hasDisability",
           "plain": true
         },
@@ -10428,7 +10428,7 @@
           "page": 4,
           "x": 552,
           "y": 125.3,
-          "value": "round(max(0, line.CWB.familyIncome - if(line.CWB.spouse == 1 or line.CWB.dependant == 1, param.cwbDisabilityIncomeBaseFamily, param.cwbDisabilityIncomeBaseSingle)) * if(line.CWB.spouse == 1 and household.partnerInYear and spouse.answer.hasDisability, param.cwbReductionRateBothDisabled, param.cwbReductionRate), 2)",
+          "value": "round(max(0, line.CWB.familyIncome - if(line.CWB.spouse == 1 or line.CWB.dependant == 1, param.cwbDisabilityIncomeBaseFamily, param.cwbDisabilityIncomeBaseSingle)) * if(line.CWB.spouse == 1 and family.partnerInYear and spouse.answer.hasDisability, param.cwbReductionRateBothDisabled, param.cwbReductionRate), 2)",
           "when": "line.CWB.eligible == 1 and answer.hasDisability"
         },
         {
@@ -10475,7 +10475,7 @@
           "x": 444,
           "y": 554.3,
           "value": "sum(spouse.RC210.box10)",
-          "when": "line.CWB.claimsBasic == 1 and household.partnerInYear and line.HH.partner == 1"
+          "when": "line.CWB.claimsBasic == 1 and family.partnerInYear and line.HH.partner == 1"
         },
         {
           "key": "46",
@@ -10483,7 +10483,7 @@
           "page": 5,
           "x": 444,
           "y": 539.3,
-          "value": "if(line.CWB.claimsBasic == 1, sum(RC210.box10) + if(household.partnerInYear and line.HH.partner == 1, sum(spouse.RC210.box10), 0), 0)"
+          "value": "if(line.CWB.claimsBasic == 1, sum(RC210.box10) + if(family.partnerInYear and line.HH.partner == 1, sum(spouse.RC210.box10), 0), 0)"
         },
         {"key":"47","kind":"amount","page":5,"x":444,"y":512.3,"value":"sum(RC210.box11)"},
         {
@@ -10492,7 +10492,7 @@
           "page": 5,
           "x": 444,
           "y": 497.3,
-          "value": "if(line.CWB.claimsBasic == 1, sum(RC210.box10) + if(household.partnerInYear and line.HH.partner == 1, sum(spouse.RC210.box10), 0), 0) + sum(RC210.box11)"
+          "value": "if(line.CWB.claimsBasic == 1, sum(RC210.box10) + if(family.partnerInYear and line.HH.partner == 1, sum(spouse.RC210.box10), 0), 0) + sum(RC210.box11)"
         },
         {"key":"49","kind":"amount","page":5,"x":552,"y":464.3,"value":"line.T1.41500"},
         {"key":"1@1","kind":"amount","page":2,"x":443.8,"y":509.3,"value":"line.T1.10100 + line.T1.10400"},
@@ -10503,7 +10503,7 @@
           "x": 551.8,
           "y": 509.3,
           "value": "spouse.line.T1.10100 + spouse.line.T1.10400",
-          "when": "line.CWB.spouse == 1 and household.partnerInYear"
+          "when": "line.CWB.spouse == 1 and family.partnerInYear"
         },
         {"key":"2@1","kind":"amount","page":2,"x":443.8,"y":482.3,"value":"line.T1.13010"},
         {
@@ -10513,7 +10513,7 @@
           "x": 551.8,
           "y": 482.3,
           "value": "spouse.line.T1.13010",
-          "when": "line.CWB.spouse == 1 and household.partnerInYear"
+          "when": "line.CWB.spouse == 1 and family.partnerInYear"
         },
         {"key":"3@1","kind":"amount","page":2,"x":443.8,"y":455.3,"value":"max(0, line.SE.net)"},
         {
@@ -10523,7 +10523,7 @@
           "x": 551.8,
           "y": 455.3,
           "value": "max(0, spouse.line.SE.net)",
-          "when": "line.CWB.spouse == 1 and household.partnerInYear"
+          "when": "line.CWB.spouse == 1 and family.partnerInYear"
         },
         {"key":"5@1","kind":"amount","page":2,"x":443.8,"y":389.3,"value":"line.CWB.working","zero":true},
         {
@@ -10533,7 +10533,7 @@
           "x": 551.8,
           "y": 389.3,
           "value": "spouse.line.CWB.working",
-          "when": "line.CWB.spouse == 1 and household.partnerInYear",
+          "when": "line.CWB.spouse == 1 and family.partnerInYear",
           "zero": true
         },
         {"key":"7@1","kind":"amount","page":3,"x":444,"y":662.3,"value":"line.T1.23600"},
@@ -10544,7 +10544,7 @@
           "x": 552,
           "y": 662.3,
           "value": "spouse.line.T1.23600",
-          "when": "line.CWB.spouse == 1 and household.partnerInYear"
+          "when": "line.CWB.spouse == 1 and family.partnerInYear"
         },
         {"key":"10@1","kind":"amount","page":3,"x":444,"y":569.3,"value":"line.T1.23600"},
         {
@@ -10554,7 +10554,7 @@
           "x": 552,
           "y": 569.3,
           "value": "spouse.line.T1.23600",
-          "when": "line.CWB.spouse == 1 and household.partnerInYear"
+          "when": "line.CWB.spouse == 1 and family.partnerInYear"
         },
         {"key":"11@1","kind":"amount","page":3,"x":444,"y":542.3,"value":"line.T1.12500"},
         {
@@ -10564,7 +10564,7 @@
           "x": 552,
           "y": 542.3,
           "value": "spouse.line.T1.12500",
-          "when": "line.CWB.spouse == 1 and household.partnerInYear"
+          "when": "line.CWB.spouse == 1 and family.partnerInYear"
         },
         {"key":"12@1","kind":"amount","page":3,"x":444,"y":527.3,"value":"line.CWB.netIncome"},
         {
@@ -10574,7 +10574,7 @@
           "x": 552,
           "y": 527.3,
           "value": "spouse.line.CWB.netIncome",
-          "when": "line.CWB.spouse == 1 and household.partnerInYear"
+          "when": "line.CWB.spouse == 1 and family.partnerInYear"
         },
         {
           "key": "27@1",
@@ -10591,7 +10591,7 @@
           "page": 4,
           "x": 444,
           "y": 125.3,
-          "value": "round(max(0, line.CWB.familyIncome - if(line.CWB.spouse == 1 or line.CWB.dependant == 1, param.cwbDisabilityIncomeBaseFamily, param.cwbDisabilityIncomeBaseSingle)) * if(line.CWB.spouse == 1 and household.partnerInYear and spouse.answer.hasDisability, param.cwbReductionRateBothDisabled, param.cwbReductionRate), 2)",
+          "value": "round(max(0, line.CWB.familyIncome - if(line.CWB.spouse == 1 or line.CWB.dependant == 1, param.cwbDisabilityIncomeBaseFamily, param.cwbDisabilityIncomeBaseSingle)) * if(line.CWB.spouse == 1 and family.partnerInYear and spouse.answer.hasDisability, param.cwbReductionRateBothDisabled, param.cwbReductionRate), 2)",
           "when": "line.CWB.eligible == 1 and answer.hasDisability"
         }
       ],
@@ -11790,21 +11790,14 @@
       "pages": 4,
       "applies": "line.T1.21400 > 0",
       "fields": [
-        {
-          "key": "1",
-          "kind": "amount",
-          "page": 3,
-          "x": 552,
-          "y": 320.3,
-          "value": "param.childCareUnder7 * household.childrenUnder7"
-        },
+        {"key":"1","kind":"amount","page":3,"x":552,"y":320.3,"value":"param.childCareUnder7 * family.childrenUnder7"},
         {
           "key": "3",
           "kind": "amount",
           "page": 3,
           "x": 552,
           "y": 257.3,
-          "value": "param.childCare7to16 * (household.childrenUnder17 - household.childrenUnder7)"
+          "value": "param.childCare7to16 * (family.childrenUnder17 - family.childrenUnder7)"
         },
         {"key":"4","kind":"amount","page":3,"x":552,"y":242.3,"value":"line.CC.limit"},
         {"key":"5","kind":"amount","page":3,"x":552,"y":227.3,"value":"line.CC.expenses"},
@@ -11818,14 +11811,14 @@
         },
         {"key":"9","kind":"amount","page":3,"x":552,"y":119.3,"value":"line.T1.21400"},
         {"key":"67950","kind":"amount","page":3,"x":186,"y":479.3,"value":"line.CC.expenses"},
-        {"key":"1@1","kind":"count","page":3,"x":393.3,"y":320.3,"value":"household.childrenUnder7"},
+        {"key":"1@1","kind":"count","page":3,"x":393.3,"y":320.3,"value":"family.childrenUnder7"},
         {
           "key": "3@1",
           "kind": "count",
           "page": 3,
           "x": 393.3,
           "y": 257.3,
-          "value": "household.childrenUnder17 - household.childrenUnder7"
+          "value": "family.childrenUnder17 - family.childrenUnder7"
         },
         {"key":"6@1","kind":"amount","page":3,"x":375,"y":212.3,"value":"line.CC.earned"},
         {"key":"6@2","kind":"amount","page":3,"x":552,"y":212.3,"value":"round(line.CC.earned * 2 / 3, 2)"}
@@ -12731,7 +12724,7 @@
           "page": 1,
           "x": 444,
           "y": 299.3,
-          "value": "if(line.HH.partner == 1 and household.partnerInYear, if(spouse.person.age >= 65, param.mbPersonalCreditAge, 0), 0)",
+          "value": "if(line.HH.partner == 1 and family.partnerInYear, if(spouse.person.age >= 65, param.mbPersonalCreditAge, 0), 0)",
           "when": "line.MB.claimsPersonalCredit == 1"
         },
         {
@@ -12740,7 +12733,7 @@
           "page": 1,
           "x": 444,
           "y": 284.3,
-          "value": "if(line.HH.partner == 1 and household.partnerInYear, if(spouse.answer.hasDisability, param.mbPersonalCreditDisability, 0), 0)",
+          "value": "if(line.HH.partner == 1 and family.partnerInYear, if(spouse.answer.hasDisability, param.mbPersonalCreditDisability, 0), 0)",
           "when": "line.MB.claimsPersonalCredit == 1"
         },
         {
@@ -14218,7 +14211,7 @@
           "page": 4,
           "x": 444,
           "y": 593.3,
-          "value": "param.peTaxReductionChild * max(0, household.childrenUnder19 - if(line.PE428.16 > 0, 1, 0))",
+          "value": "param.peTaxReductionChild * max(0, family.childrenUnder19 - if(line.PE428.16 > 0, 1, 0))",
           "when": "line.PE428.87 > 0"
         },
         {"key":"81","kind":"amount","page":4,"x":444,"y":578.3,"value":"line.PE428.81","when":"line.PE428.87 > 0"},
@@ -15296,7 +15289,7 @@
           "x": 444,
           "y": 374.3,
           "value": "line.NU479.5",
-          "when": "line.HH.partner == 0 and household.childrenUnder18 > 0"
+          "when": "line.HH.partner == 0 and family.childrenUnder18 > 0"
         },
         {
           "key": "11",
@@ -15305,7 +15298,7 @@
           "x": 444,
           "y": 344.3,
           "value": "max(0, line.NU479.5 - param.nuSingleParentThreshold)",
-          "when": "line.HH.partner == 0 and household.childrenUnder18 > 0"
+          "when": "line.HH.partner == 0 and family.childrenUnder18 > 0"
         },
         {"key":"13","kind":"amount","page":1,"x":552,"y":302.3,"value":"line.NU479.13"},
         {"key":"14","kind":"amount","page":1,"x":552,"y":287.3,"value":"line.NU479.14"},
@@ -15629,7 +15622,7 @@
           "page": 1,
           "x": 501.2,
           "y": 403.4,
-          "value": "household.maritalStatus == \"married\" or household.maritalStatus == \"common_law\""
+          "value": "family.maritalStatus == \"married\" or family.maritalStatus == \"common_law\""
         },
         {
           "key": "spouseNo",
@@ -15637,7 +15630,7 @@
           "page": 1,
           "x": 412.5,
           "y": 403.9,
-          "value": "household.maritalStatus != \"married\" and household.maritalStatus != \"common_law\""
+          "value": "family.maritalStatus != \"married\" and family.maritalStatus != \"common_law\""
         },
         {"key":"foreignPropertyYes","kind":"tick","page":1,"x":501,"y":80.9,"value":"answer.hasForeignProperty"},
         {"key":"foreignPropertyNo","kind":"tick","page":1,"x":549.2,"y":80.9,"value":"not answer.hasForeignProperty"},
@@ -15961,14 +15954,14 @@
       "applies": "person.province == \"QC\" and line.TP1.455 > 0",
       "fields": [
         {"key":"41","kind":"amount","page":1,"x":408.5,"y":75.2,"value":"line.QCC.41"},
-        {"key":"44","kind":"count","page":2,"x":407.3,"y":663.5,"value":"household.childrenUnder7"},
+        {"key":"44","kind":"count","page":2,"x":407.3,"y":663.5,"value":"family.childrenUnder7"},
         {
           "key": "45",
           "kind": "amount",
           "page": 2,
           "x": 555,
           "y": 663.5,
-          "value": "param.qcChildCareUnder7 * household.childrenUnder7"
+          "value": "param.qcChildCareUnder7 * family.childrenUnder7"
         },
         {
           "key": "46",
@@ -15976,7 +15969,7 @@
           "page": 2,
           "x": 407.3,
           "y": 641.1,
-          "value": "household.childrenUnder17 - household.childrenUnder7"
+          "value": "family.childrenUnder17 - family.childrenUnder7"
         },
         {
           "key": "47",
@@ -15984,7 +15977,7 @@
           "page": 2,
           "x": 555,
           "y": 641.1,
-          "value": "param.qcChildCare7to16 * (household.childrenUnder17 - household.childrenUnder7)"
+          "value": "param.qcChildCare7to16 * (family.childrenUnder17 - family.childrenUnder7)"
         },
         {"key":"50","kind":"amount","page":2,"x":555,"y":618.7,"value":"line.QCC.50"},
         {"key":"76","kind":"amount","page":2,"x":555,"y":570,"value":"line.TP1.275"},
@@ -16333,7 +16326,7 @@
           "page": 1,
           "x": 440.7,
           "y": 361.2,
-          "value": "if(line.HH.partner == 1, if(household.childrenUnder18 >= 2, param.drugChildrenCouple, if(household.childrenUnder18 == 1, param.drugChildCouple, 0)), 0)"
+          "value": "if(line.HH.partner == 1, if(family.childrenUnder18 >= 2, param.drugChildrenCouple, if(family.childrenUnder18 == 1, param.drugChildCouple, 0)), 0)"
         },
         {
           "key": "44",
@@ -16341,7 +16334,7 @@
           "page": 1,
           "x": 440.7,
           "y": 328.8,
-          "value": "if(line.HH.partner == 0, if(household.childrenUnder18 >= 2, param.drugChildrenSingle, if(household.childrenUnder18 == 1, param.drugChildSingle, 0)), 0)"
+          "value": "if(line.HH.partner == 0, if(family.childrenUnder18 >= 2, param.drugChildrenSingle, if(family.childrenUnder18 == 1, param.drugChildSingle, 0)), 0)"
         },
         {"key":"46","kind":"amount","page":1,"x":554.7,"y":316.7,"value":"line.QCK.46"},
         {"key":"48","kind":"amount","page":1,"x":554.7,"y":294.3,"value":"line.QCK.48"},
@@ -16617,7 +16610,7 @@
           "page": 2,
           "x": 431.4,
           "y": 544.1,
-          "value": "if(household.childrenUnder18 > 0, param.workPremiumRateChildCouple, param.workPremiumRate) * 100",
+          "value": "if(family.childrenUnder18 > 0, param.workPremiumRateChildCouple, param.workPremiumRate) * 100",
           "when": "line.HH.partner == 1",
           "plain": true
         },
@@ -16774,7 +16767,7 @@
           "page": 2,
           "x": 431.4,
           "y": 267,
-          "value": "if(household.childrenUnder18 > 0, param.workPremiumRateChildSingle, param.workPremiumRate) * 100",
+          "value": "if(family.childrenUnder18 > 0, param.workPremiumRateChildSingle, param.workPremiumRate) * 100",
           "when": "line.HH.partner == 0",
           "plain": true
         },
@@ -17768,5 +17761,5 @@
     }
   },
   "outcome": "RESULT.net",
-  "version": "e8636c6151563d8e"
+  "version": "dfd9df3fd94826c5"
 }

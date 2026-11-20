@@ -18,7 +18,7 @@ import { ResourceView } from "./Feedback.tsx";
 // server answered.
 
 export const STEP_LABELS: Record<Step, string> = {
-  household: "Personal info",
+  personal: "Personal info",
   upload: "Upload documents",
   income: "Income",
   deductions: "Deductions",
@@ -162,7 +162,7 @@ export function resultOf(estimate: Resource<Estimate>, personId: string): string
 export function ReturnSwitcher() {
   const { year, estimate } = useYear();
   const { person } = useReturn();
-  const step = useCurrentStep() ?? "household";
+  const step = useCurrentStep() ?? "personal";
   const returns = year.returns.map((progress) => year.people.find((each) => each.id === progress.personId)!).filter(Boolean);
   const trigger = (
     <span className="flex min-w-0 flex-col items-start text-left">

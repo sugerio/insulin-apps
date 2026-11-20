@@ -9,7 +9,7 @@ import {
   type Person,
   type Province,
   type Relationship,
-  type SaveHousehold,
+  type SavePersonalInfo,
   type SetYearPeople,
   type TaxYear,
   type UpdatePerson,
@@ -19,7 +19,7 @@ import { ApiError, conflict, isConstraintError, notFound } from "./http.ts";
 import { loadWorkspace, stepStatuses } from "./workspace.ts";
 import type { Caller } from "./identity.ts";
 
-// The household and its tax years in D1. People are the household's, the same every year; a year names who is in it
+// The people (the profile) and their tax years in D1. People are the profile's, the same every year; a year names who is in it
 // (`tax_year_people`). Every statement names the caller's organization (`org_id`), so another
 // organization's ids are simply not found. Each change is one batch, which D1 runs as one transaction, with its audit
 // event in the same batch.
@@ -58,14 +58,14 @@ export function audit(db: Db, caller: Caller, action: string, subjectId: string 
     .bind(crypto.randomUUID(), caller.orgId, now, caller.userId, caller.name, caller.accessVia, action, subjectId);
 }
 
-/** The organization's household id, made on first use (one per organization: a unique index decides a race). */
-async function ensureHousehold(db: Db, orgId: string, now: number): Promise<string> {
+/** The organization's profile id, made on first use (one per organization: a unique index decides a race). */
+async function ensureProfile(db: Db, orgId: string, now: number): Promise<string> {
   await db
     .prepare("INSERT INTO households (id, org_id, created_at) VALUES (?, ?, ?) ON CONFLICT(org_id) DO NOTHING")
     .bind(crypto.randomUUID(), orgId, now)
     .run();
   const row = await db.prepare("SELECT id FROM households WHERE org_id = ?").bind(orgId).first<{ id: string }>();
-  if (!row) throw new Error("The household was not created");
+  if (!row) throw new Error("The profile was not created");
   return row.id;
 }
 
@@ -99,7 +99,7 @@ const PROVINCE_NAMES: Record<Province, string> = {
 };
 
 /**
- * The issues of a year: `blocking` ones stop the household step, `unsupported` ones say a return can't be prepared
+ * The issues of a year: `blocking` ones stop the Personal info step, `unsupported` ones say a return can't be prepared
  * here. `adults` are the year's adults, each prepared.
  */
 export function assess(people: Person[], members: ReadonlySet<string>, maritalStatus: MaritalStatus | null, adults: AdultYear[]): Issue[] {
@@ -107,19 +107,19 @@ export function assess(people: Person[], members: ReadonlySet<string>, maritalSt
   const add = (code: Issue["code"], kind: Issue["kind"], personId: string | null, message: string) =>
     issues.push({ code, kind, personId, message });
   const self = people.find((person) => person.relationship === "self");
-  // Who the household says your partner is, in this year or not: the status follows it.
+  // Who the profile says your partner is, in this year or not: the status follows it.
   const partner = people.find((person) => person.relationship === "spouse");
-  if (!self || !members.has(self.id)) add("no_self", "blocking", null, "Add yourself to the household and to this year.");
+  if (!self || !members.has(self.id)) add("no_self", "blocking", null, "Add yourself to the profile and to this year.");
   if (maritalStatus === null) add("no_marital_status", "blocking", null, "Choose your marital status on December 31.");
   else if (!maritalStatusesFor(partner !== undefined).includes(maritalStatus)) {
-    // Saved before the Household changed (a spouse added or removed): ask again.
+    // Saved before the people in the Profile changed (a spouse added or removed): ask again.
     add(
       "marital_status_mismatch",
       "blocking",
       partner?.id ?? null,
       partner
-        ? `${partner.name} is your spouse or partner in the Household: choose married or living common-law.`
-        : "The Household has no spouse or partner: choose single, widowed, divorced or separated.",
+        ? `${partner.name} is your spouse or partner in the Profile: choose married or living common-law.`
+        : "The Profile has no spouse or partner: choose single, widowed, divorced or separated.",
     );
   }
   for (const adult of adults) {
@@ -221,17 +221,17 @@ export async function listYears(db: Db, orgId: string, supportedYears: readonly 
 // ---------------------------------------------------------------------------
 // Writes
 
-/** The year's people, checked: everyone is in the household, and the person preparing is one of them. */
+/** The year's people, checked: everyone is in the profile, and the person preparing is one of them. */
 function checkMembers(people: Person[], ids: string[]): void {
   const known = new Set(people.map((person) => person.id));
   const unknown = ids.findIndex((id) => !known.has(id));
   if (unknown >= 0) {
-    throw new ApiError("validation_failed", "Everyone in the year must be in the household", [
-      { path: `people.${unknown}`, message: "Not in this household" },
+    throw new ApiError("validation_failed", "Everyone in the year must be in the profile", [
+      { path: `people.${unknown}`, message: "Not in this profile" },
     ]);
   }
   const self = people.find((person) => person.relationship === "self");
-  if (!self) throw conflict("Add yourself to the household first.");
+  if (!self) throw conflict("Add yourself to the profile first.");
   if (!ids.includes(self.id)) {
     throw new ApiError("validation_failed", "You are always in your own tax year", [{ path: "people", message: "Include yourself" }]);
   }
@@ -259,7 +259,7 @@ export async function startYear(
   const existing = await yearRow(db, caller.orgId, year);
   if (existing) return { view: await viewOf(db, caller.orgId, existing), created: false };
   checkMembers(await listPeople(db, caller.orgId), memberIds);
-  const householdId = await ensureHousehold(db, caller.orgId, now);
+  const profileId = await ensureProfile(db, caller.orgId, now);
   const id = crypto.randomUUID();
   const [inserted] = await db.batch([
     db
@@ -267,7 +267,7 @@ export async function startYear(
         `INSERT INTO tax_years (id, org_id, household_id, year, revision, created_at, updated_at)
          VALUES (?, ?, ?, ?, 1, ?, ?) ON CONFLICT(household_id, year) DO NOTHING`,
       )
-      .bind(id, caller.orgId, householdId, year, now, now),
+      .bind(id, caller.orgId, profileId, year, now, now),
     // Only into the year this batch made: when another start won the race, `id` names no row and nothing is added.
     ...memberIds.map((personId) =>
       db
@@ -333,7 +333,7 @@ export async function setYearPeople(db: Db, caller: Caller, year: number, input:
 }
 
 /** Saves a year's facts (marital status, each adult's province and residency) under the year's revision. */
-export async function saveHousehold(db: Db, caller: Caller, year: number, input: SaveHousehold, now: number): Promise<TaxYear> {
+export async function savePersonalInfo(db: Db, caller: Caller, year: number, input: SavePersonalInfo, now: number): Promise<TaxYear> {
   const row = await yearRow(db, caller.orgId, year);
   if (!row) throw notFound(`The ${year} tax year hasn't been started`);
   const view = await viewOf(db, caller.orgId, row);
@@ -349,10 +349,10 @@ export async function saveHousehold(db: Db, caller: Caller, year: number, input:
   }
   const hasSpouse = view.people.some((person) => person.relationship === "spouse");
   if (input.maritalStatus !== null && !maritalStatusesFor(hasSpouse).includes(input.maritalStatus)) {
-    throw new ApiError("validation_failed", "The marital status doesn't match the Household", [
+    throw new ApiError("validation_failed", "The marital status doesn't match the Profile", [
       {
         path: "maritalStatus",
-        message: hasSpouse ? "With a spouse or partner in the Household, choose married or living common-law" : "Without a spouse or partner in the Household, choose single, widowed, divorced or separated",
+        message: hasSpouse ? "With a spouse or partner in the Profile, choose married or living common-law" : "Without a spouse or partner in the Profile, choose single, widowed, divorced or separated",
       },
     ]);
   }
@@ -377,20 +377,20 @@ export async function saveHousehold(db: Db, caller: Caller, year: number, input:
           now,
         ),
     ),
-    audit(db, caller, "household.saved", row.id, now),
+    audit(db, caller, "personal_info.saved", row.id, now),
   ]);
   return getYear(db, caller.orgId, year);
 }
 
 function personConflict(error: unknown): never {
   if (isConstraintError(error, "people.household_id")) {
-    throw conflict("The household already has that person: there can be one of you and one spouse or partner.");
+    throw conflict("The profile already has that person: there can be one of you and one spouse or partner.");
   }
   throw error;
 }
 
 export async function addPerson(db: Db, caller: Caller, input: CreatePerson, now: number): Promise<Person> {
-  const householdId = await ensureHousehold(db, caller.orgId, now);
+  const profileId = await ensureProfile(db, caller.orgId, now);
   const id = crypto.randomUUID();
   try {
     await db.batch([
@@ -399,7 +399,7 @@ export async function addPerson(db: Db, caller: Caller, input: CreatePerson, now
           `INSERT INTO people (id, org_id, household_id, name, relationship, birth_date, created_at, updated_at)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
         )
-        .bind(id, caller.orgId, householdId, input.name, input.relationship, input.birthDate, now, now),
+        .bind(id, caller.orgId, profileId, input.name, input.relationship, input.birthDate, now, now),
       audit(db, caller, "person.added", id, now),
     ]);
   } catch (error) {
@@ -419,7 +419,7 @@ async function personRow(db: Db, orgId: string, id: string): Promise<PersonRow> 
 
 export async function updatePerson(db: Db, caller: Caller, id: string, input: UpdatePerson, now: number): Promise<Person> {
   const current = await personRow(db, caller.orgId, id);
-  // The person preparing stays themselves: who "you" are is the one fact the household is built around.
+  // The person preparing stays themselves: who "you" are is the one fact the profile is built around.
   if (input.relationship !== undefined && (current.relationship === "self") !== (input.relationship === "self")) {
     throw conflict("You can't change who \"you\" are. Add or remove people instead.");
   }
@@ -443,7 +443,7 @@ export async function updatePerson(db: Db, caller: Caller, id: string, input: Up
 
 export async function removePerson(db: Db, caller: Caller, id: string, now: number): Promise<void> {
   const current = await personRow(db, caller.orgId, id);
-  if (current.relationship === "self") throw conflict("You can't remove yourself from the household.");
+  if (current.relationship === "self") throw conflict("You can't remove yourself from the profile.");
   await db.batch([
     db.prepare("DELETE FROM returns WHERE person_id = ? AND org_id = ?").bind(id, caller.orgId),
     db.prepare("DELETE FROM answers WHERE person_id = ? AND org_id = ?").bind(id, caller.orgId),

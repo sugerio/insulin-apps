@@ -9,14 +9,14 @@ import {
   idSchema,
   peopleListSchema,
   personSchema,
-  saveHouseholdSchema,
+  savePersonalInfoSchema,
   setYearPeopleSchema,
   startYearSchema,
   taxYearSchema,
   updatePersonSchema,
   yearListSchema,
   yearSchema,
-} from "./household.ts";
+} from "./people.ts";
 
 // The API's route table: the server mounts these paths, the browser calls them through `apiRequest`, and
 // `GET /api/catalog` publishes them for AI agents and API clients (AGENTS.md, "Publish your API"). The platform's tick
@@ -81,7 +81,7 @@ export const routes = {
   listYears: route({
     method: "GET",
     path: "/api/years",
-    summary: "The household's people and tax years, with each year's progress.",
+    summary: "The people in the profile and tax years, with each year's progress.",
     permission: "taxi.view",
     params: null,
     body: null,
@@ -120,7 +120,7 @@ export const routes = {
     method: "GET",
     path: "/api/years/:year/hints",
     summary:
-      "Checks on each return of the year, like a tax program's check and optimize: savings worked out with and without a change of answers (effect is what the household's refund less balance owing goes up by), and things to know. Each has a state: open, applied (an accepted saving) or dismissed.",
+      "Checks on each return of the year, like a tax program's check and optimize: savings worked out with and without a change of answers (effect is what the combined refund less balance owing of the year's returns goes up by), and things to know. Each has a state: open, applied (an accepted saving) or dismissed.",
     permission: "taxi.view",
     params: yearParams,
     body: null,
@@ -146,14 +146,14 @@ export const routes = {
     body: setYearPeopleSchema,
     response: taxYearSchema,
   }),
-  saveHousehold: route({
+  savePersonalInfo: route({
     method: "PUT",
-    path: "/api/years/:year/household",
+    path: "/api/years/:year/personal-info",
     summary:
       "Save the year's facts: marital status on December 31, and each adult's province and residency. Send the revision you read; a stale one is refused with 409.",
     permission: "taxi.prepare",
     params: yearParams,
-    body: saveHouseholdSchema,
+    body: savePersonalInfoSchema,
     response: taxYearSchema,
   }),
   listDocuments: route({
@@ -254,7 +254,7 @@ export const routes = {
   listPeople: route({
     method: "GET",
     path: "/api/people",
-    summary: "Everyone in the household, the same every year.",
+    summary: "Everyone in the profile, the same every year.",
     permission: "taxi.view",
     params: null,
     body: null,
@@ -263,7 +263,7 @@ export const routes = {
   addPerson: route({
     method: "POST",
     path: "/api/people",
-    summary: "Add a person to the household: you (once), a spouse or common-law partner (once), a child or another dependant.",
+    summary: "Add a person to the profile: you (once), a spouse or common-law partner (once), a child or another dependant.",
     permission: "taxi.prepare",
     params: null,
     body: createPersonSchema,
@@ -281,7 +281,7 @@ export const routes = {
   removePerson: route({
     method: "DELETE",
     path: "/api/people/:id",
-    summary: "Remove a person from the household, with their facts in every tax year. You can't remove yourself.",
+    summary: "Remove a person from the profile, with their facts in every tax year. You can't remove yourself.",
     permission: "taxi.prepare",
     params: personParams,
     body: null,

@@ -3,8 +3,8 @@ import { RequireAuth } from "./auth/guards.tsx";
 import { AppLayout } from "./components/AppLayout.tsx";
 import { ReturnFrame, ReturnIndex, YearFrame, YearIndex } from "./components/YearFrame.tsx";
 import { DocsPage } from "./pages/DocsPage.tsx";
-import { HouseholdPage } from "./pages/HouseholdPage.tsx";
-import { HouseholdStep } from "./pages/HouseholdStep.tsx";
+import { ProfilePage } from "./pages/ProfilePage.tsx";
+import { PersonalInfoStep } from "./pages/PersonalInfoStep.tsx";
 import { ConfirmStep } from "./pages/ConfirmStep.tsx";
 import { ModuleStep } from "./pages/ModuleStep.tsx";
 import { FinishStep } from "./pages/FinishStep.tsx";
@@ -23,7 +23,7 @@ export const routes: RouteObject[] = [
         children: [
           { index: true, element: <Navigate to="/returns" replace /> },
           { path: "/returns", element: <ReturnsPage /> },
-          { path: "/household", element: <HouseholdPage /> },
+          { path: "/profile", element: <ProfilePage /> },
           {
             path: "/returns/:year",
             element: <YearFrame />,
@@ -34,7 +34,7 @@ export const routes: RouteObject[] = [
                 element: <ReturnFrame />,
                 children: [
                   { index: true, element: <ReturnIndex /> },
-                  { path: "household", element: <HouseholdStep /> },
+                  { path: "personal", element: <PersonalInfoStep /> },
                   { path: "upload", element: <UploadStep /> },
                   { path: "income", element: <ModuleStep key="income" module="income" /> },
                   { path: "deductions", element: <ModuleStep key="deductions" module="deductions" /> },

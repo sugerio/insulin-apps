@@ -55,7 +55,7 @@ export function splitName(name: string): { first: string; last: string } {
 
 /**
  * The personal facts for a person's forms, from the engine's input. The spouse's name and birth date come from the
- * input when their return is prepared here too; otherwise the caller gives them (the household's spouse), or they stay
+ * input when their return is prepared here too; otherwise the caller gives them (the spouse in the profile), or they stay
  * blank. The engine knows no country, so the caller names the province (a code otherwise).
  */
 export function personalFacts(

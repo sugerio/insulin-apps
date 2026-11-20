@@ -13,7 +13,7 @@ import { Banner, ResourceView } from "./Feedback.tsx";
 import { useYear } from "./YearFrame.tsx";
 
 // The hints of one return (rules/<country>/<year>/hints.yaml), loaded again whenever the year changes: savings to
-// apply, with what each saves for the household, and things to know. Applying saves the hint's answers; a decision
+// apply, with what each saves on the year's returns, and things to know. Applying saves the hint's answers; a decision
 // can be undone.
 
 const ORDER: Record<HintView["kind"], number> = { saving: 0, warning: 1, info: 2 };

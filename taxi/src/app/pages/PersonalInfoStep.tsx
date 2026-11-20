@@ -26,18 +26,18 @@ import { saveAnswersFor } from "../lib/saveAnswers.ts";
 import { useEstimate } from "../lib/useYearData.ts";
 import { rulesFor } from "../shared/rules/index.ts";
 
-// Step 1, `/returns/:year/:personId/household`: the facts of the open return that no document tells the app: the
+// Step 1, `/returns/:year/:personId/personal`: the facts of the open return that no document tells the app: the
 // adult's province and residency, the marital status on December 31, which the year's returns share, and the questions
 // about the person the return reads (`module: about`, such as a spouse's net income when their return isn't here). Who is in the
-// year is chosen on the Tax years page, and how each person is related on the Household page. The facts are saved
+// year is chosen on the Tax years page, and how each person is related on the Profile page. The facts are saved
 // together, under the year's revision.
 
-export function HouseholdStep() {
+export function PersonalInfoStep() {
   const { year } = useYear();
   // Set once "Save and continue" stops on something missing; kept here because a save remounts the facts below.
   const [showMissing, setShowMissing] = useState(false);
   return (
-    <StepLayout step="household" title="Personal info" aside={<TaxNotes year={year.year} />}>
+    <StepLayout step="personal" title="Personal info" aside={<TaxNotes year={year.year} />}>
       {/* A new revision (a save, or someone else's) starts the form again from what is stored. */}
       <YearFacts key={year.revision} showMissing={showMissing} onMissing={() => setShowMissing(true)} />
     </StepLayout>
@@ -88,10 +88,10 @@ function YearFacts({ showMissing, onMissing }: { showMissing: boolean; onMissing
   const { year, replace, reload } = useYear();
   const { person: owner, adult } = useReturn();
   const editable = canPrepare(me);
-  // The Household's spouse or partner, in this year or not: it decides which statuses there are to choose from.
+  // The spouse or partner in the Profile, in this year or not: it decides which statuses there are to choose from.
   const partner = year.people.find((person) => person.relationship === "spouse");
   const statuses = maritalStatusesFor(partner !== undefined);
-  // A status saved before the Household changed no longer fits: start from none, so a save can't send it back.
+  // A status saved before the people in the Profile changed no longer fits: start from none, so a save can't send it back.
   const [maritalStatus, setMaritalStatus] = useState<MaritalStatus | null>(() =>
     year.maritalStatus !== null && statuses.includes(year.maritalStatus) ? year.maritalStatus : null,
   );
@@ -109,13 +109,13 @@ function YearFacts({ showMissing, onMissing }: { showMissing: boolean; onMissing
   async function save(thenContinue: boolean) {
     setState({ status: "saving" });
     try {
-      let saved = await apiRequest(routes.saveHousehold, {
+      let saved = await apiRequest(routes.savePersonalInfo, {
         params: { year: year.year },
         body: { revision: year.revision, maritalStatus, adults: [{ personId: owner.id, ...draft }] },
       });
       const answers = Object.fromEntries(about.map((question) => [question.id, cleanAmount(amountOf(question.id))] as const).filter(([, value]) => value !== ""));
       saved = await saveAnswersFor(saved, { [owner.id]: answers });
-      const done = stepsOf(saved, owner.id)?.household === "done";
+      const done = stepsOf(saved, owner.id)?.personal === "done";
       if (thenContinue && !done) onMissing();
       replace(saved);
       if (thenContinue && done) navigate(stepPath(year.year, owner.id, "upload"));
@@ -153,7 +153,7 @@ function YearFacts({ showMissing, onMissing }: { showMissing: boolean; onMissing
             ))}
           </RadioGroup>
           {partner ? null : (
-            <Link to={`/household?back=${encodeURIComponent(stepPath(year.year, owner.id, "household"))}`} className="text-sm underline underline-offset-2">
+            <Link to={`/profile?back=${encodeURIComponent(stepPath(year.year, owner.id, "personal"))}`} className="text-sm underline underline-offset-2">
               Add a spouse or partner
             </Link>
           )}
@@ -191,11 +191,11 @@ function YearFacts({ showMissing, onMissing }: { showMissing: boolean; onMissing
         </Banner>
       ))}
       {stale ? (
-        <Banner kind="error" title="Someone else changed this household" action={<Button variant="outline" size="sm" onClick={reload}>Reload</Button>}>
+        <Banner kind="error" title="Someone else changed this year" action={<Button variant="outline" size="sm" onClick={reload}>Reload</Button>}>
           {describeError(state.error)}
         </Banner>
       ) : state.status === "error" ? (
-        <Banner kind="error" title="The household wasn't saved">{describeError(state.error)}</Banner>
+        <Banner kind="error" title="Your personal info wasn't saved">{describeError(state.error)}</Banner>
       ) : null}
 
       {showMissing && blocking.length + unanswered.length > 0 ? (

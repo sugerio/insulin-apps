@@ -11,8 +11,8 @@ permissions a custom role can be given, and how AI agents and API clients are li
 
 | Role | In Taxi |
 |---|---|
-| Owner, Admin, Editor | Add and change the household's people, start a tax year and choose who is in it, and save its facts. |
-| Viewer | See the household's people and every tax year, and change nothing. |
+| Owner, Admin, Editor | Add and change the people in the profile, start a tax year and choose who is in it, and save its facts. |
+| Viewer | See the people in the profile and every tax year, and change nothing. |
 | Custom role | What its permissions allow (below). |
 
 People and roles are managed on Insulin Apps, under **Settings › People**. Taxi has no sign-in or user list of
@@ -22,8 +22,8 @@ its own.
 
 | Permission | Lets someone | Least built-in role with it |
 |---|---|---|
-| Prepare returns (`taxi.prepare`) | Change the household, add and confirm documents, enter answers, and apply or dismiss hints. Includes viewing. | Editor |
-| View returns (`taxi.view`) | See the household, its documents and every number, read only, and download a finished return's forms. | Viewer |
+| Prepare returns (`taxi.prepare`) | Change the profile, add and confirm documents, enter answers, and apply or dismiss hints. Includes viewing. | Editor |
+| View returns (`taxi.view`) | See the profile, its documents and every number, read only, and download a finished return's forms. | Viewer |
 
 A custom role only takes permissions away from its base role; it never adds one.
 
@@ -35,4 +35,4 @@ may use. See [Taxi API](/docs/taxi/api).
 
 ## Organizations
 
-Each organization has one household. One organization never sees another's people or tax years.
+Each organization has one profile. One organization never sees another's people or tax years.

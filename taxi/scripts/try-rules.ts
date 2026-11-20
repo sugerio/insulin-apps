@@ -2,13 +2,13 @@ import { readFileSync } from "node:fs";
 import { Evaluation, type Explanation } from "../src/app/shared/engine/evaluate.ts";
 import { rulesFor } from "../src/app/shared/rules/index.ts";
 
-// npm run rules:try -- <file.json>: evaluates a household and prints each return's result lines, why each one is what
-// it is, and what is estimated, missing or not handled. The file is an engine input, or a golden household (whose
+// npm run rules:try -- <file.json>: evaluates a year's returns and prints each return's result lines, why each one is what
+// it is, and what is estimated, missing or not handled. The file is an engine input, or a golden case (whose
 // `input` is used). Example: npm run rules:try -- test/golden/ca-2025/single-employee-on.json
 
 const file = process.argv[2];
 if (!file) {
-  console.error("usage: npm run rules:try -- <household.json>");
+  console.error("usage: npm run rules:try -- <case.json>");
   process.exit(1);
 }
 const json = JSON.parse(readFileSync(file, "utf8")) as { input?: unknown; year?: number };

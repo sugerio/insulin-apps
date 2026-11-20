@@ -16,7 +16,7 @@ describe("a year's estimate", () => {
     const alex = await addPerson("Alex Martin", "self", "1985-04-02");
     const sam = await addPerson("Sam Martin", "spouse", "1987-09-15");
     await server.call("POST", "/api/years", { body: { year: 2025, people: [alex.id, sam.id] } });
-    await server.call("PUT", "/api/years/2025/household", {
+    await server.call("PUT", "/api/years/2025/personal-info", {
       body: { revision: 1, maritalStatus: "married", adults: [{ personId: alex.id, province: "ON", residentAllYear: true }, { personId: sam.id, province: "BC", residentAllYear: true }] },
     });
 
@@ -29,7 +29,7 @@ describe("a year's estimate", () => {
         { id: alex.id, name: "Alex Martin", role: "self", birthDate: "1985-04-02", province: "ON", residentAllYear: true },
         { id: sam.id, name: "Sam Martin", role: "spouse", birthDate: "1987-09-15", province: "BC", residentAllYear: true },
       ],
-      household: { maritalStatus: "married", dependants: [] },
+      family: { maritalStatus: "married", dependants: [] },
       answers: {},
       slips: [],
     });

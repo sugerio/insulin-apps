@@ -182,7 +182,7 @@ lines:
   SK428.16:
     label: Saskatchewan amount for an eligible dependant
     formula: >-
-      round((if(line.HH.partner == 0 and household.childrenUnder18 > 0, min(param.skSpouseMax, param.skSpouseBase), 0)) * line.RES.factor, 2)
+      round((if(line.HH.partner == 0 and family.childrenUnder18 > 0, min(param.skSpouseMax, param.skSpouseBase), 0)) * line.RES.factor, 2)
     source: "SK428 lines 14 to 16. The app assumes the child had no income"
   # An adult with an impairment who lives with you gets the larger caregiver amount (line 34) instead: no one claims
   # both for the same dependant.
@@ -197,7 +197,7 @@ lines:
     label: This return claims the amount for dependent children (1 for yes)
     formula: >-
       if(person.province != "SK", 0, if(line.HH.partner == 0, 1,
-      if(not household.partnerInYear, if(line.T1.26000 <= line.HH.spouseNetIncome, 1, 0),
+      if(not family.partnerInYear, if(line.T1.26000 <= line.HH.spouseNetIncome, 1, 0),
       if(spouse.person.province != "SK", 1, if(line.T1.26000 < spouse.line.T1.26000, 1, if(line.T1.26000 > spouse.line.T1.26000, 0,
       if(person.role == "self", 1, 0)))))))
     source: >-
@@ -206,7 +206,7 @@ lines:
   SK428.18:
     label: Saskatchewan amount for dependent children born in 2007 or later
     formula: >-
-      round((if(household.childrenUnder19 == 0, 0, if(line.SK.childClaimant == 1, param.skChildAmount * max(0, household.childrenUnder19 - if(line.SK428.16 > 0, 1, 0)), 0))) * line.RES.factor, 2)
+      round((if(family.childrenUnder19 == 0, 0, if(line.SK.childClaimant == 1, param.skChildAmount * max(0, family.childrenUnder19 - if(line.SK428.16 > 0, 1, 0)), 0))) * line.RES.factor, 2)
     source: "SK428 line 18 (58210): $7,704 a child, except a child claimed as an eligible dependant"
   SK428.19:
     label: Saskatchewan senior supplementary amount
@@ -231,10 +231,10 @@ lines:
     label: Saskatchewan home renovation expenses
     formula: >-
       if(answer.homeRenovationExpenses == 0, 0,
-      if(line.HH.partner == 1 and household.partnerInYear and spouse.answer.homeRenovationExpenses > 0,
+      if(line.HH.partner == 1 and family.partnerInYear and spouse.answer.homeRenovationExpenses > 0,
       unsupported("The Saskatchewan home renovation tax credit is for the family: claim your renovation expenses on one of your returns"),
       max(0, min(answer.homeRenovationExpenses,
-      if(person.age >= 65 and household.childrenUnder18 == 0 and (line.HH.partner == 0 or (household.partnerInYear and spouse.person.age >= 65)),
+      if(person.age >= 65 and family.childrenUnder18 == 0 and (line.HH.partner == 0 or (family.partnerInYear and spouse.person.age >= 65)),
       param.skHomeRenovationSeniorMax, param.skHomeRenovationMax)) - param.skHomeRenovationBase)))
     source: "SK(S12) lines 1 to 5: expenses up to $5,000 ($6,000 when the whole family is 65 or older), less $1,000"
   SK428.30:
@@ -278,7 +278,7 @@ lines:
     source: "SK428 line 40 (58560): Schedule SK(S11)"
   SK428.41:
     label: Amounts transferred from your spouse or common-law partner
-    formula: "if(line.HH.partner == 1 and household.partnerInYear, line.SKS2.13, 0)"
+    formula: "if(line.HH.partner == 1 and family.partnerInYear, line.SKS2.13, 0)"
     source: "Schedule SK(S2): their unused Saskatchewan child, age, senior supplementary, pension income and disability amounts"
   SK428.48:
     label: Allowable medical expenses
@@ -382,16 +382,16 @@ lines:
   SK.activeFamiliesLimit:
     label: Most active families benefit for your children
     formula: >-
-      param.skActiveFamiliesPerChild * household.childrenUnder19
-      + (param.skActiveFamiliesPerDisabledChild - param.skActiveFamiliesPerChild) * min(household.childrenUnder19,
+      param.skActiveFamiliesPerChild * family.childrenUnder19
+      + (param.skActiveFamiliesPerDisabledChild - param.skActiveFamiliesPerChild) * min(family.childrenUnder19,
       if(answer.hasDisabledDependant, answer.disabledChildren, 0)
-      + if(line.HH.partner == 1 and household.partnerInYear and spouse.answer.hasDisabledDependant, spouse.answer.disabledChildren, 0))
+      + if(line.HH.partner == 1 and family.partnerInYear and spouse.answer.hasDisabledDependant, spouse.answer.disabledChildren, 0))
     source: "SK479 active families benefit worksheet, column 5: $300 a child born in 2007 or later, $400 for a child eligible for the disability tax credit"
   SK479.7:
     label: Children's activity fees claimed
     formula: >-
-      if(household.childrenUnder19 == 0, 0,
-      if(line.HH.partner == 1 and household.partnerInYear and answer.childActivityFees + spouse.answer.childActivityFees > line.SK.activeFamiliesLimit,
+      if(family.childrenUnder19 == 0, 0,
+      if(line.HH.partner == 1 and family.partnerInYear and answer.childActivityFees + spouse.answer.childActivityFees > line.SK.activeFamiliesLimit,
       unsupported("Only one of you can claim the active families benefit for a child, up to $300 a child ($400 for a child with the disability tax credit). Together you claim more: enter each child's fees on one return"),
       min(answer.childActivityFees, line.SK.activeFamiliesLimit)))
     source: "SK479 active families benefit worksheet: fees for children born in 2007 or later, less reimbursements"
@@ -403,7 +403,7 @@ lines:
     label: Fertility treatment tax credit
     formula: >-
       if(answer.fertilityExpenses == 0, 0,
-      if(line.HH.partner == 1 and household.partnerInYear and spouse.answer.fertilityExpenses > 0,
+      if(line.HH.partner == 1 and family.partnerInYear and spouse.answer.fertilityExpenses > 0,
       unsupported("You or your spouse or partner can claim the Saskatchewan fertility treatment tax credit, but not both: enter the expenses on one return"),
       min(param.skFertilityMax, round(answer.fertilityExpenses * param.skFertilityRate, 2))))
     source: "SK479 line 9 (61268): 50% of the expenses, up to $10,000"

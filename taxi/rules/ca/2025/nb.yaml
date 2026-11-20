@@ -166,7 +166,7 @@ lines:
   NB428.16:
     label: New Brunswick amount for an eligible dependant
     formula: >-
-      round((if(line.HH.partner == 0 and household.childrenUnder18 > 0, min(param.nbSpouseMax, param.nbSpouseBase), 0)) * line.RES.factor, 2)
+      round((if(line.HH.partner == 0 and family.childrenUnder18 > 0, min(param.nbSpouseMax, param.nbSpouseBase), 0)) * line.RES.factor, 2)
     source: "NB428 lines 14 to 16. The app assumes the child had no income"
   # An adult dependant with an impairment gets the infirm dependant amount, or the caregiver amount when they lived in
   # your home, never both (5004-PC, line 58400). The app knows one such dependant.
@@ -239,7 +239,7 @@ lines:
     source: "NB428 line 58600: the provincial amount they designate on their T2202, taken as the same as federally"
   NB428.37:
     label: New Brunswick amounts transferred from your spouse or common-law partner
-    formula: "if(line.HH.partner == 1 and household.partnerInYear, line.NBS2.12, 0)"
+    formula: "if(line.HH.partner == 1 and family.partnerInYear, line.NBS2.12, 0)"
     source: "NB428 line 58640, from Schedule NB(S2)"
   NB428.38:
     label: New Brunswick credit amounts before medical expenses
@@ -307,7 +307,7 @@ lines:
   NB.claimsReduction:
     label: This return claims the family's New Brunswick low-income tax reduction (1 for yes)
     formula: >-
-      if(line.HH.partner == 0 or not household.partnerInYear, 1,
+      if(line.HH.partner == 0 or not family.partnerInYear, 1,
       if(spouse.person.province != "NB", 1,
       if(line.NB428.67 != spouse.line.NB428.67, if(line.NB428.67 > spouse.line.NB428.67, 1, 0),
       if(line.T1.23600 != spouse.line.T1.23600, if(line.T1.23600 > spouse.line.T1.23600, 1, 0),
@@ -393,7 +393,7 @@ lines:
     source: "NB(S11) lines 14 to 16: this year's tuition up to $5,000, less what you used"
   NBS11.17:
     label: New Brunswick tuition transferred to your spouse or common-law partner
-    formula: "if(line.HH.partner == 1 and household.partnerInYear and line.NBS11.2 > 0, min(answer.tuitionTransfer, line.NBS11.16), 0)"
+    formula: "if(line.HH.partner == 1 and family.partnerInYear and line.NBS11.2 > 0, min(answer.tuitionTransfer, line.NBS11.16), 0)"
     source: "NB(S11) line 17: the amount you designate on your T2202 (the same as federally), up to line 16"
 
   # Schedule NB(S2) – New Brunswick amounts transferred from your spouse (read from their NB428, worked out with New
@@ -423,13 +423,13 @@ lines:
   NBS12.3:
     label: Eligible home renovation expenses, up to $10,000
     formula: >-
-      if(person.age >= 65 or (line.HH.partner == 1 and household.partnerInYear and spouse.person.age >= 65),
+      if(person.age >= 65 or (line.HH.partner == 1 and family.partnerInYear and spouse.person.age >= 65),
       min(param.nbSeniorsRenovationMax, answer.homeAccessibility), 0)
     source: "NB(S12) lines 1 to 3: for a senior 65 or older, or someone living with a family member who is"
   NBS12.5:
     label: Home renovation expenses
     formula: >-
-      if(line.HH.partner == 1 and household.partnerInYear and spouse.person.province == "NB"
+      if(line.HH.partner == 1 and family.partnerInYear and spouse.person.province == "NB"
       and line.NBS12.3 + spouse.line.NBS12.3 > param.nbSeniorsRenovationMax,
       unsupported("You and your spouse or partner can claim at most $10,000 together for the New Brunswick seniors' home renovation tax credit. Lower one of the claims"),
       line.NBS12.3)

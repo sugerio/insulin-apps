@@ -1,6 +1,6 @@
 import { DocLink, InApp, type DocTopic } from "./parts.tsx";
 
-// Docs › Canadian tax basics: the background a person needs to prepare a household's returns. General information.
+// Docs › Canadian tax basics: the background a person needs to prepare a return. General information.
 
 export const taxBasics: DocTopic = {
   slug: "tax-basics",
@@ -18,7 +18,7 @@ export const taxBasics: DocTopic = {
             Each person who lives in Canada files their own income tax and benefit return for a calendar year, called the T1. It reports their income
             and claims their deductions and credits. The return works out federal tax and the tax of the province they lived in on December 31.
           </p>
-          <InApp>one return per adult, prepared from the facts in the household and, later, the documents you upload.</InApp>
+          <InApp>one return per adult, prepared from the facts in the profile and, later, the documents you upload.</InApp>
         </>
       ),
     },
@@ -81,7 +81,7 @@ export const taxBasics: DocTopic = {
           </p>
           <p>
             Each spouse files their own return. Some amounts can be claimed by either one, such as donations and medical expenses, so it can matter
-            who claims them. See <DocLink to="household" section="start-a-year">Start a year: who is in it</DocLink>.
+            who claims them. See <DocLink to="profile" section="start-a-year">Start a year: who is in it</DocLink>.
           </p>
         </>
       ),

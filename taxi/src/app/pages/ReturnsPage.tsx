@@ -14,7 +14,7 @@ import { STEP_LABELS, nextStep, stepPath } from "../components/YearFrame.tsx";
 import { RELATIONSHIP_LABELS, formatDate } from "../lib/format.ts";
 import { useResource } from "../lib/useResource.ts";
 
-// `/returns`: the household's tax years. Each year shows the filing deadline and each adult's return with its six
+// `/returns`: the tax years. Each year shows the filing deadline and each adult's return with its six
 // steps and their state; a year not yet started can be started by someone who prepares returns.
 
 export function ReturnsPage() {
@@ -60,11 +60,11 @@ function Years({ data, reload }: { data: YearList; reload: () => void }) {
         <Card>
           <CardHeader>
             <CardTitle>
-              <h2 className="text-base font-semibold">Household</h2>
+              <h2 className="text-base font-semibold">Profile</h2>
             </CardTitle>
             <CardAction>
               <Button asChild variant="outline" size="sm">
-                <Link to="/household">{canPrepare(me) ? "Edit" : "Open"}</Link>
+                <Link to="/profile">{canPrepare(me) ? "Edit" : "Open"}</Link>
               </Button>
             </CardAction>
           </CardHeader>
@@ -111,7 +111,7 @@ function YearPeople({ year, people, onChanged }: { year: YearList["years"][numbe
   const [state, setState] = useState<{ status: "idle" | "saving" } | { status: "error"; error: unknown }>({ status: "idle" });
   const members = people.filter((person) => year.members.includes(person.id));
   const leaving = members.filter((person) => person.relationship !== "self" && !selected.has(person.id));
-  const addPerson = `/household?back=${encodeURIComponent("/returns")}`;
+  const addPerson = `/profile?back=${encodeURIComponent("/returns")}`;
 
   async function save() {
     setState({ status: "saving" });
@@ -229,8 +229,8 @@ function ReturnRow({ year, progress }: { year: number; progress: YearList["years
 }
 
 /**
- * A supported year not started yet. Starting it asks who is in it: you always, and whoever you choose of the household
- * (your spouse to prepare their return too, the dependants who lived with you). `?start=<year>` opens the choice (the way back from the Household).
+ * A supported year not started yet. Starting it asks who is in it: you always, and whoever you choose of the profile
+ * (your spouse to prepare their return too, the dependants who lived with you). `?start=<year>` opens the choice (the way back from the Profile).
  */
 function StartYear({ year, people }: { year: number; people: Person[] }) {
   const me = useMe();
@@ -241,7 +241,7 @@ function StartYear({ year, people }: { year: number; people: Person[] }) {
   const [selected, setSelected] = useState<Set<string>>(() => new Set());
   const [state, setState] = useState<{ status: "idle" | "starting" } | { status: "error"; error: unknown }>({ status: "idle" });
   const self = people.find((person) => person.relationship === "self");
-  const addPerson = `/household?back=${encodeURIComponent(`/returns?start=${year}`)}`;
+  const addPerson = `/profile?back=${encodeURIComponent(`/returns?start=${year}`)}`;
 
   async function start() {
     setState({ status: "starting" });
@@ -268,7 +268,7 @@ function StartYear({ year, people }: { year: number; people: Person[] }) {
         ) : !self ? (
           <div>
             <Button asChild>
-              <Link to={addPerson}>Go to Household</Link>
+              <Link to={addPerson}>Go to Profile</Link>
             </Button>
           </div>
         ) : choosing ? (

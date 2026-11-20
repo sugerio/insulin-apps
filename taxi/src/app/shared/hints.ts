@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { HINT_KINDS } from "./engine/rules.ts";
-import { idSchema, yearSchema } from "./household.ts";
+import { idSchema, yearSchema } from "./people.ts";
 import { revisionSchema } from "./returns.ts";
 
 // Hints: checks on each return of a year (rules/<country>/<year>/hints.yaml), worked out from what is stored. A saving
@@ -19,7 +19,7 @@ export const hintSchema = z.strictObject({
   text: z.string(),
   amount: z.strictObject({ label: z.string(), value: decimalText }).nullable(),
   /**
-   * The household's refund less balance owing with the change, less without it: for a saving, what it saves (when
+   * The combined refund less balance owing of the year's returns with the change, less without it: for a saving, what it saves (when
    * applied, what it saved when accepted); for an info hint, what the change makes, named by `effectLabel`.
    */
   effect: decimalText.nullable(),

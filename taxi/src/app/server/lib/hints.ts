@@ -1,7 +1,7 @@
 import type { DecideHint, HintList, HintView, TaxYear } from "#shared";
 import { findHints, type FoundHint } from "../../shared/engine/hints.ts";
 import { rulesFor } from "../../shared/rules/index.ts";
-import { audit, bumpRevision, getYear, runGuarded } from "./household.ts";
+import { audit, bumpRevision, getYear, runGuarded } from "./people.ts";
 import { ApiError, conflict, logError, notFound } from "./http.ts";
 import type { Caller } from "./identity.ts";
 import { answerStatement, checkAdult, openYear } from "./returns.ts";

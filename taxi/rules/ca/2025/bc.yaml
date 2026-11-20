@@ -208,7 +208,7 @@ lines:
   BC428.23:
     label: British Columbia amount for an eligible dependant
     formula: >-
-      round((if(line.HH.partner == 0 and household.childrenUnder18 > 0, min(param.bcSpouseMax, param.bcSpouseBase), 0)) * line.RES.factor, 2)
+      round((if(line.HH.partner == 0 and family.childrenUnder18 > 0, min(param.bcSpouseMax, param.bcSpouseBase), 0)) * line.RES.factor, 2)
     source: "BC428 lines 21 to 23. The app assumes the child had no income"
   # The caregiver amount is for a dependant 18 or older: British Columbia has no amount for an infirm child under 18
   # (federal line 30500). The adult dependant's column is worked out once: more than one is refused on line 30450.
@@ -275,7 +275,7 @@ lines:
     source: "BC428 line 43 (58600): the provincial amount each student designated to you on their T2202"
   BC428.44:
     label: Amounts transferred from your spouse or common-law partner
-    formula: "if(line.HH.partner == 1 and household.partnerInYear, if(line.BCS2.5 == 0, 0, line.BCS2.12), 0)"
+    formula: "if(line.HH.partner == 1 and family.partnerInYear, if(line.BCS2.5 == 0, 0, line.BCS2.12), 0)"
     source: "Schedule BC(S2): their unused British Columbia age, pension income and disability amounts, and the tuition they designate to you"
   BC428.45:
     label: British Columbia credit amounts before medical expenses
@@ -422,16 +422,16 @@ lines:
   # the amount).
   BC.eligible:
     label: Old enough for the British Columbia sales tax and renter's credits (1 for yes)
-    formula: "if(person.age >= param.bcAdultAge or line.HH.partner == 1 or household.childrenUnder19 > 0, 1, 0)"
+    formula: "if(person.age >= param.bcAdultAge or line.HH.partner == 1 or family.childrenUnder19 > 0, 1, 0)"
     source: "5010-PC: 19 or older on December 31, or with a spouse or partner, or a parent"
   BC.spouseInBC:
     label: Your spouse or partner lived in British Columbia (1 for yes)
-    formula: 'if(line.HH.partner == 0, 0, if(household.partnerInYear, if(spouse.person.province == "BC", 1, 0), 1))'
+    formula: 'if(line.HH.partner == 0, 0, if(family.partnerInYear, if(spouse.person.province == "BC", 1, 0), 1))'
     source: "From their return when it is prepared here; otherwise the app assumes they lived with you, in British Columbia"
   BC.claimsSalesCredit:
     label: This return claims the British Columbia sales tax credit for the couple (1 for yes)
     formula: >-
-      if(line.BC.eligible == 0, 0, if(line.HH.partner == 0 or not household.partnerInYear, 1,
+      if(line.BC.eligible == 0, 0, if(line.HH.partner == 0 or not family.partnerInYear, 1,
       if(spouse.person.province != "BC" or person.role == "self", 1, 0)))
     source: "BC479, sales tax credit: only one of a couple claims it, for both"
   BC.renter:
@@ -441,7 +441,7 @@ lines:
   BC.claimsRentersCredit:
     label: This return claims the British Columbia renter's tax credit for the couple (1 for yes)
     formula: >-
-      if(line.BC.renter == 0, 0, if(line.HH.partner == 0 or not household.partnerInYear, 1,
+      if(line.BC.renter == 0, 0, if(line.HH.partner == 0 or not family.partnerInYear, 1,
       if(spouse.person.province != "BC" or spouse.line.BC.renter == 0 or person.role == "self", 1, 0)))
     source: "BC479, renter's tax credit: only one credit for a couple, even if both rent their own homes"
 
@@ -454,7 +454,7 @@ lines:
     source: "BC479 lines 1 to 5: net income before it was floored at zero. UCCB and RDSP amounts aren't handled"
   BC479.6:
     label: Adjusted family net income
-    formula: "line.BC479.5 + if(line.HH.partner == 1, if(household.partnerInYear, spouse.line.BC479.5, answer.spouseNetIncome), 0)"
+    formula: "line.BC479.5 + if(line.HH.partner == 1, if(family.partnerInYear, spouse.line.BC479.5, answer.spouseNetIncome), 0)"
     source: "BC479 line 6: yours and your spouse's or partner's, from their return or your answer for their net income"
   BC479.7:
     label: Family income the sales tax credit allows
@@ -481,7 +481,7 @@ lines:
   BC479.60480:
     label: Home renovation expenses
     formula: >-
-      min(answer.homeAccessibility, param.bcRenovationMax, if(line.HH.partner == 1 and household.partnerInYear and person.role == "spouse"
+      min(answer.homeAccessibility, param.bcRenovationMax, if(line.HH.partner == 1 and family.partnerInYear and person.role == "spouse"
       and spouse.person.province == "BC", max(0, param.bcRenovationMax - min(spouse.answer.homeAccessibility, param.bcRenovationMax)), param.bcRenovationMax))
     source: "BC479 line 60480 and Schedule BC(S12) line 5: eligible expenses up to $10,000 for you and your spouse or partner together"
   BC479.14:

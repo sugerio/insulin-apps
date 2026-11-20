@@ -33,7 +33,7 @@ async function seed(server: TestServer, { applies = false, slip = false } = {}) 
   const alex = (await (await server.call("POST", "/api/people", { as: OWNER, body: { name: "Alex Martin", relationship: "self", birthDate: "1985-04-02" } })).json()) as Person;
   await server.call("POST", "/api/years", { as: OWNER, body: { year: 2025, people: [alex.id] } });
   let year = (await (
-    await server.call("PUT", "/api/years/2025/household", {
+    await server.call("PUT", "/api/years/2025/personal-info", {
       as: OWNER,
       body: { revision: 1, maritalStatus: "single", adults: [{ personId: alex.id, province: "ON", residentAllYear: true }] },
     })
@@ -68,12 +68,12 @@ describe("a return", () => {
 
 describe("Personal info", () => {
   it("asks a spouse's net income when their return isn't prepared here", async () => {
-    const { server } = await renderApp("/returns/2025/household", {
+    const { server } = await renderApp("/returns/2025/personal", {
       seed: async (s) => {
         const alex = (await (await s.call("POST", "/api/people", { as: OWNER, body: { name: "Alex Martin", relationship: "self", birthDate: "1985-04-02" } })).json()) as Person;
         await s.call("POST", "/api/people", { as: OWNER, body: { name: "Sam Martin", relationship: "spouse", birthDate: "1987-09-15" } });
         await s.call("POST", "/api/years", { as: OWNER, body: { year: 2025, people: [alex.id] } });
-        await s.call("PUT", "/api/years/2025/household", {
+        await s.call("PUT", "/api/years/2025/personal-info", {
           as: OWNER,
           body: { revision: 1, maritalStatus: "married", adults: [{ personId: alex.id, province: "ON", residentAllYear: true }] },
         });
@@ -89,11 +89,11 @@ describe("Personal info", () => {
   });
 
   it("asks the days in Canada and the income while away of someone who moved during the year", async () => {
-    const { server } = await renderApp("/returns/2025/household", {
+    const { server } = await renderApp("/returns/2025/personal", {
       seed: async (s) => {
         const alex = (await (await s.call("POST", "/api/people", { as: OWNER, body: { name: "Alex Martin", relationship: "self", birthDate: "1985-04-02" } })).json()) as Person;
         await s.call("POST", "/api/years", { as: OWNER, body: { year: 2025, people: [alex.id] } });
-        await s.call("PUT", "/api/years/2025/household", {
+        await s.call("PUT", "/api/years/2025/personal-info", {
           as: OWNER,
           body: { revision: 1, maritalStatus: "single", adults: [{ personId: alex.id, province: "ON", residentAllYear: false }] },
         });

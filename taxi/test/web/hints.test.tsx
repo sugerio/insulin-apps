@@ -13,7 +13,7 @@ async function seed(server: TestServer): Promise<Person> {
   const sam = await add("Sam Martin", "spouse");
   await server.call("POST", "/api/years", { as: OWNER, body: { year: 2025, people: [alex.id, sam.id] } });
   let year = (await (
-    await server.call("PUT", "/api/years/2025/household", {
+    await server.call("PUT", "/api/years/2025/personal-info", {
       as: OWNER,
       body: { revision: 1, maritalStatus: "married", adults: [alex, sam].map((person) => ({ personId: person.id, province: "ON", residentAllYear: true })) },
     })

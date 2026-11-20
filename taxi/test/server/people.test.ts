@@ -35,7 +35,7 @@ const facts = (revision: number, maritalStatus: string, adults: { personId: stri
   adults,
 });
 
-describe("the household's people", () => {
+describe("the people in the profile", () => {
   it("lists everyone, you first", async () => {
     await addPerson("Jamie Martin", "child", "2019-06-20");
     await addPerson("Alex Martin", "self");
@@ -43,7 +43,7 @@ describe("the household's people", () => {
     expect(people.map((person) => person.name)).toEqual(["Alex Martin", "Jamie Martin"]);
   });
 
-  it("keeps one 'you' and one spouse per household", async () => {
+  it("keeps one 'you' and one spouse per profile", async () => {
     await marriedCouple();
     expect((await server.call("POST", "/api/people", { body: { name: "Another Me", relationship: "self", birthDate: "1990-01-01" } })).status).toBe(409);
     expect((await server.call("POST", "/api/people", { body: { name: "Another Spouse", relationship: "spouse", birthDate: "1990-01-01" } })).status).toBe(409);
@@ -67,10 +67,10 @@ describe("the household's people", () => {
     expect(renamed).toMatchObject({ name: "Alex M. Martin", relationship: "self", birthDate: "1985-04-02" });
   });
 
-  it("removes a person from the household and from every year", async () => {
+  it("removes a person from the profile and from every year", async () => {
     const { alex, sam } = await marriedCouple();
     await json<TaxYear>(
-      server.call("PUT", "/api/years/2025/household", {
+      server.call("PUT", "/api/years/2025/personal-info", {
         body: facts(1, "married", [
           { personId: alex.id, province: "ON", residentAllYear: true },
           { personId: sam.id, province: "ON", residentAllYear: true },
@@ -94,7 +94,7 @@ describe("starting a tax year", () => {
     const year = await startYear([alex, sam, jamie]);
     expect(year).toMatchObject({ year: 2025, revision: 1, maritalStatus: null, prepareTogether: true, members: [alex.id, sam.id, jamie.id] });
     expect(year.adults.map((adult) => adult.personId)).toEqual([alex.id, sam.id]);
-    expect(year.returns[0]!.steps.household).toBe("todo");
+    expect(year.returns[0]!.steps.personal).toBe("todo");
     expect(year.returns[0]!.steps.upload).toBe("todo");
   });
 
@@ -106,7 +106,7 @@ describe("starting a tax year", () => {
     expect(year.adults.map((adult) => adult.personId)).toEqual([alex.id]);
   });
 
-  it("needs you in the household and in the year", async () => {
+  it("needs you in the profile and in the year", async () => {
     expect((await server.call("POST", "/api/years", { body: { year: 2025, people: [crypto.randomUUID()] } })).status).toBe(400);
     const sam = await addPerson("Sam Martin", "spouse");
     expect((await server.call("POST", "/api/years", { body: { year: 2025, people: [sam.id] } })).status).toBe(409);
@@ -132,7 +132,7 @@ describe("starting a tax year", () => {
     const list = await json<YearList>(server.call("GET", "/api/years"));
     expect(list.supportedYears).toEqual([2025]);
     expect(list.years[0]!.members).toEqual([alex.id, sam.id]);
-    expect(list.years[0]!.returns.map((each) => [each.personId, each.name, each.steps.household])).toEqual([
+    expect(list.years[0]!.returns.map((each) => [each.personId, each.name, each.steps.personal])).toEqual([
       [alex.id, "Alex Martin", "todo"],
       [sam.id, "Sam Martin", "todo"],
     ]);
@@ -143,7 +143,7 @@ describe("changing who is in a year", () => {
   it("takes your spouse out, with their facts for that year", async () => {
     const { alex, sam } = await marriedCouple();
     await json<TaxYear>(
-      server.call("PUT", "/api/years/2025/household", {
+      server.call("PUT", "/api/years/2025/personal-info", {
         body: facts(1, "married", [
           { personId: alex.id, province: "ON", residentAllYear: true },
           { personId: sam.id, province: "BC", residentAllYear: true },
@@ -153,7 +153,7 @@ describe("changing who is in a year", () => {
     const year = await json<TaxYear>(server.call("PUT", "/api/years/2025/people", { body: { revision: 2, people: [alex.id] } }));
     expect(year).toMatchObject({ revision: 3, prepareTogether: false, members: [alex.id] });
     expect(year.adults).toEqual([{ personId: alex.id, province: "ON", residentAllYear: true, prepared: true }]);
-    // Sam is still in the household.
+    // Sam is still in the profile.
     expect(year.people.map((person) => person.id)).toContain(sam.id);
     const back = await json<TaxYear>(server.call("PUT", "/api/years/2025/people", { body: { revision: 3, people: [alex.id, sam.id] } }));
     expect(back.adults.find((adult) => adult.personId === sam.id)).toMatchObject({ province: null, residentAllYear: null });
@@ -172,7 +172,7 @@ describe("the year's facts", () => {
     const { alex, sam, year } = await marriedCouple();
     expect(year.issues.map((issue) => issue.code)).toEqual(["no_marital_status", "no_province", "no_residency", "no_province", "no_residency"]);
     const saved = await json<TaxYear>(
-      server.call("PUT", "/api/years/2025/household", {
+      server.call("PUT", "/api/years/2025/personal-info", {
         body: facts(1, "married", [
           { personId: alex.id, province: "ON", residentAllYear: true },
           { personId: sam.id, province: "BC", residentAllYear: true },
@@ -181,51 +181,51 @@ describe("the year's facts", () => {
     );
     expect(saved.revision).toBe(2);
     expect(saved.issues).toEqual([]);
-    expect(saved.returns[0]!.steps.household).toBe("done");
+    expect(saved.returns[0]!.steps.personal).toBe("done");
   });
 
-  it("follow the Household: married or common-law with a spouse, the other four without", async () => {
+  it("follow the Profile: married or common-law with a spouse, the other four without", async () => {
     const { alex, sam } = await marriedCouple();
     const adults = [
       { personId: alex.id, province: "ON", residentAllYear: true },
       { personId: sam.id, province: "ON", residentAllYear: true },
     ];
-    const single = await server.call("PUT", "/api/years/2025/household", { body: facts(1, "single", adults) });
+    const single = await server.call("PUT", "/api/years/2025/personal-info", { body: facts(1, "single", adults) });
     expect(single.status).toBe(400);
     expect(((await single.json()) as { error: { issues: { path: string }[] } }).error.issues.map((issue) => issue.path)).toEqual(["maritalStatus"]);
     // Sam out of the year is still your partner: only your return, but still married.
     await json<TaxYear>(server.call("PUT", "/api/years/2025/people", { body: { revision: 1, people: [alex.id] } }));
-    const saved = await json<TaxYear>(server.call("PUT", "/api/years/2025/household", { body: facts(2, "common_law", [adults[0]!]) }));
+    const saved = await json<TaxYear>(server.call("PUT", "/api/years/2025/personal-info", { body: facts(2, "common_law", [adults[0]!]) }));
     expect(saved).toMatchObject({ maritalStatus: "common_law", prepareTogether: false, issues: [] });
   });
 
-  it("ask again for a status saved before the Household changed", async () => {
+  it("ask again for a status saved before the people in the Profile changed", async () => {
     const alex = await addPerson("Alex Martin", "self");
     await startYear([alex]);
-    expect((await server.call("PUT", "/api/years/2025/household", { body: facts(1, "married", [{ personId: alex.id, province: "ON", residentAllYear: true }]) })).status).toBe(400);
-    await json<TaxYear>(server.call("PUT", "/api/years/2025/household", { body: facts(1, "single", [{ personId: alex.id, province: "ON", residentAllYear: true }]) }));
+    expect((await server.call("PUT", "/api/years/2025/personal-info", { body: facts(1, "married", [{ personId: alex.id, province: "ON", residentAllYear: true }]) })).status).toBe(400);
+    await json<TaxYear>(server.call("PUT", "/api/years/2025/personal-info", { body: facts(1, "single", [{ personId: alex.id, province: "ON", residentAllYear: true }]) }));
     const sam = await addPerson("Sam Martin", "spouse", "1987-09-15");
     const year = await json<TaxYear>(server.call("GET", "/api/years/2025"));
     expect(year.issues).toEqual([expect.objectContaining({ code: "marital_status_mismatch", kind: "blocking", personId: sam.id })]);
-    expect(year.returns[0]!.steps.household).toBe("todo");
+    expect(year.returns[0]!.steps.personal).toBe("todo");
   });
 
   it("prepare a Quebec resident's returns like any other province's", async () => {
     const alex = await addPerson("Alex Martin", "self");
     await startYear([alex]);
     const saved = await json<TaxYear>(
-      server.call("PUT", "/api/years/2025/household", { body: facts(1, "single", [{ personId: alex.id, province: "QC", residentAllYear: true }]) }),
+      server.call("PUT", "/api/years/2025/personal-info", { body: facts(1, "single", [{ personId: alex.id, province: "QC", residentAllYear: true }]) }),
     );
     // Every province is handled, Quebec with its own return (TP-1): no issue names it.
     expect(saved.issues).toEqual([]);
-    expect(saved.returns[0]!.steps.household).toBe("done");
+    expect(saved.returns[0]!.steps.personal).toBe("done");
   });
 
   it("refuse a stale revision and keep the stored facts", async () => {
     const alex = await addPerson("Alex Martin", "self");
     await startYear([alex]);
-    await json<TaxYear>(server.call("PUT", "/api/years/2025/household", { body: facts(1, "single", [{ personId: alex.id, province: "ON", residentAllYear: true }]) }));
-    const stale = await server.call("PUT", "/api/years/2025/household", {
+    await json<TaxYear>(server.call("PUT", "/api/years/2025/personal-info", { body: facts(1, "single", [{ personId: alex.id, province: "ON", residentAllYear: true }]) }));
+    const stale = await server.call("PUT", "/api/years/2025/personal-info", {
       body: facts(1, "widowed", [{ personId: alex.id, province: "BC", residentAllYear: false }]),
     });
     expect(stale.status).toBe(409);
@@ -240,7 +240,7 @@ describe("the year's facts", () => {
     const jamie = await addPerson("Jamie Martin", "child", "2019-06-20");
     await startYear([alex, jamie]);
     for (const personId of [jamie.id, sam.id]) {
-      const response = await server.call("PUT", "/api/years/2025/household", { body: facts(1, "married", [{ personId, province: "ON", residentAllYear: true }]) });
+      const response = await server.call("PUT", "/api/years/2025/personal-info", { body: facts(1, "married", [{ personId, province: "ON", residentAllYear: true }]) });
       expect(response.status).toBe(400);
     }
   });

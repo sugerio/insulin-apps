@@ -50,7 +50,7 @@ async function alexWithT4(): Promise<{ alex: Person; revision: number }> {
   const alex = await json<Person>(server.call("POST", "/api/people", { body: { name: "Alex Martin", relationship: "self", birthDate: "1985-04-02" } }), 201);
   await json<TaxYear>(server.call("POST", "/api/years", { body: { year: 2025, people: [alex.id] } }), 201);
   let year = await json<TaxYear>(
-    server.call("PUT", "/api/years/2025/household", { body: { revision: 1, maritalStatus: "single", adults: [{ personId: alex.id, province: "ON", residentAllYear: true }] } }),
+    server.call("PUT", "/api/years/2025/personal-info", { body: { revision: 1, maritalStatus: "single", adults: [{ personId: alex.id, province: "ON", residentAllYear: true }] } }),
   );
   year = await json<TaxYear>(
     server.call("POST", "/api/years/2025/slips", { body: { revision: year.revision, personId: alex.id, type: "T4", issuer: "Maple Corp", boxes: { 14: "60000", 22: "9000" } } }),
@@ -86,7 +86,7 @@ async function camilleInQuebec(): Promise<Person> {
   const camille = await json<Person>(server.call("POST", "/api/people", { body: { name: "Camille Roy", relationship: "self", birthDate: "1991-03-14" } }), 201);
   await json<TaxYear>(server.call("POST", "/api/years", { body: { year: 2025, people: [camille.id] } }), 201);
   let year = await json<TaxYear>(
-    server.call("PUT", "/api/years/2025/household", { body: { revision: 1, maritalStatus: "single", adults: [{ personId: camille.id, province: "QC", residentAllYear: true }] } }),
+    server.call("PUT", "/api/years/2025/personal-info", { body: { revision: 1, maritalStatus: "single", adults: [{ personId: camille.id, province: "QC", residentAllYear: true }] } }),
   );
   year = await json<TaxYear>(
     server.call("POST", "/api/years/2025/slips", {
@@ -170,13 +170,13 @@ describe("printing a return", () => {
     expect(source.fetched).toEqual([t1.url, rules.forms.get("ON428")!.url]);
   });
 
-  it("names the spouse in Step 1 from the household when their return isn't prepared here, with a net income of zero", async () => {
+  it("names the spouse in Step 1 from the profile when their return isn't prepared here, with a net income of zero", async () => {
     server = await startServer({ forms: standIn() });
     const alex = await json<Person>(server.call("POST", "/api/people", { body: { name: "Alex Martin", relationship: "self", birthDate: "1985-04-02" } }), 201);
     await json<Person>(server.call("POST", "/api/people", { body: { name: "Jordan Lee Park", relationship: "spouse", birthDate: "1986-01-09" } }), 201);
     await json<TaxYear>(server.call("POST", "/api/years", { body: { year: 2025, people: [alex.id] } }), 201);
     let year = await json<TaxYear>(
-      server.call("PUT", "/api/years/2025/household", { body: { revision: 1, maritalStatus: "married", adults: [{ personId: alex.id, province: "ON", residentAllYear: true }] } }),
+      server.call("PUT", "/api/years/2025/personal-info", { body: { revision: 1, maritalStatus: "married", adults: [{ personId: alex.id, province: "ON", residentAllYear: true }] } }),
     );
     year = await json<TaxYear>(
       server.call("POST", "/api/years/2025/slips", { body: { revision: year.revision, personId: alex.id, type: "T4", issuer: "Maple Corp", boxes: { 14: "60000", 22: "9000" } } }),

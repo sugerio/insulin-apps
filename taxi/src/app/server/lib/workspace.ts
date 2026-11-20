@@ -70,7 +70,7 @@ export async function loadWorkspace(db: D1Database, orgId: string, taxYearId: st
   };
 }
 
-/** What the engine needs from a year: who files it, the household, and each adult's answers and slips. */
+/** What the engine needs from a year: who files it, the family facts, and each adult's answers and slips. */
 export interface YearFacts {
   year: number;
   maritalStatus: string | null;
@@ -94,7 +94,7 @@ export function engineInputOf(facts: YearFacts, workspace: Workspace): EngineInp
         residentAllYear: adult.residentAllYear,
       };
     }),
-    household: {
+    family: {
       maritalStatus: facts.maritalStatus,
       dependants: facts.people
         .filter((person) => facts.members.includes(person.id) && (person.relationship === "child" || person.relationship === "other_dependant"))
@@ -139,7 +139,7 @@ export function stepStatuses(facts: YearFacts, issues: Issue[], workspace: Works
     const answered = (module: Module) => rules !== undefined && leftInModule(rules, module, answers, slips, reached ?? []).length === 0;
     const state = (done: boolean) => (done ? "done" : "todo");
     const status: StepStatuses = {
-      household: state(!issues.some((issue) => issue.kind === "blocking" && isIssueOf(issue, personId)) && answered("about")),
+      personal: state(!issues.some((issue) => issue.kind === "blocking" && isIssueOf(issue, personId)) && answered("about")),
       upload: state(workspace.uploadedIn.has(personId) || slips.some((slip) => slip.documentId !== null)),
       income: state(answered("income")),
       deductions: state(answered("deductions")),

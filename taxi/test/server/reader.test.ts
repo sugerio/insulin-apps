@@ -59,7 +59,7 @@ describe("reading a slip with Claude", () => {
     expect(await claudeReader(stubbed(answer({ nope: true })).client).read(file, context)).toEqual({ kind: "failed", message: "Reading this file went wrong. Try again." });
   });
 
-  it("builds the prompt from the year's slip types and the household", () => {
+  it("builds the prompt from the year's slip types and the people", () => {
     const prompt = promptFor(context);
     expect(prompt).toContain("for the 2025 tax year");
     expect(prompt).toContain("Alex Martin (self)");

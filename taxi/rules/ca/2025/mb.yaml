@@ -261,7 +261,7 @@ lines:
   MB428.16:
     label: Manitoba amount for an eligible dependant
     formula: >-
-      round((if(line.HH.partner == 0 and household.childrenUnder18 > 0, param.mbSpouseBase, 0)) * line.RES.factor, 2)
+      round((if(line.HH.partner == 0 and family.childrenUnder18 > 0, param.mbSpouseBase, 0)) * line.RES.factor, 2)
     source: "MB428 lines 14 to 16. The app assumes the child had no income"
   MB428.17:
     label: Manitoba amount for infirm dependants age 18 or older
@@ -283,14 +283,14 @@ lines:
   MB.fitnessPeople:
     label: People the Manitoba fitness amount can be claimed for
     formula: >-
-      if(person.age < param.mbFitnessAgeLimit, 1, 0) + household.childrenUnder18
-      + if(line.HH.partner == 1 and household.partnerInYear, if(spouse.person.age >= 18 and spouse.person.age < param.mbFitnessAgeLimit, 1, 0), 0)
+      if(person.age < param.mbFitnessAgeLimit, 1, 0) + family.childrenUnder18
+      + if(line.HH.partner == 1 and family.partnerInYear, if(spouse.person.age >= 18 and spouse.person.age < param.mbFitnessAgeLimit, 1, 0), 0)
     source: "Manitoba information guide, line 58325"
   MB428.25:
     label: Fitness amount
     formula: >-
       if(line.MB.fitnessPeople == 0, 0,
-      if(line.HH.partner == 1 and household.partnerInYear and spouse.person.province == "MB"
+      if(line.HH.partner == 1 and family.partnerInYear and spouse.person.province == "MB"
       and answer.physicalActivityFees + spouse.answer.physicalActivityFees > param.mbFitnessMax * line.MB.fitnessPeople,
       unsupported("Only one of you can claim the Manitoba fitness amount for a person, up to $500 each. Together you claim more: enter each person's fees on one return"),
       min(answer.physicalActivityFees, param.mbFitnessMax * line.MB.fitnessPeople)))
@@ -298,11 +298,11 @@ lines:
   MB428.26:
     label: Children's arts amount
     formula: >-
-      if(household.childrenUnder17 == 0, 0,
-      if(line.HH.partner == 1 and household.partnerInYear and spouse.person.province == "MB"
-      and answer.childArtsFees + spouse.answer.childArtsFees > param.mbArtsMax * household.childrenUnder17,
+      if(family.childrenUnder17 == 0, 0,
+      if(line.HH.partner == 1 and family.partnerInYear and spouse.person.province == "MB"
+      and answer.childArtsFees + spouse.answer.childArtsFees > param.mbArtsMax * family.childrenUnder17,
       unsupported("Only one of you can claim the Manitoba children's arts amount for a child, up to $500 each. Together you claim more: enter each child's fees on one return"),
-      min(answer.childArtsFees, param.mbArtsMax * household.childrenUnder17)))
+      min(answer.childArtsFees, param.mbArtsMax * family.childrenUnder17)))
     source: >-
       Manitoba information guide, line 58326: up to $500 for each child under 16 at the start of the year (born in 2009
       or later). The extra $500 for a child with a disability isn't handled
@@ -355,7 +355,7 @@ lines:
     source: "MB428 line 39 (58600): the app uses the amount the student designated to you federally (line 32400)"
   MB428.40:
     label: Manitoba amounts transferred from your spouse or common-law partner
-    formula: "if(line.HH.partner == 1 and household.partnerInYear, line.MBS2.12, 0)"
+    formula: "if(line.HH.partner == 1 and family.partnerInYear, line.MBS2.12, 0)"
     source: "Schedule MB(S2): their unused Manitoba age, pension, and tuition and education amounts"
   MB428.41:
     label: Family tax benefit
@@ -427,7 +427,7 @@ lines:
   MB.higherIncome:
     label: This return claims the Manitoba credits for the children (1 for yes)
     formula: >-
-      if(line.HH.partner == 0, 1, if(not household.partnerInYear, if(line.T1.23600 >= line.HH.spouseNetIncome, 1, 0),
+      if(line.HH.partner == 0, 1, if(not family.partnerInYear, if(line.T1.23600 >= line.HH.spouseNetIncome, 1, 0),
       if(spouse.person.province != "MB", 1, if(line.T1.23600 > line.HH.spouseNetIncome, 1, if(line.T1.23600 < line.HH.spouseNetIncome, 0,
       if(person.age > spouse.person.age, 1, if(person.age < spouse.person.age, 0, if(person.role == "self", 1, 0))))))))
     source: "Manitoba information guide, Schedule MB428-A line 9: only the spouse or partner with the higher net income can claim it"
@@ -436,7 +436,7 @@ lines:
   MB.claimsPersonalCredit:
     label: This return claims the Manitoba personal tax credit for the family (1 for yes)
     formula: >-
-      if(line.HH.partner == 0, 1, if(not household.partnerInYear, 1, if(spouse.person.province != "MB", 1,
+      if(line.HH.partner == 0, 1, if(not family.partnerInYear, 1, if(spouse.person.province != "MB", 1,
       if(spouse.line.MB428.40 > 0 and line.MB428.10 > 0 and not (line.MB428.40 > 0 and spouse.line.MB428.10 > 0), 0,
       if(line.MB428.40 > 0 and spouse.line.MB428.10 > 0 and not (spouse.line.MB428.40 > 0 and line.MB428.10 > 0), 1,
       line.MB.higherIncome)))))
@@ -447,21 +447,21 @@ lines:
     label: Dependants whose disability amount you or your spouse claim (line 58480)
     formula: >-
       if(answer.hasDisabledDependant, answer.disabledChildren + answer.disabledAdults, 0)
-      + if(line.HH.partner == 1 and household.partnerInYear, if(spouse.answer.hasDisabledDependant, spouse.answer.disabledChildren + spouse.answer.disabledAdults, 0), 0)
+      + if(line.HH.partner == 1 and family.partnerInYear, if(spouse.answer.hasDisabledDependant, spouse.answer.disabledChildren + spouse.answer.disabledAdults, 0), 0)
     source: "MB428-A line 7 and MB479 line 14"
   MB.infirmDependants:
     label: Infirm dependants 18 or older you or your spouse claim (line 58200)
     formula: >-
       if(answer.hasInfirmDependant, answer.infirmDependants, 0)
-      + if(line.HH.partner == 1 and household.partnerInYear, if(spouse.answer.hasInfirmDependant, spouse.answer.infirmDependants, 0), 0)
+      + if(line.HH.partner == 1 and family.partnerInYear, if(spouse.answer.hasInfirmDependant, spouse.answer.infirmDependants, 0), 0)
     source: "MB428-A line 8 and MB479 line 15"
 
   # Schedule MB428-A – Manitoba family tax benefit
   MB428A.9:
     label: Amount for dependent children
     formula: >-
-      if(household.childrenUnder19 - if(line.MB428.16 > 0, 1, 0) > 0, if(line.MB.higherIncome == 1, param.mbFamilyBenefitChild
-      * (household.childrenUnder19 - if(line.MB428.16 > 0, 1, 0)), 0), 0)
+      if(family.childrenUnder19 - if(line.MB428.16 > 0, 1, 0) > 0, if(line.MB.higherIncome == 1, param.mbFamilyBenefitChild
+      * (family.childrenUnder19 - if(line.MB428.16 > 0, 1, 0)), 0), 0)
     source: "MB428-A line 9: children born in 2007 or later, other than the one claimed as an eligible dependant"
   MB428A.6:
     label: Disability amount for spouse or common-law partner
@@ -561,13 +561,13 @@ lines:
     source: "MB479 lines 1 to 5: net income (line 23600) before it was floored at zero, less RDSP income (line 12500). UCCB and RDSP repayments aren't handled"
   MB479.6:
     label: Family income
-    formula: "line.MB479.5 + if(line.HH.partner == 1, if(household.partnerInYear, spouse.line.MB479.5, answer.spouseNetIncome), 0)"
+    formula: "line.MB479.5 + if(line.HH.partner == 1, if(family.partnerInYear, spouse.line.MB479.5, answer.spouseNetIncome), 0)"
     source: "MB479 line 6: yours and your spouse's or partner's, from their return or your answer for their net income"
   MB479.12:
     label: Credits for your spouse or common-law partner
     formula: >-
       if(line.HH.partner == 1, param.mbPersonalCreditBasic
-      + if(household.partnerInYear, if(spouse.person.age >= 65, param.mbPersonalCreditAge, 0)
+      + if(family.partnerInYear, if(spouse.person.age >= 65, param.mbPersonalCreditAge, 0)
       + if(spouse.answer.hasDisability, param.mbPersonalCreditDisability, 0), 0), 0)
     source: "MB479 lines 9 to 12: $195, $113 if they were born in 1960 or earlier and $113 if they have the disability amount (counted only when their return is prepared here)"
   MB479.14:
@@ -580,7 +580,7 @@ lines:
     source: "MB479 line 15: each dependant claimed on line 58200 of your or your spouse's MB428"
   MB479.16:
     label: Credit for dependent children
-    formula: "param.mbPersonalCreditChild * (household.childrenUnder19 - if(line.MB428.16 > 0, 1, 0))"
+    formula: "param.mbPersonalCreditChild * (family.childrenUnder19 - if(line.MB428.16 > 0, 1, 0))"
     source: "MB479 line 16: children born in 2007 or later, other than the one claimed as an eligible dependant"
   MB479.17:
     label: Total personal credits
@@ -597,7 +597,7 @@ lines:
   MB479.22:
     label: School taxes on your principal residence
     formula: >-
-      if(answer.paidSchoolTaxes, if(line.HH.partner == 1 and household.partnerInYear and spouse.person.province == "MB" and spouse.answer.paidSchoolTaxes,
+      if(answer.paidSchoolTaxes, if(line.HH.partner == 1 and family.partnerInYear and spouse.person.province == "MB" and spouse.answer.paidSchoolTaxes,
       unsupported("Only one of you claims the Manitoba homeowners affordability tax credit for both of you. Enter the school taxes on one return"),
       answer.schoolTaxes), 0)
     source: "MB479 lines 20 to 22: the school taxes after the advance, plus the advance (the gross school taxes)"
@@ -621,13 +621,13 @@ lines:
   MB479.30:
     label: Rent paid
     formula: >-
-      if(line.HH.partner == 1 and household.partnerInYear and spouse.person.province == "MB" and line.RENT.paid > 0 and spouse.line.RENT.paid > 0,
+      if(line.HH.partner == 1 and family.partnerInYear and spouse.person.province == "MB" and line.RENT.paid > 0 and spouse.line.RENT.paid > 0,
       unsupported("Only one of you claims the Manitoba renters affordability tax credit for both of you. Enter the rent on one return"),
       line.RENT.paid)
     source: "MB479 line 30"
   MB.senior:
     label: You or your spouse were 65 or older (1 for yes)
-    formula: "if(person.age >= 65, 1, if(line.HH.partner == 1 and household.partnerInYear, if(spouse.person.age >= 65, 1, 0), 0))"
+    formula: "if(person.age >= 65, 1, if(line.HH.partner == 1 and family.partnerInYear, if(spouse.person.age >= 65, 1, 0), 0))"
     source: "MB479 lines 31 and 42: at the end of the year"
   MB479.35:
     label: Renters credit for each month, for seniors
@@ -669,7 +669,7 @@ lines:
   MB479.57:
     label: Manitoba credits after assistance payments
     formula: >-
-      if(line.MB479.55 > 0 and (line.T1.14500 > 0 or (line.HH.partner == 1 and household.partnerInYear and spouse.line.T1.14500 > 0)),
+      if(line.MB479.55 > 0 and (line.T1.14500 > 0 or (line.HH.partner == 1 and family.partnerInYear and spouse.line.T1.14500 > 0)),
       unsupported("Employment and Income Assistance or MSPD payments reduce the Manitoba credits by the number in box 14 of the T5007 (Form MB479, line 56), which this app doesn't read yet"),
       line.MB479.55)
     source: "MB479 lines 56 and 57"

@@ -15,7 +15,7 @@ export function StepLayout({ step, title, estimate = true, aside, children }: { 
   return (
     <Page
       title={`${person.name} · ${year.year} ${STEP_LABELS[step].toLowerCase()}`}
-      crumbs={[["Returns", "/returns"], [String(year.year), `/returns/${year.year}`], [person.name, stepPath(year.year, person.id, "household")], [STEP_LABELS[step]]]}
+      crumbs={[["Returns", "/returns"], [String(year.year), `/returns/${year.year}`], [person.name, stepPath(year.year, person.id, "personal")], [STEP_LABELS[step]]]}
     >
       <div className="flex min-w-0 flex-col gap-3">
         <div className="flex flex-wrap items-center justify-between gap-3">

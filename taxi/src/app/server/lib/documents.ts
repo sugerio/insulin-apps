@@ -2,7 +2,7 @@ import { DOCUMENT_TYPES, MAX_DOCUMENT_BYTES, type DocumentList, type DocumentRec
 import { Dec } from "../../shared/engine/decimal.ts";
 import { documentName } from "../../shared/engine/rules.ts";
 import { rulesFor } from "../../shared/rules/index.ts";
-import { audit, bumpRevision, getYear, runGuarded, yearRow, type YearRow } from "./household.ts";
+import { audit, bumpRevision, getYear, runGuarded, yearRow, type YearRow } from "./people.ts";
 import { ApiError, conflict, notFound } from "./http.ts";
 import type { Caller } from "./identity.ts";
 import type { FileToRead, ReadSlip, SlipReader } from "./reader.ts";

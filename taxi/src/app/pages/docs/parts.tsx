@@ -5,7 +5,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 // The pieces the in-app Docs are written with. Each topic is static TSX: a title, a one-line summary and sections of
 // ordinary markup, with no parser and no data from the server, so the same pages serve every role.
 
-export const TOPIC_SLUGS = ["getting-started", "household", "tax-basics", "glossary"] as const;
+export const TOPIC_SLUGS = ["getting-started", "profile", "tax-basics", "glossary"] as const;
 export type TopicSlug = (typeof TOPIC_SLUGS)[number];
 
 export interface DocSection {

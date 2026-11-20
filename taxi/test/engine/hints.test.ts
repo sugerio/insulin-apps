@@ -5,7 +5,7 @@ import { findHints } from "../../src/app/shared/engine/hints.ts";
 import { RuleError } from "../../src/app/shared/engine/errors.ts";
 import { rulesFor } from "../../src/app/shared/rules/index.ts";
 
-// The 2025 hints (rules/ca/2025/hints.yaml). Each saving is checked against a hand calculation on one household, kept
+// The 2025 hints (rules/ca/2025/hints.yaml). Each saving is checked against a hand calculation on one golden case, kept
 // simple enough to do on paper: Ontario couples with T4 income only (no CPP or EI boxes), incomes where the Ontario
 // surtax, tax reduction, LIFT credit and the federal top-up credit are all zero.
 
@@ -27,7 +27,7 @@ function couple(
       { id: "a", name: "Alex", role: "self", birthDate: "1985-01-01", province: "ON" },
       { id: "b", name: "Blair", role: "spouse", birthDate: "1986-01-01", province: "ON" },
     ],
-    household: { maritalStatus: "married", dependants: [] },
+    family: { maritalStatus: "married", dependants: [] },
     answers: { a: { ...NONE, ...answers[0] }, b: { ...NONE, ...answers[1] } },
     slips: [
       { id: "t4a", person: "a", type: "T4", issuer: "Maple Corp", boxes: { 14: String(incomes[0]) } },
@@ -126,7 +126,7 @@ describe("2025 hints", () => {
 
   it("offers no allocation to a single person", () => {
     const input = couple([60000, 60000], [{ donations: "150", medicalExpenses: "3000" }, {}]);
-    const single: EngineInput = { ...input, people: [input.people[0]!], household: { maritalStatus: "single", dependants: [] }, answers: { a: input.answers.a! }, slips: input.slips.filter((slip) => slip.person === "a") };
+    const single: EngineInput = { ...input, people: [input.people[0]!], family: { maritalStatus: "single", dependants: [] }, answers: { a: input.answers.a! }, slips: input.slips.filter((slip) => slip.person === "a") };
     expect(ids(single).filter((id) => /pool|medical|tuition/i.test(id))).toEqual([]);
   });
 

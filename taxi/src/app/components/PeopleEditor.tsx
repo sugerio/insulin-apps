@@ -10,10 +10,10 @@ import { ApiError, apiRequest, describeError } from "../api/client.ts";
 import { RELATIONSHIP_LABELS, formatDate } from "../lib/format.ts";
 import { Banner } from "./Feedback.tsx";
 
-// The household's people: the list with Add, Edit and Remove (the Household page), and the picker that chooses who is
+// The people in the profile: the list with Add, Edit and Remove (the Profile page), and the picker that chooses who is
 // in a tax year (Start a year, and step 1 of a year).
 
-/** The household's people, editable by someone who prepares returns. `onChanged` runs after every saved change. */
+/** The people in the profile, editable by someone who prepares returns. `onChanged` runs after every saved change. */
 export function PeopleEditor({ people, editable, onChanged }: { people: Person[]; editable: boolean; onChanged: () => Promise<void> }) {
   const [editing, setEditing] = useState<string | "new" | null>(people.length === 0 && editable ? "new" : null);
   const [error, setError] = useState<unknown>(null);
@@ -88,7 +88,7 @@ export function PeopleEditor({ people, editable, onChanged }: { people: Person[]
   );
 }
 
-/** The relationships a person may take: one "you" and one spouse or partner per household. */
+/** The relationships a person may take: one "you" and one spouse or partner per profile. */
 function allowedRelationships(people: Person[], person?: Person): Relationship[] {
   const taken = (relationship: Relationship) => people.some((other) => other.relationship === relationship && other.id !== person?.id);
   if (person?.relationship === "self") return ["self"];
@@ -166,8 +166,8 @@ function PersonForm({ person, people, onDone, onCancel }: { person?: Person; peo
 }
 
 /**
- * Who is in a tax year: a checkbox per person of the household. You are always ticked; ticking your spouse prepares
- * both returns together. `footer` sits under the list (the link to add someone to the household).
+ * Who is in a tax year: a checkbox per person of the profile. You are always ticked; ticking your spouse prepares
+ * both returns together. `footer` sits under the list (the link to add someone to the profile).
  */
 export function MemberPicker({ people, selected, onChange, disabled = false, footer }: {
   people: Person[];

@@ -144,7 +144,7 @@ lines:
   AB428.23:
     label: Alberta amount for an eligible dependant
     formula: >-
-      round((if(line.HH.partner == 0 and household.childrenUnder18 > 0, param.abSpouseBase, 0)) * line.RES.factor, 2)
+      round((if(line.HH.partner == 0 and family.childrenUnder18 > 0, param.abSpouseBase, 0)) * line.RES.factor, 2)
     source: "AB428 lines 21 to 23. The app assumes the child had no income"
   # Lines 24 and 35: Alberta kept the infirm dependant and caregiver amounts that the Canada caregiver amount replaced
   # federally. A dependant who lived in your home gets the caregiver amount, one who didn't the infirm dependant amount;
@@ -207,7 +207,7 @@ lines:
     source: "AB428 line 40 (58520): line 31900 of your return"
   AB428.42:
     label: Amounts transferred from your spouse or common-law partner
-    formula: "if(line.HH.partner == 1 and household.partnerInYear, if(line.ABS2.4 == 0, 0, line.ABS2.11), 0)"
+    formula: "if(line.HH.partner == 1 and family.partnerInYear, if(line.ABS2.4 == 0, 0, line.ABS2.11), 0)"
     source: "Schedule AB(S2): their unused Alberta age, pension income and disability amounts"
   AB428.43:
     label: Alberta credit amounts before medical expenses

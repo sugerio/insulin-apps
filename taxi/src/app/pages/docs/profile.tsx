@@ -1,11 +1,11 @@
 import { DocLink, type DocTopic } from "./parts.tsx";
 
-// Docs › The household: step 1 of a tax year, field by field.
+// Docs › Profile and personal info: the people, who is in a year, and step 1 of a tax year, field by field.
 
-export const household: DocTopic = {
-  slug: "household",
-  title: "The household",
-  summary: "Who is in the household, who is in each tax year, and the facts no document shows.",
+export const profile: DocTopic = {
+  slug: "profile",
+  title: "Profile and personal info",
+  summary: "Who is in the profile, who is in each tax year, and the facts no document shows.",
   group: "app",
   sections: [
     {
@@ -14,7 +14,7 @@ export const household: DocTopic = {
       body: (
         <>
           <p>
-            Open <b>Household</b> in the navigation. Start with yourself: the person preparing the returns. Then add the others who live with you:
+            Open <b>Profile</b> in the navigation. Start with yourself: the person preparing the returns. Then add the others who live with you:
           </p>
           <ul>
             <li>
@@ -37,7 +37,7 @@ export const household: DocTopic = {
       body: (
         <>
           <p>
-            On <b>Returns</b>, choose <b>Start 2025</b>. The app lists everyone in the household with a box to tick. Only you are ticked to begin with:
+            On <b>Returns</b>, choose <b>Start 2025</b>. The app lists everyone in the profile with a box to tick. Only you are ticked to begin with:
           </p>
           <ul>
             <li>
@@ -45,7 +45,7 @@ export const household: DocTopic = {
             </li>
             <li>
               <b>Your spouse or partner:</b> tick them to prepare both returns together. Each of you still files your own return; together, the app
-              can later decide who claims shared credits, such as donations and medical expenses, so the household pays less. Leave them unticked to
+              can later decide who claims shared credits, such as donations and medical expenses, so the two of you pay less. Leave them unticked to
               prepare only your return.
             </li>
             <li>
@@ -53,7 +53,7 @@ export const household: DocTopic = {
             </li>
           </ul>
           <p>
-            Someone missing? Choose <b>Add a new person</b>: it opens the Household page, and <b>Back to Start 2025</b> brings you back to the list.
+            Someone missing? Choose <b>Add a new person</b>: it opens the Profile page, and <b>Back to Start 2025</b> brings you back to the list.
             To change who is in a year later, use <b>Change</b> under <b>People in 2025</b> on <b>Returns</b>. Someone taken out of a year loses their facts, answers and slips for that year.
           </p>
         </>
@@ -68,7 +68,7 @@ export const household: DocTopic = {
             Choose your status on the last day of the year, as the T1 asks it. If it changed during the year, the status on December 31 counts.
           </p>
           <p>
-            The choices follow the Household. With a spouse or partner there, choose married or living common-law, even if their return isn't
+            The choices follow the Profile. With a spouse or partner there, choose married or living common-law, even if their return isn't
             prepared this year. Without one, choose single, widowed, divorced or separated. If you add or remove a spouse later, the year asks for
             the status again.
           </p>

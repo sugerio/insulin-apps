@@ -2,8 +2,8 @@ import { Dec } from "./decimal.ts";
 import { Evaluation, type EngineInput } from "./evaluate.ts";
 import type { Hint, HintKind, RuleSet } from "./rules.ts";
 
-// Finds the hints that apply to a household's returns (hints.yaml). A hint with a change is a what-if: the engine works
-// out every return again with the changed answers, and the difference in the household's outcome (the refund less the
+// Finds the hints that apply to the returns of a year (hints.yaml). A hint with a change is a what-if: the engine works
+// out every return again with the changed answers, and the difference in the combined outcome (the refund less the
 // balance owing, added up over both returns) is what the change is worth. A saving shows only when that is positive,
 // so a saving is never a guess.
 
@@ -18,7 +18,7 @@ export interface FoundHint {
   title: string;
   text: string;
   amount: { label: string; value: string } | null;
-  /** The household's outcome with the change less without it; null without a change or when it can't be worked out. */
+  /** The combined outcome of the year's returns with the change less without it; null without a change or when it can't be worked out. */
   effect: string | null;
   effectLabel: string | null;
   /** The answers the change sets, by person. */
@@ -74,7 +74,7 @@ function bestOfEachAllocation(rules: RuleSet, found: FoundHint[]): FoundHint[] {
   return found.filter((hint) => !best.has(hint.id) || best.get(hint.id) === hint);
 }
 
-/** The household's outcome: the outcome line added up over every return; null when a return's can't be worked out. */
+/** The combined outcome: the outcome line added up over every return; null when a return's can't be worked out. */
 function outcomeOf(rules: RuleSet, evaluation: Evaluation): Dec | null {
   if (rules.outcome === undefined) return null;
   let total = Dec.ZERO;

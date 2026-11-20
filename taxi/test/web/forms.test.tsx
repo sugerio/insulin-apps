@@ -10,7 +10,7 @@ async function seed(server: TestServer, finished: boolean, province: "ON" | "QC"
   const call = async <T,>(method: string, path: string, body: unknown) => (await (await server.call(method, path, { as: OWNER, body })).json()) as T;
   const alex = await call<Person>("POST", "/api/people", { name: "Alex Martin", relationship: "self", birthDate: "1985-04-02" });
   await call("POST", "/api/years", { year: 2025, people: [alex.id] });
-  let year = await call<TaxYear>("PUT", "/api/years/2025/household", { revision: 1, maritalStatus: "single", adults: [{ personId: alex.id, province, residentAllYear: true }] });
+  let year = await call<TaxYear>("PUT", "/api/years/2025/personal-info", { revision: 1, maritalStatus: "single", adults: [{ personId: alex.id, province, residentAllYear: true }] });
   year = await call<TaxYear>("POST", "/api/years/2025/slips", { revision: year.revision, personId: alex.id, type: "T4", issuer: "Maple Corp", boxes: { 14: "60000", 22: "9000" } });
   if (province === "QC") {
     year = await call<TaxYear>("POST", "/api/years/2025/slips", { revision: year.revision, personId: alex.id, type: "RL1", issuer: "Maple Corp", boxes: { A: "60000", E: "6900" } });

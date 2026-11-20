@@ -179,7 +179,7 @@ lines:
   NS428.16:
     label: Nova Scotia amount for an eligible dependant
     formula: >-
-      round((if(line.HH.partner == 0 and household.childrenUnder18 > 0, min(param.nsSpouseMax, param.nsSpouseBase - param.nsSpouseIncomeFloor), 0)) * line.RES.factor, 2)
+      round((if(line.HH.partner == 0 and family.childrenUnder18 > 0, min(param.nsSpouseMax, param.nsSpouseBase - param.nsSpouseIncomeFloor), 0)) * line.RES.factor, 2)
     source: "NS428 lines 14 to 16. The app assumes the child had no income, so $874 is taken off"
   # The amount for infirm dependants needs no shared home, unlike the caregiver amount (line 28), which the app can't
   # tell; so the infirm amount is claimed for an adult relative with an impairment.
@@ -195,7 +195,7 @@ lines:
     formula: >-
       if(line.HH.partner == 1 and (line.T1.23600 > line.HH.spouseNetIncome
       or (line.T1.23600 == line.HH.spouseNetIncome and person.role == "spouse")), 0,
-      sum(household.childMonthsUnder6) - if(line.NS428.16 > 0, min(household.childMonthsUnder6), 0))
+      sum(family.childMonthsUnder6) - if(line.NS428.16 > 0, min(family.childMonthsUnder6), 0))
     source: "NS428 line 58229: each month a child was under 6 on its first day; with a spouse or partner, only the one with the lower net income claims (with equal incomes, the person preparing)"
   NS428.18:
     label: Nova Scotia amount for young children
@@ -238,7 +238,7 @@ lines:
     source: "NS428 line 35 (58600): the provincial amount they designate on their T2202, taken as the federal one"
   NS428.36:
     label: Nova Scotia amounts transferred from your spouse or common-law partner
-    formula: "if(line.HH.partner == 1 and household.partnerInYear and line.NSS2.5 > 0, line.NSS2.12, 0)"
+    formula: "if(line.HH.partner == 1 and family.partnerInYear and line.NSS2.5 > 0, line.NSS2.12, 0)"
     source: "Schedule NS(S2): their unused Nova Scotia age, pension, disability and tuition amounts"
   NS428.43:
     label: Allowable medical expenses
@@ -298,7 +298,7 @@ lines:
     source: "NS428 lines 71 to 74: $300 each, up to $600"
   NS428.75:
     label: Reduction for dependent children
-    formula: "param.nsTaxReductionChild * max(0, household.childrenUnder19 - if(line.NS428.16 > 0, 1, 0))"
+    formula: "param.nsTaxReductionChild * max(0, family.childrenUnder19 - if(line.NS428.16 > 0, 1, 0))"
     source: "NS428 line 75: $165 for each child born in 2007 or later, other than the one claimed on line 73"
   NS428.76:
     label: Nova Scotia tax reductions
@@ -310,8 +310,8 @@ lines:
   NS.claimsReduction:
     label: This return claims the family's low-income tax reduction (1 for yes)
     formula: >-
-      if(person.age >= 19 or line.HH.partner == 1 or household.childrenUnder19 > 0,
-      if(line.HH.partner == 1 and household.partnerInYear and spouse.person.province == "NS"
+      if(person.age >= 19 or line.HH.partner == 1 or family.childrenUnder19 > 0,
+      if(line.HH.partner == 1 and family.partnerInYear and spouse.person.province == "NS"
       and (spouse.line.NS428.64 > line.NS428.64 or (spouse.line.NS428.64 == line.NS428.64
       and (spouse.line.T1.23600 > line.T1.23600 or (spouse.line.T1.23600 == line.T1.23600 and person.role == "spouse")))), 0, 1), 0)
     source: "Nova Scotia low-income tax reduction: for someone 19 or older, with a spouse or partner, or a parent; a couple claims it on one return"
@@ -368,7 +368,7 @@ lines:
     source: "NS(S11) lines 17 to 19: this year's amounts up to $5,000, less what you used"
   NSS11.20:
     label: Nova Scotia tuition and education amounts transferred to your spouse or common-law partner
-    formula: "if(line.HH.partner == 1 and household.partnerInYear and line.NSS11.5 > 0, min(answer.tuitionTransfer, line.NSS11.19), 0)"
+    formula: "if(line.HH.partner == 1 and family.partnerInYear and line.NSS11.5 > 0, min(answer.tuitionTransfer, line.NSS11.19), 0)"
     source: "NS(S11) line 20: the amount you designate on your T2202 (the same as federally), up to line 19"
 
   # Schedule NS(S2) – Nova Scotia amounts transferred from your spouse (read from their NS428, as if they lived here)
@@ -395,7 +395,7 @@ lines:
     source: "NS479 line 1 (62400): $500 for a volunteer firefighter or ground search and rescue volunteer"
   NS479.2:
     label: Your children's sports and arts expenses
-    formula: "if(household.childrenUnder19 > 0, min(answer.childActivityFees, param.nsActivityMaxPerChild * household.childrenUnder19), 0)"
+    formula: "if(family.childrenUnder19 > 0, min(answer.childActivityFees, param.nsActivityMaxPerChild * family.childrenUnder19), 0)"
     source: "NS479 line 2: fees for children under 19 at the end of the year, less assistance, up to $500 per child"
   NS479.4:
     label: Children's sports and arts tax credit

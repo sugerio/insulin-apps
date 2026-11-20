@@ -1,13 +1,13 @@
 # Taxi
 
-Taxi prepares a Canadian household's income tax returns (the T1): yours, and your spouse's or common-law
+Taxi prepares Canadian personal income tax returns (the T1): yours, and your spouse's or common-law
 partner's if you prepare them together. It never files with the CRA. When a return is done, you get the CRA's own
 forms, filled in, to sign and mail, or numbers to copy into certified software.
 
 It is an Insulin app: you start from it in the Insulin console, change it with the AppBuilder if you want to, preview it
 and publish it. It brings its own database.
 
-**Status: early.** It is being built in parts. Today a year can be prepared from start to finish: the household,
+**Status: early.** It is being built in parts. Today a year can be prepared from start to finish: the profile,
 uploaded slips read by AI (or typed in), income, deductions, credits, the results, and the filled-in CRA forms.
 
 ## What it does today
@@ -15,8 +15,8 @@ uploaded slips read by AI (or typed in), income, deductions, credits, the result
 - **Tax years.** Start a year (2025). You and your spouse or partner each have a return; the app shows one return at a
   time, with a switcher to the other. Each return has seven steps: personal info, upload documents, income,
   deductions, credits, confirm, finish. The steps run in a row above each page, with the return's estimate above them.
-- **The household.** Add yourself, your spouse or common-law partner, and your children and other dependants, with
-  their birth dates, on the Household page. Starting a year asks who is in it (only you, to begin with; change it later on
+- **The profile.** Add yourself, your spouse or common-law partner, and your children and other dependants, with
+  their birth dates, on the Profile page. Starting a year asks who is in it (only you, to begin with; change it later on
   the Tax years page): your spouse in it means both returns are
   prepared together. Each year then records your marital status on December 31, and each adult's province and whether
   they lived in Canada all year (for someone who moved, the days in Canada). The app says what is still missing.
@@ -61,7 +61,7 @@ Residents of every Canadian province and territory, for the 2025 tax year, inclu
 during the year. A resident of Quebec gets both returns: the federal return (5005-R) and Revenu Québec's TP-1, from
 the RL slips. The returns cover employment, pension, benefit, investment, self-employment (with farming and fishing),
 rental and foreign income, the sale of real estate, the usual deductions (RRSP, FHSA, pension splitting, child care,
-moving, home office, support) and the federal, provincial and territorial credits a household claims. Not handled, and
+moving, home office, support) and the federal, provincial and territorial credits a family claims. Not handled, and
 said so when it applies: property treated as sold when you leave Canada, business and investment tax credits, and a
 few Quebec cases (employment outside Quebec, rental and foreign income on the TP-1).
 
@@ -69,7 +69,7 @@ few Quebec cases (employment outside Quebec, rental and foreign income on the TP
 
 - **No SIN, address or bank details are stored.** You write them on the paper return when you sign it.
 - **Hourly usage counts.** On insulinapps.com, the platform calls Taxi every five minutes, and once an hour it
-  sends counts for each organization (households, people, tax years and returns) and the database's size. Never names,
+  sends counts for each organization (profiles, people, tax years and returns) and the database's size. Never names,
   birth dates, amounts or documents.
 - **General information, not advice.** The Docs explain tax terms in general; they are not tax advice.
 

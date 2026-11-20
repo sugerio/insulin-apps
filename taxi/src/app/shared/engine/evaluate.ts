@@ -4,7 +4,7 @@ import { EngineError } from "./errors.ts";
 import type { BinaryOperator, Formula } from "./formula.ts";
 import { isNumberQuestion, type BracketRow, type RuleSet, type Status } from "./rules.ts";
 
-// Evaluates a household's returns for one year. The input is one JSON document per household and year (the people,
+// Evaluates the returns of one year. The input is one JSON document per year (the people,
 // their answers and their slips); the screens, AI reading and API clients all produce it. Evaluation is lazy and
 // memoized: a value is computed the first time something asks for it, so a question only matters when a line that is
 // reached reads it. Each value records what it read, which is what `explain` walks.
@@ -27,8 +27,8 @@ export const engineInputSchema = z.strictObject({
     .min(1)
     .max(2)
     .refine((people) => people.filter((person) => person.role === "self").length === 1, { message: "One person is self" }),
-  /** What the household says for the year: the marital status on December 31 and the dependants in the year. */
-  household: z.strictObject({
+  /** The family facts of the year: the marital status on December 31 and the dependants in the year. */
+  family: z.strictObject({
     maritalStatus: z.string().nullable(),
     dependants: z.array(z.strictObject({ id: z.string().min(1), name: z.string(), birthDate: z.iso.date() })),
   }),
@@ -72,7 +72,7 @@ export interface PersonResult {
   personId: string;
   /** The rule set's result lines, in order. */
   lines: ResultLine[];
-  /** What a result line needs that isn't given: questions with no answer and no default, household facts, the province. */
+  /** What a result line needs that isn't given: questions with no answer and no default, family facts, the province. */
   missing: { question: string; ask: string }[];
   /** Questions a result line needs that are unanswered, so their default was used. */
   estimates: { question: string; ask: string; assumed: string | boolean }[];
@@ -214,9 +214,9 @@ export class Evaluation {
         const asked = [...reached].filter((key) => key.startsWith(`${person.id}:answer.`)).map((key) => key.slice(`${person.id}:answer.`.length));
         const missing: PersonResult["missing"] = [];
         const estimates: PersonResult["estimates"] = [];
-        // A household fact or the province that a result line needs and that hasn't been given yet.
+        // A family fact or the province that a result line needs and that hasn't been given yet.
         for (const key of reached) {
-          const fact = key.startsWith("household.") ? key : key.startsWith(`${person.id}:person.`) ? key.slice(person.id.length + 1) : null;
+          const fact = key.startsWith("family.") ? key : key.startsWith(`${person.id}:person.`) ? key.slice(person.id.length + 1) : null;
           if (fact !== null && this.node(key).status === "missing") missing.push({ question: fact, ask: this.node(key).label });
         }
         for (const id of asked) {
@@ -258,7 +258,7 @@ export class Evaluation {
       if (!other) return `${personId}:${path.join(".")}`;
       return this.key(other, path.slice(1));
     }
-    if (path[0] === "param" || path[0] === "household") return path.join(".");
+    if (path[0] === "param" || path[0] === "family") return path.join(".");
     return `${personId}:${path.join(".")}`;
   }
 
@@ -281,7 +281,7 @@ export class Evaluation {
   }
 
   private compute(key: string): Node {
-    if (key.startsWith("household.")) return this.householdValue(key.slice("household.".length));
+    if (key.startsWith("family.")) return this.familyValue(key.slice("family.".length));
     if (key.startsWith("param.")) {
       const param = this.rules.params.get(key.slice("param.".length))!;
       return { value: param.value, status: "complete", label: param.label, source: param.source, reads: [] };
@@ -348,16 +348,16 @@ export class Evaluation {
     }
   }
 
-  /** The household's facts: the same for both returns. */
-  private householdValue(name: string): Node {
-    const { household, year } = this.input;
+  /** The family facts: the same for both returns. */
+  private familyValue(name: string): Node {
+    const { family, year } = this.input;
     const childrenUnder = (age: number) =>
-      Dec.of(household.dependants.filter((dependant) => year - Number(dependant.birthDate.slice(0, 4)) < age).length);
+      Dec.of(family.dependants.filter((dependant) => year - Number(dependant.birthDate.slice(0, 4)) < age).length);
     switch (name) {
       case "maritalStatus":
         return {
-          value: household.maritalStatus,
-          status: household.maritalStatus === null ? "missing" : "complete",
+          value: family.maritalStatus,
+          status: family.maritalStatus === null ? "missing" : "complete",
           label: "Marital status on December 31",
           reads: [],
         };
@@ -377,7 +377,7 @@ export class Evaluation {
         // Some credits (Nova Scotia's and Prince Edward Island's amount for young children) count the months on whose
         // first day a child was born and not yet 6. One entry per dependant under 18, so a formula can also leave out
         // the child claimed as an eligible dependant.
-        const items = household.dependants
+        const items = family.dependants
           .filter((dependant) => year - Number(dependant.birthDate.slice(0, 4)) < 18)
           .map((dependant) => {
             const sixth = `${Number(dependant.birthDate.slice(0, 4)) + 6}${dependant.birthDate.slice(4)}`;
@@ -389,7 +389,7 @@ export class Evaluation {
         return { value: items.map((item) => item.value), status: "complete", label: "Months each dependant under 18 was under 6", reads: [], items };
       }
       default:
-        throw new EngineError("ENGINE_NAME", `No household.${name}`);
+        throw new EngineError("ENGINE_NAME", `No family.${name}`);
     }
   }
 

@@ -121,10 +121,10 @@ lines:
   YT428.22:
     label: Children's arts amount
     formula: >-
-      if(household.childrenUnder17 > 0, if(household.partnerInYear and line.HH.partner == 1
-      and answer.childArtsFees + spouse.answer.childArtsFees > param.ytArtsMaxPerChild * household.childrenUnder17,
-      round(answer.childArtsFees * param.ytArtsMaxPerChild * household.childrenUnder17 / (answer.childArtsFees + spouse.answer.childArtsFees), 2),
-      min(answer.childArtsFees, param.ytArtsMaxPerChild * household.childrenUnder17)), 0)
+      if(family.childrenUnder17 > 0, if(family.partnerInYear and line.HH.partner == 1
+      and answer.childArtsFees + spouse.answer.childArtsFees > param.ytArtsMaxPerChild * family.childrenUnder17,
+      round(answer.childArtsFees * param.ytArtsMaxPerChild * family.childrenUnder17 / (answer.childArtsFees + spouse.answer.childArtsFees), 2),
+      min(answer.childArtsFees, param.ytArtsMaxPerChild * family.childrenUnder17)), 0)
     source: "YT428 line 22 (58326): fees for an artistic, cultural, recreational or developmental program for a child under 16, up to $500 each"
   YT428.23:
     label: Yukon adoption expenses
@@ -166,7 +166,7 @@ lines:
     source: "YT428 line 32 (58600): the territorial amount designated to you on their T2202 (the app takes the federal one, line 32400)"
   YT428.33:
     label: Amounts transferred from your spouse or common-law partner
-    formula: "if(line.HH.partner == 1 and household.partnerInYear, line.YTS2.13, 0)"
+    formula: "if(line.HH.partner == 1 and family.partnerInYear, line.YTS2.13, 0)"
     source: "YT428 line 33 (58640): Schedule YT(S2)"
   YT428.40:
     label: Allowable medical expenses
@@ -249,7 +249,7 @@ lines:
     source: "YT(S11) lines 16 to 18: this year's tuition up to $5,000, less what you used"
   YTS11.19:
     label: Yukon tuition transferred to your spouse or common-law partner
-    formula: "if(line.HH.partner == 1 and household.partnerInYear and line.YTS11.4 > 0, min(answer.tuitionTransfer, line.YTS11.18), 0)"
+    formula: "if(line.HH.partner == 1 and family.partnerInYear and line.YTS11.4 > 0, min(answer.tuitionTransfer, line.YTS11.18), 0)"
     source: "YT(S11) line 19: the amount you designate on your T2202 (the app takes the federal one), up to line 18"
 
   # Schedule YT(S2) – Yukon amounts transferred from your spouse (read from their YT428, whatever their province)
@@ -277,10 +277,10 @@ lines:
   YT479.63800:
     label: Eligible children's fitness fees
     formula: >-
-      if(household.childrenUnder17 > 0, if(household.partnerInYear and line.HH.partner == 1
-      and answer.childFitnessFees + spouse.answer.childFitnessFees > param.ytFitnessMaxPerChild * household.childrenUnder17,
-      round(answer.childFitnessFees * param.ytFitnessMaxPerChild * household.childrenUnder17 / (answer.childFitnessFees + spouse.answer.childFitnessFees), 2),
-      min(answer.childFitnessFees, param.ytFitnessMaxPerChild * household.childrenUnder17)), 0)
+      if(family.childrenUnder17 > 0, if(family.partnerInYear and line.HH.partner == 1
+      and answer.childFitnessFees + spouse.answer.childFitnessFees > param.ytFitnessMaxPerChild * family.childrenUnder17,
+      round(answer.childFitnessFees * param.ytFitnessMaxPerChild * family.childrenUnder17 / (answer.childFitnessFees + spouse.answer.childFitnessFees), 2),
+      min(answer.childFitnessFees, param.ytFitnessMaxPerChild * family.childrenUnder17)), 0)
     source: >-
       YT479 line 63800: fees for children under 16 at the start of the year, up to $1,000 each. When both spouses
       claim more than that together, each claims a share of it

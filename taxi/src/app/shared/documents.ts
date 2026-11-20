@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { idSchema, taxYearSchema } from "./household.ts";
+import { idSchema, taxYearSchema } from "./people.ts";
 import { SLIP_STATUSES } from "./returns.ts";
 
 // Step 2: files uploaded for a tax year, one per request, each read by AI into slips.

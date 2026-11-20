@@ -16,11 +16,11 @@ import { parseFormula, references, type Formula } from "./formula.ts";
 //                                 person preparing or "spouse"; person.residentAllYear whether they lived in Canada all year
 //   person.birthMonth             the month the person was born, 1 to 12 (with person.age, the month they turned an
 //                                 age this year, which prorates CPP in the year they turn 18 or 70)
-//   household.maritalStatus, household.partnerInYear, household.childrenUnder18, household.childrenUnder19
+//   family.maritalStatus, family.partnerInYear, family.childrenUnder18, family.childrenUnder19
 //                                 the year's marital status, whether the spouse's return is prepared too, and the
 //                                 number of dependants under 18 (or 19) at the end of the year; also childrenUnder6,
 //                                 childrenUnder7 and childrenUnder17
-//   household.childMonthsUnder6   for each dependant under 18, the months on whose first day they were born and under 6
+//   family.childMonthsUnder6      for each dependant under 18, the months on whose first day they were born and under 6
 //                                 (a list: sum, min)
 //   spouse.<any of the above but param>   the same, for the spouse
 
@@ -130,7 +130,7 @@ export interface HintChange {
 /**
  * A hint: a check on a return that either proposes a change with the money it saves (`saving`) or tells the person
  * something (`info`, `warning`). `when` decides whether it shows, from this person's side. A change is a set of
- * answers; the engine works out the household's result with and without it, so a saving is never guessed.
+ * answers; the engine works out the result of the year's returns with and without it, so a saving is never guessed.
  */
 export interface Hint {
   id: string;
@@ -242,7 +242,7 @@ export interface RuleSet {
   hints: Map<string, Hint>;
   /** The CRA forms a return is printed on, in order. */
   forms: Map<string, FormSpec>;
-  /** The line a hint's what-if compares, added up over the household: the refund less the balance owing. */
+  /** The line a hint's what-if compares, added up over the year's returns: the refund less the balance owing. */
   outcome?: string;
 }
 
@@ -796,13 +796,13 @@ function refType(ruleSet: RuleSet, path: string[], fail: (message: string) => ne
       if (!question) return fail(`No question ${rest.join(".")}`);
       return isNumberQuestion(question.type) ? "number" : question.type === "boolean" ? "boolean" : "string";
     }
-    case "household":
-      if (spouse) return fail(`${name}: the household is the same for both spouses; write household.${rest.join(".")}`);
+    case "family":
+      if (spouse) return fail(`${name}: the family facts are the same for both spouses; write family.${rest.join(".")}`);
       if (rest.length === 1 && rest[0] === "maritalStatus") return "string";
       if (rest.length === 1 && rest[0] === "partnerInYear") return "boolean";
       if (rest.length === 1 && ["childrenUnder6", "childrenUnder7", "childrenUnder17", "childrenUnder18", "childrenUnder19"].includes(rest[0]!)) return "number";
       if (rest.length === 1 && rest[0] === "childMonthsUnder6") return "list";
-      return fail(`${name}: the household has maritalStatus, partnerInYear, childrenUnder6, childrenUnder7, childrenUnder17, childrenUnder18, childrenUnder19 and childMonthsUnder6`);
+      return fail(`${name}: family has maritalStatus, partnerInYear, childrenUnder6, childrenUnder7, childrenUnder17, childrenUnder18, childrenUnder19 and childMonthsUnder6`);
     case "person":
       if (rest.length === 1 && (rest[0] === "age" || rest[0] === "birthMonth")) return "number";
       if (rest.length === 1 && (rest[0] === "province" || rest[0] === "role")) return "string";

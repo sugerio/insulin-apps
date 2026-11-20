@@ -1,7 +1,7 @@
 # Hints: checks on each return, like a tax program's "check and optimize". A hint shows when `when` is yes, worked out
 # from the return's side (`spouse.` reads the other return). It is one of:
 # - saving: a change of answers (`change`, each a formula from this return's side). The engine works out both returns
-#   again with the change, and the hint shows only when the household's refund less balance owing (`outcome` in
+#   again with the change, and the hint shows only when the combined refund less balance owing of the year's returns (`outcome` in
 #   year.yaml) goes up by $1 or more. Accepting it saves the answers, so the return stays explainable.
 # - info or warning: something to know. A change here is only worked out to show what it makes (`effectLabel`).
 # `amount` is a number shown with the hint, named by `amountLabel`.
@@ -53,7 +53,7 @@ hints:
     title: Split your pension income with your spouse or partner
     text: >-
       You can move up to half of your eligible pension income to your spouse's or partner's return (Form T1032). With
-      the lower income taxed there, the household usually pays less, and a spouse with no pension of their own can
+      the lower income taxed there, the couple usually pays less, and a spouse with no pension of their own can
       claim the pension income amount. The split brings your two net incomes as close as the limit allows. Both of you
       sign Form T1032 and attach it to both returns if you file on paper.
     when: >-

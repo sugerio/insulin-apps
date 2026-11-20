@@ -1,8 +1,8 @@
 import { z } from "zod";
-import { idSchema } from "./household.ts";
+import { idSchema } from "./people.ts";
 
 // What a year's returns are made of: each adult's slips and answers. Every change names the year's revision it was
-// based on, like the household facts, and answers with the year (its new revision and steps).
+// based on, like the family facts, and answers with the year (its new revision and steps).
 
 export const revisionSchema = z.number().int().min(1);
 

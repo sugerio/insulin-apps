@@ -1,9 +1,9 @@
 import type { Estimate } from "#shared";
-import { getYear, yearRow } from "./household.ts";
+import { getYear, yearRow } from "./people.ts";
 import { notFound } from "./http.ts";
 import { evaluateYear, loadWorkspace } from "./workspace.ts";
 
-// A year's estimate: the engine run on what is stored for the year (its adults, household, answers and slips).
+// A year's estimate: the engine run on what is stored for the year (its adults, family facts, answers and slips).
 // Nothing computed is stored; every read computes again, so a change to the rules shows on the next read.
 
 export async function getEstimate(db: D1Database, orgId: string, year: number): Promise<Estimate> {

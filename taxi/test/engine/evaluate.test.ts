@@ -53,7 +53,7 @@ function input(overrides: Partial<EngineInput> = {}): EngineInput {
       { id: "a", name: "Alex", role: "self", birthDate: "1960-04-02", province: "ON" },
       { id: "b", name: "Sam", role: "spouse", birthDate: "1987-09-15", province: "BC" },
     ],
-    household: { maritalStatus: "married", dependants: [] },
+    family: { maritalStatus: "married", dependants: [] },
     answers: {},
     slips: [
       { id: "s1", person: "a", type: "S", issuer: "One", boxes: { 1: "150.50" } },
@@ -69,7 +69,7 @@ const value = (evaluation: Evaluation, person: string, line: string) => {
   return [result.value?.toString() ?? null, result.status];
 };
 
-describe("evaluating a household", () => {
+describe("evaluating a year", () => {
   it("sums slip boxes, applies brackets, and marks a default as an estimate", () => {
     const evaluation = new Evaluation(rules, input());
     expect(value(evaluation, "a", "R.income")).toEqual(["250.5", "complete"]);
@@ -166,7 +166,7 @@ describe("the 2025 rules", () => {
     new Evaluation(rulesFor(2025)!, {
       year: 2025,
       people: [{ id: "p1", name: "Alex", role: "self", birthDate: "1985-04-02", province }],
-      household: { maritalStatus: "single", dependants: [] },
+      family: { maritalStatus: "single", dependants: [] },
       answers: { p1: answers },
       slips,
     });
@@ -186,18 +186,18 @@ describe("the 2025 rules", () => {
     expect(result.unhandled).toEqual(["T4 from Maple Corp: box 40 isn't handled by this app"]);
   });
 
-  it("say which household fact is missing", () => {
+  it("say which family fact is missing", () => {
     const evaluation = new Evaluation(rulesFor(2025)!, {
       year: 2025,
       people: [{ id: "p1", name: "Alex", role: "self", birthDate: "1985-04-02", province: null }],
-      household: { maritalStatus: null, dependants: [] },
+      family: { maritalStatus: null, dependants: [] },
       answers: {},
       slips: [],
     });
     expect(evaluation.line("p1", "T1.42000").status).toBe("missing");
     // In no particular order: which fact a formula reads first is the rules' business.
     expect([...evaluation.result().people[0]!.missing].sort((a, b) => a.question.localeCompare(b.question))).toEqual([
-      { question: "household.maritalStatus", ask: "Marital status on December 31" },
+      { question: "family.maritalStatus", ask: "Marital status on December 31" },
       { question: "person.province", ask: "Province on December 31" },
     ]);
   });
@@ -258,7 +258,7 @@ describe("the 2025 rules", () => {
       new Evaluation(rulesFor(2025)!, {
         year: 2025,
         people: [{ id: "p1", name: "Alex", role: "self", birthDate: "1985-04-02", province: "ON" }],
-        household: { maritalStatus: "single", dependants: [] },
+        family: { maritalStatus: "single", dependants: [] },
         answers: { p1: { rrspDeduction: "0" } },
         slips: [{ id: "s1", person: "p1", type: "T4", issuer: "Maple Corp", boxes: { 14: income } }],
       }).line("p1", "T1.30000").value!.toString();

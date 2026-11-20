@@ -11,7 +11,7 @@ describe("the estimate above a step", () => {
       seed: async (server) => {
         const alex = (await (await server.call("POST", "/api/people", { as: OWNER, body: { name: "Alex Martin", relationship: "self", birthDate: "1985-04-02" } })).json()) as Person;
         await server.call("POST", "/api/years", { as: OWNER, body: { year: 2025, people: [alex.id] } });
-        await server.call("PUT", "/api/years/2025/household", {
+        await server.call("PUT", "/api/years/2025/personal-info", {
           as: OWNER,
           body: { revision: 1, maritalStatus: "single", adults: [{ personId: alex.id, province: "ON", residentAllYear: true }] },
         });
@@ -36,7 +36,7 @@ describe("the estimate above a step", () => {
         const call = async (method: string, path: string, body: unknown) => (await server.call(method, path, { as: OWNER, body })).json();
         const camille = (await call("POST", "/api/people", { name: "Camille Roy", relationship: "self", birthDate: "1991-02-03" })) as Person;
         await call("POST", "/api/years", { year: 2025, people: [camille.id] });
-        let year = (await call("PUT", "/api/years/2025/household", {
+        let year = (await call("PUT", "/api/years/2025/personal-info", {
           revision: 1,
           maritalStatus: "single",
           adults: [{ personId: camille.id, province: "QC", residentAllYear: true }],

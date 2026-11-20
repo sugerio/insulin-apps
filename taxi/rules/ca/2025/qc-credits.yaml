@@ -333,7 +333,7 @@ lines:
     source: "Schedule B, line 22: born before January 1, 1961"
   QCB.23:
     label: Age amount of your spouse
-    formula: "if(line.HH.partner == 1 and household.partnerInYear, if(spouse.person.age >= 65, param.qcAgeAmount, 0), 0)"
+    formula: "if(line.HH.partner == 1 and family.partnerInYear, if(spouse.person.age >= 65, param.qcAgeAmount, 0), 0)"
     source: "Schedule B, line 23: your spouse born before January 1, 1961"
   QCB.27:
     label: Amount for retirement income
@@ -391,7 +391,7 @@ lines:
   QCC.own:
     label: Childcare expenses this return paid
     formula: >-
-      if(household.childrenUnder17 > 0, max(0, sum(RL24.boxE) + answer.qcChildCareReceipts - sum(RL1.box201) - sum(RL5.boxJ)), 0)
+      if(family.childrenUnder17 > 0, max(0, sum(RL24.boxE) + answer.qcChildCareReceipts - sum(RL1.box201) - sum(RL5.boxJ)), 0)
     source: "Schedule C, lines 26.1 to 41: box E of the RL-24 slips and the receipts without one, less the allowance in box 201 of the RL-1 or box J of the RL-5"
   QCC.41:
     label: Childcare expenses qualifying for the tax credit
@@ -399,7 +399,7 @@ lines:
     source: "Schedule C, line 41: the couple's expenses"
   QCC.50:
     label: Childcare expense limit
-    formula: "param.qcChildCareUnder7 * household.childrenUnder7 + param.qcChildCare7to16 * (household.childrenUnder17 - household.childrenUnder7)"
+    formula: "param.qcChildCareUnder7 * family.childrenUnder7 + param.qcChildCare7to16 * (family.childrenUnder17 - family.childrenUnder7)"
     source: "Schedule C, lines 44 to 50: $12,275 for each child born after 2018 and $6,180 for each child born after 2008 (the $16,800 limit for a child with an impairment isn't handled)"
   QCC.85:
     label: Childcare expenses counted
@@ -511,9 +511,9 @@ lines:
   QCK.46:
     label: Income not subject to the premium
     formula: >-
-      if(line.HH.partner == 1, param.drugIncomeCouple + if(household.childrenUnder18 >= 2, param.drugChildrenCouple,
-      if(household.childrenUnder18 == 1, param.drugChildCouple, 0)), param.drugIncomeSingle + if(household.childrenUnder18 >= 2,
-      param.drugChildrenSingle, if(household.childrenUnder18 == 1, param.drugChildSingle, 0)))
+      if(line.HH.partner == 1, param.drugIncomeCouple + if(family.childrenUnder18 >= 2, param.drugChildrenCouple,
+      if(family.childrenUnder18 == 1, param.drugChildCouple, 0)), param.drugIncomeSingle + if(family.childrenUnder18 >= 2,
+      param.drugChildrenSingle, if(family.childrenUnder18 == 1, param.drugChildSingle, 0)))
     source: "Schedule K, lines 41 to 46 (a dependent child: under 18 at the end of the year)"
   QCK.48:
     label: Income used to calculate the premium
@@ -560,7 +560,7 @@ lines:
   QCP.49:
     label: Your spouse's work income
     formula: >-
-      if(line.HH.partner == 1, if(household.partnerInYear, if(spouse.person.province == "QC", spouse.line.QC.work, spouse.line.CWB.working),
+      if(line.HH.partner == 1, if(family.partnerInYear, if(spouse.person.province == "QC", spouse.line.QC.work, spouse.line.CWB.working),
       if(line.QC.family < param.workPremiumMaxFamilyCouple,
       unsupported("The work premium for a couple needs your spouse's work income: prepare their return here too"), 0)), 0)
     source: "Schedule P, line 49; a couple whose family income is over the most can't get the premium, so the spouse's income isn't needed"
@@ -577,7 +577,7 @@ lines:
   QCP.76:
     label: Work premium before reduction
     formula: >-
-      round(line.QCP.72 * if(household.childrenUnder18 > 0, if(line.HH.partner == 1, param.workPremiumRateChildCouple,
+      round(line.QCP.72 * if(family.childrenUnder18 > 0, if(line.HH.partner == 1, param.workPremiumRateChildCouple,
       param.workPremiumRateChildSingle), param.workPremiumRate), 2)
     source: "Schedule P, lines 74 and 76: 25% (couple) or 30% (single parent) with a designated dependent child (a child under 18 who lived with you), else 11.6%"
   QCP.83:
@@ -603,7 +603,7 @@ lines:
   QCP.76_2:
     label: Adapted work premium before reduction
     formula: >-
-      round(line.QCP.72_2 * if(household.childrenUnder18 > 0, if(line.HH.partner == 1, param.adaptedWorkPremiumRateChildCouple,
+      round(line.QCP.72_2 * if(family.childrenUnder18 > 0, if(line.HH.partner == 1, param.adaptedWorkPremiumRateChildCouple,
       param.adaptedWorkPremiumRateChildSingle), param.adaptedWorkPremiumRate), 2)
     source: "Schedule P, Part E, column 2, lines 75 and 76"
   QCP.83_2:
@@ -770,8 +770,8 @@ lines:
   QC.childActivities:
     label: Tax credit for children's activities
     formula: >-
-      if(household.childrenUnder17 - household.childrenUnder6 > 0 and line.QC.family <= param.childActivitiesMaxIncome,
-      round(min(answer.childActivityFees, param.childActivitiesMaxFees * (household.childrenUnder17 - household.childrenUnder6))
+      if(family.childrenUnder17 - family.childrenUnder6 > 0 and line.QC.family <= param.childActivitiesMaxIncome,
+      round(min(answer.childActivityFees, param.childActivitiesMaxFees * (family.childrenUnder17 - family.childrenUnder6))
       * param.childActivitiesRate, 2), 0)
     source: "Guide, line 462, point 25: 20% of fees up to $500 for each child born from 2009 to 2019, with family income of $168,470 or less (the extra for a child with an impairment isn't handled)"
   QC.seniorAssistance:

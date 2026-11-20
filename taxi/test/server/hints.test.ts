@@ -26,7 +26,7 @@ async function couple() {
   const sam = await addPerson("Sam Martin", "spouse", "1987-09-15");
   await json<TaxYear>(server.call("POST", "/api/years", { body: { year: 2025, people: [alex.id, sam.id] } }), 201);
   let year = await json<TaxYear>(
-    server.call("PUT", "/api/years/2025/household", {
+    server.call("PUT", "/api/years/2025/personal-info", {
       body: { revision: 1, maritalStatus: "married", adults: [alex, sam].map((person) => ({ personId: person.id, province: "ON", residentAllYear: true })) },
     }),
   );

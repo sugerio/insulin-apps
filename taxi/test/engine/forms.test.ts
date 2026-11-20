@@ -6,10 +6,10 @@ import { Dec } from "../../src/app/shared/engine/decimal.ts";
 import { Evaluation } from "../../src/app/shared/engine/evaluate.ts";
 import { fillForms, formAmount, personalFacts, splitName } from "../../src/app/shared/engine/forms.ts";
 import { rulesFor } from "../../src/app/shared/rules/index.ts";
-import { PROVINCE_NAMES, type Province } from "../../src/app/shared/household.ts";
+import { PROVINCE_NAMES, type Province } from "../../src/app/shared/people.ts";
 
-// The CRA forms a return is printed on (rules/ca/2025/forms.yaml): which forms each golden household's returns get,
-// every amount written on them against the household's expected lines, the bracket tables against the tax lines, and
+// The CRA forms a return is printed on (rules/ca/2025/forms.yaml): which forms each golden case's returns get,
+// every amount written on them against the case's expected lines, the bracket tables against the tax lines, and
 // the other kinds of field (Step 1's name and dates, ticks, counts).
 
 const rules = rulesFor(2025)!;
@@ -21,11 +21,11 @@ interface Golden {
 }
 const golden = (name: string) => JSON.parse(readFileSync(join(GOLDEN, `${name}.json`), "utf8")) as Golden;
 
-/** Every row of the household's forms that holds one of its expected lines as it is: blank when zero, else that amount. */
+/** Every row of the profile's forms that holds one of its expected lines as it is: blank when zero, else that amount. */
 function checkForms(name: string, forms: readonly string[]) {
-  const household = golden(name);
-  const evaluation = new Evaluation(rules, household.input);
-  for (const [personId, expected] of Object.entries(household.expected)) {
+  const example = golden(name);
+  const evaluation = new Evaluation(rules, example.input);
+  for (const [personId, expected] of Object.entries(example.expected)) {
     const filled = fillForms(rules, evaluation, personId, personalFacts(evaluation.input, personId));
     expect(filled.map((each) => each.form.id)).toEqual(forms);
     let checked = 0;
@@ -44,7 +44,7 @@ function checkForms(name: string, forms: readonly string[]) {
 }
 
 describe("2025 forms", () => {
-  // Each household's forms, per person, in the order they print: the T1, the schedules and forms the return uses, then
+  // Each case's forms, per person, in the order they print: the T1, the schedules and forms the return uses, then
   // the provincial ones. A schedule is printed only when its key line isn't zero.
   for (const [name, ...people] of [
     ["on-couple-kids", "T1,S2,S5,ON428", "T1,S11,ON428"],
@@ -88,12 +88,12 @@ describe("2025 forms", () => {
     ["single-employee-qc", "T1QC,S9,TP1,QCU"],
     ["single-parent-low-income-qc", "T1QC,S5,S6,T778,TP1,QCB,QCC,QCP,QCU"],
   ] as const) {
-    it(`${name}: its forms hold the household's expected lines`, () => {
-      const household = golden(name);
-      const evaluation = new Evaluation(rules, household.input);
-      household.input.people.forEach((person, index) => {
+    it(`${name}: its forms hold the case's expected lines`, () => {
+      const example = golden(name);
+      const evaluation = new Evaluation(rules, example.input);
+      example.input.people.forEach((person, index) => {
         const personId = person.id;
-        const expected = household.expected[personId]!;
+        const expected = example.expected[personId]!;
         const filled = fillForms(rules, evaluation, personId, personalFacts(evaluation.input, personId));
         expect(filled.map((each) => each.form.id).join(","), name).toBe(people[index]);
         let checked = 0;
@@ -120,8 +120,8 @@ describe("2025 forms", () => {
   }
 
   it("numbers the T1 for residents of Quebec's rows as 5005-R prints them", () => {
-    const household = golden("qc-fed-ei-ppip-overpayment");
-    const evaluation = new Evaluation(rules, household.input);
+    const example = golden("qc-fed-ei-ppip-overpayment");
+    const evaluation = new Evaluation(rules, example.input);
     const [t1qc] = fillForms(rules, evaluation, "p1", personalFacts(evaluation.input, "p1"));
     const row = (key: string) => t1qc!.amounts.find((amount) => amount.key === key)?.value.toString();
     // PPIP premiums paid (31205), the refundable Quebec abatement (44000), EI and net EI overpayment (45000, 45100).
@@ -162,9 +162,9 @@ describe("2025 forms", () => {
   });
 
   it("fills the column of the bracket the taxable income falls in, ending at the tax line", () => {
-    const household = golden("on-couple-kids");
-    const evaluation = new Evaluation(rules, household.input);
-    const person = household.input.people[0]!.id;
+    const example = golden("on-couple-kids");
+    const evaluation = new Evaluation(rules, example.input);
+    const person = example.input.people[0]!.id;
     const filled = fillForms(rules, evaluation, person, personalFacts(evaluation.input, person));
     const [t1, on428] = ["T1", "ON428"].map((id) => filled.find((each) => each.form.id === id));
     // $88,926 is in the second federal bracket ($57,375 to $114,750): 31,551 over, at 20.5% = 6,467.96, + 8,319.38.
@@ -209,17 +209,17 @@ describe("2025 forms", () => {
 
   it("writes the spouse's net income even when it is zero, and ticks only what the person answered", () => {
     const input = structuredClone(golden("single-employee-on").input) as Golden["input"] & {
-      household: { maritalStatus: string };
+      family: { maritalStatus: string };
       answers: Record<string, Record<string, string | boolean>>;
     };
     const personId = input.people[0]!.id;
-    input.household.maritalStatus = "common_law";
+    input.family.maritalStatus = "common_law";
     input.answers[personId] = { ...input.answers[personId], spouseNetIncome: "0" };
     delete input.answers[personId]!.hasForeignProperty;
     const t1 = marksOf(input, 0, "T1");
     expect(t1.amounts.spouseNetIncome).toBe("0");
     expect(t1.marks.commonLaw).toBe("X");
-    // Their spouse isn't in the household, so their first name stays blank; foreign property wasn't answered.
+    // Their spouse isn't in the profile, so their first name stays blank; foreign property wasn't answered.
     expect(t1.marks.spouseFirstName).toBeUndefined();
     expect(t1.marks.foreignPropertyNo).toBeUndefined();
   });
@@ -267,8 +267,8 @@ describe("2025 forms", () => {
   });
 
   it("prints Revenu Québec's forms on their French versions in French, with the same rows, and the CRA's in English", () => {
-    const household = golden("senior-couple-qc");
-    const evaluation = new Evaluation(rules, household.input);
+    const example = golden("senior-couple-qc");
+    const evaluation = new Evaluation(rules, example.input);
     const facts = personalFacts(evaluation.input, "p1");
     const english = fillForms(rules, evaluation, "p1", facts);
     const french = fillForms(rules, evaluation, "p1", facts, "fr");

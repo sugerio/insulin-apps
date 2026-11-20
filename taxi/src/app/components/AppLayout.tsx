@@ -290,7 +290,7 @@ function OrgSwitcher({ platform, collapsed }: { platform: PlatformAccount | null
       {collapsed ? <OrgTile name={name} /> : <BrandMark size={32} />}
       <span className="grid min-w-0 flex-1 text-left leading-tight">
         <span className="truncate font-semibold">{name}</span>
-        <span className="truncate text-xs text-sidebar-foreground/70">{platform ? "Taxi" : "Household tax returns"}</span>
+        <span className="truncate text-xs text-sidebar-foreground/70">{platform ? "Taxi" : "Personal tax returns"}</span>
       </span>
     </>
   );

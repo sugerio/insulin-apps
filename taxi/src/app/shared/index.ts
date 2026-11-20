@@ -4,7 +4,7 @@ export * from "./documents.ts";
 export * from "./errors.ts";
 export * from "./estimate.ts";
 export * from "./hints.ts";
-export * from "./household.ts";
+export * from "./people.ts";
 export * from "./print.ts";
 export * from "./progress.ts";
 export * from "./returns.ts";

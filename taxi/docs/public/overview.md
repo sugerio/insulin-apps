@@ -4,7 +4,7 @@ description: What Taxi does, who it is for, what it doesn't do yet, and how it r
 order: 1
 ---
 
-Taxi prepares a Canadian household's income tax returns. This page explains what it does today, who it is for,
+Taxi prepares Canadian personal income tax returns. This page explains what it does today, who it is for,
 and what it leaves out. Read it first if you are deciding whether Taxi suits you, or if you are an AI agent that
 needs the big picture before calling its API.
 
@@ -74,6 +74,6 @@ return when you sign it.
 ## On Insulin Apps
 
 Taxi runs at `https://taxi.insulinapps.com`. Sign in to Insulin Apps, create an organization (a
-household can be an organization of one), and open the app. People and roles are managed on Insulin Apps; see
+family can be an organization of one), and open the app. People and roles are managed on Insulin Apps; see
 [Roles and access](/docs/taxi/roles-and-access). AI agents connect over MCP, and API clients call the same API
 as the browser; see [Taxi API](/docs/taxi/api).

@@ -51,7 +51,7 @@ function Results({ estimate, slips }: { estimate: Estimate; slips: SlipList }) {
   /** The step that asks a question: its module's, Personal info for facts about the person. */
   const stepOfQuestion = (id: string): Step => {
     const module = rules.questions.get(id)?.module;
-    return module === "income" || module === "deductions" || module === "credits" ? module : "household";
+    return module === "income" || module === "deductions" || module === "credits" ? module : "personal";
   };
   const other = spouseOf(estimate.result.people, owner.id);
   const spouse = other ? { name: year.people.find((each) => each.id === other.personId)?.name ?? "Your spouse", result: other } : undefined;

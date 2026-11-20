@@ -7,7 +7,7 @@ export const API_ERROR_CODES = [
   "unauthenticated", // 401
   "forbidden", // 403
   "not_found", // 404, also another organization's records
-  "conflict", // 409, a stale revision or a rule about the household
+  "conflict", // 409, a stale revision or a rule about the profile
   "payload_too_large", // 413
   "internal", // 500
   "unavailable", // 503, an outside service (canada.ca) didn't answer as expected

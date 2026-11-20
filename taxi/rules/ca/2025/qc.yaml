@@ -191,11 +191,11 @@ lines:
   # spouse is a Quebec resident too; otherwise their net income is the federal one, or the answer about them.
   QC.couple:
     label: Both spouses file a Quebec return prepared here (1 for yes)
-    formula: 'if(line.HH.partner == 1 and household.partnerInYear, if(spouse.person.province == "QC", 1, 0), 0)'
+    formula: 'if(line.HH.partner == 1 and family.partnerInYear, if(spouse.person.province == "QC", 1, 0), 0)'
   QC.spouseNet:
     label: Your spouse's net income, for the Quebec family income
     formula: >-
-      if(line.HH.partner == 1, if(household.partnerInYear, if(spouse.person.province == "QC", spouse.line.TP1.275,
+      if(line.HH.partner == 1, if(family.partnerInYear, if(spouse.person.province == "QC", spouse.line.TP1.275,
       spouse.line.T1.23600), answer.spouseNetIncome), 0)
     source: "TP-1 line 51: your spouse's net income (line 275 of their TP-1); for a spouse who doesn't file one, their federal net income"
   QC.family:
@@ -438,8 +438,8 @@ lines:
   TP1.393:
     label: Donations and gifts
     formula: >-
-      if(household.partnerInYear and spouse.answer.claimSpouseDonations and line.HH.partner == 1, 0, line.QC.ownDonations)
-      + if(household.partnerInYear and answer.claimSpouseDonations and line.HH.partner == 1, spouse.line.QC.ownDonations, 0)
+      if(family.partnerInYear and spouse.answer.claimSpouseDonations and line.HH.partner == 1, 0, line.QC.ownDonations)
+      + if(family.partnerInYear and answer.claimSpouseDonations and line.HH.partner == 1, spouse.line.QC.ownDonations, 0)
     source: "Work Chart 395, line 1: monetary donations made in 2025. Whoever claims both spouses' donations on the federal return claims them here too"
   TP1.395:
     label: Tax credits for donations and gifts

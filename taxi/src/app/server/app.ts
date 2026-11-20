@@ -6,7 +6,7 @@ import * as documents from "./lib/documents.ts";
 import { getEstimate } from "./lib/estimate.ts";
 import * as hints from "./lib/hints.ts";
 import { craForms, printReturn, type FormSource } from "./lib/forms.ts";
-import * as household from "./lib/household.ts";
+import * as people from "./lib/people.ts";
 import * as returns from "./lib/returns.ts";
 import { ApiError, forbidden, logError, notFound, parseOr400, readJson } from "./lib/http.ts";
 import { isScheduleTick, readCaller, type Caller } from "./lib/identity.ts";
@@ -92,17 +92,17 @@ export function createApp(options: AppOptions = {}) {
 
   mount(routes.getMe, async ({ caller }) => meOf(caller));
   mount(routes.getCatalog, async ({ caller }) => catalogFor(caller));
-  mount(routes.listYears, async ({ caller, db }) => household.listYears(db, caller.orgId, SUPPORTED_YEARS));
+  mount(routes.listYears, async ({ caller, db }) => people.listYears(db, caller.orgId, SUPPORTED_YEARS));
   mount(routes.startYear, async ({ caller, body, db, now }) => {
-    const { view, created } = await household.startYear(db, caller, body.year, body.people, now);
+    const { view, created } = await people.startYear(db, caller, body.year, body.people, now);
     return created ? { status: 201, body: view } : view;
   });
-  mount(routes.getYear, async ({ caller, params, db }) => household.getYear(db, caller.orgId, params.year));
+  mount(routes.getYear, async ({ caller, params, db }) => people.getYear(db, caller.orgId, params.year));
   mount(routes.getEstimate, async ({ caller, params, db }) => getEstimate(db, caller.orgId, params.year));
   mount(routes.listHints, async ({ caller, params, db }) => hints.listHints(db, caller.orgId, params.year));
   mount(routes.decideHint, async ({ caller, params, body, db, now }) => hints.decideHint(db, caller, params.year, params.hint, body, now));
-  mount(routes.setYearPeople, async ({ caller, params, body, db, now }) => household.setYearPeople(db, caller, params.year, body, now));
-  mount(routes.saveHousehold, async ({ caller, params, body, db, now }) => household.saveHousehold(db, caller, params.year, body, now));
+  mount(routes.setYearPeople, async ({ caller, params, body, db, now }) => people.setYearPeople(db, caller, params.year, body, now));
+  mount(routes.savePersonalInfo, async ({ caller, params, body, db, now }) => people.savePersonalInfo(db, caller, params.year, body, now));
   mount(routes.listDocuments, async ({ caller, params, db }) => documents.listDocuments(db, caller.orgId, params.year));
   mount(routes.uploadDocument, async ({ caller, params, db, now, request }) =>
     documents.uploadDocument(db, caller, params.year, request, readerFor(caller.orgId), now),
@@ -150,10 +150,10 @@ export function createApp(options: AppOptions = {}) {
   mount(routes.updateSlip, async ({ caller, params, body, db, now }) => returns.updateSlip(db, caller, params.year, params.id, body, now));
   mount(routes.removeSlip, async ({ caller, params, body, db, now }) => returns.removeSlip(db, caller, params.year, params.id, body.revision, now));
   mount(routes.confirmSlips, async ({ caller, params, body, db, now }) => returns.confirmSlips(db, caller, params.year, body, now));
-  mount(routes.listPeople, async ({ caller, db }) => ({ people: await household.listPeople(db, caller.orgId) }));
-  mount(routes.addPerson, async ({ caller, body, db, now }) => ({ status: 201, body: await household.addPerson(db, caller, body, now) }));
-  mount(routes.updatePerson, async ({ caller, params, body, db, now }) => household.updatePerson(db, caller, params.id, body, now));
-  mount(routes.removePerson, async ({ caller, params, db, now }) => household.removePerson(db, caller, params.id, now));
+  mount(routes.listPeople, async ({ caller, db }) => ({ people: await people.listPeople(db, caller.orgId) }));
+  mount(routes.addPerson, async ({ caller, body, db, now }) => ({ status: 201, body: await people.addPerson(db, caller, body, now) }));
+  mount(routes.updatePerson, async ({ caller, params, body, db, now }) => people.updatePerson(db, caller, params.id, body, now));
+  mount(routes.removePerson, async ({ caller, params, db, now }) => people.removePerson(db, caller, params.id, now));
   app.all("/api/*", () => {
     throw notFound("Unknown API route");
   });

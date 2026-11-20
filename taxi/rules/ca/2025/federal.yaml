@@ -598,18 +598,18 @@ params:
     value: 1000
 
 lines:
-  # The household: whether you have a spouse or partner, and their net income
+  # The family: whether you have a spouse or partner, and their net income
   HH.partner:
     label: Spouse or common-law partner on December 31 (1 for yes)
-    formula: 'if(household.maritalStatus == "married" or household.maritalStatus == "common_law", 1, 0)'
+    formula: 'if(family.maritalStatus == "married" or family.maritalStatus == "common_law", 1, 0)'
   # Read by hints: a claim moves between the returns only when both are prepared here. The lines that move a claim read
   # the marital status only once a claim was moved, so a return's numbers don't wait for it.
   SPOUSES.together:
     label: Both spouses' returns are prepared here (1 for yes)
-    formula: "if(household.partnerInYear and line.HH.partner == 1, 1, 0)"
+    formula: "if(family.partnerInYear and line.HH.partner == 1, 1, 0)"
   HH.spouseNetIncome:
     label: Your spouse's or partner's net income
-    formula: "if(line.HH.partner == 1, if(household.partnerInYear, spouse.line.T1.23600, answer.spouseNetIncome), 0)"
+    formula: "if(line.HH.partner == 1, if(family.partnerInYear, spouse.line.T1.23600, answer.spouseNetIncome), 0)"
     source: "From their return when both returns are prepared here; otherwise from your answer"
 
   # Step 2 – Total income
@@ -641,7 +641,7 @@ lines:
     source: "T4A box 016; annuities (T4A box 024) and RRIF payments (T4RIF box 16) at 65 or older, else on line 13000"
   T1.11600:
     label: Elected split-pension amount
-    formula: "if(line.HH.partner == 1 and household.partnerInYear, spouse.line.T1.21000, 0)"
+    formula: "if(line.HH.partner == 1 and family.partnerInYear, spouse.line.T1.21000, 0)"
     source: "Form T1032, line 22: the amount your spouse or partner splits with you"
   T1.11900:
     label: Employment insurance and other benefits
@@ -915,7 +915,7 @@ lines:
   T1.21000:
     label: Deduction for elected split-pension amount
     formula: >-
-      if(answer.pensionSplit > 0 and line.HH.partner == 1 and household.partnerInYear,
+      if(answer.pensionSplit > 0 and line.HH.partner == 1 and family.partnerInYear,
       if(spouse.answer.pensionSplit > 0, unsupported("Only one spouse can split pension income with the other for a year. Undo one of the two splits"),
       min(answer.pensionSplit, line.PEN.splitMax)), 0)
     source: "Form T1032, line 22, up to the maximum on line 21"
@@ -970,12 +970,12 @@ lines:
     formula: "line.CC.ownExpenses + if(line.SPOUSES.together == 1, spouse.line.CC.ownExpenses, 0)"
     source: "Form T778, line 67950 (line 5): the expenses both of you paid, when both returns are prepared here"
   CC.family:
-    label: Child care is claimed in this household (1 for yes)
+    label: Child care is claimed on one of the year's returns (1 for yes)
     formula: "if(answer.hasChildCare or (line.SPOUSES.together == 1 and spouse.answer.hasChildCare), 1, 0)"
   T778.1:
     label: Basic limit for children born in 2019 or later
     formula: >-
-      param.childCareUnder7 * (household.childrenUnder7 - if(answer.hasChildCare, answer.childCareDisabledUnder7,
+      param.childCareUnder7 * (family.childrenUnder7 - if(answer.hasChildCare, answer.childCareDisabledUnder7,
       if(line.SPOUSES.together == 1, if(spouse.answer.hasChildCare, spouse.answer.childCareDisabledUnder7, 0), 0)))
     source: "Form T778, Part B, line 1: $8,000 for each child born in 2019 or later the disability amount can't be claimed for. The counts come from the return that entered child care"
   T778.2:
@@ -988,7 +988,7 @@ lines:
   T778.3:
     label: Basic limit for children born from 2009 to 2018, and older infirm children
     formula: >-
-      param.childCare7to16 * (household.childrenUnder17 - household.childrenUnder7 + if(answer.hasChildCare,
+      param.childCare7to16 * (family.childrenUnder17 - family.childrenUnder7 + if(answer.hasChildCare,
       answer.childCareInfirmOlder - answer.childCareDisabled7to16, if(line.SPOUSES.together == 1, if(spouse.answer.hasChildCare,
       spouse.answer.childCareInfirmOlder - spouse.answer.childCareDisabled7to16, 0), 0)))
     source: "Form T778, Part B, line 3: $5,000 for each child born from 2009 to 2018, and born in 2008 or earlier with an infirmity, the disability amount can't be claimed for"
@@ -996,7 +996,7 @@ lines:
     label: Basic limit for child care expenses
     formula: >-
       if(line.T778.1 < 0 or line.T778.3 < 0,
-      unsupported("More children have the disability tax credit than the household's dependants born in those years. Check the counts under child care, or the people in the year"),
+      unsupported("More children have the disability tax credit than the dependants born in those years. Check the counts under child care, or the people in the year"),
       line.T778.1 + line.T778.2 + line.T778.3)
     source: "Form T778, Part B, line 4: lines 1 to 3"
   CC.earned:
@@ -1012,12 +1012,12 @@ lines:
     formula: "line.T1.15000 - line.DED.other"
   CC.spouseNetIncome:
     label: Your spouse's or partner's net income without it
-    formula: "if(household.partnerInYear, spouse.line.CC.netIncome, answer.spouseNetIncome)"
+    formula: "if(family.partnerInYear, spouse.line.CC.netIncome, answer.spouseNetIncome)"
   CC.higher:
     label: This return has the higher net income of the couple (1 for yes)
     formula: >-
       if(line.HH.partner == 1, if(line.CC.netIncome > line.CC.spouseNetIncome, 1, if(line.CC.netIncome == line.CC.spouseNetIncome
-      and household.partnerInYear and person.role == "spouse", 1, 0)), 0)
+      and family.partnerInYear and person.role == "spouse", 1, 0)), 0)
     source: "Form T778, page 1: the person with the lower net income claims. With equal incomes the couple agrees: here the person preparing claims"
   CC.weekly:
     label: Child care the higher-income spouse can claim for each week or month
@@ -1347,10 +1347,10 @@ lines:
       if(answer.hasNorthernResidence, min(param.northernDaysMax, answer.northernDays), 0), 0)
   # Only one person in a home claims the additional amount, and only if no one else there claims the basic amount. When
   # both spouses lived there, one claims both amounts (the one with the higher net income, or the person preparing when
-  # they are equal), unless each claiming the basic amount gives the household more: the 20% of net income limit.
+  # they are equal), unless each claiming the basic amount gives the couple more: the 20% of net income limit.
   NRD.shared:
     label: Both spouses lived in a northern zone (1 for yes)
-    formula: "if(line.HH.partner == 1 and household.partnerInYear, if(line.NRD.days > 0 and spouse.line.NRD.days > 0, 1, 0), 0)"
+    formula: "if(line.HH.partner == 1 and family.partnerInYear, if(line.NRD.days > 0 and spouse.line.NRD.days > 0, 1, 0), 0)"
   NRD.first:
     label: This return is the one that would claim both amounts (1 for yes)
     formula: 'if(line.T1.23600 > spouse.line.T1.23600 or (line.T1.23600 == spouse.line.T1.23600 and person.role == "self"), 1, 0)'
@@ -1436,7 +1436,7 @@ lines:
   T1.30400:
     label: Amount for an eligible dependant
     formula: >-
-      round((if(line.HH.partner == 0 and household.childrenUnder18 > 0, line.FULL.30000, 0)) * line.RES.factor, 2)
+      round((if(line.HH.partner == 0 and family.childrenUnder18 > 0, line.FULL.30000, 0)) * line.RES.factor, 2)
     source: "Schedule 5 line 30400: for a single parent, one child under 18 who lived with you. The app assumes the child had no income"
   T1.30425:
     label: Canada caregiver amount for spouse or common-law partner
@@ -1536,7 +1536,7 @@ lines:
   T1.31270:
     label: Home buyers' amount
     formula: >-
-      if(household.partnerInYear and line.HH.partner == 1 and answer.homeBuyers + spouse.answer.homeBuyers > param.homeBuyersMax,
+      if(family.partnerInYear and line.HH.partner == 1 and answer.homeBuyers + spouse.answer.homeBuyers > param.homeBuyersMax,
       unsupported("You and your spouse or partner can claim at most $10,000 together for the home buyers' amount. Lower one of the claims"),
       min(answer.homeBuyers, param.homeBuyersMax))
   T1.31285:
@@ -1586,11 +1586,11 @@ lines:
     source: "The amount on the student's T2202 for your province or territory, asked once a federal amount is transferred"
   T1.32600:
     label: Amounts transferred from your spouse or common-law partner
-    formula: "if(line.HH.partner == 1 and household.partnerInYear, line.S2.13, 0)"
+    formula: "if(line.HH.partner == 1 and family.partnerInYear, line.S2.13, 0)"
     source: "Schedule 2: their unused age amount and the tuition they designate to you"
   T1.33099:
     label: Medical expenses for you, your spouse and your children
-    formula: "if(household.partnerInYear and spouse.answer.claimSpouseMedical and line.HH.partner == 1, 0, line.OWN.medical) + if(household.partnerInYear and answer.claimSpouseMedical and line.HH.partner == 1, spouse.line.OWN.medical, 0)"
+    formula: "if(family.partnerInYear and spouse.answer.claimSpouseMedical and line.HH.partner == 1, 0, line.OWN.medical) + if(family.partnerInYear and answer.claimSpouseMedical and line.HH.partner == 1, spouse.line.OWN.medical, 0)"
     source: "Either spouse can claim the family's medical expenses: this return's own, unless the spouse claims them, and the spouse's when this return claims them"
   OWN.medical:
     label: Medical expenses on this return's receipts and entered here
@@ -1698,7 +1698,7 @@ lines:
     label: Total income tax deducted
     formula: >-
       sum(T4.box22) + sum(T4A.box022) + sum(T4AP.box22) + sum(T4AOAS.box22) + sum(T4E.box22) + sum(T4RIF.box28) + sum(T4RSP.box30) + sum(T4FHSA.box30)
-      - line.PEN.taxSplit + if(line.HH.partner == 1 and household.partnerInYear, spouse.line.PEN.taxSplit, 0)
+      - line.PEN.taxSplit + if(line.HH.partner == 1 and family.partnerInYear, spouse.line.PEN.taxSplit, 0)
     source: "The income tax deducted on all slips; with pension splitting, the tax that goes with the split (Form T1032, lines 39 and 42)"
   T1.44800:
     label: CPP overpayment
@@ -1728,7 +1728,7 @@ lines:
     label: Adjusted family net income for the refundable medical expense supplement
     formula: >-
       max(0, line.T1.23600 - line.T1.12500) + if(line.HH.partner == 1,
-      if(household.partnerInYear, max(0, spouse.line.T1.23600 - spouse.line.T1.12500), line.HH.spouseNetIncome), 0)
+      if(family.partnerInYear, max(0, spouse.line.T1.23600 - spouse.line.T1.12500), line.HH.spouseNetIncome), 0)
     source: "Federal Worksheet, line 45200, lines 1 to 6"
   T1.45200:
     label: Refundable medical expense supplement
@@ -1752,26 +1752,26 @@ lines:
     source: "Schedule 6, Part B, lines 7 to 12"
   CWB.dependant:
     label: An eligible dependant (1 for yes)
-    formula: "if(household.childrenUnder19 > 0, 1, 0)"
+    formula: "if(family.childrenUnder19 > 0, 1, 0)"
     source: "Schedule 6: a child under 19 who lived with you on December 31"
   CWB.student:
     label: A full-time student for more than 13 weeks without an eligible dependant (1 for yes)
     formula: "if(sum(T2202.box25) > param.cwbStudentMonths and line.CWB.dependant == 0, 1, 0)"
   CWB.spouse:
     label: An eligible spouse (1 for yes)
-    formula: "if(line.HH.partner == 1, if(household.partnerInYear, if(spouse.line.CWB.student == 1, 0, 1), 1), 0)"
+    formula: "if(line.HH.partner == 1, if(family.partnerInYear, if(spouse.line.CWB.student == 1, 0, 1), 1), 0)"
   CWB.eligible:
     label: Eligible for the Canada workers benefit (1 for yes)
     formula: "if(person.residentAllYear and line.CWB.student == 0 and (person.age >= 19 or line.CWB.spouse == 1 or line.CWB.dependant == 1), 1, 0)"
     source: "Schedule 6: resident in Canada all year, 19 or older (or with a spouse or a child) and not a full-time student for more than 13 weeks"
   CWB.familyWorking:
     label: Family working income
-    formula: "line.CWB.working + if(line.CWB.spouse == 1 and household.partnerInYear, spouse.line.CWB.working, 0)"
+    formula: "line.CWB.working + if(line.CWB.spouse == 1 and family.partnerInYear, spouse.line.CWB.working, 0)"
     source: "Schedule 6, line 6"
   CWB.familyIncome:
     label: Adjusted family net income
     formula: >-
-      if(line.CWB.spouse == 1, if(household.partnerInYear, line.CWB.netIncome + spouse.line.CWB.netIncome
+      if(line.CWB.spouse == 1, if(family.partnerInYear, line.CWB.netIncome + spouse.line.CWB.netIncome
       - min(param.cwbSecondaryEarnerMax, if(line.CWB.working < spouse.line.CWB.working, min(line.CWB.working, line.CWB.netIncome),
       min(spouse.line.CWB.working, spouse.line.CWB.netIncome))),
       if(line.CWB.netIncome + line.HH.spouseNetIncome - min(param.cwbSecondaryEarnerMax, line.CWB.netIncome, line.HH.spouseNetIncome) < line.CWB.familyLimit and line.CWB.working > 0,
@@ -1835,14 +1835,14 @@ lines:
   CWB.disabilityReductionRate:
     label: Disability supplement reduction rate
     formula: >-
-      if(line.CWB.spouse == 1 and household.partnerInYear and spouse.answer.hasDisability,
+      if(line.CWB.spouse == 1 and family.partnerInYear and spouse.answer.hasDisability,
       if(person.province == "QC", param.cwbQcReductionRateBothDisabled, param.cwbReductionRateBothDisabled),
       if(person.province == "QC", param.cwbQcReductionRate, param.cwbReductionRate))
     source: "Schedule 6, line 38: 15% (7.5% when both spouses have the disability tax credit). In Quebec, 5005-S6 line 38: 20% (10%)"
   CWB.claimsBasic:
     label: This return claims the couple's basic benefit (1 for yes)
     formula: >-
-      if(line.CWB.eligible == 0, 0, if(line.CWB.spouse == 0 or not household.partnerInYear, 1,
+      if(line.CWB.eligible == 0, 0, if(line.CWB.spouse == 0 or not family.partnerInYear, 1,
       if(spouse.line.CWB.eligible == 0 or line.CWB.working > spouse.line.CWB.working
       or (line.CWB.working == spouse.line.CWB.working and person.role == "self"), 1, 0)))
   CWB.basic:
@@ -1865,7 +1865,7 @@ lines:
     label: Advanced Canada workers benefit
     formula: >-
       min(max(line.CWB.basic, line.T1.45300), if(line.CWB.claimsBasic == 1, sum(RC210.box10)
-      + if(household.partnerInYear and line.HH.partner == 1, sum(spouse.RC210.box10), 0), 0) + sum(RC210.box11))
+      + if(family.partnerInYear and line.HH.partner == 1, sum(spouse.RC210.box10), 0), 0) + sum(RC210.box11))
     source: "Schedule 6, Step 4: the advance payments (RC210 box 10 of both spouses, on the return claiming the basic benefit, and box 11), up to the benefit"
 
   # Schedule 11 – the Canada training credit: half the tuition, up to the limit on the notice of assessment.
@@ -1987,7 +1987,7 @@ lines:
   # Schedule 9 – Donations and gifts
   S9.5:
     label: Total eligible amount of charitable donations
-    formula: "if(household.partnerInYear and spouse.answer.claimSpouseDonations and line.HH.partner == 1, 0, line.OWN.donations) + if(household.partnerInYear and answer.claimSpouseDonations and line.HH.partner == 1, spouse.line.OWN.donations, 0)"
+    formula: "if(family.partnerInYear and spouse.answer.claimSpouseDonations and line.HH.partner == 1, 0, line.OWN.donations) + if(family.partnerInYear and answer.claimSpouseDonations and line.HH.partner == 1, spouse.line.OWN.donations, 0)"
     source: "Schedule 9 line 5: either spouse can claim both spouses' donations"
   OWN.donations:
     label: Donations on this return's receipts and entered here
@@ -2052,10 +2052,10 @@ lines:
     source: "Schedule 11 lines 21 to 23: this year's tuition up to $5,000, less what you used"
   S11.24:
     label: Tuition transferred to your spouse or common-law partner
-    formula: "if(line.HH.partner == 1 and household.partnerInYear and line.S11.8 > 0, min(answer.tuitionTransfer, line.S11.23), 0)"
+    formula: "if(line.HH.partner == 1 and family.partnerInYear and line.S11.8 > 0, min(answer.tuitionTransfer, line.S11.23), 0)"
     source: "Schedule 11 line 24: the amount you designate on your T2202, up to line 23"
 
-  # The household's outcome, which hints compare with and without their change.
+  # The outcome of one return; hints add it up over the year's returns and compare with and without their change.
   RESULT.net:
     label: Refund, less balance owing
     formula: 'line.T1.48400 - line.T1.48500 + if(person.province == "QC", line.TP1.478 - line.TP1.479, 0)'

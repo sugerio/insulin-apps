@@ -194,7 +194,7 @@ lines:
   NL428.23:
     label: Newfoundland and Labrador amount for an eligible dependant
     formula: >-
-      round((if(line.HH.partner == 0 and household.childrenUnder18 > 0, min(param.nlSpouseMax, param.nlSpouseBase), 0)) * line.RES.factor, 2)
+      round((if(line.HH.partner == 0 and family.childrenUnder18 > 0, min(param.nlSpouseMax, param.nlSpouseBase), 0)) * line.RES.factor, 2)
     source: "NL428 lines 21 to 23. The app assumes the child had no income"
   # An adult dependant with an impairment gets the infirm dependant amount, or the caregiver amount when they lived in
   # your home, never both (5001-PC, line 58400): whichever is more. The app knows one such dependant.
@@ -278,7 +278,7 @@ lines:
     source: "NL428 line 58600: the provincial amount they designate on their T2202, taken as the same as federally"
   NL428.46:
     label: Newfoundland and Labrador amounts transferred from your spouse or common-law partner
-    formula: "if(line.HH.partner == 1 and household.partnerInYear, line.NLS2.12, 0)"
+    formula: "if(line.HH.partner == 1 and family.partnerInYear, line.NLS2.12, 0)"
     source: "NL428 line 58640, from Schedule NL(S2)"
   NL428.47:
     label: Newfoundland and Labrador credit amounts before medical expenses
@@ -354,7 +354,7 @@ lines:
   NL.claimsReduction:
     label: This return claims the family's Newfoundland and Labrador low-income tax reduction (1 for yes)
     formula: >-
-      if(line.HH.partner == 0 or not household.partnerInYear, 1,
+      if(line.HH.partner == 0 or not family.partnerInYear, 1,
       if(spouse.person.province != "NL", 1,
       if(line.NL428.85 != spouse.line.NL428.85, if(line.NL428.85 > spouse.line.NL428.85, 1, 0),
       if(line.T1.23600 != spouse.line.T1.23600, if(line.T1.23600 > spouse.line.T1.23600, 1, 0),
@@ -440,7 +440,7 @@ lines:
     source: "NL(S11) lines 17 to 19: this year's amounts up to $5,000, less what you used"
   NLS11.20:
     label: Newfoundland and Labrador tuition and education amounts transferred to your spouse or common-law partner
-    formula: "if(line.HH.partner == 1 and household.partnerInYear and line.NLS11.5 > 0, min(answer.tuitionTransfer, line.NLS11.19), 0)"
+    formula: "if(line.HH.partner == 1 and family.partnerInYear and line.NLS11.5 > 0, min(answer.tuitionTransfer, line.NLS11.19), 0)"
     source: "NL(S11) line 20: the amount you designate on your T2202 (the same as federally), up to line 19"
 
   # Schedule NL(S2) – Newfoundland and Labrador amounts transferred from your spouse (read from their NL428, worked
@@ -468,7 +468,7 @@ lines:
   NL479.5:
     label: Physical activity expenses
     formula: >-
-      if(line.HH.partner == 1 and household.partnerInYear,
+      if(line.HH.partner == 1 and family.partnerInYear,
       if(spouse.person.province == "NL",
       if(answer.physicalActivityFees + spouse.answer.physicalActivityFees > param.nlPhysicalActivityMax,
       unsupported("Your family can claim up to $2,000 of physical activity fees in all. Split them between your two returns so they add up to $2,000 or less"),

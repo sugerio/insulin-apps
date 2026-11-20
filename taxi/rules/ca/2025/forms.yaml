@@ -36,12 +36,12 @@ forms:
       firstName: { text: firstName }
       lastName: { text: lastName }
       birthDate: { text: birthDate }
-      married: { tick: 'household.maritalStatus == "married"' }
-      commonLaw: { tick: 'household.maritalStatus == "common_law"' }
-      widowed: { tick: 'household.maritalStatus == "widowed"' }
-      divorced: { tick: 'household.maritalStatus == "divorced"' }
-      separated: { tick: 'household.maritalStatus == "separated"' }
-      single: { tick: 'household.maritalStatus == "single"' }
+      married: { tick: 'family.maritalStatus == "married"' }
+      commonLaw: { tick: 'family.maritalStatus == "common_law"' }
+      widowed: { tick: 'family.maritalStatus == "widowed"' }
+      divorced: { tick: 'family.maritalStatus == "divorced"' }
+      separated: { tick: 'family.maritalStatus == "separated"' }
+      single: { tick: 'family.maritalStatus == "single"' }
       province: { text: province }
       spouseFirstName: { text: spouseFirstName, when: "line.HH.partner == 1" }
       # Known only when the spouse's return is prepared here too.
@@ -224,12 +224,12 @@ forms:
       firstName: { text: firstName }
       lastName: { text: lastName }
       birthDate: { text: birthDate }
-      married: { tick: 'household.maritalStatus == "married"' }
-      commonLaw: { tick: 'household.maritalStatus == "common_law"' }
-      widowed: { tick: 'household.maritalStatus == "widowed"' }
-      divorced: { tick: 'household.maritalStatus == "divorced"' }
-      separated: { tick: 'household.maritalStatus == "separated"' }
-      single: { tick: 'household.maritalStatus == "single"' }
+      married: { tick: 'family.maritalStatus == "married"' }
+      commonLaw: { tick: 'family.maritalStatus == "common_law"' }
+      widowed: { tick: 'family.maritalStatus == "widowed"' }
+      divorced: { tick: 'family.maritalStatus == "divorced"' }
+      separated: { tick: 'family.maritalStatus == "separated"' }
+      single: { tick: 'family.maritalStatus == "single"' }
       province: { text: province }
       spouseFirstName: { text: spouseFirstName, when: "line.HH.partner == 1" }
       # Known only when the spouse's return is prepared here too.
@@ -498,32 +498,32 @@ forms:
       # the eligible spouse, filled when their return is prepared here (without it the app can't work out the benefit).
       # Part A – Family working income. No tax-exempt income (line 4).
       "1@1": line.T1.10100 + line.T1.10400
-      "1@2": { value: spouse.line.T1.10100 + spouse.line.T1.10400, when: "line.CWB.spouse == 1 and household.partnerInYear" }
+      "1@2": { value: spouse.line.T1.10100 + spouse.line.T1.10400, when: "line.CWB.spouse == 1 and family.partnerInYear" }
       "2@1": line.T1.13010
-      "2@2": { value: spouse.line.T1.13010, when: "line.CWB.spouse == 1 and household.partnerInYear" }
+      "2@2": { value: spouse.line.T1.13010, when: "line.CWB.spouse == 1 and family.partnerInYear" }
       "3@1": max(0, line.SE.net)
-      "3@2": { value: "max(0, spouse.line.SE.net)", when: "line.CWB.spouse == 1 and household.partnerInYear" }
+      "3@2": { value: "max(0, spouse.line.SE.net)", when: "line.CWB.spouse == 1 and family.partnerInYear" }
       # "Enter the result, even if it is 0."
       "5@1": { value: line.CWB.working, zero: true }
-      "5@2": { value: spouse.line.CWB.working, when: "line.CWB.spouse == 1 and household.partnerInYear", zero: true }
+      "5@2": { value: spouse.line.CWB.working, when: "line.CWB.spouse == 1 and family.partnerInYear", zero: true }
       "6": line.CWB.familyWorking
       # Part B – Adjusted family net income. No exempt income (line 8) or UCCB and RDSP repayments (line 9); line 11 is
       # the RDSP income.
       "7@1": line.T1.23600
-      "7@2": { value: spouse.line.T1.23600, when: "line.CWB.spouse == 1 and household.partnerInYear" }
+      "7@2": { value: spouse.line.T1.23600, when: "line.CWB.spouse == 1 and family.partnerInYear" }
       "10@1": line.T1.23600
-      "10@2": { value: spouse.line.T1.23600, when: "line.CWB.spouse == 1 and household.partnerInYear" }
+      "10@2": { value: spouse.line.T1.23600, when: "line.CWB.spouse == 1 and family.partnerInYear" }
       "11@1": line.T1.12500
-      "11@2": { value: spouse.line.T1.12500, when: "line.CWB.spouse == 1 and household.partnerInYear" }
+      "11@2": { value: spouse.line.T1.12500, when: "line.CWB.spouse == 1 and family.partnerInYear" }
       "12@1": line.CWB.netIncome
-      "12@2": { value: spouse.line.CWB.netIncome, when: "line.CWB.spouse == 1 and household.partnerInYear" }
-      "13": "line.CWB.netIncome + if(line.CWB.spouse == 1 and household.partnerInYear, spouse.line.CWB.netIncome, 0)"
+      "12@2": { value: spouse.line.CWB.netIncome, when: "line.CWB.spouse == 1 and family.partnerInYear" }
+      "13": "line.CWB.netIncome + if(line.CWB.spouse == 1 and family.partnerInYear, spouse.line.CWB.netIncome, 0)"
       # The secondary earner exemption: from the column of the spouse with the lower working income.
       "14":
         value: >-
           min(param.cwbSecondaryEarnerMax, if(line.CWB.working < spouse.line.CWB.working,
           min(line.CWB.working, line.CWB.netIncome), min(spouse.line.CWB.working, spouse.line.CWB.netIncome)))
-        when: "line.CWB.spouse == 1 and household.partnerInYear"
+        when: "line.CWB.spouse == 1 and family.partnerInYear"
       "15": line.CWB.familyIncome
       # Step 2 – Basic CWB, on the return that claims it for the couple.
       "16": { value: line.CWB.familyWorking, when: "line.CWB.claimsBasic == 1" }
@@ -570,19 +570,19 @@ forms:
       # The rate, as a percent: 7.5 when both spouses are eligible for the disability tax credit, else 15.
       "38":
         value: >-
-          100 * if(line.CWB.spouse == 1 and household.partnerInYear and spouse.answer.hasDisability,
+          100 * if(line.CWB.spouse == 1 and family.partnerInYear and spouse.answer.hasDisability,
           param.cwbReductionRateBothDisabled, param.cwbReductionRate)
         when: "line.CWB.eligible == 1 and answer.hasDisability"
       "39@1":
         value: >-
           round(max(0, line.CWB.familyIncome - if(line.CWB.spouse == 1 or line.CWB.dependant == 1, param.cwbDisabilityIncomeBaseFamily,
-          param.cwbDisabilityIncomeBaseSingle)) * if(line.CWB.spouse == 1 and household.partnerInYear and spouse.answer.hasDisability,
+          param.cwbDisabilityIncomeBaseSingle)) * if(line.CWB.spouse == 1 and family.partnerInYear and spouse.answer.hasDisability,
           param.cwbReductionRateBothDisabled, param.cwbReductionRate), 2)
         when: "line.CWB.eligible == 1 and answer.hasDisability"
       "39":
         value: >-
           round(max(0, line.CWB.familyIncome - if(line.CWB.spouse == 1 or line.CWB.dependant == 1, param.cwbDisabilityIncomeBaseFamily,
-          param.cwbDisabilityIncomeBaseSingle)) * if(line.CWB.spouse == 1 and household.partnerInYear and spouse.answer.hasDisability,
+          param.cwbDisabilityIncomeBaseSingle)) * if(line.CWB.spouse == 1 and family.partnerInYear and spouse.answer.hasDisability,
           param.cwbReductionRateBothDisabled, param.cwbReductionRate), 2)
         when: "line.CWB.eligible == 1 and answer.hasDisability"
       "40": { value: line.CWB.disability, when: "line.CWB.eligible == 1 and answer.hasDisability" }
@@ -591,11 +591,11 @@ forms:
       # Step 4 – Advanced CWB (RC210 slips). The return claiming the basic benefit reports both spouses' box 10.
       "43": { value: line.T1.45300, when: "line.T1.41500 > 0" }
       "44": { value: sum(RC210.box10), when: "line.CWB.claimsBasic == 1" }
-      "45": { value: sum(spouse.RC210.box10), when: "line.CWB.claimsBasic == 1 and household.partnerInYear and line.HH.partner == 1" }
-      "46": "if(line.CWB.claimsBasic == 1, sum(RC210.box10) + if(household.partnerInYear and line.HH.partner == 1, sum(spouse.RC210.box10), 0), 0)"
+      "45": { value: sum(spouse.RC210.box10), when: "line.CWB.claimsBasic == 1 and family.partnerInYear and line.HH.partner == 1" }
+      "46": "if(line.CWB.claimsBasic == 1, sum(RC210.box10) + if(family.partnerInYear and line.HH.partner == 1, sum(spouse.RC210.box10), 0), 0)"
       "47": sum(RC210.box11)
       "48": >-
-        if(line.CWB.claimsBasic == 1, sum(RC210.box10) + if(household.partnerInYear and line.HH.partner == 1, sum(spouse.RC210.box10), 0), 0)
+        if(line.CWB.claimsBasic == 1, sum(RC210.box10) + if(family.partnerInYear and line.HH.partner == 1, sum(spouse.RC210.box10), 0), 0)
         + sum(RC210.box11)
       "49": line.T1.41500
 
@@ -949,10 +949,10 @@ forms:
       "67950": line.CC.expenses
       # Part B – the basic limit: children born in 2019 or later (under 7) and born 2009 to 2018 (7 to 16). Children
       # with a disability (line 2) aren't handled.
-      "1@1": { count: household.childrenUnder7 }
-      "1": param.childCareUnder7 * household.childrenUnder7
-      "3@1": { count: household.childrenUnder17 - household.childrenUnder7 }
-      "3": param.childCare7to16 * (household.childrenUnder17 - household.childrenUnder7)
+      "1@1": { count: family.childrenUnder7 }
+      "1": param.childCareUnder7 * family.childrenUnder7
+      "3@1": { count: family.childrenUnder17 - family.childrenUnder7 }
+      "3": param.childCare7to16 * (family.childrenUnder17 - family.childrenUnder7)
       "4": line.CC.limit
       "5": line.CC.expenses
       "6@1": line.CC.earned
@@ -1486,8 +1486,8 @@ forms:
       # Personal tax credit, on the return that claims it for the family (line 7, $195, is printed)
       "8": { value: "if(person.age >= 65, param.mbPersonalCreditAge, 0)", when: "line.MB.claimsPersonalCredit == 1" }
       "9": { value: "if(line.HH.partner == 1, param.mbPersonalCreditBasic, 0)", when: "line.MB.claimsPersonalCredit == 1" }
-      "10": { value: "if(line.HH.partner == 1 and household.partnerInYear, if(spouse.person.age >= 65, param.mbPersonalCreditAge, 0), 0)", when: "line.MB.claimsPersonalCredit == 1" }
-      "11": { value: "if(line.HH.partner == 1 and household.partnerInYear, if(spouse.answer.hasDisability, param.mbPersonalCreditDisability, 0), 0)", when: "line.MB.claimsPersonalCredit == 1" }
+      "10": { value: "if(line.HH.partner == 1 and family.partnerInYear, if(spouse.person.age >= 65, param.mbPersonalCreditAge, 0), 0)", when: "line.MB.claimsPersonalCredit == 1" }
+      "11": { value: "if(line.HH.partner == 1 and family.partnerInYear, if(spouse.answer.hasDisability, param.mbPersonalCreditDisability, 0), 0)", when: "line.MB.claimsPersonalCredit == 1" }
       "60900": { value: "line.MB479.12", when: "line.MB.claimsPersonalCredit == 1" }
       "12": { value: "line.MB479.12", when: "line.MB.claimsPersonalCredit == 1" }
       "13": { value: "if(line.MB428.16 > 0, param.mbPersonalCreditBasic, 0)", when: "line.MB.claimsPersonalCredit == 1" }
@@ -2165,7 +2165,7 @@ forms:
       "77": { value: "if(line.HH.partner == 1, param.peTaxReductionBasic, 0)", when: "line.PE428.87 > 0" }
       "78": { value: "line.PE428.78", when: "line.PE428.87 > 0" }
       "79": { value: "if(line.PE428.16 > 0, param.peTaxReductionBasic, 0)", when: "line.PE428.87 > 0" }
-      "80": { value: "param.peTaxReductionChild * max(0, household.childrenUnder19 - if(line.PE428.16 > 0, 1, 0))", when: "line.PE428.87 > 0" }
+      "80": { value: "param.peTaxReductionChild * max(0, family.childrenUnder19 - if(line.PE428.16 > 0, 1, 0))", when: "line.PE428.87 > 0" }
       "81": { value: "line.PE428.81", when: "line.PE428.87 > 0" }
       "82": { value: "line.PE428.73", when: "line.PE428.87 > 0" }
       "84": { value: "max(0, line.PE428.73 - param.peTaxReductionBase)", when: "line.PE428.87 > 0" }
@@ -2665,8 +2665,8 @@ forms:
       "6": line.NU479.5
       "8": line.NU479.8
       # The supplement for single parents (lines 10 and 12, the base and the rate, are printed).
-      "9": { value: "line.NU479.5", when: "line.HH.partner == 0 and household.childrenUnder18 > 0" }
-      "11": { value: "max(0, line.NU479.5 - param.nuSingleParentThreshold)", when: "line.HH.partner == 0 and household.childrenUnder18 > 0" }
+      "9": { value: "line.NU479.5", when: "line.HH.partner == 0 and family.childrenUnder18 > 0" }
+      "11": { value: "max(0, line.NU479.5 - param.nuSingleParentThreshold)", when: "line.HH.partner == 0 and family.childrenUnder18 > 0" }
       "13": line.NU479.13
       "14": line.NU479.14
       # The political contribution credit; the chart on page 2 is worked out only between $100 and $900.
@@ -2773,8 +2773,8 @@ forms:
       lastName: { text: lastName }
       firstName: { text: firstName }
       birthDate: { text: birthDate }
-      spouseYes: { tick: 'household.maritalStatus == "married" or household.maritalStatus == "common_law"' }
-      spouseNo: { tick: 'household.maritalStatus != "married" and household.maritalStatus != "common_law"' }
+      spouseYes: { tick: 'family.maritalStatus == "married" or family.maritalStatus == "common_law"' }
+      spouseNo: { tick: 'family.maritalStatus != "married" and family.maritalStatus != "common_law"' }
       foreignPropertyYes: { tick: answer.hasForeignProperty }
       foreignPropertyNo: { tick: not answer.hasForeignProperty }
       spouseLastName: { text: spouseLastName, when: "line.HH.partner == 1" }
@@ -2949,10 +2949,10 @@ forms:
     fields:
       "41": line.QCC.41
       # Part B – Childcare expense limit
-      "44": { count: household.childrenUnder7 }
-      "45": "param.qcChildCareUnder7 * household.childrenUnder7"
-      "46": { count: "household.childrenUnder17 - household.childrenUnder7" }
-      "47": "param.qcChildCare7to16 * (household.childrenUnder17 - household.childrenUnder7)"
+      "44": { count: family.childrenUnder7 }
+      "45": "param.qcChildCareUnder7 * family.childrenUnder7"
+      "46": { count: "family.childrenUnder17 - family.childrenUnder7" }
+      "47": "param.qcChildCare7to16 * (family.childrenUnder17 - family.childrenUnder7)"
       "50": line.QCC.50
       # Part C – Family income
       "76": line.TP1.275
@@ -3065,11 +3065,11 @@ forms:
       "40": line.QCK.40
       "41": "if(line.HH.partner == 1, param.drugIncomeCouple, param.drugIncomeSingle)"
       "42": >-
-        if(line.HH.partner == 1, if(household.childrenUnder18 >= 2, param.drugChildrenCouple,
-        if(household.childrenUnder18 == 1, param.drugChildCouple, 0)), 0)
+        if(line.HH.partner == 1, if(family.childrenUnder18 >= 2, param.drugChildrenCouple,
+        if(family.childrenUnder18 == 1, param.drugChildCouple, 0)), 0)
       "44": >-
-        if(line.HH.partner == 0, if(household.childrenUnder18 >= 2, param.drugChildrenSingle,
-        if(household.childrenUnder18 == 1, param.drugChildSingle, 0)), 0)
+        if(line.HH.partner == 0, if(family.childrenUnder18 >= 2, param.drugChildrenSingle,
+        if(family.childrenUnder18 == 1, param.drugChildSingle, 0)), 0)
       "46": line.QCK.46
       "48": line.QCK.48
       # Part B – months with no premium to pay
@@ -3151,7 +3151,7 @@ forms:
       "72@1": { value: line.QCP.72, when: "line.HH.partner == 1" }
       "68@2": { value: "min(line.QCP.64, param.adaptedWorkPremiumCapCouple)", when: "line.QCP.adapted == 1 and line.HH.partner == 1" }
       "72@2": { value: line.QCP.72_2, when: "line.QCP.adapted == 1 and line.HH.partner == 1" }
-      "74": { value: "if(household.childrenUnder18 > 0, param.workPremiumRateChildCouple, param.workPremiumRate) * 100", when: "line.HH.partner == 1" }
+      "74": { value: "if(family.childrenUnder18 > 0, param.workPremiumRateChildCouple, param.workPremiumRate) * 100", when: "line.HH.partner == 1" }
       "76@1": { value: line.QCP.76, when: "line.HH.partner == 1" }
       "76@2": { value: line.QCP.76_2, when: "line.QCP.adapted == 1 and line.HH.partner == 1" }
       "78@1": { value: line.QC.family, when: "line.HH.partner == 1" }
@@ -3172,7 +3172,7 @@ forms:
       "p2:72@1": { value: line.QCP.72, when: "line.HH.partner == 0" }
       "p2:68@2": { value: "min(line.QCP.64, param.adaptedWorkPremiumCapSingle)", when: "line.QCP.adapted == 1 and line.HH.partner == 0" }
       "p2:72@2": { value: line.QCP.72_2, when: "line.QCP.adapted == 1 and line.HH.partner == 0" }
-      "p2:74": { value: "if(household.childrenUnder18 > 0, param.workPremiumRateChildSingle, param.workPremiumRate) * 100", when: "line.HH.partner == 0" }
+      "p2:74": { value: "if(family.childrenUnder18 > 0, param.workPremiumRateChildSingle, param.workPremiumRate) * 100", when: "line.HH.partner == 0" }
       "p2:76@1": { value: line.QCP.76, when: "line.HH.partner == 0" }
       "p2:76@2": { value: line.QCP.76_2, when: "line.QCP.adapted == 1 and line.HH.partner == 0" }
       "p2:78@1": { value: line.QC.family, when: "line.HH.partner == 0" }

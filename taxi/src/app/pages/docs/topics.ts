@@ -1,6 +1,6 @@
 import { gettingStarted } from "./gettingStarted.tsx";
 import { glossary } from "./glossary.tsx";
-import { household } from "./household.tsx";
+import { profile } from "./profile.tsx";
 import { TOPIC_SLUGS, type DocTopic, type TopicSlug } from "./parts.tsx";
 import { taxBasics } from "./taxBasics.tsx";
 
@@ -8,7 +8,7 @@ import { taxBasics } from "./taxBasics.tsx";
 
 const BY_SLUG: Record<TopicSlug, DocTopic> = {
   "getting-started": gettingStarted,
-  household,
+  profile,
   "tax-basics": taxBasics,
   glossary,
 };

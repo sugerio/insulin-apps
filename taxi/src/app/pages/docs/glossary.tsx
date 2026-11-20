@@ -12,7 +12,7 @@ const TERMS: readonly (readonly [term: string, definition: ReactNode])[] = [
   ["Deduction", "An amount that lowers the income you are taxed on, such as an RRSP contribution."],
   ["Dependant", "Someone you support, such as a child or a parent who lives with you."],
   ["FHSA", "A first home savings account: a registered account for saving for a first home. The T4FHSA slip reports it."],
-  ["Household", "In Taxi: you, your spouse or partner, and the children and other dependants who live with you."],
+  ["Profile", "In Taxi: you, your spouse or partner, and the children and other dependants who live with you. The same people every year."],
   ["Notice of assessment", <>The CRA's answer after it processes a return. See <DocLink to="tax-basics" section="notice-of-assessment">The notice of assessment</DocLink>.</>],
   ["Refund", "Money the CRA pays back when more tax was taken off your pay than you owe."],
   ["RRSP", "A registered retirement savings plan. Contributions can be deducted, up to your RRSP deduction limit."],

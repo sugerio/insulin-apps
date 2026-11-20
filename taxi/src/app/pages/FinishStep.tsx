@@ -60,7 +60,7 @@ function Results({ estimate, slips }: { estimate: Estimate; slips: SlipList }) {
       text: blocker.text,
       personId: blocker.personId ?? owner.id,
       step: blocker.confirm ? ("confirm" as const) : blocker.question ? stepOfQuestion(blocker.question) : null,
-      ask: blocker.question && blocker.text.includes("not answered yet:") ? (rules.questions.get(blocker.question)?.ask ?? null) : null,
+      ask: blocker.question && blocker.unanswered ? (rules.questions.get(blocker.question)?.ask ?? null) : null,
     })),
     (personId) => (personId === owner.id ? "" : `${spouse?.name ?? "Your spouse"}'s return: `),
   );

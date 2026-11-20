@@ -67,9 +67,11 @@ few Quebec cases (employment outside Quebec, rental and foreign income on the TP
 
 ## Good to know
 
-- **No SIN, address or bank details are stored.** You write them on the paper return when you sign it.
+- **No SIN, address or bank details in Taxi's fields.** You write them on the paper return when you sign it. An
+  uploaded file is kept as it was uploaded, so a slip's printed SIN and address are in it until the file is deleted or a new version of it is read.
 - **Hourly usage counts.** On insulinapps.com, the platform calls Taxi every five minutes, and once an hour it
-  sends counts for each organization (profiles, people, tax years and returns) and the database's size. Never names,
+  sends counts for each organization (profiles, people, tax years, returns and files), the bytes each one stores and
+  the database's size. Never names,
   birth dates, amounts or documents.
 - **General information, not advice.** The Docs explain tax terms in general; they are not tax advice.
 

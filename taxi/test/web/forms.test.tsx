@@ -58,4 +58,13 @@ describe("the forms on Finish", () => {
     expect(within(forms).getByText("Finish the items under Before you file, above, to download them.")).toBeTruthy();
     expect(within(screen.getByRole("region", { name: "Before you file" })).getByText("1 slip is not confirmed yet.")).toBeTruthy();
   });
+
+  it("put three or more of your own unanswered questions of a step into one item", async () => {
+    await renderApp("/returns/2025/finish", { seed: (s) => seed(s, false) });
+    const before = await screen.findByRole("region", { name: "Before you file" });
+    const items = within(before).getAllByRole("listitem").map((item) => item.textContent ?? "");
+    // Your own blockers read "Not answered yet: …"; grouping once matched only the spouse's lower-case wording.
+    expect(items.some((text) => /^\d+ questions on (Income|Deductions|Credits) not answered yet: .+ and \d+ more\./.test(text))).toBe(true);
+    expect(items.filter((text) => text.startsWith("Not answered yet:")).length).toBeLessThan(3);
+  });
 });

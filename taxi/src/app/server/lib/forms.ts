@@ -5,6 +5,7 @@ import { fillForms, personalFacts } from "../../shared/engine/forms.ts";
 import { documentName, type FormLanguage, type FormSpec, type RuleSet } from "../../shared/engine/rules.ts";
 import { rulesFor } from "../../shared/rules/index.ts";
 import { buildReturnPdf, type Worksheet, type WorksheetRow } from "./forms-pdf.ts";
+import { hintsOf, stillApplied } from "./hints.ts";
 import { ApiError, conflict, notFound } from "./http.ts";
 import { openYear } from "./returns.ts";
 import { engineInputOf, loadWorkspace, spouseResult } from "./workspace.ts";
@@ -83,15 +84,17 @@ export async function printReturn(
   for (const each of filled) forms.push({ filled: each, template: await formTemplate(db, orgId, each.form, source, now) });
   const person = view.people.find((each) => each.id === personId)!;
   const accepted = await db
-    .prepare("SELECT hint, effect FROM hint_decisions WHERE org_id = ? AND tax_year_id = ? AND person_id = ? AND decision = 'accepted' ORDER BY decided_at")
+    .prepare("SELECT person_id, hint, decision, effect, previous FROM hint_decisions WHERE org_id = ? AND tax_year_id = ? AND person_id = ? AND decision = 'accepted' ORDER BY decided_at")
     .bind(orgId, row.id, personId)
-    .all<{ hint: string; effect: string | null }>();
+    .all<{ person_id: string; hint: string; decision: "accepted"; effect: string | null; previous: string }>();
+  // Only the savings that still hold: one whose answers were changed since isn't applied any more.
+  const applied = accepted.results.length > 0 ? stillApplied(accepted.results, hintsOf(view, workspace), workspace.answers) : [];
   const worksheet = worksheetOf(rules, evaluation, view, {
     personId,
     name: person.name,
     slips: workspace.slips.filter((slip) => slip.personId === personId),
     answers: workspace.answers[personId] ?? {},
-    hints: accepted.results,
+    hints: applied.map(({ hint, effect }) => ({ hint, effect })),
     forms: filled.map((each) => each.form),
     now,
   });

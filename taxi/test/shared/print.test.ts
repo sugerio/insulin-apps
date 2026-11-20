@@ -36,14 +36,14 @@ describe("printBlockers", () => {
     const own = result("a", { estimates: [{ question: "hasWorkFromHome", ask: "Working from home", assumed: false }] });
     expect(printBlockers(own, [slip("a", "unconfirmed")])).toEqual([
       { text: "1 slip is not confirmed yet.", confirm: true },
-      { text: "Not answered yet: Working from home.", question: "hasWorkFromHome" },
+      { text: "Not answered yet: Working from home.", question: "hasWorkFromHome", unanswered: true },
     ]);
   });
 
   it("names what is left on the spouse's return when this one reads it", () => {
     const waiting = result("a", { lines: [{ id: "T1.48400", label: "Refund", value: "100", status: "estimate" }] });
     const spouse = { name: "Sam", result: result("b", { estimates: [{ question: "hasMovingExpenses", ask: "Moving expenses", assumed: false }] }) };
-    expect(printBlockers(waiting, [], spouse)).toEqual([{ text: "Sam's return: not answered yet: Moving expenses.", question: "hasMovingExpenses", personId: "b" }]);
+    expect(printBlockers(waiting, [], spouse)).toEqual([{ text: "Sam's return: not answered yet: Moving expenses.", question: "hasMovingExpenses", unanswered: true, personId: "b" }]);
     // A finished return isn't held by what is left on the other.
     expect(printBlockers(result("a"), [], spouse)).toEqual([]);
   });

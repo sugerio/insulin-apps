@@ -116,6 +116,38 @@ describe("printing a return", () => {
     expect(year.returns[0]!.steps.finish).toBe("todo");
   });
 
+  it("lists a saving on the worksheet while it holds, and not once its answers were changed", async () => {
+    server = await startServer({ forms: standIn() });
+    const add = (name: string, relationship: string, birthDate: string) => json<Person>(server.call("POST", "/api/people", { body: { name, relationship, birthDate } }), 201);
+    const alex = await add("Alex Martin", "self", "1985-04-02");
+    const sam = await add("Sam Martin", "spouse", "1987-09-15");
+    await json<TaxYear>(server.call("POST", "/api/years", { body: { year: 2025, people: [alex.id, sam.id] } }), 201);
+    const adults = [alex, sam].map((person) => ({ personId: person.id, province: "ON", residentAllYear: true }));
+    let year = await json<TaxYear>(server.call("PUT", "/api/years/2025/personal-info", { body: { revision: 1, maritalStatus: "married", adults } }));
+    for (const person of [alex, sam]) {
+      const body = { revision: year.revision, personId: person.id, type: "T4", issuer: "Maple Corp", boxes: { 14: "60000", 22: "9000" } };
+      year = await json<TaxYear>(server.call("POST", "/api/years/2025/slips", { body }), 201);
+      year = await json<TaxYear>(server.call("PUT", "/api/years/2025/answers", { body: { revision: year.revision, personId: person.id, answers: { donations: "150" } } }));
+    }
+    year = await json<TaxYear>(server.call("POST", "/api/years/2025/hints/poolDonations", { body: { revision: year.revision, personId: alex.id, decision: "accept" } }));
+    const estimate = await json<Estimate>(server.call("GET", "/api/years/2025/estimate"));
+    for (const person of estimate.result.people) {
+      const answers = Object.fromEntries(person.estimates.map((item) => [item.question, item.assumed]));
+      year = await json<TaxYear>(server.call("PUT", "/api/years/2025/answers", { body: { revision: year.revision, personId: person.personId, answers } }));
+      year = await json<TaxYear>(server.call("POST", "/api/years/2025/slips/confirm", { body: { revision: year.revision, personId: person.personId } }));
+    }
+    const worksheet = async () => (await pagesOf(await (await download(alex.id)).arrayBuffer())).flat().map((item) => item.text);
+    const title = rules.hints.get("poolDonations")!.title;
+    expect(await worksheet()).toEqual(expect.arrayContaining(["Hints applied", title]));
+    // The donations moved back by hand: the saving no longer holds, so the worksheet doesn't claim it.
+    for (const person of [alex, sam]) {
+      year = await json<TaxYear>(server.call("PUT", "/api/years/2025/answers", { body: { revision: year.revision, personId: person.id, answers: { claimSpouseDonations: false } } }));
+    }
+    const after = await worksheet();
+    expect(after).not.toContain("Hints applied");
+    expect(after).not.toContain(title);
+  });
+
   it("prints a finished return on the T1 and ON428, then its worksheet; the forms are downloaded once", async () => {
     const source = standIn();
     server = await startServer({ forms: source });

@@ -144,6 +144,29 @@ describe("step 1 of a year", () => {
     expect(stored.returns[0]!.steps.personal).toBe("done");
   });
 
+  it("saves again after an answer is refused, without calling its own first save someone else's change", async () => {
+    const { server } = await renderApp("/returns/2025/personal", {
+      seed: async (s) => {
+        const alex = await add(s, "Alex Martin", "self", "1985-04-02");
+        const year = (await (await s.call("POST", "/api/years", { as: OWNER, body: { year: 2025, people: [alex.id] } })).json()) as TaxYear;
+        const body = { revision: year.revision, maritalStatus: "single", adults: [{ personId: alex.id, province: "ON", residentAllYear: false }] };
+        await s.call("PUT", "/api/years/2025/personal-info", { as: OWNER, body });
+      },
+    });
+    // The facts save (a new revision), then a part day is refused: days are whole.
+    fireEvent.change(await screen.findByLabelText(/Days you lived in Canada/), { target: { value: "200.5" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Save" }).hasAttribute("disabled")).toBe(false));
+    expect(screen.queryByText(/Someone else changed/)).toBeNull();
+    fireEvent.change(screen.getByLabelText(/Days you lived in Canada/), { target: { value: "200" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(async () => {
+      const stored = (await (await server.call("GET", "/api/years/2025/estimate")).json()) as { input: { answers: Record<string, Record<string, unknown>> } };
+      expect(Object.values(stored.input.answers)[0]).toMatchObject({ daysResident: "200" });
+    });
+    expect(screen.queryByText(/Someone else changed/)).toBeNull();
+  });
+
   it("shows one adult's return, with a switcher to the other's", async () => {
     const { router } = await renderApp("/returns/2025/personal", { seed: seedCouple });
     expect(await screen.findAllByLabelText("Province on December 31")).toHaveLength(1);

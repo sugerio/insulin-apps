@@ -104,7 +104,7 @@ export function promptFor(context: ReadContext): string {
     "- type: one of the slip types above.",
     "- person: the recipient's or student's name as printed on the slip.",
     "- issuer: who issued the slip (the employer, payer, trust, broker or institution).",
-    "- boxes: each box from that type's list that shows an amount, with the amount exactly as printed but without $ signs, spaces or thousands separators (for example 60000.00). Leave out empty boxes and boxes not in the list. Copy amounts; never add them up.",
+    "- boxes: each box from that type's list that shows an amount, with the amount exactly as printed but without $ signs, spaces or thousands separators, and a point as the decimal mark (for example 60000.00; a Quebec slip's 45 000,00 is 45000.00). Leave out empty boxes and boxes not in the list. Copy amounts; never add them up.",
     "- unsure: the numbers of any boxes you could not read clearly.",
     "Quebec RL slips (RL-1, RL-2 …) print boxes as letters: report each under its key in the list, a point or dash as an underscore (box B.A of an RL-1 is B_A). On an RL-2, box C goes under C_QPP when its source of income is RRQ, and under C otherwise.",
     "Receipts and notices (RRSP, DONATION, MEDICAL, NOA) have no box numbers printed: the numbers in their list are this app's. Put each amount under the number of the matching description. For a medical receipt, person is the patient; for a notice of assessment, the taxpayer, and issuer is Canada Revenue Agency.",

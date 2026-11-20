@@ -9,6 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { cn } from "@/lib/utils.ts";
 import { ApiError, apiRequest, describeError } from "../api/client.ts";
 import { byBox, formatBox } from "../lib/format.ts";
+import { normalizeAmount } from "../shared/amount.ts";
 import { rulesFor } from "../shared/rules/index.ts";
 import type { SlipType } from "../shared/engine/rules.ts";
 import { Banner } from "./Feedback.tsx";
@@ -96,7 +97,7 @@ export function OriginalFile({ year, documentId }: { year: number; documentId: s
 function filled(boxes: Record<string, string>): Record<string, string> {
   return Object.fromEntries(
     Object.entries(boxes)
-      .map(([box, amount]) => [box, amount.replace(/[$,\s]/g, "")] as const)
+      .map(([box, amount]) => [box, normalizeAmount(amount)] as const)
       .filter(([, amount]) => amount !== ""),
   );
 }

@@ -351,8 +351,9 @@ export class Evaluation {
   /** The family facts: the same for both returns. */
   private familyValue(name: string): Node {
     const { family, year } = this.input;
-    const childrenUnder = (age: number) =>
-      Dec.of(family.dependants.filter((dependant) => year - Number(dependant.birthDate.slice(0, 4)) < age).length);
+    // A dependant born after December 31 (added while last year's return is prepared) isn't one for this year.
+    const born = family.dependants.filter((dependant) => Number(dependant.birthDate.slice(0, 4)) <= year);
+    const childrenUnder = (age: number) => Dec.of(born.filter((dependant) => year - Number(dependant.birthDate.slice(0, 4)) < age).length);
     switch (name) {
       case "maritalStatus":
         return {
@@ -377,7 +378,7 @@ export class Evaluation {
         // Some credits (Nova Scotia's and Prince Edward Island's amount for young children) count the months on whose
         // first day a child was born and not yet 6. One entry per dependant under 18, so a formula can also leave out
         // the child claimed as an eligible dependant.
-        const items = family.dependants
+        const items = born
           .filter((dependant) => year - Number(dependant.birthDate.slice(0, 4)) < 18)
           .map((dependant) => {
             const sixth = `${Number(dependant.birthDate.slice(0, 4)) + 6}${dependant.birthDate.slice(4)}`;

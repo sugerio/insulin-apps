@@ -13,6 +13,7 @@ import { engineInputOf, loadWorkspace, type Workspace } from "./workspace.ts";
 
 type Db = D1Database;
 type Answer = string | boolean;
+type AnswersByPerson = Record<string, Record<string, Answer | null>>;
 
 interface DecisionRow {
   person_id: string;
@@ -28,10 +29,12 @@ export async function listHints(db: Db, orgId: string, year: number): Promise<Hi
   const rules = rulesFor(year)!;
   const adults = new Set(view.adults.map((adult) => adult.personId));
   const decisionOf = (personId: string, hint: string) => decisions.find((each) => each.person_id === personId && each.hint === hint);
+  const offers = hintsOf(view, workspace);
+  const applied = stillApplied(decisions, offers, workspace.answers);
   const hints: HintView[] = [];
-  for (const decision of decisions) {
+  for (const decision of applied) {
     const hint = rules.hints.get(decision.hint);
-    if (decision.decision !== "accepted" || !hint || !adults.has(decision.person_id)) continue;
+    if (!hint || !adults.has(decision.person_id)) continue;
     hints.push({
       id: hint.id,
       personId: decision.person_id,
@@ -44,9 +47,9 @@ export async function listHints(db: Db, orgId: string, year: number): Promise<Hi
       state: "applied",
     });
   }
-  for (const hint of hintsOf(view, workspace)) {
+  for (const hint of offers) {
     const decision = decisionOf(hint.personId, hint.id);
-    if (decision?.decision === "accepted") continue;
+    if (decision && applied.includes(decision)) continue;
     hints.push({
       id: hint.id,
       personId: hint.personId,
@@ -56,7 +59,7 @@ export async function listHints(db: Db, orgId: string, year: number): Promise<Hi
       amount: hint.amount,
       effect: hint.effect,
       effectLabel: hint.effectLabel,
-      state: decision ? "dismissed" : "open",
+      state: decision?.decision === "dismissed" ? "dismissed" : "open",
     });
   }
   return { revision: row.revision, hints };
@@ -72,7 +75,7 @@ export async function decideHint(db: Db, caller: Caller, year: number, hintId: s
   const forget = db
     .prepare("DELETE FROM hint_decisions WHERE org_id = ? AND tax_year_id = ? AND person_id = ? AND hint = ?")
     .bind(caller.orgId, row.id, input.personId, hintId);
-  const record = (decision: DecisionRow["decision"], effect: string | null, previous: Record<string, Record<string, Answer | null>>) =>
+  const record = (decision: DecisionRow["decision"], effect: string | null, previous: { before: AnswersByPerson; after: AnswersByPerson } | Record<string, never>) =>
     db
       .prepare(
         `INSERT INTO hint_decisions (id, org_id, tax_year_id, person_id, hint, decision, effect, previous, decided_by, decided_at)
@@ -89,27 +92,41 @@ export async function decideHint(db: Db, caller: Caller, year: number, hintId: s
       const workspace = await loadWorkspace(db, caller.orgId, row.id);
       const offer = hintsOf(view, workspace).find((each) => each.id === hintId && each.personId === input.personId);
       if (!offer) throw conflict("This hint doesn't apply to the return any more. Reload to see its hints now.");
-      const previous: Record<string, Record<string, Answer | null>> = {};
-      for (const change of offer.change) (previous[change.personId] ??= {})[change.question] = workspace.answers[change.personId]?.[change.question] ?? null;
+      // The answers it changes as they were, to undo it, and as it sets them, to tell later whether it still holds.
+      const before: AnswersByPerson = {};
+      const after: AnswersByPerson = {};
+      for (const change of offer.change) {
+        (before[change.personId] ??= {})[change.question] = workspace.answers[change.personId]?.[change.question] ?? null;
+        (after[change.personId] ??= {})[change.question] = change.value;
+      }
       statements.push(
         ...offer.change.map((change) => answerStatement(db, caller.orgId, row.id, change.personId, change.question, change.value, now)),
         // A saving accepted replaces any earlier one of the same hint in the year (from either return: an allocation
         // moved back the other way), whose answers it has just changed.
         db.prepare("DELETE FROM hint_decisions WHERE org_id = ? AND tax_year_id = ? AND hint = ? AND decision = 'accepted'").bind(caller.orgId, row.id, hintId),
         forget,
-        record("accepted", offer.effect, previous),
+        record("accepted", offer.effect, { before, after }),
         audit(db, caller, "hint.accepted", row.id, now),
       );
       break;
     }
-    case "dismiss":
-      if (current?.decision === "accepted") throw conflict("This saving is applied. Undo it to dismiss it.");
+    case "dismiss": {
+      // A saving that still holds is undone, not dismissed; one whose answers were changed since is offered again,
+      // with Dismiss, so its old decision is replaced.
+      if (current?.decision === "accepted") {
+        const workspace = await loadWorkspace(db, caller.orgId, row.id);
+        if (stillApplied([current], hintsOf(view, workspace), workspace.answers).length > 0) throw conflict("This saving is applied. Undo it to dismiss it.");
+      }
       statements.push(forget, record("dismissed", null, {}), audit(db, caller, "hint.dismissed", row.id, now));
       break;
+    }
     case "undo": {
       if (!current) throw notFound("There is no decision on this hint to undo");
+      // A saving that no longer holds is only forgotten: its earlier answers would overwrite the ones entered since.
+      const workspace = await loadWorkspace(db, caller.orgId, row.id);
+      const holds = current.decision !== "accepted" || stillApplied([current], hintsOf(view, workspace), workspace.answers).length > 0;
       const adults = new Set(view.adults.map((adult) => adult.personId));
-      const previous = JSON.parse(current.previous) as Record<string, Record<string, Answer | null>>;
+      const previous = holds ? changeOf(current.previous).before : {};
       for (const [personId, answers] of Object.entries(previous)) {
         if (!adults.has(personId)) continue;
         for (const [question, value] of Object.entries(answers)) statements.push(answerStatement(db, caller.orgId, row.id, personId, question, value, now));
@@ -122,8 +139,37 @@ export async function decideHint(db: Db, caller: Caller, year: number, hintId: s
   return getYear(db, caller.orgId, year);
 }
 
+/**
+ * An accepted saving's answers: `before` it, to undo it, and as it set them (`after`). A decision saved before `after`
+ * was kept is the bare `before` map (its keys are person ids, never "before").
+ */
+function changeOf(previous: string): { before: AnswersByPerson; after: AnswersByPerson | null } {
+  const value = JSON.parse(previous) as AnswersByPerson | { before: AnswersByPerson; after: AnswersByPerson };
+  return "before" in value && "after" in value ? (value as { before: AnswersByPerson; after: AnswersByPerson }) : { before: value as AnswersByPerson, after: null };
+}
+
+/**
+ * The accepted savings that still hold: every answer they set is still what they set. One whose answers were changed
+ * since (by hand, or by taking someone out of the year) shows as open again, isn't printed as applied, can be
+ * dismissed, and undoing it only forgets it, so its earlier answers never overwrite newer ones. The engine offering
+ * the same hint again doesn't by itself undo it (a second T2202 can raise the tuition to transfer). A decision without
+ * `after` holds while the engine doesn't offer it again.
+ */
+export function stillApplied<T extends Pick<DecisionRow, "person_id" | "hint" | "decision" | "previous">>(
+  decisions: T[],
+  offers: FoundHint[],
+  answers: Record<string, Record<string, Answer>>,
+): T[] {
+  return decisions.filter((decision) => {
+    if (decision.decision !== "accepted") return false;
+    const { after } = changeOf(decision.previous);
+    if (after === null) return !offers.some((offer) => offer.id === decision.hint && offer.personId === decision.person_id);
+    return Object.entries(after).every(([personId, set]) => Object.entries(set).every(([question, value]) => (answers[personId]?.[question] ?? null) === value));
+  });
+}
+
 /** The hints the year's returns get from what is stored; none when the rules can't read it (logged). */
-function hintsOf(view: TaxYear, workspace: Workspace): FoundHint[] {
+export function hintsOf(view: TaxYear, workspace: Workspace): FoundHint[] {
   const rules = rulesFor(view.year);
   if (!rules || view.adults.length === 0) return [];
   try {

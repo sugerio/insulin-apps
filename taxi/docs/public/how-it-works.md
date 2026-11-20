@@ -19,11 +19,13 @@ Taxi keeps its own database. Each organization has one profile, with:
   paper slip (who and when).
 - **Answers:** each adult's answers to the year's questions, such as an RRSP deduction or whether they had rental
   income.
-- **Uploaded files:** each file uploaded for a year, its name, size and fingerprint (SHA-256), and what reading it
-  found. Slips read from a file link to it.
+- **Uploaded files:** each file uploaded for a year, kept as it was uploaded, with its name, size and fingerprint
+  (SHA-256), and what reading it found. Slips read from a file link to it.
 - **History:** who made each change, when, and whether they used the browser, an AI agent or an API client.
 
-It never stores a SIN, a home address or bank details.
+Taxi never asks for a SIN, a home address or bank details, and none of its fields holds them. An uploaded file is kept
+as it was uploaded, so the SIN and address printed on a slip are in it. Deleting the file removes it, and so does a
+new version of it that Taxi reads.
 
 ## How AI reads a slip
 
@@ -84,7 +86,8 @@ holds for the return. It is one of:
   are over the limit on last year's notice of assessment plus $2,000.
 
 Applying a saving saves its answers, so the return explains the change like any other answer. The answers it changed
-are kept, so **Undo** puts them back. A dismissed hint can be shown again.
+are kept, so **Undo** puts them back. If you later change one of the answers it set, the saving is no longer applied.
+If it still saves something, it shows as a hint again, which you can apply or dismiss. Your newer answers stay. A dismissed hint can be shown again.
 
 The 2025 hints: claim both spouses' donations on one return; claim the family's medical expenses on one return (usually
 the lower income); transfer this year's tuition the student doesn't need to their spouse; deduct RRSP contributions in a
@@ -105,7 +108,7 @@ Form T778, each only when it applies), the provincial forms, then a worksheet.
   a whole number.
 - Step 1 of the T1 gets the name (split at its last space into first and last name), date of birth, marital status,
   province of residence, the spouse's or partner's first name and net income, and the foreign property answer. Taxi
-  never stores a social insurance number, an address or bank details, so those boxes stay blank.
+  never asks for a social insurance number, an address or bank details, so those boxes stay blank.
 - A couple's returns read each other (the spouse amount reads the other's net income), so a question left on one return
   can hold the other's forms too. Finish then names it under the other person, with a link to it.
 - A row Taxi doesn't know (a dependant's details, each expense category, a property's address) is left blank. The
@@ -120,7 +123,8 @@ year never overwrite each other without knowing.
 ## Usage reports
 
 Once an hour, Taxi sends Insulin Apps a count of its records for each organization (profiles, people, tax
-years and returns) and the size of its database, so that Insulin Apps can watch usage and plan capacity. It never sends
+years, returns and uploaded files), the bytes each organization stores (its files and its copies of the official
+forms) and the size of its database, so that Insulin Apps can watch usage and plan capacity. It never sends
 a name, a birth date, an amount or a document.
 
 ## Limits today

@@ -90,6 +90,10 @@ function ModuleForm({
   const me = useMe();
   const navigate = useNavigate();
   const { year, replace, reload } = useYear();
+  // The year as this form last saved it. When the module's answers save and the request after them (a slip, a file)
+  // is refused, the revision has still moved on; replacing the year would start the form again and lose what was
+  // typed, so the next save starts from here instead.
+  const latest = useRef(year);
   const { person } = useReturn();
   const editable = canPrepare(me);
   const rules = rulesFor(year.year)!;
@@ -171,7 +175,7 @@ function ModuleForm({
   async function save(thenContinue: boolean) {
     setState({ status: "saving" });
     try {
-      const saved = await saveAnswersFor(year, answersToSave());
+      const saved = await saveModule();
       replace(saved);
       if (thenContinue) navigate(stepPath(year.year, person.id, MODULE_PAGES[module].next));
       else setState({ status: "idle" });
@@ -189,7 +193,7 @@ function ModuleForm({
     }
     setState({ status: "saving" });
     try {
-      const saved = await saveAnswersFor(year, answersToSave());
+      const saved = await saveModule();
       const uploaded = await uploadFile(year.year, person.id, file, type);
       replace(uploaded.year.revision > saved.revision ? uploaded.year : saved);
       if (uploaded.status !== "read") setState({ status: "error", error: new ApiError(400, "validation_failed", `${file.name}: ${uploaded.message}`) });
@@ -199,7 +203,7 @@ function ModuleForm({
   }
 
   /** Saves the module so far, before a slip is added or changed here, so nothing chosen is lost. */
-  const saveModule = () => saveAnswersFor(year, answersToSave());
+  const saveModule = async () => (latest.current = await saveAnswersFor(latest.current, answersToSave()));
 
   const onReturn = items.filter((item) => added[item.question.id]);
   const toAdd = items.filter((item) => !added[item.question.id]);

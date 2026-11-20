@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { DocumentList, Estimate, Person, SlipList, TaxYear, ReadResult } from "#shared";
-import type { ReadContext, ReadOutcome, SlipReader } from "../../src/app/server/lib/reader.ts";
+import type { ReadContext, ReadOutcome, ReadSlip, SlipReader } from "../../src/app/server/lib/reader.ts";
 import { Evaluation } from "../../src/app/shared/engine/evaluate.ts";
 import { rulesFor } from "../../src/app/shared/rules/index.ts";
 import { VIEWER, startServer, type TestServer } from "../support/server.ts";
@@ -52,6 +52,14 @@ const upload = (bytes: Uint8Array<ArrayBuffer>, name = "slip.pdf", contentType =
 const T4 = { type: "T4", person: "SAM MARTIN", issuer: "Island Grocers", boxes: { 14: "31,000.00", 16: "1636.25", 22: "$2,400.00", 99: "5" }, unsure: ["16"] };
 
 describe("uploading a slip", () => {
+  it("reads an amount printed with a French decimal comma as dollars and cents", async () => {
+    const { alex } = await couple();
+    answers.push({ kind: "read", taxYear: 2025, slips: [{ type: "RL1", person: "Alex Martin", issuer: "Érable inc.", boxes: { A: "45 000,00", E: "6 900,5" }, unsure: [] }], model: "test-model" });
+    await json<ReadResult>(upload(pdf("rl1"), "RL-1.pdf", undefined, undefined, alex.id));
+    const slips = await json<SlipList>(server.call("GET", "/api/years/2025/slips"));
+    expect(slips.slips.map((slip) => slip.boxes)).toEqual([{ A: "45000", E: "6900.5" }]);
+  });
+
   it("reads it into unconfirmed slips for the adult named on it", async () => {
     const { sam } = await couple();
     answers.push({ kind: "read", taxYear: 2025, slips: [T4], model: "claude-opus-5-5" });
@@ -82,6 +90,105 @@ describe("uploading a slip", () => {
     expect(scan).toMatchObject({ status: "duplicate", message: "The slips in this file are already in this year.", document: null });
     expect((await json<SlipList>(server.call("GET", "/api/years/2025/slips"))).slips).toHaveLength(1);
     expect((await json<DocumentList>(server.call("GET", "/api/years/2025/documents"))).documents.map((document) => document.name)).toEqual(["first.pdf"]);
+  });
+
+  /**
+   * Uploads the files side by side into Sam's return, with a reader that answers each file by its tag only once every
+   * file has been sent to it: reading takes seconds, and the uploader sends three files at once.
+   */
+  async function sideBySide(files: { tag: string; name: string; outcome: ReadOutcome }[]) {
+    let started = 0;
+    let release!: () => void;
+    const together = new Promise<void>((resolve) => (release = resolve));
+    const gated: SlipReader = {
+      async read(file) {
+        if (++started === files.length) release();
+        await together;
+        const text = new TextDecoder().decode(file.bytes);
+        return files.find((each) => text.includes(`% ${each.tag}\n`))!.outcome;
+      },
+    };
+    server.close();
+    server = await startServer({ now: () => 1_767_225_600_000, reader: () => gated });
+    const { sam } = await couple();
+    const results = await Promise.all(files.map((each) => json<ReadResult>(upload(pdf(each.tag), each.name, undefined, undefined, sam.id))));
+    const slips = await json<SlipList>(server.call("GET", "/api/years/2025/slips"));
+    const documents = await json<DocumentList>(server.call("GET", "/api/years/2025/documents"));
+    return { results, slips: slips.slips, documents: documents.documents };
+  }
+
+  const readAs = (slips: ReadSlip[]): ReadOutcome => ({ kind: "read", taxYear: 2025, slips, model: "test-model" });
+  const T5 = { type: "T5", person: "SAM MARTIN", issuer: "Lakeview Credit Union", boxes: { 13: "1250.00" }, unsure: [] };
+
+  it("saves the same file once, and the same slips once, when they are uploaded side by side", async () => {
+    const { results, slips, documents } = await sideBySide([
+      { tag: "same", name: "T4.pdf", outcome: readAs([T4]) },
+      { tag: "same", name: "T4 (1).pdf", outcome: readAs([T4]) },
+      { tag: "photo", name: "T4 photo.pdf", outcome: readAs([T4]) },
+    ]);
+    expect(results.map((result) => result.status).sort()).toEqual(["duplicate", "duplicate", "read"]);
+    expect(slips).toHaveLength(1);
+    expect(documents).toHaveLength(1);
+    // The history says why the two uploads it shows aren't there.
+    const removed = await server.db.prepare("SELECT count(*) AS n FROM audit_events WHERE action = 'document.duplicate_removed'").first<{ n: number }>();
+    expect(removed!.n).toBe(2);
+  });
+
+  it("keeps the new slips of a file side by side with another holding one of them", async () => {
+    // Uploaded one after the other, the second file keeps its T5 and drops only the T4: side by side must agree. The
+    // order is forced: "All slips.pdf" is checked before "T4.pdf" is saved, and saved after it.
+    let release!: () => void;
+    let bothStarted!: () => void;
+    const started = new Promise<void>((resolve) => (bothStarted = resolve));
+    const held = new Promise<void>((resolve) => (release = resolve));
+    const reader: SlipReader = {
+      async read(file) {
+        if (new TextDecoder().decode(file.bytes).includes("% t4\n")) return readAs([T4]);
+        bothStarted();
+        await held;
+        return readAs([T4, T5]);
+      },
+    };
+    server.close();
+    server = await startServer({ now: () => 1_767_225_600_000, reader: () => reader });
+    const { sam } = await couple();
+    const later = json<ReadResult>(upload(pdf("both"), "All slips.pdf", undefined, undefined, sam.id));
+    await started;
+    await json<ReadResult>(upload(pdf("t4"), "T4.pdf", undefined, undefined, sam.id));
+    release();
+    const result = await later;
+
+    expect(result.status).toBe("read");
+    expect(result.message).toBe("T5 from Lakeview Credit Union");
+    const slips = await json<SlipList>(server.call("GET", "/api/years/2025/slips"));
+    expect(slips.slips.map((slip) => slip.type).sort()).toEqual(["T4", "T5"]);
+    // The answer's slip is the one stored, and the stored file says what it holds now.
+    expect(result.document!.slips.map((slip) => [slip.id, slip.type])).toEqual([[slips.slips.find((slip) => slip.type === "T5")!.id, "T5"]]);
+    const documents = await json<DocumentList>(server.call("GET", "/api/years/2025/documents"));
+    expect(documents.documents.find((each) => each.name === "All slips.pdf")).toMatchObject({ message: "T5 from Lakeview Credit Union", slips: [expect.objectContaining({ type: "T5" })] });
+    const removed = await server.db.prepare("SELECT count(*) AS n FROM audit_events WHERE action = 'document.duplicate_slips_removed'").first<{ n: number }>();
+    expect(removed!.n).toBe(1);
+  });
+
+  it("keeps the same receipt in two files side by side, as one after the other", async () => {
+    // Two receipts can hold the same amount from the same place (a monthly prescription): they are never matched.
+    const receipt = { type: "MEDICAL", person: "Sam Martin", issuer: "Lakeview Pharmacy", boxes: { 1: "25.00" }, unsure: [] };
+    const { slips, documents } = await sideBySide([
+      { tag: "march", name: "March.pdf", outcome: readAs([T4, receipt]) },
+      { tag: "april", name: "April.pdf", outcome: readAs([T5, receipt]) },
+    ]);
+    expect(slips.map((slip) => slip.type).sort()).toEqual(["MEDICAL", "MEDICAL", "T4", "T5"]);
+    expect(documents).toHaveLength(2);
+  });
+
+  it("saves the same file without slips once, when it is uploaded side by side", async () => {
+    const letter: ReadOutcome = { kind: "read", taxYear: 2025, slips: [], model: "test-model" };
+    const { results, documents } = await sideBySide([
+      { tag: "letter", name: "Letter.pdf", outcome: letter },
+      { tag: "letter", name: "Letter (1).pdf", outcome: letter },
+    ]);
+    expect(results.map((result) => result.status).sort()).toEqual(["duplicate", "not_a_slip"]);
+    expect(documents).toHaveLength(1);
   });
 
   it("replaces a file of the same name in the return with a changed one, and its slips", async () => {

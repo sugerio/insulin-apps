@@ -136,7 +136,9 @@ export function stepStatuses(facts: YearFacts, issues: Issue[], workspace: Works
     const answers = workspace.answers[personId] ?? {};
     const result = evaluation?.result.people.find((person) => person.personId === personId);
     const reached = result?.questions;
-    const answered = (module: Module) => rules !== undefined && leftInModule(rules, module, answers, slips, reached ?? []).length === 0;
+    // Without an evaluation (the engine refused what is stored) nothing says which questions the return reads, so no
+    // step that depends on them is done.
+    const answered = (module: Module) => evaluation !== null && rules !== undefined && leftInModule(rules, module, answers, slips, reached ?? []).length === 0;
     const state = (done: boolean) => (done ? "done" : "todo");
     const status: StepStatuses = {
       personal: state(!issues.some((issue) => issue.kind === "blocking" && isIssueOf(issue, personId)) && answered("about")),

@@ -16,6 +16,8 @@ export interface PrintBlocker {
   question?: string;
   /** Confirm the slips; otherwise the step of the question, or none. */
   confirm?: true;
+  /** An answer not given yet (the usual answer is assumed): Finish groups three or more of one step. */
+  unanswered?: true;
   /** The return it is on, when it is the spouse's. */
   personId?: string;
 }
@@ -25,7 +27,7 @@ export function printBlockers(person: PersonResult, slips: Slip[], spouse?: { na
   const blockers: PrintBlocker[] = [
     ...(toConfirm > 0 ? [{ text: `${toConfirm} ${toConfirm === 1 ? "slip is" : "slips are"} not confirmed yet.`, confirm: true as const }] : []),
     ...person.missing.map((item) => ({ text: `Needed: ${item.ask}.`, question: item.question })),
-    ...person.estimates.map((item) => ({ text: `Not answered yet: ${item.ask}.`, question: item.question })),
+    ...person.estimates.map((item) => ({ text: `Not answered yet: ${item.ask}.`, question: item.question, unanswered: true as const })),
     ...person.unhandled.map((note) => ({ text: note })),
   ];
   const incomplete = person.lines.some((line) => line.status !== "complete");
@@ -33,7 +35,7 @@ export function printBlockers(person: PersonResult, slips: Slip[], spouse?: { na
     const theirs = spouse.result.personId;
     blockers.push(
       ...spouse.result.missing.map((item) => ({ text: `${spouse.name}'s return: needed: ${item.ask}.`, question: item.question, personId: theirs })),
-      ...spouse.result.estimates.map((item) => ({ text: `${spouse.name}'s return: not answered yet: ${item.ask}.`, question: item.question, personId: theirs })),
+      ...spouse.result.estimates.map((item) => ({ text: `${spouse.name}'s return: not answered yet: ${item.ask}.`, question: item.question, unanswered: true as const, personId: theirs })),
     );
   }
   // A line can still be incomplete without a reason above (a value the rules can't work out): never print it.

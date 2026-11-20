@@ -227,6 +227,27 @@ describe("Income", () => {
     expect(slips.slips).toEqual([expect.objectContaining({ type: "T4", boxes: { 14: "60000" } })]);
   });
 
+  it("retries a refused slip without calling its own earlier save someone else's change", async () => {
+    const { server } = await renderApp("/returns/2025/income", { seed: (s) => seed(s).then(() => undefined) });
+    const add = await screen.findByRole("region", { name: "Add to your return" });
+    fireEvent.click(within(add).getByRole("button", { name: "Add Employment income" }));
+    fireEvent.click(screen.getByRole("button", { name: "Enter the T4" }));
+    const form = screen.getByRole("form", { name: "Add a slip" });
+    fireEvent.change(within(form).getByLabelText("Issued by"), { target: { value: "Maple Corp" } });
+    // Three decimals: the module's answers save (a new revision), then the slip is refused.
+    fireEvent.change(within(form).getByLabelText(/^Box 14/), { target: { value: "12.345" } });
+    fireEvent.click(within(form).getByRole("button", { name: "Add" }));
+    await waitFor(() => expect(within(screen.getByRole("form", { name: "Add a slip" })).getByRole("button", { name: "Add" }).hasAttribute("disabled")).toBe(false));
+    expect(screen.queryByText(/Someone else changed/)).toBeNull();
+    const retry = screen.getByRole("form", { name: "Add a slip" });
+    fireEvent.change(within(retry).getByLabelText(/^Box 14/), { target: { value: "60000" } });
+    fireEvent.click(within(retry).getByRole("button", { name: "Add" }));
+    await waitFor(() => expect(within(screen.getByRole("region", { name: "On your return" })).getByRole("button", { name: /T4 from Maple Corp/ })).toBeTruthy());
+    expect(screen.queryByText(/Someone else changed/)).toBeNull();
+    const slips = (await (await server.call("GET", "/api/years/2025/slips")).json()) as { slips: { boxes: Record<string, string> }[] };
+    expect(slips.slips).toEqual([expect.objectContaining({ boxes: { 14: "60000" } })]);
+  });
+
   it("takes the missing slip right there", async () => {
     const reader: SlipReader = {
       read: async () => ({ kind: "read", taxYear: 2025, model: "m", slips: [{ type: "T5", person: "Alex Martin", issuer: "Lakeview Credit Union", boxes: { 13: "1250.00" }, unsure: [] }] }),
@@ -402,7 +423,8 @@ describe("Finish", () => {
     await renderApp("/returns/2025/finish", { seed: (s) => seed(s, { applies: true, slip: true }).then(() => undefined) });
     expect(await screen.findByText("Refund")).toBeTruthy();
     expect(screen.getByText("1 slip is not confirmed yet.")).toBeTruthy();
-    expect(screen.getByText(/^Not answered yet: RRSP contributions/)).toBeTruthy();
+    // Three or more questions of one step left: one item for the step, naming the first two.
+    expect(screen.getByText(/^\d+ questions on Deductions not answered yet: /)).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: /Net federal tax/ }));
     expect(screen.getByText("= line.T1.41700 + line.T1.41500")).toBeTruthy();
   });

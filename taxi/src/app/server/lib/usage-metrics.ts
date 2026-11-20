@@ -36,7 +36,7 @@ const REQUESTS_BUDGET_MS = 15_000
 export const ORGANIZATIONS_PER_REQUEST = 500
 
 /** Each organization's metrics, in the order they are sent. */
-export const ORGANIZATION_METRICS = ['profiles', 'people', 'tax_years', 'returns'] as const
+export const ORGANIZATION_METRICS = ['profiles', 'people', 'tax_years', 'returns', 'documents', 'storage_bytes'] as const
 export type OrganizationMetric = (typeof ORGANIZATION_METRICS)[number]
 
 /**
@@ -48,6 +48,12 @@ const QUERIES = [
   'SELECT org_id AS organization_id, count(*) AS people FROM people GROUP BY org_id',
   'SELECT org_id AS organization_id, count(*) AS tax_years FROM tax_years GROUP BY org_id',
   'SELECT org_id AS organization_id, count(*) AS returns FROM returns GROUP BY org_id',
+  // What an organization stores: its uploaded files and its copies of the official forms, which are nearly all of
+  // the database's size.
+  `SELECT org_id AS organization_id, sum(file) AS documents, sum(size) AS storage_bytes FROM (
+     SELECT org_id, 1 AS file, byte_size AS size FROM documents
+     UNION ALL SELECT org_id, 0, length(bytes) FROM form_files
+   ) GROUP BY org_id`,
 ]
 
 export interface UsageReport {

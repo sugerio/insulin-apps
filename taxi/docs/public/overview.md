@@ -68,8 +68,9 @@ For each person: their name, their relationship to you and their birth date. For
 spouse in it means both returns are prepared together), the marital status on December 31, each adult's province
 and whether they lived in Canada all year, their slips and their answers. Every change records who made it and when.
 
-Taxi never stores a social insurance number (SIN), a home address or bank details. You write those on the paper
-return when you sign it.
+Taxi never asks for a social insurance number (SIN), a home address or bank details, and none of its fields holds
+them. You write those on the paper return when you sign it. An uploaded slip is kept as it was uploaded, so the SIN
+and address printed on it are in the file until you delete it or upload a new version that Taxi reads.
 
 ## On Insulin Apps
 

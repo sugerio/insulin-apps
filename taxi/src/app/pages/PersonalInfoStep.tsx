@@ -1,4 +1,4 @@
-import { useId, useState } from "react";
+import { useId, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router";
 import {
   PROVINCES,
@@ -86,6 +86,9 @@ function YearFacts({ showMissing, onMissing }: { showMissing: boolean; onMissing
   const me = useMe();
   const navigate = useNavigate();
   const { year, replace, reload } = useYear();
+  // The year as this step last saved it: if the facts save and the answers after them are refused, the revision has
+  // still moved on, and replacing the year would start the form again and lose what was typed.
+  const latest = useRef(year);
   const { person: owner, adult } = useReturn();
   const editable = canPrepare(me);
   // The spouse or partner in the Profile, in this year or not: it decides which statuses there are to choose from.
@@ -111,8 +114,9 @@ function YearFacts({ showMissing, onMissing }: { showMissing: boolean; onMissing
     try {
       let saved = await apiRequest(routes.savePersonalInfo, {
         params: { year: year.year },
-        body: { revision: year.revision, maritalStatus, adults: [{ personId: owner.id, ...draft }] },
+        body: { revision: latest.current.revision, maritalStatus, adults: [{ personId: owner.id, ...draft }] },
       });
+      latest.current = saved;
       const answers = Object.fromEntries(about.map((question) => [question.id, cleanAmount(amountOf(question.id))] as const).filter(([, value]) => value !== ""));
       saved = await saveAnswersFor(saved, { [owner.id]: answers });
       const done = stepsOf(saved, owner.id)?.personal === "done";

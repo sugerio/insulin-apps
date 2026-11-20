@@ -130,7 +130,7 @@ export const routes = {
     method: "POST",
     path: "/api/years/:year/hints/:hint",
     summary:
-      "Decide on a hint of an adult's return: accept a saving (its answers are saved, and the answers it changed are kept to undo it), dismiss a hint, or undo either. Send the revision you read.",
+      "Decide on a hint of an adult's return: accept a saving (its answers are saved, and the answers it changed are kept to undo it), dismiss a hint, or undo either. A saving stays applied while every answer it set is unchanged; after that it is offered again only if it still saves something, and undo only removes its decision. Send the revision you read.",
     permission: "taxi.prepare",
     params: hintParamsSchema,
     body: decideHintSchema,

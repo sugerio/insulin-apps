@@ -5,7 +5,8 @@
 // `getCurrentUser().organizationId`, and every query names it, so one organization never reads another's rows.
 // Instants are INTEGER Unix epoch milliseconds (`*_at`); dates are TEXT 'YYYY-MM-DD'; booleans are INTEGER 0/1.
 //
-// Never stored: a SIN, a home address or bank details. People write those on the paper return when they sign it.
+// No column holds a SIN, a home address or bank details: people write those on the paper return when they sign it.
+// Uploaded files are kept as uploaded (document_chunks), so a slip's printed SIN and address are in its bytes.
 import { sql } from "drizzle-orm";
 import { blob, check, index, integer, primaryKey, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 import { MARITAL_STATUSES, PROVINCES, RELATIONSHIPS } from "../shared/people.ts";
@@ -258,8 +259,9 @@ export const HINT_DECISIONS = ["accepted", "dismissed"] as const;
 
 /**
  * A person's decision on a hint of their return (`rules/<country>/<year>/hints.yaml`): accepted, with the answers it
- * changed as they were before (`previous`, person → question → value or null), so it can be undone, and what it saved
- * then; or dismissed. One row per return and hint; undoing deletes it.
+ * changed (`previous`: `{ before, after }`, each person → question → value or null; a row from before `after` was kept
+ * is the bare `before` map), so it can be undone and checked to still hold, and what it saved then; or dismissed. One
+ * row per return and hint; undoing deletes it.
  */
 export const hintDecisions = sqliteTable(
   "hint_decisions",

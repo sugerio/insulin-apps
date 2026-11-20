@@ -83,7 +83,7 @@ export const gettingStarted: DocTopic = {
             <li>
               <b>Finish.</b> The return's refund or balance owing, its key lines with why each is what it is, and what to check before filing.
               Under <b>Check and save</b>, hints show ways to pay less, such as claiming both spouses' donations on one return, with what each saves
-              on the year's returns. <b>Apply</b> changes your answers; <b>Undo</b> puts them back. When nothing is left before filing,{" "}
+              on the year's returns. <b>Apply</b> changes your answers; <b>Undo</b> puts them back. If you later change an answer a saving set, it is no longer applied, and shows as a hint again if it still saves something. When nothing is left before filing,{" "}
               <b>Download the forms</b> gives one PDF: the CRA's T1, the schedules and forms your return uses and the provincial forms, filled in
               with your name, date of birth, marital status, province and amounts, and a worksheet that shows how each amount was worked out. Add
               your social insurance number, address and the other Step 1 answers by hand, sign the T1 and mail it, or copy the amounts into
@@ -141,11 +141,16 @@ export const gettingStarted: DocTopic = {
         <>
           <p>
             For each person: their name, their relationship to you and their birth date. For each tax year: who is in it, your marital status on
-            December 31, and each adult's province and whether they lived in Canada all year. Every change records who
-            made it and when.
+            December 31, and each adult's province and whether they lived in Canada all year. For each return: its slips, your answers and the
+            hints you applied. A file that is saved is kept as you uploaded it, until you delete it or a new version of it is read. Every change records who made it and when.
           </p>
           <p>
-            <b>Never stored:</b> a social insurance number (SIN), a home address or bank details. You write those on the paper return when you sign it.
+            Each uploaded file is sent to Anthropic's Claude to be read, with your organization's own Anthropic credential (set on the app's
+            Integrations page).
+          </p>
+          <p>
+            <b>Never asked for:</b> a social insurance number (SIN), a home address or bank details. You write those on the paper return when you
+            sign it. An uploaded slip is kept as it was uploaded, so the SIN and address printed on it are in the file until you delete it or a new version of it is read.
           </p>
         </>
       ),
@@ -155,8 +160,8 @@ export const gettingStarted: DocTopic = {
       title: "Usage reports every hour",
       body: (
         <p>
-          Once an hour, the app sends Insulin Apps a count of its records for each organization: profiles, people, tax years and returns, and the
-          size of its database. It never sends a name, a birth date, an amount or a document.
+          Once an hour, the app sends Insulin Apps a count of its records for each organization: profiles, people, tax years, returns and
+          uploaded files, the bytes each organization stores (its files and its copies of the official forms), and the size of its database. It never sends a name, a birth date, an amount or a document.
         </p>
       ),
     },

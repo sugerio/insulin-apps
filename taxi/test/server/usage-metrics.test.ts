@@ -17,9 +17,21 @@ describe("the hourly usage report", () => {
   it("counts each organization's records, and nothing else", async () => {
     const report = await measureUsage(server.db, hourOf(NOW), null);
     expect(report.organizations).toEqual([
-      { id: "org-a", metrics: { profiles: 1, people: 2, tax_years: 1, returns: 0 } },
-      { id: "org-b", metrics: { profiles: 1, people: 1, tax_years: 0, returns: 0 } },
+      { id: "org-a", metrics: { profiles: 1, people: 2, tax_years: 1, returns: 0, documents: 0, storage_bytes: 0 } },
+      { id: "org-b", metrics: { profiles: 1, people: 1, tax_years: 0, returns: 0, documents: 0, storage_bytes: 0 } },
     ]);
+  });
+
+  it("adds up each organization's stored bytes: its uploaded files and its copies of the official forms", async () => {
+    const pdf = new TextEncoder().encode("%PDF-1.4\n% stored\n%%EOF\n");
+    const upload = await server.call("POST", "/api/years/2025/documents", {
+      raw: pdf as Uint8Array<ArrayBuffer>,
+      headers: { "Content-Type": "application/pdf", "X-File-Name": "t4.pdf" },
+    });
+    expect(upload.status).toBe(200);
+    await server.db.prepare("INSERT INTO form_files (org_id, url, sha256, bytes, fetched_at) VALUES (?, ?, ?, ?, 0)").bind("org-a", "https://www.canada.ca/t1.pdf", "x", new Uint8Array(1000)).run();
+    const report = await measureUsage(server.db, hourOf(NOW), null);
+    expect(report.organizations.find((each) => each.id === "org-a")!.metrics).toMatchObject({ documents: 1, storage_bytes: pdf.byteLength + 1000 });
   });
 
   it("sends the hour once, with the app's token", async () => {

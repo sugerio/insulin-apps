@@ -2,9 +2,10 @@ import { useId } from "react";
 import { Input } from "@/components/ui/input.tsx";
 import { Label } from "@/components/ui/label.tsx";
 import { cn } from "@/lib/utils.ts";
+import { normalizeAmount } from "../shared/amount.ts";
 
-/** An amount in dollars, as typed: `$`, separators and spaces are taken out when it is saved. */
-export const cleanAmount = (value: string) => value.replace(/[$,%\s]/g, "");
+/** An amount in dollars, as typed, the way it is saved (normalizeAmount). */
+export const cleanAmount = normalizeAmount;
 
 /**
  * An amount to enter, in dollars, as a percent, or a count (no unit). `labelHidden` keeps the label for screen readers only, where the card

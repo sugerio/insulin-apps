@@ -1,5 +1,5 @@
 import { createCipheriv, createHash } from "node:crypto";
-import { PDFDocument } from "pdf-lib";
+import { PDFDict, PDFDocument, PDFName, PDFRef } from "pdf-lib";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { describe, expect, it } from "vitest";
 import { decryptPdf, md5, rc4 } from "../../src/app/server/lib/pdf-decrypt.ts";
@@ -44,10 +44,11 @@ function aes256Security(fileKey: Uint8Array, password: string) {
 }
 
 /**
- * A one-page PDF saying "Revenu Quebec", encrypted as Revenu Québec's forms are (AES-128, or AES-256 with `aes256`);
- * `password` makes it need one.
+ * A one-page PDF saying "Revenu Quebec", encrypted as Revenu Québec's forms are (AES-128, or AES-256 with `aes256`, or
+ * RC4 with `rc4`); `password` makes it need one. With `xrefStream` its cross-reference is a stream, as PDF 1.5 files
+ * often have it, and its font is in an object stream.
  */
-async function encryptedPdf(options: { password?: string; aes256?: boolean } = {}): Promise<Uint8Array> {
+async function encryptedPdf(options: { password?: string; aes256?: boolean; rc4?: boolean; xrefStream?: boolean } = {}): Promise<Uint8Array> {
   const id = Uint8Array.from({ length: 16 }, (_, index) => index * 7);
   const owner = Uint8Array.from({ length: 32 }, (_, index) => 255 - index);
   const permissions = new Uint8Array(4);
@@ -61,6 +62,7 @@ async function encryptedPdf(options: { password?: string; aes256?: boolean } = {
   );
   const fileKey = Uint8Array.from({ length: 32 }, (_, index) => (index * 29 + 3) & 255);
   const aes = async (num: number, plain: Uint8Array) => {
+    if (options.rc4) return rc4(md5(join(key, Uint8Array.of(num, 0, 0, 0, 0))), plain);
     // Revision 6 encrypts every object with the file key itself.
     const objectKey = options.aes256 ? fileKey : md5(join(key, Uint8Array.of(num, 0, 0, 0, 0), bytes("sAlT")));
     const iv = Uint8Array.from({ length: 16 }, (_, index) => index + num);
@@ -68,32 +70,51 @@ async function encryptedPdf(options: { password?: string; aes256?: boolean } = {
     return join(iv, new Uint8Array(await crypto.subtle.encrypt({ name: "AES-CBC", iv }, cipher, new Uint8Array(plain))));
   };
   const content = await aes(4, bytes("BT /F1 12 Tf 72 700 Td (Revenu Quebec) Tj ET"));
+  const font = "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>";
+  // An object stream holds object 5 (the font); the stream is encrypted as a whole, as object 9.
+  const packed = await aes(9, bytes(`5 0 ${font}`));
   const objects = [
     bytes("<< /Type /Catalog /Pages 2 0 R >>"),
     bytes("<< /Type /Pages /Kids [3 0 R] /Count 1 >>"),
     bytes("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 603 774] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>"),
     // The length in another object, as Revenu Québec's files often have it.
     join(bytes("<< /Length 6 0 R >>\nstream\n"), content, bytes("\nendstream")),
-    bytes("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>"),
+    bytes(font),
     bytes(String(content.length)),
     bytes(`<< /Title <${hex(await aes(7, bytes("Schedule (test)")))}> >>`),
     bytes(
       options.aes256
         ? aes256Security(fileKey, options.password ?? "")
-        : `<< /Filter /Standard /V 4 /R 4 /Length 128 /CF << /StdCF << /AuthEvent /DocOpen /CFM /AESV2 /Length 16 >> >> /StmF /StdCF /StrF /StdCF /O <${hex(owner)}> /U <${hex(user)}> /P -1036 >>`,
+        : options.rc4
+          ? `<< /Filter /Standard /V 2 /R 3 /Length 128 /O <${hex(owner)}> /U <${hex(user)}> /P -1036 >>`
+          : `<< /Filter /Standard /V 4 /R 4 /Length 128 /CF << /StdCF << /AuthEvent /DocOpen /CFM /AESV2 /Length 16 >> >> /StmF /StdCF /StrF /StdCF /O <${hex(owner)}> /U <${hex(user)}> /P -1036 >>`,
     ),
+    ...(options.xrefStream ? [join(bytes(`<< /Type /ObjStm /N 1 /First 4 /Length ${packed.length} >>\nstream\n`), packed, bytes("\nendstream"))] : []),
   ];
   const parts: Uint8Array[] = [bytes("%PDF-1.7\n")];
   const offsets: number[] = [];
   let at = parts[0]!.length;
   objects.forEach((body, index) => {
-    const object = join(bytes(`${index + 1} 0 obj\n`), body, bytes("\nendobj\n"));
     offsets.push(at);
+    // With an object stream, the font is only there: nothing else can stand in for it.
+    if (options.xrefStream && index === 4) return;
+    const object = join(bytes(`${index + 1} 0 obj\n`), body, bytes("\nendobj\n"));
     parts.push(object);
     at += object.length;
   });
+  const trailer = `/Root 1 0 R /Info 7 0 R /Encrypt 8 0 R /ID [<${hex(id)}> <${hex(id)}>]`;
+  if (options.xrefStream) {
+    // Object 10, the cross-reference stream (never encrypted): type, field 2 and field 3 in 1, 4 and 2 bytes. Object 5
+    // is the first object of object stream 9.
+    const row = (type: number, field: number, gen: number) => Uint8Array.of(type, field >>> 24, (field >>> 16) & 255, (field >>> 8) & 255, field & 255, gen >> 8, gen & 255);
+    const rows = [row(0, 0, 65535), ...offsets.map((offset, index) => (index === 4 ? row(2, 9, 0) : row(1, offset, 0))), row(1, at, 0)];
+    const data = join(...rows);
+    parts.push(join(bytes(`10 0 obj\n<< /Type /XRef /Size 11 /W [1 4 2] ${trailer} /Length ${data.length} >>\nstream\n`), data, bytes("\nendstream\nendobj\n")));
+    parts.push(bytes(`startxref\n${at}\n%%EOF\n`));
+    return join(...parts);
+  }
   const xref = `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n${offsets.map((offset) => `${String(offset).padStart(10, "0")} 00000 n \n`).join("")}`;
-  parts.push(bytes(`${xref}trailer\n<< /Size ${objects.length + 1} /Root 1 0 R /Info 7 0 R /Encrypt 8 0 R /ID [<${hex(id)}> <${hex(id)}>] >>\nstartxref\n${at}\n%%EOF\n`));
+  parts.push(bytes(`${xref}trailer\n<< /Size ${objects.length + 1} ${trailer} >>\nstartxref\n${at}\n%%EOF\n`));
   return join(...parts);
 }
 
@@ -110,16 +131,22 @@ describe("decrypting a PDF to fill it", () => {
   });
 
   it.each([
-    ["AES-128", false],
-    ["AES-256", true],
-  ])("decrypts a file anyone may open (%s), so pdf-lib reads it: its page and its strings", async (_, aes256) => {
-    const encrypted = await encryptedPdf({ aes256 });
+    ["AES-128", {}],
+    ["AES-256", { aes256: true }],
+    ["RC4", { rc4: true }],
+    ["AES-128, with a cross-reference stream and an object stream", { xrefStream: true }],
+    ["RC4, with a cross-reference stream and an object stream", { rc4: true, xrefStream: true }],
+  ])("decrypts a file anyone may open (%s), so pdf-lib reads it: its page and its strings", async (_, options) => {
+    const encrypted = await encryptedPdf(options);
     // A PDF reader opens it as it is; pdf-lib refuses it.
     expect(await textOf(encrypted)).toBe("Revenu Quebec");
     await expect(PDFDocument.load(encrypted)).rejects.toThrow(/encrypted/);
 
-    const decrypted = await PDFDocument.load(await decryptPdf(encrypted));
+    const decrypted = await PDFDocument.load(await decryptPdf(encrypted), { throwOnInvalidObject: true });
     expect(decrypted.getTitle()).toBe("Schedule (test)");
+    // The font is read from the decrypted file (from its object stream, when it has one), not a reader's fallback.
+    const font = decrypted.context.lookup(PDFRef.of(5, 0), PDFDict);
+    expect(font.get(PDFName.of("BaseFont"))).toBe(PDFName.of("Helvetica"));
     const copy = await PDFDocument.create();
     const [page] = await copy.copyPages(decrypted, [0]);
     copy.addPage(page);

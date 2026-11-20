@@ -89,13 +89,15 @@ the Insulin template and stay byte-identical to it (`test/server/framework-templ
 - **The tick** (`/api/scheduled`): only `x-suger-access-via: schedule` with no identity passes; such a request is
   nobody on every other route (`readCaller`). It is never in the catalog.
 - **Usage reports** (`usage-metrics.ts`): once an hour, counts per organization (profiles, people, tax_years,
-  returns) and the database size. Counts only: never a name, a birth date, an amount or a document. A new metric goes
+  returns, documents) with its `storage_bytes` (uploaded files and copies of the official forms), and the database
+  size. Counts and sizes only: never a name, a birth date, an amount or a document. A new metric goes
   in the in-app Docs ("Usage reports every hour") and `docs/public/how-it-works.md`.
 - **No login of our own.** The preview owner exists only in the dev server.
 
 ## Data
 
-- **Never store** a SIN, a home address or bank details. The person writes them on the paper return.
+- **Never store** a SIN, a home address or bank details in a field, and never read them out of a file. The person
+  writes them on the paper return. Uploaded files are kept as uploaded, so they can hold them: the Docs say so.
 - **People are the profile's; a year picks among them** (`tax_year_people`). Your spouse in a year is what "prepare
   both returns together" means: it isn't stored apart.
 - **One batch per write**, with its audit event in the same batch. A year's changes (who is in it, its facts) save

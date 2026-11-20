@@ -29,6 +29,8 @@ const rules = loadRuleSet(
                 "R.gated": { label: "Gated", formula: 'if(answer.hasPet and answer.petKind == "dog", answer.petCost, 0)' },
                 "R.older": { label: "Older", formula: "if(person.age >= 65, 1, 0)" },
                 "R.birthMonth": { label: "Birth month", formula: "person.birthMonth" },
+                "R.kids": { label: "Children under 18", formula: "family.childrenUnder18" },
+                "R.youngMonths": { label: "Fewest months under 6", formula: "min(family.childMonthsUnder6)" },
               },
               questions: {
                 deduction: { type: "money", ask: "Deduction", default: 0 },
@@ -184,6 +186,26 @@ describe("the 2025 rules", () => {
     expect(result.estimates.map((estimate) => estimate.question)).toEqual(expect.arrayContaining(["donations", "fhsaDeduction", "hasSelfEmployment", "rrspDeduction"]));
     expect(result.questions).toContain("hasChildCare");
     expect(result.unhandled).toEqual(["T4 from Maple Corp: box 40 isn't handled by this app"]);
+  });
+
+  it("count only the dependants born by the end of the year", () => {
+    // A child born in early 2026 can be added to the profile while the 2025 return is prepared; for 2025 they don't exist yet.
+    const evaluation = new Evaluation(
+      rules,
+      input({
+        family: {
+          maritalStatus: "married",
+          dependants: [
+            { id: "c1", name: "Robin", birthDate: "2021-06-01" },
+            { id: "c2", name: "Kai", birthDate: "2025-03-15" },
+            { id: "c3", name: "Noa", birthDate: "2026-02-10" },
+          ],
+        },
+      }),
+    );
+    expect(value(evaluation, "a", "R.kids")).toEqual(["2", "complete"]);
+    // An unborn child's 0 months would also pull min() down in the young-children credits.
+    expect(value(evaluation, "a", "R.youngMonths")).toEqual(["9", "complete"]);
   });
 
   it("say which family fact is missing", () => {

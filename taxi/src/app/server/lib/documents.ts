@@ -1,4 +1,5 @@
 import { DOCUMENT_TYPES, MAX_DOCUMENT_BYTES, type DocumentList, type DocumentRecord, type Person, type ReadResult, type Slip, type TaxYear } from "#shared";
+import { normalizeAmount } from "../../shared/amount.ts";
 import { Dec } from "../../shared/engine/decimal.ts";
 import { documentName } from "../../shared/engine/rules.ts";
 import { rulesFor } from "../../shared/rules/index.ts";
@@ -182,6 +183,29 @@ export async function uploadDocument(db: Db, caller: Caller, year: number, reque
   for (let start = CHUNKS_PER_BATCH; start < chunks.length; start += CHUNKS_PER_BATCH) {
     await db.batch(chunks.slice(start, start + CHUNKS_PER_BATCH).map((chunk, offset) => insertChunk(db, caller.orgId, id, start + offset, chunk)));
   }
+  // Reading takes seconds and the uploader sends files side by side, so the checks above can miss the same file, or
+  // the same slips, saved meanwhile. What was saved first stays, as when the files come one after the other: this file
+  // goes if one saved before it has the same bytes, else only its slips already in an earlier file do, and the file
+  // goes too when none of its own is left.
+  const before = await savedBefore(db, caller.orgId, row.id, year, id, sha256, reading.found);
+  const kept = reading.found.filter((_, index) => !before.slips.includes(index));
+  if (before.file !== null || (reading.found.length > 0 && kept.length === 0)) {
+    await db.batch([...deleteDocumentRows(db, caller.orgId, row.id, id), bump, audit(db, caller, "document.duplicate_removed", id, now)]);
+    const message = before.file !== null ? `The same file is already here, as ${before.file}.` : "The slips in this file are already in this year.";
+    return { status: "duplicate", message: `${replacing}${message}`, document: null, replaced, year: await getYear(db, caller.orgId, year) };
+  }
+  if (before.slips.length > 0) {
+    const taken = before.slips.map((index) => slipIds[index]!);
+    await db.batch([
+      db.prepare(`DELETE FROM slips WHERE org_id = ? AND document_id = ? AND id IN (${taken.map(() => "?").join(", ")})`).bind(caller.orgId, id, ...taken),
+      db.prepare("UPDATE documents SET message = ? WHERE id = ? AND org_id = ?").bind(foundMessage(year, kept, uploader), id, caller.orgId),
+      bump,
+      audit(db, caller, "document.duplicate_slips_removed", id, now),
+    ]);
+    reading.found = kept;
+    reading.message = foundMessage(year, kept, uploader);
+    slipIds.splice(0, slipIds.length, ...slipIds.filter((slipId) => !taken.includes(slipId)));
+  }
 
   const document: DocumentRecord = {
     id,
@@ -195,6 +219,47 @@ export async function uploadDocument(db: Db, caller: Caller, year: number, reque
     createdAt: now,
   };
   return { status: reading.status, message: `${replacing}${reading.message}`, document, replaced, year: await getYear(db, caller.orgId, year) };
+}
+
+/**
+ * What of a file just saved is already in a file saved before it in the year (by rowid, the order D1 wrote them): the
+ * same bytes (that file's name), or else the indexes of its slips that are the same as one of the earlier files'
+ * (receipts aside, as when reading).
+ */
+async function savedBefore(
+  db: Db,
+  orgId: string,
+  taxYearId: string,
+  year: number,
+  id: string,
+  sha256: string,
+  found: Planned[],
+): Promise<{ file: string | null; slips: number[] }> {
+  const earlier = `SELECT id FROM documents WHERE org_id = ? AND tax_year_id = ? AND status NOT IN (${UNREAD_SQL})
+    AND rowid < (SELECT rowid FROM documents WHERE id = ? AND org_id = ?)`;
+  const same = await db
+    .prepare(`SELECT name FROM documents WHERE id IN (${earlier}) AND sha256 = ? LIMIT 1`)
+    .bind(orgId, taxYearId, id, orgId, sha256)
+    .first<{ name: string }>();
+  if (same) return { file: same.name, slips: [] };
+  const rules = rulesFor(year)!;
+  if (!found.some((slip) => !rules.slips.get(slip.type)!.receipt)) return { file: null, slips: [] };
+  const slips = (
+    await db
+      .prepare(`SELECT type, issuer, person_id, boxes FROM slips WHERE org_id = ? AND tax_year_id = ? AND document_id IN (${earlier})`)
+      .bind(orgId, taxYearId, orgId, taxYearId, id, orgId)
+      .all<{ type: string; issuer: string; person_id: string; boxes: string }>()
+  ).results.map((slip) => ({ type: slip.type, issuer: slip.issuer, personId: slip.person_id, boxes: JSON.parse(slip.boxes) as Record<string, string> }));
+  const taken = found.flatMap((slip, index) => (!rules.slips.get(slip.type)!.receipt && slips.some((other) => sameSlip(other, slip)) ? [index] : []));
+  return { file: null, slips: taken };
+}
+
+/** What a file added, slip by slip: "T4 from Maple Corp; T5 from Lakeview Credit Union, added to Sam's return". */
+function foundMessage(year: number, found: Planned[], uploader: Person): string {
+  const rules = rulesFor(year)!;
+  return found
+    .map((slip) => `${documentName(rules.slips.get(slip.type), slip.type)} from ${slip.issuer}${slip.personId === uploader.id ? "" : `, added to ${slip.personName}'s return`}${slip.guessed ? " (check whose it is)" : ""}`)
+    .join("; ");
 }
 
 /** " and its 2 slips (1 confirmed)", for saying what replacing a file took with it. */
@@ -302,9 +367,7 @@ async function readInto(year: number, view: TaxYear, uploader: Person, file: Fil
   // Two receipts can hold the same amount from the same place (a monthly prescription): only slips are matched.
   const found = planned.filter((slip) => rules.slips.get(slip.type)!.receipt || !existing.some((other) => sameSlip(other, slip)));
   if (found.length === 0) return { status: "duplicate", message: "The slips in this file are already in this year.", modelId, found: [] };
-  const message = found
-    .map((slip) => `${documentName(rules.slips.get(slip.type), slip.type)} from ${slip.issuer}${slip.personId === uploader.id ? "" : `, added to ${slip.personName}'s return`}${slip.guessed ? " (check whose it is)" : ""}`)
-    .join("; ");
+  const message = foundMessage(year, found, uploader);
   return { status: "read", message, modelId, found };
 }
 
@@ -346,7 +409,7 @@ function plan(slips: ReadSlip[], view: TaxYear, year: number, uploader: Person):
     for (const [rawBox, rawAmount] of Object.entries(slip.boxes)) {
       const box = rawBox.trim().toUpperCase();
       if (!(box in type.boxes)) continue;
-      const amount = rawAmount.replace(/[$,\s]/g, "");
+      const amount = normalizeAmount(rawAmount);
       if (/^\d{1,9}(\.\d{1,2})?$/.test(amount)) boxes[box] = Dec.from(amount).toString();
       else unsure.add(box);
     }

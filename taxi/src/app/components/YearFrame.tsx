@@ -1,4 +1,4 @@
-import { createContext, useContext } from "react";
+import { createContext, useContext, useRef } from "react";
 import { Link, Navigate, Outlet, useLocation, useParams } from "react-router";
 import { Check, ChevronRight, ChevronsUpDown } from "lucide-react";
 import { STEPS, SUPPORTED_YEARS, routes, type AdultYear, type Estimate, type Person, type SlipList, type Step, type StepStatuses, type TaxYear } from "#shared";
@@ -15,7 +15,7 @@ import { ResourceView } from "./Feedback.tsx";
 // and shared through YearContext. Each adult of the year has a return of their own at `/returns/:year/:personId/:step`:
 // one person's steps (about them, their documents, their income, deductions and credits, confirming the slips,
 // finishing), with a switcher to the other returns of the year. A step that saves replaces the year with what the
-// server answered.
+// server answered, unless the year held is newer already.
 
 export const STEP_LABELS: Record<Step, string> = {
   household: "Personal info",
@@ -81,6 +81,16 @@ export function YearFrame() {
   const year = Number(useParams().year);
   const known = (SUPPORTED_YEARS as readonly number[]).includes(year);
   const resource = useResource(`year-${year}`, (signal) => apiRequest(routes.getYear, { params: { year }, signal }));
+  // Answers arrive in any order, some for a page no longer open (an upload in the other return): one with an older
+  // revision than the year held would undo a newer change here, and the next save would be refused.
+  const held = useRef<TaxYear | null>(null);
+  held.current = resource.status === "ready" ? resource.data : null;
+  const replace = (next: TaxYear) => {
+    const current = held.current;
+    if (resource.status !== "ready" || current === null || next.year !== current.year || next.revision < current.revision) return;
+    held.current = next;
+    resource.replace(next);
+  };
   if (!known) return <NotFoundPage />;
   // A year that hasn't been started opens on the list of years, where it can be.
   if (resource.status === "error" && resource.error instanceof ApiError && resource.error.status === 404) {
@@ -88,7 +98,7 @@ export function YearFrame() {
   }
   return (
     <ResourceView resource={resource}>
-      {(data) => <YearData year={data} replace={resource.status === "ready" ? resource.replace : () => {}} reload={resource.reload} />}
+      {(data) => <YearData year={data} replace={replace} reload={resource.reload} />}
     </ResourceView>
   );
 }
@@ -128,9 +138,11 @@ export function ReturnFrame() {
     if (step) return <Navigate to={stepPath(year.year, first.personId, step)} replace />;
     return <Navigate to={`/returns/${year.year}`} replace />;
   }
+  // The switcher keeps the step: a new key starts its form again from the other person's stored facts, so a draft of
+  // one return is never shown, or saved, as the other's.
   return (
     <ReturnContext value={{ person, adult, steps: progress.steps }}>
-      <Outlet />
+      <Outlet key={person.id} />
     </ReturnContext>
   );
 }

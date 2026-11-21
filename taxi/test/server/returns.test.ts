@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { Estimate, Person, SlipList, TaxYear } from "#shared";
+import type { SlipReader } from "../../src/app/server/lib/reader.ts";
 import { VIEWER, startServer, type TestServer } from "../support/server.ts";
 
 let server: TestServer;
@@ -115,6 +116,39 @@ describe("slips", () => {
     const removed = await json<TaxYear>(server.call("DELETE", `/api/years/2025/slips/${slip!.id}`, { body: { revision: changed.revision } }));
     expect(removed.revision).toBe(changed.revision + 1);
     expect((await json<SlipList>(server.call("GET", "/api/years/2025/slips"))).slips).toEqual([]);
+  });
+
+  it("can't be confirmed while a box AI couldn't read has no amount, until that box is entered", async () => {
+    server.close();
+    const reader: SlipReader = {
+      read: async () => ({ kind: "read", taxYear: 2025, model: "test-model", slips: [{ type: "T4", person: "ALEX MARTIN", issuer: "Maple Corp", boxes: { 22: "9000" }, unsure: ["14", "22"] }] }),
+    };
+    server = await startServer({ now: () => 1_767_225_600_000, reader: () => reader });
+    const { alex } = await year();
+    const pdf = new TextEncoder().encode("%PDF-1.4\n% a sample T4\n%%EOF\n") as Uint8Array<ArrayBuffer>;
+    expect((await server.call("POST", "/api/years/2025/documents", { raw: pdf, headers: { "Content-Type": "application/pdf", "X-File-Name": "T4.pdf" } })).status).toBe(200);
+    const list = await json<SlipList>(server.call("GET", "/api/years/2025/slips"));
+    expect(list.slips).toEqual([expect.objectContaining({ boxes: { 22: "9000" }, unsure: ["14", "22"], status: "unconfirmed" })]);
+    const id = list.slips[0]!.id;
+    const confirm = (body: object) => json<{ error: { code: string; message: string; issues: { path: string; message: string }[] } }>(server.call("POST", "/api/years/2025/slips/confirm", { body }), 400);
+
+    for (const body of [{ revision: list.revision, personId: alex.id }, { revision: list.revision }]) {
+      const refused = await confirm(body);
+      expect(refused.error.message).toBe("T4 from Maple Corp: box 14 (Employment income) couldn't be read. Enter it before confirming, or 0 if it is blank on the slip.");
+      expect(refused.error.issues).toEqual([{ path: `slips.${id}.boxes.14`, message: "Couldn't be read: enter it, or 0 if it is blank on the slip" }]);
+    }
+    expect((await json<SlipList>(server.call("GET", "/api/years/2025/slips"))).slips[0]).toMatchObject({ status: "unconfirmed" });
+
+    // Saving the other boxes clears their marks, not box 14's: it is still empty.
+    let edited = await json<TaxYear>(server.call("PATCH", `/api/years/2025/slips/${id}`, { body: { revision: list.revision, boxes: { 22: "9500" } } }));
+    expect((await json<SlipList>(server.call("GET", "/api/years/2025/slips"))).slips[0]).toMatchObject({ boxes: { 22: "9500" }, unsure: ["14"] });
+    expect((await confirm({ revision: edited.revision, personId: alex.id })).error.issues).toEqual([expect.objectContaining({ path: `slips.${id}.boxes.14` })]);
+
+    // Blank on the paper slip: 0 says so.
+    edited = await json<TaxYear>(server.call("PATCH", `/api/years/2025/slips/${id}`, { body: { revision: edited.revision, boxes: { 14: "0", 22: "9500" } } }));
+    expect((await json<SlipList>(server.call("GET", "/api/years/2025/slips"))).slips[0]).toMatchObject({ boxes: { 14: "0", 22: "9500" }, unsure: [] });
+    const confirmed = await json<TaxYear>(server.call("POST", "/api/years/2025/slips/confirm", { body: { revision: edited.revision, personId: alex.id } }));
+    expect(confirmed.returns[0]!.steps.confirm).toBe("done");
   });
 
   it("refuse a type or box the year's rules don't have", async () => {

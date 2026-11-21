@@ -67,7 +67,6 @@ function Uploader({ onUploading }: { onUploading: (uploading: boolean) => void }
   const [dragging, setDragging] = useState(false);
   const folderInput = useRef<HTMLInputElement>(null);
   const filesInput = useRef<HTMLInputElement>(null);
-  const latest = useRef(year.revision);
   const editable = canPrepare(me);
 
   function update(key: string, row: Row | null) {
@@ -97,11 +96,8 @@ function Uploader({ onUploading }: { onUploading: (uploading: boolean) => void }
         // A saved file is listed under "Uploaded files"; one that wasn't, or that replaced another, stays here with why.
         const note = noteOf(result);
         update(item.key, note ? { key: item.key, name: item.file.name, state: "note", ...note } : null);
-        // Uploads finish in any order: keep the newest year.
-        if (result.year.revision > latest.current) {
-          latest.current = result.year.revision;
-          replace(result.year);
-        }
+        // Uploads finish in any order: the year keeps the newest of their answers.
+        replace(result.year);
       } catch (error) {
         update(item.key, { key: item.key, name: item.file.name, state: "error", message: describeError(error) });
       }

@@ -420,34 +420,50 @@ async function personRow(db: Db, orgId: string, id: string): Promise<PersonRow> 
   return row;
 }
 
+/**
+ * Moves on the revision of every year the person is in, before a change to who files in those years or that takes
+ * their facts out, so a save started from the year as read before is refused (409) rather than lost or failing.
+ * Unguarded: the change is the household's, not one year's someone opened.
+ */
+function bumpYearsOf(db: Db, orgId: string, personId: string, now: number): D1PreparedStatement {
+  return db
+    .prepare(
+      `UPDATE tax_years SET revision = revision + 1, updated_at = ?
+       WHERE org_id = ? AND id IN (SELECT tax_year_id FROM tax_year_people WHERE person_id = ? AND org_id = ?)`,
+    )
+    .bind(now, orgId, personId, orgId);
+}
+
 export async function updatePerson(db: Db, caller: Caller, id: string, input: UpdatePerson, now: number): Promise<Person> {
   const current = await personRow(db, caller.orgId, id);
   // The person preparing stays themselves: who "you" are is the one fact the household is built around.
   if (input.relationship !== undefined && (current.relationship === "self") !== (input.relationship === "self")) {
     throw conflict("You can't change who \"you\" are. Add or remove people instead.");
   }
-  const next = { ...toPerson(current), ...input };
+  // Only the fields sent are written, so two changes saved at the same time to different fields both stay.
+  const fields = Object.entries({ name: input.name, relationship: input.relationship, birth_date: input.birthDate }).filter(([, value]) => value !== undefined);
+  // A person who is no longer an adult files no return.
+  const noReturn = input.relationship !== undefined && !isAdult(input.relationship);
   try {
     await db.batch([
+      ...(input.relationship !== undefined ? [bumpYearsOf(db, caller.orgId, id, now)] : []),
       db
-        .prepare("UPDATE people SET name = ?, relationship = ?, birth_date = ?, updated_at = ? WHERE id = ? AND org_id = ?")
-        .bind(next.name, next.relationship, next.birthDate, now, id, caller.orgId),
-      // A person who is no longer an adult files no return.
-      ...(isAdult(next.relationship)
-        ? []
-        : [db.prepare("DELETE FROM returns WHERE person_id = ? AND org_id = ?").bind(id, caller.orgId)]),
+        .prepare(`UPDATE people SET ${fields.map(([column]) => `${column} = ?, `).join("")}updated_at = ? WHERE id = ? AND org_id = ?`)
+        .bind(...fields.map(([, value]) => value), now, id, caller.orgId),
+      ...(noReturn ? [db.prepare("DELETE FROM returns WHERE person_id = ? AND org_id = ?").bind(id, caller.orgId)] : []),
       audit(db, caller, "person.changed", id, now),
     ]);
   } catch (error) {
     personConflict(error);
   }
-  return next;
+  return toPerson(await personRow(db, caller.orgId, id));
 }
 
 export async function removePerson(db: Db, caller: Caller, id: string, now: number): Promise<void> {
   const current = await personRow(db, caller.orgId, id);
   if (current.relationship === "self") throw conflict("You can't remove yourself from the household.");
   await db.batch([
+    bumpYearsOf(db, caller.orgId, id, now),
     db.prepare("DELETE FROM returns WHERE person_id = ? AND org_id = ?").bind(id, caller.orgId),
     db.prepare("DELETE FROM answers WHERE person_id = ? AND org_id = ?").bind(id, caller.orgId),
     db.prepare("DELETE FROM slips WHERE person_id = ? AND org_id = ?").bind(id, caller.orgId),

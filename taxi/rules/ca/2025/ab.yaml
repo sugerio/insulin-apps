@@ -89,8 +89,8 @@ lines:
     formula: "if(line.HH.partner == 1, max(0, param.abSpouseBase - line.HH.spouseNetIncome), 0)"
   AB428.23:
     label: Alberta amount for an eligible dependant
-    formula: "if(line.HH.partner == 0 and household.childrenUnder18 > 0, param.abSpouseBase, 0)"
-    source: "AB428 lines 21 to 23. The app assumes the child had no income"
+    formula: "if(line.HH.partner == 0 and household.childrenUnder18 > 0, max(0, param.abSpouseBase - answer.dependantNetIncome), 0)"
+    source: "AB428 lines 21 to 23: the base minus their net income"
   AB428.32:
     label: CPP and EI credit amounts
     formula: "line.T1.30800 + line.T1.31000 + line.T1.31200"

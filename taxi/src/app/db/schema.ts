@@ -185,8 +185,9 @@ export const slips = sqliteTable(
   ],
 );
 
-// `duplicate` is no longer written (a duplicate upload isn't saved, and migration 0004 removed the old rows). It stays
-// in the CHECK because changing a CHECK rebuilds the table.
+// A duplicate upload isn't saved any more (migration 0004 removed the old `duplicate` rows), and changing a CHECK
+// rebuilds the table, so `duplicate` now marks a file whose pieces are still being stored, which no reader shows
+// (`STAGED` in server/lib/documents.ts).
 export const DOCUMENT_STATUSES = ["read", "duplicate", "not_a_slip", "failed", "not_available"] as const;
 
 /**

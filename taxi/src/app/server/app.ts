@@ -1,6 +1,6 @@
 import { Hono, type Context } from "hono";
 import { z } from "zod";
-import { ROUTE_TABLE, SUPPORTED_YEARS, routes, type AnyRoute, type ApiCatalog, type Me } from "#shared";
+import { ROUTE_TABLE, SUPPORTED_YEARS, fileRoutes, routes, type AnyRoute, type ApiCatalog, type Me } from "#shared";
 import { platformReader } from "./lib/ai.ts";
 import * as documents from "./lib/documents.ts";
 import { getEstimate } from "./lib/estimate.ts";
@@ -110,9 +110,9 @@ export function createApp(options: AppOptions = {}) {
   mount(routes.readDocumentAgain, async ({ caller, params, db, now }) => documents.readDocumentAgain(db, caller, params.year, params.id, readerFor(caller.orgId), now));
   mount(routes.deleteDocument, async ({ caller, params, body, db, now }) => documents.deleteDocument(db, caller, params.year, params.id, body.revision, now));
   // A stored file's bytes, to show it beside the numbers read from it: not JSON, so outside the route table.
-  app.get("/api/years/:year/documents/:id/file", async (c) => {
+  app.get(fileRoutes.documentFile.path, async (c) => {
     const caller = c.get("caller");
-    if (!caller.permissions.has("taxi.view")) throw forbidden();
+    if (!caller.permissions.has(fileRoutes.documentFile.permission)) throw forbidden();
     const year = Number(c.req.param("year"));
     if (!(SUPPORTED_YEARS as readonly number[]).includes(year)) throw notFound();
     const file = await documents.documentFile(c.env.DB, caller.orgId, year, c.req.param("id"));
@@ -126,9 +126,9 @@ export function createApp(options: AppOptions = {}) {
     });
   });
   // A return printed on the CRA's forms, with its worksheet, as a PDF to save: not JSON, so outside the route table.
-  app.get("/api/years/:year/returns/:personId/forms", async (c) => {
+  app.get(fileRoutes.returnForms.path, async (c) => {
     const caller = c.get("caller");
-    if (!caller.permissions.has("taxi.view")) throw forbidden();
+    if (!caller.permissions.has(fileRoutes.returnForms.permission)) throw forbidden();
     const year = Number(c.req.param("year"));
     if (!(SUPPORTED_YEARS as readonly number[]).includes(year)) throw notFound();
     const pdf = await printReturn(c.env.DB, caller.orgId, year, c.req.param("personId"), options.forms ?? craForms, now());
@@ -179,16 +179,22 @@ function jsonSchemaOf(schema: z.ZodType): Record<string, unknown> {
   return document;
 }
 
-/** `GET /api/catalog`: only the routes the caller may use, with their bodies as JSON Schema. */
+/** `GET /api/catalog`: only the routes the caller may use, with their bodies as JSON Schema, then those that answer with a file. */
 export function catalogFor(caller: Pick<Caller, "permissions">): ApiCatalog {
+  const pathOf = (path: string) => path.replace(/:([A-Za-z][A-Za-z0-9]*)/g, "{$1}");
   return {
-    endpoints: ROUTE_TABLE.filter((route) => route.permission === null || caller.permissions.has(route.permission)).map((route) => ({
-      method: route.method,
-      path: route.path.replace(/:([A-Za-z][A-Za-z0-9]*)/g, "{$1}"),
-      summary: route.summary,
-      query: null,
-      body: route.body ? jsonSchemaOf(route.body) : null,
-      idempotencyKey: false,
-    })),
+    endpoints: [
+      ...ROUTE_TABLE.filter((route) => route.permission === null || caller.permissions.has(route.permission)).map((route) => ({
+        method: route.method,
+        path: pathOf(route.path),
+        summary: route.summary,
+        query: null,
+        body: route.body ? jsonSchemaOf(route.body) : null,
+        idempotencyKey: false,
+      })),
+      ...Object.values(fileRoutes)
+        .filter((route) => caller.permissions.has(route.permission))
+        .map((route) => ({ method: route.method, path: pathOf(route.path), summary: route.summary, query: route.query, body: null, idempotencyKey: false })),
+    ],
   };
 }

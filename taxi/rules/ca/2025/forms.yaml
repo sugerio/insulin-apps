@@ -132,6 +132,7 @@ forms:
       "10": line.ON428.10
       "12": "if(line.HH.partner == 1, line.HH.spouseNetIncome, 0)"
       "13": line.ON428.13
+      "15": "if(line.HH.partner == 0 and household.childrenUnder18 > 0, answer.dependantNetIncome, 0)"
       "16": line.ON428.16
       "18": line.ON428.9 + line.ON428.10 + line.ON428.13 + line.ON428.16
       "19": line.T1.30800
@@ -209,6 +210,7 @@ forms:
       "17": line.BC428.17
       "19": "if(line.HH.partner == 1, line.HH.spouseNetIncome, 0)"
       "20": line.BC428.20
+      "22": "if(line.HH.partner == 0 and household.childrenUnder18 > 0, answer.dependantNetIncome, 0)"
       "23": line.BC428.23
       "25": line.BC428.16 + line.BC428.17 + line.BC428.20 + line.BC428.23
       "26": line.BC428.16 + line.BC428.17 + line.BC428.20 + line.BC428.23
@@ -273,6 +275,7 @@ forms:
       "17": line.AB428.17
       "19": "if(line.HH.partner == 1, line.HH.spouseNetIncome, 0)"
       "20": line.AB428.20
+      "22": "if(line.HH.partner == 0 and household.childrenUnder18 > 0, answer.dependantNetIncome, 0)"
       "23": line.AB428.23
       "25": line.AB428.16 + line.AB428.17 + line.AB428.20 + line.AB428.23
       "26": line.AB428.16 + line.AB428.17 + line.AB428.20 + line.AB428.23

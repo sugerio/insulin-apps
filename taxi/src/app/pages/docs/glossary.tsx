@@ -16,7 +16,7 @@ const TERMS: readonly (readonly [term: string, definition: ReactNode])[] = [
   ["Notice of assessment", <>The CRA's answer after it processes a return. See <DocLink to="tax-basics" section="notice-of-assessment">The notice of assessment</DocLink>.</>],
   ["Refund", "Money the CRA pays back when more tax was taken off your pay than you owe."],
   ["RRSP", "A registered retirement savings plan. Contributions can be deducted, up to your RRSP deduction limit."],
-  ["SIN", "Your social insurance number. Taxi never asks for it or stores it: you write it on the paper return."],
+  ["SIN", "Your social insurance number. Taxi never asks for it: you write it on the paper return. An uploaded slip that prints it is kept as it is until you delete the file."],
   ["Slip", "A form an employer, bank or other payer sends to report income or amounts paid, such as a T4 or a T5."],
   ["T1", "The income tax and benefit return each person files every year."],
   ["T4", "The slip that reports employment income and the tax, CPP and EI taken off your pay."],

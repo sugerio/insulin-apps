@@ -57,11 +57,12 @@ export function HouseholdPage() {
         <Card size="sm">
           <CardHeader>
             <CardTitle>
-              <h2 className="text-sm font-semibold">What we don't store</h2>
+              <h2 className="text-sm font-semibold">What we don't ask for</h2>
             </CardTitle>
           </CardHeader>
           <CardContent className="text-sm text-muted-foreground">
-            No SIN, home address or bank details. You write them on the paper return when you sign it.
+            No SIN, home address or bank details. You write them on the paper return when you sign it. Uploaded files are kept as they are,
+            so what a slip prints (often your SIN and address) is stored with the file until you delete it.
           </CardContent>
         </Card>
       </div>

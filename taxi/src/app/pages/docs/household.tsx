@@ -28,6 +28,10 @@ export const household: DocTopic = {
             For each person, enter their name and birth date. Use the names as they appear on their tax slips: in a later step, AI uses the names to
             decide whose document each file is. The people stay the same from one year to the next. You can't remove yourself.
           </p>
+          <p>
+            <b>Remove</b> asks first: removing someone deletes their facts, answers and slips (confirmed ones too) in every tax year they are in.
+            Files uploaded in their return stay in the year. To leave someone out of one year only, change who is in that year instead.
+          </p>
         </>
       ),
     },

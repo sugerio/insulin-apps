@@ -214,8 +214,9 @@ export class Evaluation {
         const unhandled: string[] = [];
         for (const slip of this.input.slips.filter((each) => each.person === person.id)) {
           const used = this.rules.usedBoxes.get(slip.type) ?? new Set();
-          for (const box of Object.keys(slip.boxes)) {
-            if (!used.has(box)) unhandled.push(`${slip.type} from ${slip.issuer}: box ${box} isn't handled by this app`);
+          for (const [box, amount] of Object.entries(slip.boxes)) {
+            // A box blank on the paper slip is entered as 0: it adds nothing, so it needs no handling.
+            if (!used.has(box) && !Dec.from(amount).isZero()) unhandled.push(`${slip.type} from ${slip.issuer}: box ${box} isn't handled by this app`);
           }
         }
         for (const id of Object.keys(answered)) {
@@ -323,8 +324,14 @@ export class Evaluation {
   /** The household's facts: the same for both returns. */
   private householdValue(name: string): Node {
     const { household, year } = this.input;
+    // A dependant born after the year isn't one for it.
     const childrenUnder = (age: number) =>
-      Dec.of(household.dependants.filter((dependant) => year - Number(dependant.birthDate.slice(0, 4)) < age).length);
+      Dec.of(
+        household.dependants.filter((dependant) => {
+          const ageAtYearEnd = year - Number(dependant.birthDate.slice(0, 4));
+          return ageAtYearEnd >= 0 && ageAtYearEnd < age;
+        }).length,
+      );
     switch (name) {
       case "maritalStatus":
         return {

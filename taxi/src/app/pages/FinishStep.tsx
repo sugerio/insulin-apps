@@ -49,10 +49,10 @@ function Results({ estimate, slips }: { estimate: Estimate; slips: SlipList }) {
   };
   const other = spouseOf(estimate.result.people, owner.id);
   const spouse = other ? { name: year.people.find((each) => each.id === other.personId)?.name ?? "Your spouse", result: other } : undefined;
-  const checks = printBlockers(person, slips.slips, spouse).map((blocker) => ({
+  const checks = printBlockers({ rules, issues: year.issues, answers: estimate.input.answers, slips: slips.slips }, person, spouse).map((blocker) => ({
     text: blocker.text,
     personId: blocker.personId ?? owner.id,
-    step: blocker.confirm ? ("confirm" as const) : blocker.question ? stepOfQuestion(blocker.question) : null,
+    step: blocker.confirm ? ("confirm" as const) : blocker.issue ? ("household" as const) : blocker.question ? stepOfQuestion(blocker.question) : null,
   }));
   return (
     <Card>

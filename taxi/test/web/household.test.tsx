@@ -51,6 +51,23 @@ describe("the Household page", () => {
     expect(screen.queryByRole("link", { name: /^Back/ })).toBeNull();
   });
 
+  it("asks before removing a person, saying what goes with them, and removes nothing until you confirm", async () => {
+    const { server } = await renderApp("/household", { seed: seedCouple });
+    const names = async () => ((await (await server.call("GET", "/api/people")).json()) as { people: Person[] }).people.map((person) => person.name);
+    const question = () => screen.getByText("Remove Sam Martin?").closest<HTMLElement>("[role=status]")!;
+    fireEvent.click(await screen.findByRole("button", { name: "Remove Sam Martin" }));
+    expect(question().textContent).toMatch(/their facts, answers and slips in every tax year they are in are deleted too/);
+    expect(await names()).toEqual(["Alex Martin", "Sam Martin", "Jamie Martin"]);
+    fireEvent.click(within(question()).getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByText("Remove Sam Martin?")).toBeNull();
+    expect(await names()).toEqual(["Alex Martin", "Sam Martin", "Jamie Martin"]);
+
+    fireEvent.click(screen.getByRole("button", { name: "Remove Sam Martin" }));
+    fireEvent.click(within(question()).getByRole("button", { name: "Remove person" }));
+    await waitFor(() => expect(screen.queryByText("Sam Martin")).toBeNull());
+    expect(await names()).toEqual(["Alex Martin", "Jamie Martin"]);
+  });
+
   it("shows a viewer the people without anything to change", async () => {
     await renderApp("/household", { as: VIEWER, seed: async (s) => void (await seedPeople(s)) });
     expect(await screen.findByText("Sam Martin")).toBeTruthy();
@@ -64,6 +81,15 @@ describe("starting a year", () => {
     await renderApp("/returns");
     const link = await screen.findByRole("link", { name: "Go to Household" });
     expect(link.getAttribute("href")).toBe(`/household?back=${encodeURIComponent("/returns?start=2025")}`);
+  });
+
+  it("says what the app covers and what it doesn't yet", async () => {
+    await renderApp("/returns");
+    const covers = (await screen.findByRole("heading", { name: "What this app covers" })).closest<HTMLElement>("[data-slot=card]")!;
+    const [handled, notYet] = within(covers).getAllByText(/./, { selector: "p" }).map((paragraph) => paragraph.textContent ?? "");
+    expect(handled).toMatch(/self-employment and rental income, income earned abroad/);
+    expect(notYet).toMatch(/^Not yet: .*moving to or from Canada during the year.*capital cost allowance/);
+    expect(notYet).not.toMatch(/self-employment|rental|outside Canada/);
   });
 
   it("asks who is in the year, and starts it with them", async () => {
@@ -158,6 +184,46 @@ describe("step 1 of a year", () => {
     await waitFor(() => expect(router.state.location.pathname).not.toBe(alexPath));
     expect(router.state.location.pathname).toMatch(/\/household$/);
     expect(await screen.findByRole("button", { name: "Return of Sam Martin: switch return" })).toBeTruthy();
+  });
+
+  it("shows the other adult's own facts after switching at the same step, and saves them as theirs", async () => {
+    let people: { alex: Person; sam: Person } | undefined;
+    const { router, server } = await renderApp("/returns/2025/household", {
+      seed: async (s) => {
+        const { alex, sam } = await seedPeople(s);
+        people = { alex, sam };
+        await s.call("POST", "/api/years", { as: OWNER, body: { year: 2025, people: [alex.id, sam.id] } });
+        await s.call("PUT", "/api/years/2025/household", {
+          as: OWNER,
+          body: {
+            revision: 1,
+            maritalStatus: "married",
+            adults: [
+              { personId: alex.id, province: "ON", residentAllYear: true },
+              { personId: sam.id, province: "BC", residentAllYear: false },
+            ],
+          },
+        });
+      },
+    });
+    const province = async () => ((await screen.findByLabelText("Province on December 31")) as HTMLSelectElement).value;
+    expect(await province()).toBe("ON");
+    fireEvent.keyDown(screen.getByRole("button", { name: "Return of Alex Martin: switch return" }), { key: "Enter" });
+    fireEvent.click(await screen.findByRole("menuitem", { name: /Sam Martin/ }));
+    await waitFor(() => expect(router.state.location.pathname).toBe(`/returns/2025/${people!.sam.id}/household`));
+    await screen.findByRole("button", { name: "Return of Sam Martin: switch return" });
+    expect(await province()).toBe("BC");
+    expect(screen.getByRole("radio", { name: "No" }).getAttribute("aria-checked")).toBe("true");
+
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(async () => {
+      const stored = (await (await server.call("GET", "/api/years/2025")).json()) as TaxYear;
+      expect(stored.revision).toBe(3);
+      expect(stored.adults).toEqual([
+        expect.objectContaining({ personId: people!.alex.id, province: "ON", residentAllYear: true }),
+        expect.objectContaining({ personId: people!.sam.id, province: "BC", residentAllYear: false }),
+      ]);
+    });
   });
 
   it("says what is still missing only when you try to continue", async () => {

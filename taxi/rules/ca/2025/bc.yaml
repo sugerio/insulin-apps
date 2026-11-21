@@ -109,8 +109,8 @@ lines:
     formula: "if(line.HH.partner == 1, min(param.bcSpouseMax, max(0, param.bcSpouseBase - line.HH.spouseNetIncome)), 0)"
   BC428.23:
     label: British Columbia amount for an eligible dependant
-    formula: "if(line.HH.partner == 0 and household.childrenUnder18 > 0, min(param.bcSpouseMax, param.bcSpouseBase), 0)"
-    source: "BC428 lines 21 to 23. The app assumes the child had no income"
+    formula: "if(line.HH.partner == 0 and household.childrenUnder18 > 0, min(param.bcSpouseMax, max(0, param.bcSpouseBase - answer.dependantNetIncome)), 0)"
+    source: "BC428 lines 21 to 23: the base minus their net income, up to the maximum"
   BC428.33:
     label: CPP and EI credit amounts
     formula: "line.T1.30800 + line.T1.31000 + line.T1.31200"

@@ -81,19 +81,23 @@ the Insulin template and stay byte-identical to it (`test/server/framework-templ
 - **Two permissions**, declared in `package.json` `insulin.permissions` and in `shared/access.ts`:
   `taxi.prepare` (Owner, Admin, Editor: every change) and `taxi.view` (every role: every read). Each
   route in `shared/routes.ts` names the one it needs and `mount()` in `app.ts` enforces it; decide by permission, never
-  by role name. `x-suger-app-permissions` narrows a role, never widens it (`readGrant`).
+  by role name. `x-suger-app-permissions` narrows a role, never widens it (`readGrant`); `taxi.prepare` includes
+  `taxi.view` (`withIncluded`), so a custom role with only Prepare returns still reads.
 - **The organization is the tenant.** Every row has `org_id`, and every statement names it, from the caller's
   `x-suger-organization-id`. Another organization's ids answer 404.
 - **The tick** (`/api/scheduled`): only `x-suger-access-via: schedule` with no identity passes; such a request is
   nobody on every other route (`readCaller`). It is never in the catalog.
 - **Usage reports** (`usage-metrics.ts`): once an hour, counts per organization (households, people, tax_years,
-  returns) and the database size. Counts only: never a name, a birth date, an amount or a document. A new metric goes
-  in the in-app Docs ("Usage reports every hour") and `docs/public/how-it-works.md`.
+  returns), its `storage_bytes` (the documents' `byte_size` plus the `form_files` bytes) and the database size. Counts
+  and sizes only: never a name, a birth date, an amount or a document. A new metric goes in the in-app Docs ("Usage
+  reports every hour") and `docs/public/how-it-works.md`.
 - **No login of our own.** The preview owner exists only in the dev server.
 
 ## Data
 
-- **Never store** a SIN, a home address or bank details. The person writes them on the paper return.
+- **Never ask for or record** a SIN, a home address or bank details in the app's own fields (people, answers, slips,
+  the reader's answer): the person writes them on the paper return. An uploaded file is kept as it is (it may print a
+  SIN and an address) until it is deleted; the docs say so.
 - **People are the household's; a year picks among them** (`tax_year_people`). Your spouse in a year is what "prepare
   both returns together" means: it isn't stored apart.
 - **One batch per write**, with its audit event in the same batch. A year's changes (who is in it, its facts) save

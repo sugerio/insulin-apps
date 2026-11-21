@@ -90,8 +90,15 @@ function Years({ data, reload }: { data: YearList; reload: () => void }) {
             </CardTitle>
           </CardHeader>
           <CardContent className="flex flex-col gap-2 text-sm text-muted-foreground">
-            <p>Residents of Ontario, British Columbia and Alberta with employment income, investment slips, RRSP, donations and medical expenses.</p>
-            <p>Not yet: self-employment, rental income, income from outside Canada, Quebec.</p>
+            <p>
+              Residents of Ontario, British Columbia and Alberta who lived in Canada all year, with employment income, pensions, EI benefits,
+              investment slips, self-employment and rental income, income earned abroad, and the sale of real estate; RRSP and FHSA
+              contributions, child care, moving and home-office expenses; tuition, donations and medical expenses.
+            </p>
+            <p>
+              Not yet: Quebec and the other provinces and territories, moving to or from Canada during the year, farming and fishing income,
+              capital cost allowance, and pension income splitting.
+            </p>
             <p>Nothing is sent to the CRA. You get the CRA's own forms, filled in, to sign and mail.</p>
           </CardContent>
         </Card>

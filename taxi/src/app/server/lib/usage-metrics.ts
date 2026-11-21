@@ -2,8 +2,8 @@ import { logError } from './http.ts'
 
 /**
  * The hourly usage report to the platform. The platform can't read this database, so its operator console sees
- * Taxi's usage only through these reports: counts of records per organization, never a name, a birth date, an
- * amount or a document.
+ * Taxi's usage only through these reports: counts of records and bytes of stored files per organization, never a
+ * name, a birth date, an amount or a document.
  *
  * The platform's tick (`POST /api/scheduled`, every five minutes) calls `reportUsage`. The first tick of each UTC hour
  * claims the hour in `metrics_reports` with one conditional statement, so two overlapping ticks never both send, then
@@ -36,18 +36,26 @@ const REQUESTS_BUDGET_MS = 15_000
 export const ORGANIZATIONS_PER_REQUEST = 500
 
 /** Each organization's metrics, in the order they are sent. */
-export const ORGANIZATION_METRICS = ['households', 'people', 'tax_years', 'returns'] as const
+export const ORGANIZATION_METRICS = ['households', 'people', 'tax_years', 'returns', 'storage_bytes'] as const
 export type OrganizationMetric = (typeof ORGANIZATION_METRICS)[number]
 
 /**
  * One GROUP BY over a whole table per query, so the work doesn't grow with the number of organizations; each column
  * other than `organization_id` is a metric. The first query lists every organization with a household (one each).
+ * `storage_bytes` adds up the files kept in D1: the uploads, by their recorded size (their bytes are in
+ * `document_chunks`), and the CRA's forms downloaded for the organization (`form_files`). An upload is staged as
+ * `duplicate` while its pieces are stored (documents.ts): such a row is left out, as it is still being stored or was
+ * left by an upload that stopped part-way, and its recorded size isn't what is stored.
  */
 const QUERIES = [
   'SELECT org_id AS organization_id, count(*) AS households FROM households GROUP BY org_id',
   'SELECT org_id AS organization_id, count(*) AS people FROM people GROUP BY org_id',
   'SELECT org_id AS organization_id, count(*) AS tax_years FROM tax_years GROUP BY org_id',
   'SELECT org_id AS organization_id, count(*) AS returns FROM returns GROUP BY org_id',
+  `SELECT org_id AS organization_id, sum(size) AS storage_bytes FROM (
+     SELECT org_id, byte_size AS size FROM documents WHERE status <> 'duplicate'
+     UNION ALL SELECT org_id, length(bytes) AS size FROM form_files
+   ) GROUP BY org_id`,
 ]
 
 export interface UsageReport {

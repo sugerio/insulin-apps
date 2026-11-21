@@ -25,7 +25,8 @@ Each return has seven steps:
    to add.
 4. **Deductions.** RRSP and FHSA contributions, working from home, child care and moving expenses, and what your
    slips already deduct.
-5. **Credits.** Tuition, medical expenses, donations, and what your slips already claim.
+5. **Credits.** Tuition, medical expenses, donations, a single parent's child's net income (for the eligible dependant
+   amount), and what your slips already claim.
 6. **Confirm.** Every number AI read, to check against the papers.
 7. **Finish.** The refund or balance owing, what to check before filing, and hints: ways to pay less, such as claiming
    both spouses' donations on one return, each with what it saves. Apply one to change your answers; you can undo it.
@@ -56,8 +57,9 @@ For each person: their name, their relationship to you and their birth date. For
 spouse in it means both returns are prepared together), the marital status on December 31, each adult's province
 and whether they lived in Canada all year, their slips and their answers. Every change records who made it and when.
 
-Taxi never stores a social insurance number (SIN), a home address or bank details. You write those on the paper
-return when you sign it.
+Taxi never asks for a social insurance number (SIN), a home address or bank details, and keeps none in its own
+records: you write those on the paper return when you sign it. Uploaded files are kept as they are, so what a slip
+prints (often your SIN and address) is stored with the file until you delete it.
 
 ## On Insulin Apps
 

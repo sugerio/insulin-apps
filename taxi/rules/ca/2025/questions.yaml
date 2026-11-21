@@ -278,6 +278,11 @@ questions:
     ask: Donations
     help: On official receipts. Uploaded receipts and box 46 of your T4 are added; enter what isn't on one. Either spouse can claim both spouses' donations; claiming them together usually saves more.
     default: 0
+  dependantNetIncome:
+    type: money
+    module: credits
+    ask: Your eligible dependant's 2025 net income
+    help: The net income (line 23600 of their return, if they file one) of the child you claim the amount for an eligible dependant for. The amount goes down by it. Don't add it if they had no income.
 
   # About the person (Personal info)
   spouseNetIncome:

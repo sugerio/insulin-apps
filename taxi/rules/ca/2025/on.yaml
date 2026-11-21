@@ -132,8 +132,8 @@ lines:
     formula: "if(line.HH.partner == 1, min(param.onSpouseMax, max(0, param.onSpouseBase - line.HH.spouseNetIncome)), 0)"
   ON428.16:
     label: Ontario amount for an eligible dependant
-    formula: "if(line.HH.partner == 0 and household.childrenUnder18 > 0, min(param.onSpouseMax, param.onSpouseBase), 0)"
-    source: "ON428 lines 14 to 16. The app assumes the child had no income"
+    formula: "if(line.HH.partner == 0 and household.childrenUnder18 > 0, min(param.onSpouseMax, max(0, param.onSpouseBase - answer.dependantNetIncome)), 0)"
+    source: "ON428 lines 14 to 16: the base minus their net income, up to the maximum"
   ON428.24:
     label: CPP and EI credit amounts
     formula: "line.T1.30800 + line.T1.31000 + line.T1.31200"

@@ -12,7 +12,7 @@ import { ApiError, describeError } from "../api/client.ts";
 import { useMe } from "../auth/AuthProvider.tsx";
 import { AmountField, cleanAmount } from "../components/AmountField.tsx";
 import { Banner, ResourceView } from "../components/Feedback.tsx";
-import { OriginalFile, SlipBoxTable, SlipForm } from "../components/SlipForm.tsx";
+import { OriginalFile, SlipBoxTable, SlipForm, type SlipFormHost, type SlipValues } from "../components/SlipForm.tsx";
 import { StepLayout } from "../components/StepLayout.tsx";
 import { stepPath, useReturn, useYear } from "../components/YearFrame.tsx";
 import { formatMoney } from "../lib/format.ts";
@@ -48,12 +48,131 @@ interface Item {
 const kindOf = (question: Question, parts: Question[]): ItemKind =>
   question.type === "money" ? "amount" : question.slip ? "slip" : parts.length > 0 ? "group" : "fact";
 
+/** A slip form in a card, by its key (`slip:<id>` for a slip's own, `new:<question>` for one adding a slip): its page host. */
+type HostOf = (key: string) => SlipFormHost;
+
+/**
+ * What was changed in the form and not saved yet: each value with the stored facts it was changed from (`basis`, as
+ * JSON). What the form showed isn't compared: it may be worked out (a group shown because its parts are answered) or
+ * suggested from documents, and change without anyone changing the answer.
+ */
+interface Draft {
+  added: Record<string, { basis: string; to: boolean }>;
+  amounts: Record<string, { basis: string; to: string }>;
+}
+
+/**
+ * The form's values from what is stored, with the changes not saved put back where the stored facts they were made
+ * from are unchanged; a change whose answer was saved otherwise meanwhile gives way to it, and is dropped.
+ */
+function withDraft<T>(shown: Record<string, T>, changes: Record<string, { basis: string; to: T }>, basisOf: (id: string) => string): Record<string, T> {
+  const values = { ...shown };
+  for (const [id, change] of Object.entries(changes)) {
+    if (id in shown && basisOf(id) === change.basis) values[id] = change.to;
+    else delete changes[id];
+  }
+  return values;
+}
+
+/** The draft's entries as a request sends them; each change makes a new entry, so one changed since isn't among them. */
+const sentOf = (draft: Draft): Draft => ({ added: { ...draft.added }, amounts: { ...draft.amounts } });
+
+/** Once the answers a request sent are saved, its entries are no longer changes; an entry changed since stays. */
+function clearSent(draft: Draft, sent: Draft) {
+  for (const [id, entry] of Object.entries(sent.added)) if (draft.added[id] === entry) delete draft.added[id];
+  for (const [id, entry] of Object.entries(sent.amounts)) if (draft.amounts[id] === entry) delete draft.amounts[id];
+}
+
+type RequestState = { status: "idle" | "working" } | { status: "error"; error: unknown };
+
+/** The module's request, held by ModuleStep: the form below starts again whenever the year changes, the request goes on. */
+interface Requests {
+  state: RequestState;
+  /**
+   * Runs one request, which may make several calls; the form is locked until it ends. `answered` keeps the year each
+   * call answered with: the last one is applied when the request ends, even if a later call failed, so the next save
+   * isn't refused as stale. With `thenNext`, a request that succeeded goes on to the next step. Answers whether every
+   * call succeeded.
+   */
+  run: (calls: (answered: (year: TaxYear) => TaxYear) => Promise<void>, options?: { thenNext?: boolean }) => Promise<boolean>;
+  /** A request refused before it was sent. */
+  fail: (error: unknown) => void;
+  /** Loads the year again, and clears what the last request said. */
+  reload: () => void;
+}
+
+/** The slip forms in the cards, by key: which cards have one open to add a slip, what each holds, and why its save failed. */
+interface SlipForms {
+  entering: ReadonlySet<string>;
+  setEntering: (question: string, open: boolean) => void;
+  values: Record<string, SlipValues>;
+  errors: Record<string, unknown>;
+  /** Keeps a form's values; undefined forgets them and its error. */
+  keep: (key: string, values: SlipValues | undefined) => void;
+  fail: (key: string, error: unknown) => void;
+}
+
 export function ModuleStep({ module }: { module: ReturnModule }) {
-  const { year } = useYear();
+  const { year, replace, reload } = useYear();
+  const { person } = useReturn();
+  const navigate = useNavigate();
   const estimate = useEstimate();
   const slips = useSlips();
-  // Kept here, as the form below starts again whenever the year changes (a slip saved, say).
+  // Kept here, as the form below starts again whenever the year changes (a slip saved, or an upload finishing on another
+  // step): which slips are open, what was changed and not saved yet, the request running or how the last one ended,
+  // and what an upload in a card said. This step is mounted once per return and module, so each has its own.
   const [open, setOpen] = useState<ReadonlySet<string>>(new Set());
+  const draft = useRef<Draft>({ added: {}, amounts: {} });
+  const [note, setNote] = useState<string | null>(null);
+  const [request, setRequest] = useState<RequestState>({ status: "idle" });
+  const slipValues = useRef<Record<string, SlipValues>>({});
+  const [slipErrors, setSlipErrors] = useState<Record<string, unknown>>({});
+  const [entering, setEntering] = useState<ReadonlySet<string>>(new Set());
+  const slipForms: SlipForms = {
+    entering,
+    setEntering: (question, open) =>
+      setEntering((current) => {
+        const next = new Set(current);
+        if (open) next.add(question);
+        else next.delete(question);
+        return next;
+      }),
+    values: slipValues.current,
+    errors: slipErrors,
+    keep(key, values) {
+      if (values) {
+        slipValues.current[key] = values;
+        return;
+      }
+      delete slipValues.current[key];
+      setSlipErrors(({ [key]: _forgotten, ...others }) => others);
+    },
+    fail: (key, error) => setSlipErrors((current) => ({ ...current, [key]: error })),
+  };
+  const requests: Requests = {
+    state: request,
+    async run(calls, { thenNext = false } = {}) {
+      const last: { year: TaxYear | null } = { year: null };
+      setRequest({ status: "working" });
+      setNote(null);
+      try {
+        await calls((answered) => (last.year = answered));
+        setRequest({ status: "idle" });
+        if (last.year) replace(last.year);
+        if (thenNext) navigate(stepPath(year.year, person.id, MODULE_PAGES[module].next));
+        return true;
+      } catch (error) {
+        setRequest({ status: "error", error });
+        if (last.year) replace(last.year);
+        return false;
+      }
+    },
+    fail: (error) => setRequest({ status: "error", error }),
+    reload() {
+      setRequest({ status: "idle" });
+      reload();
+    },
+  };
   const toggle = (id: string) =>
     setOpen((current) => {
       const next = new Set(current);
@@ -66,7 +185,21 @@ export function ModuleStep({ module }: { module: ReturnModule }) {
       <ResourceView resource={estimate}>
         {(answers) => (
           <ResourceView resource={slips}>
-            {(slipList) => <ModuleForm key={year.revision} module={module} estimate={answers} slips={slipList} open={open} onToggle={toggle} />}
+            {(slipList) => (
+              <ModuleForm
+                key={year.revision}
+                module={module}
+                estimate={answers}
+                slips={slipList}
+                open={open}
+                onToggle={toggle}
+                draft={draft.current}
+                requests={requests}
+                slipForms={slipForms}
+                note={note}
+                onNote={setNote}
+              />
+            )}
           </ResourceView>
         )}
       </ResourceView>
@@ -80,20 +213,26 @@ function ModuleForm({
   slips,
   open,
   onToggle,
+  draft,
+  requests,
+  slipForms,
+  note,
+  onNote,
 }: {
   module: ReturnModule;
   estimate: Estimate;
   slips: SlipList;
   open: ReadonlySet<string>;
   onToggle: (slipId: string) => void;
+  draft: Draft;
+  requests: Requests;
+  slipForms: SlipForms;
+  /** What the last upload in a card said, when its file wasn't read into slips. */
+  note: string | null;
+  onNote: (note: string | null) => void;
 }) {
   const me = useMe();
-  const navigate = useNavigate();
-  const { year, replace, reload } = useYear();
-  // The year as this form last saved it. When the module's answers save and the request after them (a slip, a file)
-  // is refused, the revision has still moved on; replacing the year would start the form again and lose what was
-  // typed, so the next save starts from here instead.
-  const latest = useRef(year);
+  const { year } = useYear();
   const { person } = useReturn();
   const editable = canPrepare(me);
   const rules = rulesFor(year.year)!;
@@ -116,18 +255,16 @@ function ModuleForm({
     .map((question) => ({ question, kind: kindOf(question, partsOf(question)) }));
   const parts = items.filter((item) => item.kind === "group").flatMap((item) => partsOf(item.question));
 
-  const [added, setAdded] = useState<Record<string, boolean>>(() =>
-    Object.fromEntries(
+  const [shown] = useState(() => ({
+    added: Object.fromEntries(
       items.map(({ question, kind }) => {
         const answer = given[question.id];
         if (kind === "slip") return [question.id, slipsOf(question.slip!).length > 0 || answer === true];
         if (kind === "amount") return [question.id, (typeof answer === "string" && Number(answer) !== 0) || receiptsOf(question).length > 0 || (answer === undefined && suggestionOf(question) !== null)];
         return [question.id, answer === true];
       }),
-    ),
-  );
-  const [amounts, setAmounts] = useState<Record<string, string>>(() =>
-    Object.fromEntries([
+    ) as Record<string, boolean>,
+    amounts: Object.fromEntries([
       ...items
         .filter((item) => item.kind === "amount")
         .map(({ question }) => {
@@ -142,9 +279,28 @@ function ModuleForm({
         if (typeof answer !== "string") return [part.id, ""];
         return [part.id, part.type === "choice" || Number(answer) !== 0 ? answer : ""];
       }),
-    ]),
-  );
-  const [state, setState] = useState<{ status: "idle" | "saving" } | { status: "error"; error: unknown }>({ status: "idle" });
+    ]) as Record<string, string>,
+  }));
+  /** What an item's place on the return rests on: its answer, a group's parts' answers, and the slips or receipts showing it. */
+  const addedBasis = (id: string) => {
+    const item = items.find((each) => each.question.id === id);
+    if (!item) return "";
+    const { question, kind } = item;
+    const parts = kind === "group" ? partsOf(question).map((part) => given[part.id] ?? null) : [];
+    return JSON.stringify([given[id] ?? null, ...parts, kind === "slip" ? slipsOf(question.slip!).length : receiptsOf(question).length]);
+  };
+  /** An amount rests on its answer alone: a starting amount suggested from documents isn't one. */
+  const amountBasis = (id: string) => JSON.stringify(given[id] ?? null);
+  const [added, setAdded] = useState(() => withDraft(shown.added, draft.added, addedBasis));
+  const [amounts, setAmounts] = useState(() => withDraft(shown.amounts, draft.amounts, amountBasis));
+  const setAddedOf = (id: string, value: boolean) => {
+    setAdded((current) => ({ ...current, [id]: value }));
+    draft.added[id] = { basis: addedBasis(id), to: value };
+  };
+  const setAmountOf = (id: string, value: string) => {
+    setAmounts((current) => ({ ...current, [id]: value }));
+    draft.amounts[id] = { basis: amountBasis(id), to: value };
+  };
   /** A group's parts that apply: one asked only for some options of a choice waits for that choice. */
   const shownPartsOf = (question: Question) =>
     partsOf(question).filter((part) => !part.askedWhen || part.askedWhen.options.includes(amounts[part.askedWhen.question] ?? ""));
@@ -173,44 +329,81 @@ function ModuleForm({
   });
 
   async function save(thenContinue: boolean) {
-    setState({ status: "saving" });
-    try {
-      const saved = await saveModule();
-      replace(saved);
-      if (thenContinue) navigate(stepPath(year.year, person.id, MODULE_PAGES[module].next));
-      else setState({ status: "idle" });
-    } catch (error) {
-      setState({ status: "error", error });
-    }
+    const answers = answersToSave();
+    const sent = sentOf(draft);
+    await requests.run(
+      async (answered) => {
+        answered(await saveAnswersFor(year, answers));
+        clearSent(draft, sent);
+      },
+      { thenNext: thenContinue },
+    );
   }
 
   /** Uploads a slip into this return after saving the module so far, so nothing chosen here is lost. */
   async function upload(file: File) {
     const type = uploadType(file);
     if (!type) {
-      setState({ status: "error", error: new ApiError(400, "validation_failed", `${file.name} isn't a PDF, PNG or JPEG.`) });
+      requests.fail(new ApiError(400, "validation_failed", `${file.name} isn't a PDF, PNG or JPEG.`));
       return;
     }
-    setState({ status: "saving" });
-    try {
-      const saved = await saveModule();
+    const answers = answersToSave();
+    const sent = sentOf(draft);
+    await requests.run(async (answered) => {
+      const saved = answered(await saveAnswersFor(year, answers));
+      clearSent(draft, sent);
       const uploaded = await uploadFile(year.year, person.id, file, type);
-      replace(uploaded.year.revision > saved.revision ? uploaded.year : saved);
-      if (uploaded.status !== "read") setState({ status: "error", error: new ApiError(400, "validation_failed", `${file.name}: ${uploaded.message}`) });
-    } catch (error) {
-      setState({ status: "error", error });
-    }
+      // Said above this form, which starts again with the year it answered with.
+      if (uploaded.status !== "read") onNote(`${file.name}: ${uploaded.message}`);
+      if (uploaded.year.revision > saved.revision) answered(uploaded.year);
+    });
   }
 
-  /** Saves the module so far, before a slip is added or changed here, so nothing chosen is lost. */
-  const saveModule = async () => (latest.current = await saveAnswersFor(latest.current, answersToSave()));
+  /**
+   * A slip added or changed in a card (its form's host): the slip first, then the module so far, so nothing chosen here
+   * is lost. A slip refused changes nothing: its form shows why, and keeps what was typed, even if it started again
+   * meanwhile.
+   */
+  async function saveSlip(key: string, send: (revision: number) => Promise<TaxYear>): Promise<boolean> {
+    const answers = answersToSave();
+    const sent = sentOf(draft);
+    const outcome = { refused: false };
+    slipForms.fail(key, null);
+    const saved = await requests.run(async (answered) => {
+      let withSlip: TaxYear;
+      try {
+        withSlip = answered(await send(year.revision));
+      } catch (error) {
+        outcome.refused = true;
+        slipForms.fail(key, error);
+        return;
+      }
+      slipForms.keep(key, undefined);
+      answered(await saveAnswersFor(withSlip, answers));
+      clearSent(draft, sent);
+    });
+    return saved && !outcome.refused;
+  }
 
   const onReturn = items.filter((item) => added[item.question.id]);
   const toAdd = items.filter((item) => !added[item.question.id]);
   const missing = onReturn.filter((item) => item.kind === "slip" && slipsOf(item.question.slip!).length === 0).map((item) => item.question.slip!);
-  const issues = state.status === "error" && state.error instanceof ApiError ? (state.error.body?.error.issues ?? []) : [];
-  const stale = state.status === "error" && state.error instanceof ApiError && state.error.status === 409;
-  const busy = state.status === "saving";
+  const error = requests.state.status === "error" ? requests.state.error : null;
+  const issues = error instanceof ApiError ? (error.body?.error.issues ?? []) : [];
+  const stale = error instanceof ApiError && error.status === 409;
+  const busy = requests.state.status === "working";
+  const hostOf: HostOf = (key) => ({
+    save: (send) => saveSlip(key, send),
+    values: slipForms.values[key],
+    onValues: (values) => slipForms.keep(key, values),
+    error: slipForms.errors[key] ?? null,
+    busy,
+  });
+  // The issues shown beside their field (an amount, a group's part, on the return); the banner says the others.
+  const fields = new Set(
+    onReturn.flatMap(({ question, kind }) => (kind === "amount" ? [question.id] : kind === "group" ? partsOf(question).map((part) => part.id) : [])).map((id) => `answers.${id}`),
+  );
+  const unshown = issues.filter((issue) => !fields.has(issue.path));
   // What keeps this step from done, as saved (the step's state in the row of steps says the same).
   const left = leftInModule(rules, module, given, slips.slips.filter((slip) => slip.personId === person.id), result?.questions ?? []);
   const unanswered = left.filter((item) => item.reason === "unanswered");
@@ -242,8 +435,9 @@ function ModuleForm({
             question={question}
             kind={kind}
             editable={editable}
+            busy={busy}
             onRemove={
-              (kind === "slip" && slipsOf(question.slip!).length > 0) || receiptsOf(question).length > 0 ? undefined : () => setAdded((current) => ({ ...current, [question.id]: false }))
+              (kind === "slip" && slipsOf(question.slip!).length > 0) || receiptsOf(question).length > 0 ? undefined : () => setAddedOf(question.id, false)
             }
           >
             {kind === "slip" ? (
@@ -256,7 +450,9 @@ function ModuleForm({
                 editable={editable}
                 busy={busy}
                 onFile={(file) => void upload(file)}
-                before={saveModule}
+                hostOf={hostOf}
+                entering={slipForms.entering.has(question.id)}
+                onEntering={(open) => slipForms.setEntering(question.id, open)}
               />
             ) : kind === "amount" ? (
               <AmountItem
@@ -267,11 +463,13 @@ function ModuleForm({
                 editable={editable}
                 busy={busy}
                 issue={issues.find((issue) => issue.path === `answers.${question.id}`)?.message}
-                onChange={(value) => setAmounts((current) => ({ ...current, [question.id]: value }))}
+                onChange={(value) => setAmountOf(question.id, value)}
                 open={open}
                 onToggle={onToggle}
                 onFile={(file) => void upload(file)}
-                before={saveModule}
+                hostOf={hostOf}
+                entering={slipForms.entering.has(question.id)}
+                onEntering={(open) => slipForms.setEntering(question.id, open)}
               />
             ) : kind === "group" ? (
               <div className="flex flex-col gap-4">
@@ -281,9 +479,9 @@ function ModuleForm({
                       key={part.id}
                       question={part}
                       value={amounts[part.id] ?? ""}
-                      disabled={!editable}
+                      disabled={!editable || busy}
                       issue={issues.find((issue) => issue.path === `answers.${part.id}`)?.message}
-                      onChange={(value) => setAmounts((current) => ({ ...current, [part.id]: value }))}
+                      onChange={(value) => setAmountOf(part.id, value)}
                     />
                   ) : part.receipts ? (
                     <div key={part.id} className="flex flex-col gap-1">
@@ -297,11 +495,13 @@ function ModuleForm({
                         editable={editable}
                         busy={busy}
                         issue={issues.find((issue) => issue.path === `answers.${part.id}`)?.message}
-                        onChange={(value) => setAmounts((current) => ({ ...current, [part.id]: value }))}
+                        onChange={(value) => setAmountOf(part.id, value)}
                         open={open}
                         onToggle={onToggle}
                         onFile={(file) => void upload(file)}
-                        before={saveModule}
+                        hostOf={hostOf}
+                        entering={slipForms.entering.has(part.id)}
+                        onEntering={(open) => slipForms.setEntering(part.id, open)}
                       />
                     </div>
                   ) : (
@@ -311,9 +511,9 @@ function ModuleForm({
                       help={part.help}
                       unit={part.type === "percent" ? "%" : part.type === "count" ? "" : "$"}
                       value={amounts[part.id] ?? ""}
-                      disabled={!editable}
+                      disabled={!editable || busy}
                       issue={issues.find((issue) => issue.path === `answers.${part.id}`)?.message}
-                      onChange={(value) => setAmounts((current) => ({ ...current, [part.id]: value }))}
+                      onChange={(value) => setAmountOf(part.id, value)}
                     />
                   ),
                 )}
@@ -333,8 +533,9 @@ function ModuleForm({
               <li key={question.id}>
                 <button
                   type="button"
-                  className="flex h-full w-full items-start gap-3 rounded-lg border bg-card p-3 text-left hover:bg-muted/50"
-                  onClick={() => setAdded((current) => ({ ...current, [question.id]: true }))}
+                  className="flex h-full w-full items-start gap-3 rounded-lg border bg-card p-3 text-left hover:bg-muted/50 disabled:opacity-50"
+                  onClick={() => setAddedOf(question.id, true)}
+                  disabled={busy}
                   aria-label={`Add ${question.ask}`}
                 >
                   <Plus className="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
@@ -354,11 +555,22 @@ function ModuleForm({
       <FromYourSlips module={module} estimate={estimate} />
 
       {stale ? (
-        <Banner kind="error" title="Someone else changed this year" action={<Button variant="outline" size="sm" onClick={reload}>Reload</Button>}>
-          {describeError(state.error)}
+        <Banner kind="error" title="Someone else changed this year" action={<Button variant="outline" size="sm" onClick={requests.reload}>Reload</Button>}>
+          {describeError(error)}
         </Banner>
-      ) : state.status === "error" && issues.length === 0 ? (
-        <Banner kind="error" title="That didn't work">{describeError(state.error)}</Banner>
+      ) : error !== null && (issues.length === 0 || unshown.length > 0) ? (
+        <Banner kind="error" title="That didn't work">
+          {describeError(error)}
+          {unshown.length > 0 ? (
+            <ul className="mt-1 list-disc pl-5">
+              {unshown.map((issue) => (
+                <li key={issue.path}>{issue.message}</li>
+              ))}
+            </ul>
+          ) : null}
+        </Banner>
+      ) : note ? (
+        <Banner kind="error" title="That didn't work">{note}</Banner>
       ) : null}
       {editable ? (
         <div className="flex justify-end gap-2">
@@ -381,7 +593,21 @@ function ModuleForm({
 }
 
 /** One thing on the return: its name, what it is, and what it holds. */
-function ItemCard({ question, kind, editable, onRemove, children }: { question: Question; kind: ItemKind; editable: boolean; onRemove?: () => void; children: ReactNode }) {
+function ItemCard({
+  question,
+  kind,
+  editable,
+  busy,
+  onRemove,
+  children,
+}: {
+  question: Question;
+  kind: ItemKind;
+  editable: boolean;
+  busy: boolean;
+  onRemove?: () => void;
+  children: ReactNode;
+}) {
   const { year } = useYear();
   return (
     <Card size="sm">
@@ -396,7 +622,7 @@ function ItemCard({ question, kind, editable, onRemove, children }: { question: 
           {question.help ? <p className="text-xs text-muted-foreground">{question.help}</p> : null}
         </div>
         {editable && onRemove ? (
-          <Button variant="ghost" size="sm" onClick={onRemove} aria-label={`Remove ${question.ask}`}>
+          <Button variant="ghost" size="sm" onClick={onRemove} disabled={busy} aria-label={`Remove ${question.ask}`}>
             Remove
           </Button>
         ) : null}
@@ -416,7 +642,9 @@ function SlipItem({
   editable,
   busy,
   onFile,
-  before,
+  hostOf,
+  entering,
+  onEntering,
 }: {
   type: string;
   slips: Slip[];
@@ -426,18 +654,20 @@ function SlipItem({
   editable: boolean;
   busy: boolean;
   onFile: (file: File) => void;
-  before: () => Promise<TaxYear>;
+  hostOf: HostOf;
+  /** Its form to add a slip is open (kept by ModuleStep, like the form's values). */
+  entering: boolean;
+  onEntering: (open: boolean) => void;
 }) {
   const { person } = useReturn();
   const { year } = useYear();
   const name = slipName(year.year, type);
-  const [entering, setEntering] = useState(false);
   return (
     <div className="flex flex-col gap-2">
       {slips.length > 0 ? (
         <ul className="flex flex-col divide-y" aria-label={`${question.ask} slips`}>
           {slips.map((slip) => (
-            <FoundSlip key={slip.id} slip={slip} open={open.has(slip.id)} onToggle={() => onToggle(slip.id)} editable={editable} before={before} />
+            <FoundSlip key={slip.id} slip={slip} open={open.has(slip.id)} onToggle={() => onToggle(slip.id)} editable={editable} hostOf={hostOf} />
           ))}
         </ul>
       ) : (
@@ -447,12 +677,12 @@ function SlipItem({
       )}
       {entering ? (
         <div className="rounded-lg border bg-muted/30 p-4">
-          <SlipForm personId={person.id} type={type} before={before} onDone={() => setEntering(false)} />
+          <SlipForm personId={person.id} type={type} host={hostOf(`new:${question.id}`)} onDone={() => onEntering(false)} />
         </div>
       ) : editable ? (
         <div className="flex flex-wrap items-center gap-2">
           <UploadSlip label={slips.length > 0 ? `Upload another ${name}` : `Upload the ${name}`} busy={busy} onFile={onFile} />
-          <Button variant="ghost" size="sm" onClick={() => setEntering(true)} disabled={busy}>
+          <Button variant="ghost" size="sm" onClick={() => onEntering(true)} disabled={busy}>
             <PencilLine aria-hidden="true" />
             {slips.length > 0 ? `Enter another ${name}` : `Enter the ${name}`}
           </Button>
@@ -463,7 +693,7 @@ function SlipItem({
 }
 
 /** A slip found: who issued it and its state; opened, its boxes, to check and change (a changed slip goes back to unconfirmed). */
-function FoundSlip({ slip, open, onToggle, editable, before }: { slip: Slip; open: boolean; onToggle: () => void; editable: boolean; before: () => Promise<TaxYear> }) {
+function FoundSlip({ slip, open, onToggle, editable, hostOf }: { slip: Slip; open: boolean; onToggle: () => void; editable: boolean; hostOf: HostOf }) {
   const { year } = useYear();
   const panel = useId();
   const slipType = rulesFor(year.year)!.slips.get(slip.type)!;
@@ -479,7 +709,7 @@ function FoundSlip({ slip, open, onToggle, editable, before }: { slip: Slip; ope
       </button>
       {open ? (
         <div id={panel} className="flex flex-col gap-3 pt-2 pb-3 pl-6">
-          {editable ? <SlipForm personId={slip.personId} slip={slip} before={before} inline /> : <SlipBoxTable slipType={slipType} boxes={slip.boxes} unsure={confirmed ? [] : slip.unsure} />}
+          {editable ? <SlipForm personId={slip.personId} slip={slip} host={hostOf(`slip:${slip.id}`)} inline /> : <SlipBoxTable slipType={slipType} boxes={slip.boxes} unsure={confirmed ? [] : slip.unsure} />}
           {slip.documentId ? <OriginalFile year={year.year} documentId={slip.documentId} /> : null}
         </div>
       ) : null}
@@ -504,7 +734,9 @@ function AmountItem({
   open,
   onToggle,
   onFile,
-  before,
+  hostOf,
+  entering,
+  onEntering,
 }: {
   question: Question;
   receipts: Slip[];
@@ -517,11 +749,13 @@ function AmountItem({
   open: ReadonlySet<string>;
   onToggle: (slipId: string) => void;
   onFile: (file: File) => void;
-  before: () => Promise<TaxYear>;
+  hostOf: HostOf;
+  /** Its form to add a receipt is open (kept by ModuleStep, like the form's values). */
+  entering: boolean;
+  onEntering: (open: boolean) => void;
 }) {
   const { year } = useYear();
   const { person } = useReturn();
-  const [entering, setEntering] = useState(false);
   const type = question.receipts ? rulesFor(year.year)!.slips.get(question.receipts)! : null;
   const added = type !== null && question.suggest === undefined;
   // A receipt by its title in lower case ("medical expense receipt"), keeping acronyms (RRSP); a slip by its code (T4FHSA).
@@ -531,19 +765,19 @@ function AmountItem({
       {receipts.length > 0 ? (
         <ul className="flex flex-col divide-y" aria-label={`${question.ask} receipts`}>
           {receipts.map((slip) => (
-            <FoundSlip key={slip.id} slip={slip} open={open.has(slip.id)} onToggle={() => onToggle(slip.id)} editable={editable} before={before} />
+            <FoundSlip key={slip.id} slip={slip} open={open.has(slip.id)} onToggle={() => onToggle(slip.id)} editable={editable} hostOf={hostOf} />
           ))}
         </ul>
       ) : null}
       {type && editable ? (
         entering ? (
           <div className="rounded-lg border bg-muted/30 p-4">
-            <SlipForm personId={person.id} type={type.id} before={before} onDone={() => setEntering(false)} />
+            <SlipForm personId={person.id} type={type.id} host={hostOf(`new:${question.id}`)} onDone={() => onEntering(false)} />
           </div>
         ) : (
           <div className="flex flex-wrap items-center gap-2">
             <UploadSlip label={`Upload ${receipts.length > 0 ? "another" : article(noun)} ${noun}`} busy={busy} onFile={onFile} />
-            <Button variant="ghost" size="sm" onClick={() => setEntering(true)} disabled={busy}>
+            <Button variant="ghost" size="sm" onClick={() => onEntering(true)} disabled={busy}>
               <PencilLine aria-hidden="true" />
               Enter {receipts.length > 0 ? "another" : article(noun)} {noun}
             </Button>
@@ -554,7 +788,7 @@ function AmountItem({
         label={added ? "Not on an uploaded receipt" : question.ask}
         labelHidden={!added}
         value={value}
-        disabled={!editable}
+        disabled={!editable || busy}
         issue={issue}
         onChange={onChange}
       />
@@ -562,7 +796,7 @@ function AmountItem({
         <p className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
           From your documents: {formatMoney(suggestion)}.
           {editable && cleanAmount(value) !== suggestion ? (
-            <Button variant="link" size="sm" className="h-auto p-0 text-xs" onClick={() => onChange(suggestion)}>
+            <Button variant="link" size="sm" className="h-auto p-0 text-xs" onClick={() => onChange(suggestion)} disabled={busy}>
               Use {formatMoney(suggestion)}
             </Button>
           ) : null}

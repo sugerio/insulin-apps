@@ -2,8 +2,8 @@ import { logError } from './http.ts'
 
 /**
  * The hourly usage report to the platform. The platform can't read this database, so its operator console sees
- * Taxi's usage only through these reports: counts of records per organization, never a name, a birth date, an
- * amount or a document.
+ * Taxi's usage only through these reports: counts of records and bytes of stored files per organization, never a
+ * name, a birth date, an amount or a document.
  *
  * The platform's tick (`POST /api/scheduled`, every five minutes) calls `reportUsage`. The first tick of each UTC hour
  * claims the hour in `metrics_reports` with one conditional statement, so two overlapping ticks never both send, then
@@ -42,6 +42,10 @@ export type OrganizationMetric = (typeof ORGANIZATION_METRICS)[number]
 /**
  * One GROUP BY over a whole table per query, so the work doesn't grow with the number of organizations; each column
  * other than `organization_id` is a metric. The first query lists every organization with a profile (one each).
+ * `documents` counts the uploads, and `storage_bytes` adds up the files kept in D1: the uploads, by their recorded size
+ * (their bytes are in `document_chunks`), and the CRA's forms downloaded for the organization (`form_files`). An upload
+ * is staged as `duplicate` while its pieces are stored (documents.ts): such a row is left out of both, as it is still
+ * being stored or was left by an upload that stopped part-way, and its recorded size isn't what is stored.
  */
 const QUERIES = [
   'SELECT org_id AS organization_id, count(*) AS profiles FROM households GROUP BY org_id',
@@ -51,7 +55,7 @@ const QUERIES = [
   // What an organization stores: its uploaded files and its copies of the official forms, which are nearly all of
   // the database's size.
   `SELECT org_id AS organization_id, sum(file) AS documents, sum(size) AS storage_bytes FROM (
-     SELECT org_id, 1 AS file, byte_size AS size FROM documents
+     SELECT org_id, 1 AS file, byte_size AS size FROM documents WHERE status <> 'duplicate'
      UNION ALL SELECT org_id, 0, length(bytes) FROM form_files
    ) GROUP BY org_id`,
 ]

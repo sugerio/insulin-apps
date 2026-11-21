@@ -156,8 +156,8 @@ lines:
   NT428.16:
     label: Northwest Territories amount for an eligible dependant
     formula: >-
-      round((if(line.HH.partner == 0 and family.childrenUnder18 > 0, param.ntSpouseBase, 0)) * line.RES.factor, 2)
-    source: "NT428 lines 14 to 16. The app assumes the child had no income"
+      round((if(line.HH.partner == 0 and family.childrenUnder18 > 0, max(0, param.ntSpouseBase - answer.dependantNetIncome), 0)) * line.RES.factor, 2)
+    source: "NT428 lines 14 to 16: the base minus their net income"
   # The worksheet's infirm dependant amount, which needn't live with you, rather than the caregiver amount (line 27),
   # which needs a dependant living with you: the app doesn't ask where they live. One dependant, as line 30450.
   NT428.17:

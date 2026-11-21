@@ -17,14 +17,19 @@ import { Banner } from "./Feedback.tsx";
 export function PeopleEditor({ people, editable, onChanged }: { people: Person[]; editable: boolean; onChanged: () => Promise<void> }) {
   const [editing, setEditing] = useState<string | "new" | null>(people.length === 0 && editable ? "new" : null);
   const [error, setError] = useState<unknown>(null);
+  // Removing deletes the person from every year, so it is asked first; `removing` is set while it is sent.
+  const [asking, setAsking] = useState<{ id: string; removing: boolean } | null>(null);
 
   async function remove(person: Person) {
     setError(null);
+    setAsking({ id: person.id, removing: true });
     try {
       await apiRequest(routes.removePerson, { params: { id: person.id } });
       await onChanged();
+      setAsking(null);
     } catch (failure) {
       setError(failure);
+      setAsking({ id: person.id, removing: false });
     }
   }
   const done = async () => {
@@ -61,16 +66,45 @@ export function PeopleEditor({ people, editable, onChanged }: { people: Person[]
                     {RELATIONSHIP_LABELS[person.relationship]} · Born {formatDate(person.birthDate)}
                   </p>
                 </div>
-                {editable && editing === null ? (
+                {editable && editing === null && asking === null ? (
                   <div className="flex gap-2">
                     <Button variant="ghost" size="sm" onClick={() => setEditing(person.id)} aria-label={`Edit ${person.name}`}>
                       Edit
                     </Button>
                     {person.relationship === "self" ? null : (
-                      <Button variant="ghost" size="sm" onClick={() => void remove(person)} aria-label={`Remove ${person.name}`}>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          setError(null);
+                          setAsking({ id: person.id, removing: false });
+                        }}
+                        aria-label={`Remove ${person.name}`}
+                      >
                         Remove
                       </Button>
                     )}
+                  </div>
+                ) : null}
+                {asking?.id === person.id ? (
+                  <div className="basis-full">
+                    <Banner
+                      kind="warning"
+                      title={`Remove ${person.name}?`}
+                      action={
+                        <span className="flex gap-2">
+                          <Button variant="destructive" size="sm" disabled={asking.removing} onClick={() => void remove(person)}>
+                            {asking.removing ? "Removing…" : "Remove person"}
+                          </Button>
+                          <Button variant="outline" size="sm" disabled={asking.removing} onClick={() => setAsking(null)}>
+                            Cancel
+                          </Button>
+                        </span>
+                      }
+                    >
+                      {person.name} leaves the profile, and their facts, answers and slips in every tax year they are in are deleted too,
+                      confirmed slips included. Files uploaded in their return stay in the year.
+                    </Banner>
                   </div>
                 ) : null}
               </li>

@@ -59,6 +59,7 @@
         "childTuitionTransfer": "0",
         "hasOtherDependantMedical": false,
         "donations": "0",
+        "dependantNetIncome": "0",
         "politicalContributions": "0",
         "multigenerationalRenovation": "0",
         "teacherSupplies": "0",

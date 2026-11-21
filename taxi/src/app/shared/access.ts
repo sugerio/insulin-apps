@@ -17,6 +17,13 @@ export function rolePermissions(role: Role): readonly Permission[] {
   return role === "USER" || role === "VIEWER" ? ["taxi.view"] : PERMISSIONS;
 }
 
+/** Permissions with what each includes: preparing returns includes viewing them (package.json, "Includes viewing"). */
+export function withIncluded(permissions: Iterable<Permission>): Permission[] {
+  const granted = new Set(permissions);
+  if (granted.has("taxi.prepare")) granted.add("taxi.view");
+  return PERMISSIONS.filter((permission) => granted.has(permission));
+}
+
 /** How a request reached the app: a person in the browser, an AI agent over MCP, or an API client. */
 export const accessViaSchema = z.enum(["browser", "mcp", "api"]);
 export type AccessVia = z.infer<typeof accessViaSchema>;

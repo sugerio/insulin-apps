@@ -1,6 +1,6 @@
-import { STEPS, isIssueOf, leftInModule, printBlockers, spouseOf, type AdultYear, type Issue, type Person, type ReturnProgress, type Slip, type StepStatuses } from "#shared";
+import { STEPS, isIssueOf, leftInModule, printBlockers, spouseOf, type AdultYear, type Issue, type Person, type PrintYear, type ReturnProgress, type Slip, type StepStatuses } from "#shared";
 import { Evaluation, type EngineInput, type EvaluationResult } from "../../shared/engine/evaluate.ts";
-import type { Module } from "../../shared/engine/rules.ts";
+import type { Module, RuleSet } from "../../shared/engine/rules.ts";
 import { rulesFor } from "../../shared/rules/index.ts";
 import { logError } from "./http.ts";
 
@@ -147,10 +147,15 @@ export function stepStatuses(facts: YearFacts, issues: Issue[], workspace: Works
       deductions: state(answered("deductions")),
       credits: state(answered("credits")),
       confirm: state(slips.length > 0 && slips.every((slip) => slip.status === "confirmed")),
-      finish: state(result !== undefined && printBlockers(result, workspace.slips, spouseResult(facts, evaluation?.result.people ?? [], personId)).length === 0),
+      finish: state(rules !== undefined && result !== undefined && printBlockers(printYear(rules, issues, workspace), result, spouseResult(facts, evaluation?.result.people ?? [], personId)).length === 0),
     };
     return { personId, steps: Object.fromEntries(STEPS.map((step) => [step, status[step]])) as StepStatuses };
   });
+}
+
+/** What printBlockers reads of a year, as stored. */
+export function printYear(rules: RuleSet, issues: Issue[], workspace: Workspace): PrintYear {
+  return { rules, issues, answers: workspace.answers, slips: workspace.slips };
 }
 
 /** The other adult's name and result, when both returns of a couple are prepared here. */

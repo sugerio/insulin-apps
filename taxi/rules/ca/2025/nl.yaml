@@ -194,8 +194,8 @@ lines:
   NL428.23:
     label: Newfoundland and Labrador amount for an eligible dependant
     formula: >-
-      round((if(line.HH.partner == 0 and family.childrenUnder18 > 0, min(param.nlSpouseMax, param.nlSpouseBase), 0)) * line.RES.factor, 2)
-    source: "NL428 lines 21 to 23. The app assumes the child had no income"
+      round((if(line.HH.partner == 0 and family.childrenUnder18 > 0, min(param.nlSpouseMax, max(0, param.nlSpouseBase - answer.dependantNetIncome)), 0)) * line.RES.factor, 2)
+    source: "NL428 lines 21 to 23: the base minus their net income, up to the maximum"
   # An adult dependant with an impairment gets the infirm dependant amount, or the caregiver amount when they lived in
   # your home, never both (5001-PC, line 58400): whichever is more. The app knows one such dependant.
   NL.infirmAmount:

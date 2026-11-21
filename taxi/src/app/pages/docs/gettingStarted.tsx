@@ -52,8 +52,11 @@ export const gettingStarted: DocTopic = {
             </li>
             <li>
               <b>Upload documents.</b> Choose a folder or files (PDF, PNG or JPEG). AI reads each file: slips, RRSP, donation and medical receipts,
-              and last year's notice of assessment. A document with the other person's name on it goes to their return. A file with the same name as one in this return replaces it and the slips read from it, and is read again. A file
-              with the same content as one under another name isn't saved again. A file uploaded by mistake can be deleted,
+              and last year's notice of assessment. A document with the other person's name on it goes to their return. A slip with a child's name isn't
+              added, since they have no return here, but a receipt for them (a medical or child care receipt) is. A slip whose name matches no one in the
+              year stays in this return, marked to check whose it is. A file with the same name as one in this return replaces it and the slips read from it, and is read again. A file
+              with the same content as one under another name isn't saved again, nor is a slip that adds nothing to one already here. A reading with anything more
+              (a clearer scan, say) is added as a slip of its own: when it may be the same slip as one already here, the message says so, to check at Confirm. A file uploaded by mistake can be deleted,
               with the slips read from it. You can also type slips in at Confirm.
             </li>
             <li>
@@ -73,17 +76,24 @@ export const gettingStarted: DocTopic = {
             <li>
               <b>Credits.</b> Tuition (T2202, and unused tuition from last year), medical expenses and donations, and what your slips
               already claim, such as CPP and EI contributions. Uploaded donation and medical receipts are added; enter only what isn't on
-              one. Only the amounts that can change the return appear.
+              one. A single parent with a child under 18 adds the child's net income, which lowers the amount for an eligible dependant.
+              Only the amounts that can change the return appear.
             </li>
             <li>
               <b>Confirm.</b> The slips (T4, T5, T3, T5008, T2202), receipts and notices of assessment, read by AI or entered. Check each one against the paper slip (a
-              box AI wasn't sure of is marked), then confirm them. Changing a slip makes it unconfirmed again. A slip that is the other
+              box AI wasn't sure of is marked), then confirm them. A box AI couldn't read at all shows as <i>couldn't be read</i>: enter it with
+              Edit (0 if it is blank on the paper slip) before the slip can be confirmed. A T5008 often has no cost (box 20): type it in from your records, or the gain
+              can't be worked out. Changing a slip makes it unconfirmed again. A slip that may be the same as one above it (the same kind, from the same issuer,
+              with no box holding a different amount) says so: if it is, remove one; if they're different slips, keep both. A slip that is the other
               person's can be moved to their return.
             </li>
             <li>
               <b>Finish.</b> The return's refund or balance owing, its key lines with why each is what it is, and what to check before filing.
               Under <b>Check and save</b>, hints show ways to pay less, such as claiming both spouses' donations on one return, with what each saves
-              on the year's returns. <b>Apply</b> changes your answers; <b>Undo</b> puts them back. If you later change an answer a saving set, it is no longer applied, and shows as a hint again if it still saves something. When nothing is left before filing,{" "}
+              on the year's returns. <b>Apply</b> changes your answers; <b>Undo</b> puts them back. If you later change an answer a saving set, it is no longer applied, and shows as a hint again if it still saves something.{" "}
+              <b>Before you file</b> lists, with a link to each, what keeps the return from its forms: something on Personal info (such as your
+              province on December 31), a slip not confirmed, a kind of income added without its slip, a question not answered, and for a couple,
+              what is left on the other person's Personal info or slips, as each return reads the other. When nothing is left before filing,{" "}
               <b>Download the forms</b> gives one PDF: the CRA's T1, the schedules and forms your return uses and the provincial forms, filled in
               with your name, date of birth, marital status, province and amounts, and a worksheet that shows how each amount was worked out. Add
               your social insurance number, address and the other Step 1 answers by hand, sign the T1 and mail it, or copy the amounts into
@@ -124,7 +134,7 @@ export const gettingStarted: DocTopic = {
             rows={[
               ["Owner, Admin, Editor", "Add and change the people in the profile, start a tax year, enter and confirm slips, and answer the questions."],
               ["Viewer", "See the profile and every return, but change nothing."],
-              ["Custom role", "What its permissions allow: Prepare returns, or View returns."],
+              ["Custom role", "What its permissions allow: Prepare returns (which includes viewing), or View returns."],
             ]}
           />
           <p>

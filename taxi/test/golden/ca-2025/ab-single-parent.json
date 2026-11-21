@@ -27,6 +27,7 @@
         "fhsaDeduction": "0",
         "medicalExpenses": "0",
         "donations": "0",
+        "dependantNetIncome": "0",
         "unusedTuition": "0",
         "tuitionTransfer": "0",
         "hasSelfEmployment": false,

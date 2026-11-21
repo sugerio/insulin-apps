@@ -1,5 +1,5 @@
 # Slip types: what each one is, for the screens and for AI reading, and its boxes as printed. `informational` boxes
-# never change a return; `counts` boxes hold a number (months), not money. Any other box no formula reads is kept on the slip and shown as not handled by this app.
+# never change a return; `counts` boxes hold a number (months), not money. Any other box no formula reads is kept on the slip and, unless it holds 0, shown as not handled by this app.
 
 slips:
   T4:
@@ -35,6 +35,10 @@ slips:
       11: Taxable amount of dividends other than eligible dividends
       12: Dividend tax credit for dividends other than eligible dividends
       13: Interest from Canadian sources
+      14: Other income from Canadian sources   # 14 to 17: no formula reads them, so an amount in them says so
+      15: Foreign income
+      16: Foreign tax paid
+      17: Royalties from Canadian sources
       18: Capital gains dividends
       24: Actual amount of eligible dividends
       25: Taxable amount of eligible dividends
@@ -61,8 +65,8 @@ slips:
     title: T5008 Statement of Securities Transactions
     about: A sale of shares, bonds or fund units through a broker, with the proceeds and, when the broker knows it, the cost
     boxes:
-      20: Proceeds of disposition or settlement amount
-      21: Cost or book value
+      20: Cost or book value
+      21: Proceeds of disposition or settlement amount
 
   T2202:
     title: T2202 Tuition and Enrolment Certificate
@@ -108,6 +112,7 @@ slips:
       "022": Income tax deducted
       "024": Annuities
       "028": Other income
+      "048": Fees for services                  # no formula reads it, so an amount in it says so
       "105": Scholarships, bursaries, fellowships, artists' project grants and prizes
       "131": Registered disability savings plan
   T4RIF:

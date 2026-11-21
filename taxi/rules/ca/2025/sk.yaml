@@ -182,8 +182,8 @@ lines:
   SK428.16:
     label: Saskatchewan amount for an eligible dependant
     formula: >-
-      round((if(line.HH.partner == 0 and family.childrenUnder18 > 0, min(param.skSpouseMax, param.skSpouseBase), 0)) * line.RES.factor, 2)
-    source: "SK428 lines 14 to 16. The app assumes the child had no income"
+      round((if(line.HH.partner == 0 and family.childrenUnder18 > 0, min(param.skSpouseMax, max(0, param.skSpouseBase - answer.dependantNetIncome)), 0)) * line.RES.factor, 2)
+    source: "SK428 lines 14 to 16: the base minus their net income, up to the maximum"
   # An adult with an impairment who lives with you gets the larger caregiver amount (line 34) instead: no one claims
   # both for the same dependant.
   SK428.17:

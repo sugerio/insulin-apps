@@ -84,6 +84,37 @@ describe("the people in the profile", () => {
     const returns = await server.db.prepare("SELECT person_id FROM returns").all<{ person_id: string }>();
     expect(returns.results.map((row) => row.person_id)).toEqual([alex.id]);
   });
+
+  it("keeps both of two changes to a person saved at the same time", async () => {
+    const { sam } = await marriedCouple();
+    const answers = await Promise.all([
+      json<Person>(server.call("PATCH", `/api/people/${sam.id}`, { body: { name: "Sam R. Martin" } })),
+      json<Person>(server.call("PATCH", `/api/people/${sam.id}`, { body: { birthDate: "1987-09-16" } })),
+    ]);
+    const both = { id: sam.id, name: "Sam R. Martin", relationship: "spouse", birthDate: "1987-09-16" };
+    expect((await json<{ people: Person[] }>(server.call("GET", "/api/people"))).people).toContainEqual(both);
+    // Each answers the person as stored: the one saved last has both changes.
+    expect(answers).toContainEqual(both);
+  });
+
+  it("changes the revision of every year someone was in when they leave it or stop being an adult", async () => {
+    const alex = await addPerson("Alex Martin", "self");
+    const sam = await addPerson("Sam Martin", "spouse", "1987-09-15");
+    const jamie = await addPerson("Jamie Martin", "child", "2019-06-20");
+    const year = await startYear([alex, sam, jamie]);
+    const saveAnswer = (revision: number) =>
+      server.call("PUT", "/api/years/2025/answers", { body: { revision, personId: alex.id, answers: { rrspDeduction: "100" } } });
+    // A save sent from the year as read before someone was removed is refused.
+    expect((await server.call("DELETE", `/api/people/${jamie.id}`)).status).toBe(204);
+    expect((await saveAnswer(year.revision)).status).toBe(409);
+    // So is one sent from before the spouse became someone with no return.
+    const before = await json<TaxYear>(server.call("GET", "/api/years/2025"));
+    await json<Person>(server.call("PATCH", `/api/people/${sam.id}`, { body: { relationship: "other_dependant" } }));
+    expect((await saveAnswer(before.revision)).status).toBe(409);
+    const after = await json<TaxYear>(server.call("GET", "/api/years/2025"));
+    expect(after.revision).toBe(year.revision + 2);
+    await json<TaxYear>(saveAnswer(after.revision));
+  });
 });
 
 describe("starting a tax year", () => {

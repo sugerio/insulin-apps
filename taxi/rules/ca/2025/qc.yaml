@@ -13,10 +13,11 @@
 # Left out (said not handled, or not entered): a year you moved to or from Canada; employment outside Quebec (a T4
 # without an RL-1, Schedule R Part B, line 454); CPP contributions on an RL-1 (lines 96 to 96.2, form LE-35-V); QPP in
 # the year you turned 18 or 73, an election to stop paying QPP (Schedule U Part A); rental and foreign income (TP-128-V,
-# Schedule E); net federal supplements (lines 148 and 295); moving expenses (line 228); lines 105, 107, 136, 153, 169,
-# 236, 241, 246, 250, 252, 260, 276, 278, 287, 291 to 297, 358, 378, 390 to 392, 396, 422, 424, 438, 443, 454, 459, 460,
-# 466; the refund transferred between spouses (lines 476 and 477); Schedule A Parts A and C, Schedule B line 21,
-# Schedule H, the adapted work premium (Schedule P column 2) and the supplement to the work premium (Part D).
+# Schedule E); net federal supplements (lines 148 and 295); an OAS overpayment recovered; moving expenses (line 228);
+# lines 105, 107, 136, 153, 169, 236, 241, 246, 250, 252, 260, 276, 278, 287, 291 to 297, 358, 378, 390 to 392, 396,
+# 422, 424, 438, 443, 454, 459, 460, 466; the refund transferred between spouses (lines 476 and 477); Schedule A Parts A
+# and C, Schedule B line 21, Schedule H, the adapted work premium (Schedule P column 2) and the supplement to the work
+# premium (Part D).
 
 params:
   qcTaxBrackets:
@@ -217,7 +218,8 @@ lines:
       if(answer.hasRentalIncome, unsupported("Rental income on the Quebec return (form TP-128-V) isn't handled by this app yet"),
       if(answer.hasForeignIncome, unsupported("Foreign income on the Quebec return (the foreign tax credit, Schedule E) isn't handled by this app yet"),
       if(sum(T4AOAS.box21) > 0, unsupported("Net federal supplements on the Quebec return (lines 148 and 295) aren't handled by this app yet"),
-      if(answer.hasMovingExpenses, unsupported("Moving expenses on the Quebec return (form TP-348-V) aren't handled by this app yet"), 0))))))
+      if(sum(T4AOAS.box20) > 0, unsupported("An Old Age Security overpayment recovered (box 20 of the T4A(OAS)) on the Quebec return isn't handled by this app yet"),
+      if(answer.hasMovingExpenses, unsupported("Moving expenses on the Quebec return (form TP-348-V) aren't handled by this app yet"), 0)))))))
 
   # Page 2 – contributions (not added into income)
   TP1.97:

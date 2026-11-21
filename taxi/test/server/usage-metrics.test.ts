@@ -5,7 +5,8 @@ import { OTHER_ORG, startServer, type TestServer } from "../support/server.ts";
 const NOW = Date.UTC(2026, 2, 1, 10, 5);
 let server: TestServer;
 beforeEach(async () => {
-  server = await startServer({ now: () => NOW });
+  // An upload is stored when AI reading isn't set up, as in the preview.
+  server = await startServer({ now: () => NOW, reader: () => ({ read: async () => ({ kind: "not_available", message: "Not set up." }) }) });
   const alex = (await (await server.call("POST", "/api/people", { body: { name: "Alex Martin", relationship: "self", birthDate: "1985-04-02" } })).json()) as { id: string };
   await server.call("POST", "/api/years", { body: { year: 2025, people: [alex.id] } });
   await server.call("POST", "/api/people", { body: { name: "Jamie Martin", relationship: "child", birthDate: "2019-06-20" } });
@@ -32,6 +33,19 @@ describe("the hourly usage report", () => {
     await server.db.prepare("INSERT INTO form_files (org_id, url, sha256, bytes, fetched_at) VALUES (?, ?, ?, ?, 0)").bind("org-a", "https://www.canada.ca/t1.pdf", "x", new Uint8Array(1000)).run();
     const report = await measureUsage(server.db, hourOf(NOW), null);
     expect(report.organizations.find((each) => each.id === "org-a")!.metrics).toMatchObject({ documents: 1, storage_bytes: pdf.byteLength + 1000 });
+  });
+
+  it("leaves out a file still being stored, or left by an upload that stopped part-way", async () => {
+    const taxYear = (await server.db.prepare("SELECT id FROM tax_years WHERE org_id = 'org-a'").first<{ id: string }>())!.id;
+    await server.db
+      .prepare(
+        `INSERT INTO documents (id, org_id, tax_year_id, name, content_type, byte_size, sha256, status, message, created_at)
+         VALUES (?, 'org-a', ?, 'T4.pdf', 'application/pdf', 5000000, ?, 'duplicate', '', ?)`,
+      )
+      .bind(crypto.randomUUID(), taxYear, "0".repeat(64), NOW)
+      .run();
+    const report = await measureUsage(server.db, hourOf(NOW), null);
+    expect(report.organizations.find((organization) => organization.id === "org-a")!.metrics).toMatchObject({ documents: 0, storage_bytes: 0 });
   });
 
   it("sends the hour once, with the app's token", async () => {

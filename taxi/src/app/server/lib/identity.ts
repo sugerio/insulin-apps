@@ -1,5 +1,5 @@
 import { getCurrentUser } from "@fours/app/server";
-import { accessViaSchema, roleSchema, rolePermissions, type AccessVia, type Permission, type Role } from "#shared";
+import { accessViaSchema, roleSchema, rolePermissions, withIncluded, type AccessVia, type Permission, type Role } from "#shared";
 import { readAppEnv } from "#platform";
 
 // Who is calling, from the platform's headers. With `isScheduleTick`, the only code that reads identity headers.
@@ -28,14 +28,15 @@ const PREVIEW = {
 
 /**
  * `x-suger-app-permissions` only takes permissions away: the result is the role's own set intersected with the header,
- * so a forged header gains nothing. `x-suger-access-via` absent means the browser (the Insulin console sends neither); a
- * value that isn't one of the three counts as an API client, the most limited channel.
+ * so a forged header gains nothing, and then what those include (Prepare returns includes viewing, which every role
+ * that prepares has). `x-suger-access-via` absent means the browser (the Insulin console sends neither); a value that
+ * isn't one of the three counts as an API client, the most limited channel.
  */
 export function readGrant(request: Request, role: Role): { permissions: Set<Permission>; accessVia: AccessVia } {
   const own = rolePermissions(role);
   const header = request.headers.get("x-suger-app-permissions");
   const listed = header === null ? null : new Set(header.split(/[\s,]+/).filter(Boolean));
-  const permissions = new Set(listed === null ? own : own.filter((permission) => listed.has(permission)));
+  const permissions = new Set(withIncluded(listed === null ? own : own.filter((permission) => listed.has(permission))));
   const raw = request.headers.get("x-suger-access-via");
   const via = accessViaSchema.safeParse(raw?.trim().toLowerCase());
   return { permissions, accessVia: raw === null ? "browser" : via.success ? via.data : "api" };

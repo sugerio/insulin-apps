@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router";
 import { Plus } from "lucide-react";
-import { canPrepare, routes, type Person, type Slip, type SlipList } from "#shared";
+import { canPrepare, possibleDuplicates, routes, unreadBoxes, type Person, type Slip, type SlipList } from "#shared";
 import { Badge } from "@/components/ui/badge.tsx";
 import { Button } from "@/components/ui/button.tsx";
 import { Card, CardAction, CardContent, CardHeader, CardTitle } from "@/components/ui/card.tsx";
@@ -18,7 +18,8 @@ import { rulesFor } from "../shared/rules/index.ts";
 
 // Step 4, `/returns/:year/:personId/confirm`: the slips of the open return, read by AI from the uploads or typed in,
 // to check against the paper slips. The form for a slip is built from its type in the year's rules (slips.yaml): its
-// boxes as printed. A slip that is the other adult's moves to their return.
+// boxes as printed. A slip that is the other adult's moves to their return. A slip that may be the same as one above
+// it (another reading of it, never merged on its own) says so, for the person to remove one or keep both.
 
 export function ConfirmStep() {
   const slips = useSlips();
@@ -37,6 +38,8 @@ function ReturnSlips({ data }: { data: SlipList }) {
   const [state, setState] = useState<{ status: "idle" | "saving" } | { status: "error"; error: unknown }>({ status: "idle" });
   const slips = data.slips.filter((slip) => slip.personId === person.id);
   const unconfirmed = slips.filter((slip) => slip.status === "unconfirmed").length;
+  // The server refuses to confirm a slip with a box AI couldn't read and no amount.
+  const unread = slips.some((slip) => slip.status === "unconfirmed" && unreadBoxes(slip).length > 0);
 
   async function confirmAll() {
     setState({ status: "saving" });
@@ -61,8 +64,11 @@ function ReturnSlips({ data }: { data: SlipList }) {
         )
       ) : null}
       <div className="flex flex-wrap items-center justify-end gap-2">
+        {editable && unread ? (
+          <p className="mr-auto text-xs text-muted-foreground">Before confirming, enter each box that couldn't be read, or 0 if it is blank on the slip: choose Edit on its slip.</p>
+        ) : null}
         {editable ? (
-          <Button variant="outline" onClick={() => void confirmAll()} disabled={unconfirmed === 0 || state.status === "saving"}>
+          <Button variant="outline" onClick={() => void confirmAll()} disabled={unconfirmed === 0 || unread || state.status === "saving"}>
             {unconfirmed === 0 ? "All slips confirmed" : `Confirm ${unconfirmed} ${unconfirmed === 1 ? "slip" : "slips"}`}
           </Button>
         ) : null}
@@ -77,6 +83,7 @@ function ReturnSlips({ data }: { data: SlipList }) {
 function PersonSlips({ personId, slips, editable }: { personId: string; slips: Slip[]; editable: boolean }) {
   const { year } = useYear();
   const types = rulesFor(year.year)!.slips;
+  const duplicates = possibleDuplicates(rulesFor(year.year)!, slips);
   const others = year.adults.filter((adult) => adult.personId !== personId).map((adult) => year.people.find((person) => person.id === adult.personId)!);
   const [editing, setEditing] = useState<string | "new" | null>(null);
   return (
@@ -109,18 +116,28 @@ function PersonSlips({ personId, slips, editable }: { personId: string; slips: S
                     {documentName(types.get(slip.type), slip.type)} · {slip.issuer}
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    {byBox(Object.entries(slip.boxes)).map(([box, amount], index) => (
-                      <span key={box} className={slip.unsure.includes(box) && slip.status !== "confirmed" ? "font-medium text-amber-700 dark:text-amber-400" : undefined}>
-                        {index > 0 ? " · " : ""}
-                        {types.get(slip.type)?.receipt ? "" : `Box ${box} `}
-                        {types.get(slip.type)?.boxes[box] ?? ""}: {formatBox(types.get(slip.type), box, amount)}
-                        {slip.unsure.includes(box) && slip.status !== "confirmed" ? " (check)" : ""}
-                      </span>
-                    ))}
+                    {/* A box AI couldn't read has no amount: it is shown, so the slip isn't confirmed without it. */}
+                    {byBox<string | null>([...Object.entries(slip.boxes), ...unreadBoxes(slip).map((box): [string, null] => [box, null])]).map(([box, amount], index) => {
+                      const check = amount === null || (slip.unsure.includes(box) && slip.status !== "confirmed");
+                      return (
+                        <span key={box} className={check ? "font-medium text-amber-700 dark:text-amber-400" : undefined}>
+                          {index > 0 ? " · " : ""}
+                          {types.get(slip.type)?.receipt ? "" : `Box ${box} `}
+                          {types.get(slip.type)?.boxes[box] ?? ""}: {amount === null ? "couldn't be read" : formatBox(types.get(slip.type), box, amount)}
+                          {check ? " (check)" : ""}
+                        </span>
+                      );
+                    })}
                   </p>
                   {slip.documentId ? (
                     <p className="text-xs">
                       <OriginalFile year={year.year} documentId={slip.documentId} />
+                    </p>
+                  ) : null}
+                  {duplicates.has(slip.id) ? (
+                    <p className="text-xs font-medium text-amber-700 dark:text-amber-400">
+                      May be the same slip as the {documentName(types.get(slip.type), slip.type)} from {duplicates.get(slip.id)!.issuer} above: if so, remove one; if
+                      they're different slips, keep both.
                     </p>
                   ) : null}
                   {editable && editing === null

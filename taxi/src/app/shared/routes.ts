@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { meSchema, type Permission } from "./access.ts";
 import { documentListSchema, readResultSchema } from "./documents.ts";
+import { FORM_LANGUAGES } from "./engine/rules.ts";
 import { estimateSchema } from "./estimate.ts";
 import { decideHintSchema, hintListSchema, hintParamsSchema } from "./hints.ts";
 import { confirmSlipsSchema, createSlipSchema, revisionBodySchema, saveAnswersSchema, slipListSchema, updateSlipSchema } from "./returns.ts";
@@ -51,7 +52,7 @@ export const apiCatalogSchema = z.strictObject({
       method: z.string(),
       path: z.string(),
       summary: z.string(),
-      query: z.null(),
+      query: z.record(z.string(), z.unknown()).nullable(),
       body: z.record(z.string(), z.unknown()).nullable(),
       idempotencyKey: z.boolean(),
     }),
@@ -169,7 +170,7 @@ export const routes = {
     method: "POST",
     path: "/api/years/:year/documents",
     summary:
-      "Upload one file (PDF, PNG or JPEG, up to 10 MiB) for AI to read into slips: send its bytes as the body with its Content-Type, and its name in an X-File-Name header (URI-encoded), and the adult whose return it is uploaded in as an X-Person-Id header (the person preparing without it). Slips found are added unconfirmed to the adult whose name is on them, or to that adult when no name matches. A file with the name of one in the same return, changed or not, replaces it and its slips once read into slips (listed in replaced); if it can't be, the earlier one is kept. Otherwise the same file under another name, or the same slips, already in the year are not saved again (status duplicate).",
+      "Upload one file (PDF, PNG or JPEG, up to 10 MiB) for AI to read into slips: send its bytes as the body with its Content-Type, its name in an X-File-Name header (URI-encoded; required, as a file replaces the one of the same name in the return), and the adult whose return it is uploaded in as an X-Person-Id header (the person preparing without it). Slips found are added unconfirmed to the adult whose name is on them. A slip naming someone else in the year, who has no return here (a child), isn't added, but a receipt for them (such as a medical receipt) goes to this adult; a slip whose name matches no one in the year, or several, goes to this adult, marked to check whose it is. A file with the name of one in the same return, changed or not, replaces it and its slips once read into slips (listed in replaced); if it can't be, the earlier one is kept. Otherwise the same file under another name, or the same slips, already in the year are not saved again, even when uploaded at the same time (status duplicate). An upload that fails part-way changes nothing.",
     permission: "taxi.prepare",
     params: yearParams,
     body: null,
@@ -226,7 +227,8 @@ export const routes = {
   updateSlip: route({
     method: "PATCH",
     path: "/api/years/:year/slips/:id",
-    summary: "Change a slip's issuer or boxes. The slip goes back to unconfirmed.",
+    summary:
+      "Change a slip's issuer or boxes (boxes replaces them all). The slip goes back to unconfirmed. A box AI wasn't sure of is no longer marked once it is in boxes; one AI couldn't read stays marked until it is (0 if it is blank on the slip).",
     permission: "taxi.prepare",
     params: slipParams,
     body: updateSlipSchema,
@@ -245,7 +247,7 @@ export const routes = {
     method: "POST",
     path: "/api/years/:year/slips/confirm",
     summary:
-      "Confirm the unconfirmed slips of one adult (personId), or of every adult without it: someone checked each one against the paper slip.",
+      "Confirm the unconfirmed slips of one adult (personId), or of every adult without it: someone checked each one against the paper slip. Refused with 400, naming each box, while a slip has a box AI couldn't read and no amount: enter it first (0 if it is blank on the slip).",
     permission: "taxi.prepare",
     params: yearParams,
     body: confirmSlipsSchema,
@@ -292,3 +294,38 @@ export const routes = {
 export type Routes = typeof routes;
 export type AnyRoute = Routes[keyof Routes];
 export const ROUTE_TABLE: readonly AnyRoute[] = Object.values(routes);
+
+/** An endpoint that answers with a file, not JSON: served apart from the route table, and in the catalog with it. */
+export interface FileRoute {
+  method: "GET";
+  path: string;
+  summary: string;
+  permission: Permission;
+  /** Its query parameters, as JSON Schema; null for none. */
+  query: Record<string, unknown> | null;
+}
+
+export const fileRoutes = {
+  documentFile: {
+    method: "GET",
+    path: "/api/years/:year/documents/:id/file",
+    summary: "An uploaded file's bytes as stored: the PDF, PNG or JPEG itself, with its Content-Type, to look at beside the slips read from it.",
+    permission: "taxi.view",
+    query: null,
+  },
+  returnForms: {
+    method: "GET",
+    path: "/api/years/:year/returns/:personId/forms",
+    summary:
+      "A finished return as a PDF (application/pdf): the CRA's T1 and provincial form with the amounts filled in, then a worksheet; for a resident of Quebec, Revenu Québec's TP-1 and its schedules come after the federal forms. Refused with 400 for another language, with 409 while anything is left before filing (the message says what), and with 503 when canada.ca or revenuquebec.ca doesn't answer or its form changed.",
+    permission: "taxi.view",
+    query: {
+      type: "object",
+      properties: {
+        download: { type: "string", description: "Set (download=1) to get the PDF as an attachment to save; without it, it opens inline." },
+        language: { type: "string", enum: [...FORM_LANGUAGES], description: "fr prints Revenu Québec's forms in French; the CRA's forms and the worksheet stay in English. en by default." },
+      },
+      additionalProperties: false,
+    },
+  },
+} as const satisfies Record<string, FileRoute>;

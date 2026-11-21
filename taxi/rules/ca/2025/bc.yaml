@@ -208,8 +208,8 @@ lines:
   BC428.23:
     label: British Columbia amount for an eligible dependant
     formula: >-
-      round((if(line.HH.partner == 0 and family.childrenUnder18 > 0, min(param.bcSpouseMax, param.bcSpouseBase), 0)) * line.RES.factor, 2)
-    source: "BC428 lines 21 to 23. The app assumes the child had no income"
+      round((if(line.HH.partner == 0 and family.childrenUnder18 > 0, min(param.bcSpouseMax, max(0, param.bcSpouseBase - answer.dependantNetIncome)), 0)) * line.RES.factor, 2)
+    source: "BC428 lines 21 to 23: the base minus their net income, up to the maximum"
   # The caregiver amount is for a dependant 18 or older: British Columbia has no amount for an infirm child under 18
   # (federal line 30500). The adult dependant's column is worked out once: more than one is refused on line 30450.
   BC428.24:

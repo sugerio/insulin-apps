@@ -70,22 +70,29 @@ export function matchNavigation(items: readonly NavItem[], pathname: string): Na
 // Collapsing, remembered per browser
 
 export type NavState = "collapsed" | "expanded";
+export interface NavCollapse {
+  l1: NavState;
+  l2: NavState;
+}
 export const NAV_STORAGE_KEY = "insulin-nav";
+const EXPANDED: NavCollapse = { l1: "expanded", l2: "expanded" };
+const isState = (value: unknown): value is NavState => value === "collapsed" || value === "expanded";
 
-/** Level 1's last choice in this browser; expanded when nothing (or nothing readable) is stored. */
-export function readNavCollapse(): NavState {
+/** Each level's last choice in this browser; both expanded when nothing (or nothing readable) is stored. */
+export function readNavCollapse(): NavCollapse {
   try {
     const stored: unknown = JSON.parse(window.localStorage.getItem(NAV_STORAGE_KEY) ?? "null");
-    const l1 = stored && typeof stored === "object" ? (stored as Record<string, unknown>).l1 : undefined;
-    return l1 === "collapsed" ? "collapsed" : "expanded";
+    if (!stored || typeof stored !== "object") return EXPANDED;
+    const { l1, l2 } = stored as Record<string, unknown>;
+    return { l1: isState(l1) ? l1 : "expanded", l2: isState(l2) ? l2 : "expanded" };
   } catch {
-    return "expanded";
+    return EXPANDED;
   }
 }
 
-export function writeNavCollapse(value: NavState): void {
+export function writeNavCollapse(value: NavCollapse): void {
   try {
-    window.localStorage.setItem(NAV_STORAGE_KEY, JSON.stringify({ l1: value, l2: "expanded" }));
+    window.localStorage.setItem(NAV_STORAGE_KEY, JSON.stringify({ l1: value.l1, l2: value.l2 }));
   } catch {
     // Storage can be off (a private window, blocked site data): the choice then lasts until the page is reloaded.
   }

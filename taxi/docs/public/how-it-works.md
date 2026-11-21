@@ -36,9 +36,23 @@ never holds it. Without that credential, files are stored but not read, and slip
 
 With the file, Claude gets the year, the names of the people in the year, and the slip types the app reads with their
 boxes. It answers in a fixed shape: each slip's type, the name on it, the issuer, its boxes and the boxes it couldn't
-read clearly. It is told never to return a social insurance number. Taxi then checks the answer itself: only known slip
-types and boxes are kept, amounts must be numbers, a slip for another year is refused, and a slip already in the year
-isn't added again. Every slip read this way starts unconfirmed: someone checks it against the paper slip at Confirm.
+read clearly. It is told never to return a social insurance number. Taxi then checks the answer itself: only known
+slip types and boxes are kept, amounts must be numbers, a slip for another year is left out (the message says which),
+and a slip already in the year, or printed twice in the file, isn't added again. Slips are never merged: a reading is
+left out when it adds nothing to a slip already here (or to a fuller copy in the same file) of the same type, person
+and issuer, that is, it has at least one amount, each of its amounts is on that slip with the same value, and each box
+it couldn't read is one that slip has. Any other reading is added as a slip of its own, even a fuller or a blurred
+copy, since two partly read slips of one issuer can be different slips. When it may be the same slip as another (same
+type, person and issuer, and no box holding different amounts), the message says so, and Confirm marks it for the
+person to remove one or keep both. Receipts are never matched: two can hold the same amount from the same place.
+Claude gives a file one year, so a file holding documents of different years (a T4 and last year's notice of
+assessment, say) is best uploaded one document at a time. Each slip goes to the adult whose name is on it. A slip
+naming someone else in the year, such as a child's T4, isn't added, since they have no return here, and the message
+says whose it is; a receipt for them, such as a child's medical receipt, stays in the return it was uploaded in. A
+slip whose name matches no one in the year stays there too, marked to check whose it is. Every slip read this way
+starts unconfirmed: someone checks it against the paper slip at Confirm. A box AI wasn't sure of is marked; one it
+couldn't read at all shows as couldn't be read, and the slip can't be confirmed until that box is entered (0 when it
+is blank on the paper slip). Saving the slip's other boxes leaves it marked.
 
 Receipts and last year's notice of assessment are read the same way: RRSP contribution receipts (for March 4, 2025 to
 March 2, 2026), official donation receipts, medical receipts, and the 2024 notice of assessment. Donation and medical
@@ -50,8 +64,11 @@ are both kept: a receipt is skipped only when the same file is uploaded again.
 A file with the name of one already in the same return is a new version, changed or not: once it is read into slips,
 it replaces the earlier file and every slip read from it (those start unconfirmed again). If the new version can't be
 read into slips, the earlier one is kept. Files of the same name in two people's returns don't replace each other. A
-file with the same content (its SHA-256) as one under another name isn't read or saved again. A file that couldn't be read can be read again from what was stored. Deleting a file deletes every slip read from it, confirmed or not, in whichever return
-it is; slips typed in by hand stay.
+file with the same content (its SHA-256) as one under another name isn't read or saved again, and files uploaded or
+read again at the same time are checked against each other too. A file and its slips are saved together once all of it
+is stored, so an upload that fails part-way changes nothing. A file that couldn't be read can be read again from what
+was stored. Deleting a file deletes every slip read from it, confirmed or not, in whichever return it is; slips typed
+in by hand stay.
 
 ## How a return is computed
 
@@ -96,9 +113,12 @@ T5. Moving claims between the returns works only when both spouses' returns are 
 
 ## The CRA's forms
 
-A finished return (every slip confirmed, every line worked out from answers, nothing the app doesn't handle) downloads
-as one PDF: the CRA's own T1, the schedules and forms the return uses (such as Schedule 9, Schedule 11, Form T2125 or
-Form T778, each only when it applies), the provincial forms, then a worksheet.
+A finished return downloads as one PDF: the CRA's own T1, the schedules and forms the return uses (such as Schedule 9,
+Schedule 11, Form T2125 or Form T778, each only when it applies), the provincial forms, then a worksheet. Finished means
+nothing is left on Personal info (the marital status, the province on December 31 and whether the person lived in
+Canada all year are given), every slip is there and confirmed (a kind of income added without its slip is missing),
+every line is worked out from answers, and nothing is left that the app doesn't handle. Until then Finish lists what is
+left under Before you file, and the download is refused.
 
 - The forms are the CRA's print versions. The first time an organization prints a return, Taxi downloads them from
   canada.ca and keeps them in its database. It checks each file against the one it was measured on, and refuses to fill
@@ -109,8 +129,10 @@ Form T778, each only when it applies), the provincial forms, then a worksheet.
 - Step 1 of the T1 gets the name (split at its last space into first and last name), date of birth, marital status,
   province of residence, the spouse's or partner's first name and net income, and the foreign property answer. Taxi
   never asks for a social insurance number, an address or bank details, so those boxes stay blank.
-- A couple's returns read each other (the spouse amount reads the other's net income), so a question left on one return
-  can hold the other's forms too. Finish then names it under the other person, with a link to it.
+- A couple's returns read each other (the spouse amount reads the other's net income), so what is left on the other
+  person's Personal info, their slips not confirmed or missing, and what the app doesn't handle on their return hold
+  this return's forms too, as does a question left on their return that a line of this one waits on. Finish names each
+  under the other person, with a link to it.
 - A row Taxi doesn't know (a dependant's details, each expense category, a property's address) is left blank. The
   worksheet lists the slips, the answers, the hints applied and every line with its formula.
 
@@ -140,8 +162,11 @@ a name, a birth date, an amount or a document.
   - people who moved to or from Canada during the year: the personal amounts are reduced by the days in Canada, unless
     at least 90% of their income for the rest of the year came from Canada.
 - Not handled, and said so when it applies: property treated as sold when you leave Canada (Forms T1243 and T1161), a
-  T4 with both CPP and QPP (Form RC381), capital cost allowance for more than one class, a farming loss, and on the
-  TP-1 employment outside Quebec, rental and foreign income and moving expenses.
+  T4 with both CPP and QPP (Form RC381), capital cost allowance for more than one class, a farming loss, an amount in a
+  slip box the app doesn't read (such as a T5's foreign income, box 15, or a T4A's fees for services, box 048), and on
+  the TP-1 employment outside Quebec, rental and foreign income, moving expenses and an OAS overpayment recovered.
+- A T5008 without its cost (box 20), which brokers often leave blank, can't be counted until the cost is typed in at
+  Confirm.
 - Not handled and not asked: electing to stop CPP contributions (Form CPT30), a CPP disability pension (which changes
   the months of CPP), and business, investment, mining and similar tax credits.
 - When the rules meet a case they don't handle, the number is shown as missing with the reason, never guessed.

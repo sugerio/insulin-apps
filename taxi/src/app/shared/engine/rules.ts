@@ -237,7 +237,7 @@ export interface RuleSet {
   lines: Map<string, Line>;
   questions: Map<string, Question>;
   slips: Map<string, SlipType>;
-  /** Per slip type, the boxes some formula reads, and the informational ones. Any other box is shown as not handled. */
+  /** Per slip type, the boxes some formula reads, and the informational ones. Any other box with an amount is shown as not handled. */
   usedBoxes: Map<string, Set<string>>;
   hints: Map<string, Hint>;
   /** The CRA forms a return is printed on, in order. */

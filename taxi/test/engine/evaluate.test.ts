@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { compileRules } from "../../src/app/shared/engine/compile.ts";
 import { EngineError } from "../../src/app/shared/engine/errors.ts";
@@ -112,6 +114,16 @@ describe("evaluating a year", () => {
   it("reads the month of birth", () => {
     expect(value(new Evaluation(rules, input()), "a", "R.birthMonth")).toEqual(["4", "complete"]);
     expect(value(new Evaluation(rules, input()), "b", "R.birthMonth")).toEqual(["9", "complete"]);
+  });
+
+  it("counts a dependant only from the year they are born", () => {
+    const children = (birthDate: string) =>
+      new Evaluation(rules, input({ family: { maritalStatus: "married", dependants: [{ id: "d1", name: "Jamie", birthDate }] } })).explain(
+        "a",
+        "family.childrenUnder18",
+      ).value;
+    expect(children("2025-12-31")).toBe("1");
+    expect(children("2026-01-15")).toBe("0");
   });
 
   it("summarizes the result lines with what is estimated and what isn't handled", () => {
@@ -286,5 +298,133 @@ describe("the 2025 rules", () => {
       }).line("p1", "T1.30000").value!.toString();
     // (16129 − 14538) × (215648 − 177882) / (253414 − 177882) = 795.5: halfway down.
     expect([at("177882"), at("215648"), at("253414"), at("300000")]).toEqual(["16129", "15333.5", "14538", "14538"]);
+  });
+
+  it("count a sale's proceeds (T5008 box 21) less its cost (box 20)", () => {
+    const evaluation = alone([{ id: "s1", person: "p1", type: "T5008", issuer: "Pine Securities", boxes: { 20: "10000", 21: "15000" } }]);
+    expect(value(evaluation, "p1", "S3.13200")).toEqual(["5000", "complete"]);
+    expect(evaluation.line("p1", "T1.12700").value?.toString()).toBe("2500");
+  });
+
+  it("say so when a T5008 has no cost, instead of counting all the proceeds as gain", () => {
+    const evaluation = alone([{ id: "s1", person: "p1", type: "T5008", issuer: "Pine Securities", boxes: { 21: "15000" } }]);
+    expect(value(evaluation, "p1", "S3.13200")).toEqual([null, "missing"]);
+    expect(evaluation.result().people[0]!.unhandled).toEqual([expect.stringMatching(/T5008.*cost.*box 20.*Confirm/)]);
+  });
+
+  it("deduct an OAS overpayment recovered (T4A(OAS) box 20) on line 23200", () => {
+    const pensioner = JSON.parse(readFileSync(resolve(import.meta.dirname, "../golden/ca-2025/pensioner-on.json"), "utf8")).input as EngineInput;
+    const recovered = { ...pensioner, slips: pensioner.slips.map((slip) => (slip.type === "T4AOAS" ? { ...slip, boxes: { ...slip.boxes, 20: "1000" } } : slip)) };
+    expect(value(new Evaluation(rulesFor(2025)!, pensioner), "p1", "T1.23600")).toEqual(["58300", "complete"]);
+    expect(value(new Evaluation(rulesFor(2025)!, recovered), "p1", "T1.23200")).toEqual(["1000", "complete"]);
+    expect(value(new Evaluation(rulesFor(2025)!, recovered), "p1", "T1.23600")).toEqual(["57300", "complete"]);
+  });
+
+  it("keep an OAS overpayment recovered out of the foreign income the foreign tax credits are on", () => {
+    const pensioner = JSON.parse(readFileSync(resolve(import.meta.dirname, "../golden/ca-2025/pensioner-on.json"), "utf8")).input as EngineInput;
+    const foreign = { hasForeignIncome: true, foreignInvestmentIncome: "1000", foreignInvestmentTax: "150", foreignEmploymentIncome: "0", foreignEmploymentTax: "0" };
+    const withBoxes = (boxes: Record<string, Record<string, string>>) =>
+      new Evaluation(rulesFor(2025)!, {
+        ...pensioner,
+        answers: { p1: { ...pensioner.answers.p1, ...foreign } },
+        slips: pensioner.slips.map((slip) => ({ ...slip, boxes: { ...slip.boxes, ...boxes[slip.type] } })),
+      });
+    // The credits are shared out by net income, so compare with the same net income reached without the overpayment:
+    // $2,000 recovered, or $2,000 less from the RRIF.
+    const recovered = withBoxes({ T4AOAS: { 20: "2000" } });
+    const lessIncome = withBoxes({ T4RIF: { 16: "4000" } });
+    expect(value(recovered, "p1", "T1.23600")).toEqual(value(lessIncome, "p1", "T1.23600"));
+    expect(value(recovered, "p1", "FTC.netForeign")).toEqual(["1000", "complete"]);
+    for (const line of ["T1.40500", "ON428.82"]) {
+      expect(value(recovered, "p1", line), line).toEqual(value(lessIncome, "p1", line));
+      expect(recovered.line("p1", line).value!.isPositive(), line).toBe(true);
+    }
+  });
+
+  it("reduce the eligible dependant amounts by the dependant's net income", () => {
+    const singleParent = (province: string, answers: Record<string, string>) =>
+      new Evaluation(rulesFor(2025)!, {
+        year: 2025,
+        people: [{ id: "p1", name: "Alex", role: "self", birthDate: "1985-04-02", province }],
+        family: { maritalStatus: "single", dependants: [{ id: "d1", name: "Jamie", birthDate: "2017-04-04" }] },
+        answers: { p1: answers },
+        slips: [t4({ 14: "50000", 22: "7000" })],
+      });
+    const earned = { dependantNetIncome: "10000" };
+    // 16,129 − 10,000; the basic personal amount itself is an estimate until the income questions are answered.
+    expect(value(singleParent("ON", earned), "p1", "T1.30400")).toEqual(["6129", "estimate"]);
+    expect(value(singleParent("ON", earned), "p1", "ON428.16")).toEqual(["1905", "complete"]);
+    expect(value(singleParent("BC", earned), "p1", "BC428.23")).toEqual(["2181", "complete"]);
+    expect(value(singleParent("AB", earned), "p1", "AB428.23")).toEqual(["12323", "complete"]);
+    // No income: the provincial maximum where there is one.
+    expect(value(singleParent("ON", { dependantNetIncome: "0" }), "p1", "ON428.16")).toEqual(["10823", "complete"]);
+
+    const unanswered = singleParent("ON", {});
+    expect(value(unanswered, "p1", "T1.30400")).toEqual([null, "missing"]);
+    expect(unanswered.result().people[0]!.missing.map((each) => each.question)).toContain("dependantNetIncome");
+    // Asked only when the amount applies: not of a couple's return.
+    const couple = new Evaluation(rulesFor(2025)!, {
+      year: 2025,
+      people: [{ id: "p1", name: "Alex", role: "self", birthDate: "1985-04-02", province: "ON" }],
+      family: { maritalStatus: "married", dependants: [{ id: "d1", name: "Jamie", birthDate: "2017-04-04" }] },
+      answers: { p1: { spouseNetIncome: "0" } },
+      slips: [t4({ 14: "50000", 22: "7000" })],
+    });
+    expect(couple.result().people[0]!.questions).not.toContain("dependantNetIncome");
+  });
+
+  it("reduce every other province's and territory's eligible dependant amount by the dependant's net income", () => {
+    const singleParent = (province: string, dependantNetIncome: string) =>
+      new Evaluation(rulesFor(2025)!, {
+        year: 2025,
+        people: [{ id: "p1", name: "Alex", role: "self", birthDate: "1985-04-02", province }],
+        family: { maritalStatus: "single", dependants: [{ id: "d1", name: "Jamie", birthDate: "2017-04-04" }] },
+        answers: { p1: { dependantNetIncome } },
+        slips: [t4({ 14: "50000", 22: "7000" })],
+      });
+    // The line, then the amount with no income (the base, or the maximum where there is one), then with $5,000 (the base
+    // less it).
+    const amounts: Record<string, [string, string, string]> = {
+      MB: ["MB428.16", "9134", "4134"],
+      SK: ["SK428.16", "19491", "16440"],
+      NB: ["NB428.16", "10499", "6550"],
+      NL: ["NL428.23", "9043", "4948"],
+      NS: ["NS428.16", "11744", "7618"],
+      PE: ["PE428.16", "12443", "8687"],
+      NT: ["NT428.16", "17842", "12842"],
+      NU: ["NU428.16", "19274", "14274"],
+    };
+    for (const [province, [line, none, earned]] of Object.entries(amounts)) {
+      expect(value(singleParent(province, "0"), "p1", line), province).toEqual([none, "complete"]);
+      expect(value(singleParent(province, "5000"), "p1", line), province).toEqual([earned, "complete"]);
+    }
+    // Never below zero.
+    expect(value(singleParent("NT", "20000"), "p1", "NT428.16")).toEqual(["0", "complete"]);
+    // Nova Scotia takes off whichever is more, $874 or the dependant's net income (NS428 line 15).
+    expect(value(singleParent("NS", "500"), "p1", "NS428.16")).toEqual(["11744", "complete"]);
+    expect(value(singleParent("NS", "1000"), "p1", "NS428.16")).toEqual(["11618", "complete"]);
+    // Yukon's is line 30400 of the return: the basic personal amount, 16,129, less it.
+    expect(value(singleParent("YT", "5000"), "p1", "YT428.12")).toEqual(["11129", "estimate"]);
+  });
+
+  it("keep T5 and T4A boxes they don't handle on the slip, and say so", () => {
+    const rules2025 = rulesFor(2025)!;
+    expect(rules2025.slips.get("T5")!.boxes).toMatchObject({
+      14: "Other income from Canadian sources",
+      15: "Foreign income",
+      16: "Foreign tax paid",
+      17: "Royalties from Canadian sources",
+    });
+    expect(rules2025.slips.get("T4A")!.boxes["048"]).toBe("Fees for services");
+    const evaluation = alone([{ id: "s1", person: "p1", type: "T5", issuer: "Northwind Bank", boxes: { 13: "200", 15: "400" } }]);
+    expect(evaluation.result().people[0]!.unhandled).toEqual(["T5 from Northwind Bank: box 15 isn't handled by this app"]);
+  });
+
+  it("don't report a box they don't handle when it holds zero, as a blank box is entered", () => {
+    const unhandled = (box15: string) =>
+      alone([{ id: "s1", person: "p1", type: "T5", issuer: "Northwind Bank", boxes: { 13: "200", 15: box15 } }]).result().people[0]!.unhandled;
+    expect(unhandled("0")).toEqual([]);
+    expect(unhandled("0.00")).toEqual([]);
+    expect(unhandled("500")).toEqual(["T5 from Northwind Bank: box 15 isn't handled by this app"]);
   });
 });

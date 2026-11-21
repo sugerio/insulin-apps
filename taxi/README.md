@@ -44,8 +44,9 @@ uploaded slips read by AI (or typed in), income, deductions, credits, the result
   contributions later, RRSP contributions over the limit, and interest without a T5. A saving is worked out on both
   returns with and without the change, never guessed (`rules/ca/2025/hints.yaml`); applying it saves answers, and it can
   be undone.
-- **The CRA's forms.** A finished return (every slip confirmed, every line worked out) downloads as one PDF: the CRA's
-  own T1 and provincial form (ON428, BC428 or AB428) with the amounts written in, then a worksheet with the slips, the
+- **The CRA's forms.** A finished return (nothing left on Personal info, every slip there and confirmed, every line
+  worked out; for a couple, the other's facts given and slips confirmed too) downloads as one PDF: the CRA's own T1
+  and the Form 428 of the province or territory with the amounts written in, then a worksheet with the slips, the
   answers, the applied hints and how each line was worked out. The CRA's print PDFs come from canada.ca on first use
   and are kept in the database; they are never in the repository. Where each amount goes is measured from the PDFs by
   `npm run form-layout` (`rules/ca/2025/form-layout.yaml`); what goes there is in `rules/ca/2025/forms.yaml`. Revenu

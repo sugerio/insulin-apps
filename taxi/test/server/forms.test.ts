@@ -45,27 +45,47 @@ async function json<T>(response: Response | Promise<Response>, status = 200): Pr
   return body as T;
 }
 
-/** Alex, single in Ontario, with a T4: the year at its revision, Alex's slips not yet confirmed. */
-async function alexWithT4(): Promise<{ alex: Person; revision: number }> {
+const T4: { type: string; issuer: string; boxes: Record<string, string> } = { type: "T4", issuer: "Maple Corp", boxes: { 14: "60000", 22: "9000" } };
+
+/** Alex, single in Ontario, with a T4 (or the slip given): the year at its revision, Alex's slips not yet confirmed. */
+async function alexWithT4({ residentAllYear = true as boolean | null, slip = T4 } = {}): Promise<{ alex: Person; revision: number }> {
   const alex = await json<Person>(server.call("POST", "/api/people", { body: { name: "Alex Martin", relationship: "self", birthDate: "1985-04-02" } }), 201);
   await json<TaxYear>(server.call("POST", "/api/years", { body: { year: 2025, people: [alex.id] } }), 201);
   let year = await json<TaxYear>(
-    server.call("PUT", "/api/years/2025/personal-info", { body: { revision: 1, maritalStatus: "single", adults: [{ personId: alex.id, province: "ON", residentAllYear: true }] } }),
+    server.call("PUT", "/api/years/2025/personal-info", { body: { revision: 1, maritalStatus: "single", adults: [{ personId: alex.id, province: "ON", residentAllYear }] } }),
   );
-  year = await json<TaxYear>(
-    server.call("POST", "/api/years/2025/slips", { body: { revision: year.revision, personId: alex.id, type: "T4", issuer: "Maple Corp", boxes: { 14: "60000", 22: "9000" } } }),
-    201,
-  );
+  year = await json<TaxYear>(server.call("POST", "/api/years/2025/slips", { body: { revision: year.revision, personId: alex.id, ...slip } }), 201);
   return { alex, revision: year.revision };
 }
 
-/** Answers every question the return still assumes, and confirms the slips: the return is finished. */
-async function finish(alex: Person, revision: number): Promise<TaxYear> {
+/** Answers every question the return still assumes (and any answers given), and confirms the slips. */
+async function finish(alex: Person, revision: number, answers: Record<string, string | boolean> = {}): Promise<TaxYear> {
   const estimate = await json<Estimate>(server.call("GET", "/api/years/2025/estimate"));
-  const assumed = Object.fromEntries(estimate.result.people[0]!.estimates.map((item) => [item.question, item.assumed]));
-  let year = await json<TaxYear>(server.call("PUT", "/api/years/2025/answers", { body: { revision, personId: alex.id, answers: assumed } }));
+  const assumed = Object.fromEntries(estimate.result.people.find((person) => person.personId === alex.id)!.estimates.map((item) => [item.question, item.assumed]));
+  let year = await json<TaxYear>(server.call("PUT", "/api/years/2025/answers", { body: { revision, personId: alex.id, answers: { ...assumed, ...answers } } }));
   year = await json<TaxYear>(server.call("POST", "/api/years/2025/slips/confirm", { body: { revision: year.revision, personId: alex.id } }));
   return year;
+}
+
+/** Alex and Sam, married in Ontario, each with a T4, Sam's questions answered and Sam's slip not confirmed. */
+async function couple(samResidentAllYear: boolean | null = true): Promise<{ alex: Person; sam: Person; revision: number }> {
+  const alex = await json<Person>(server.call("POST", "/api/people", { body: { name: "Alex Martin", relationship: "self", birthDate: "1985-04-02" } }), 201);
+  const sam = await json<Person>(server.call("POST", "/api/people", { body: { name: "Sam Martin", relationship: "spouse", birthDate: "1987-09-15" } }), 201);
+  await json<TaxYear>(server.call("POST", "/api/years", { body: { year: 2025, people: [alex.id, sam.id] } }), 201);
+  const adults = [
+    { personId: alex.id, province: "ON", residentAllYear: true },
+    { personId: sam.id, province: "ON", residentAllYear: samResidentAllYear },
+  ];
+  let year = await json<TaxYear>(server.call("PUT", "/api/years/2025/personal-info", { body: { revision: 1, maritalStatus: "married", adults } }));
+  year = await json<TaxYear>(server.call("POST", "/api/years/2025/slips", { body: { revision: year.revision, personId: alex.id, ...T4 } }), 201);
+  year = await json<TaxYear>(
+    server.call("POST", "/api/years/2025/slips", { body: { revision: year.revision, personId: sam.id, type: "T4", issuer: "Birch Ltd", boxes: { 14: "30000", 22: "4000" } } }),
+    201,
+  );
+  const estimate = await json<Estimate>(server.call("GET", "/api/years/2025/estimate"));
+  const assumed = Object.fromEntries(estimate.result.people.find((person) => person.personId === sam.id)!.estimates.map((item) => [item.question, item.assumed]));
+  year = await json<TaxYear>(server.call("PUT", "/api/years/2025/answers", { body: { revision: year.revision, personId: sam.id, answers: assumed } }));
+  return { alex, sam, revision: year.revision };
 }
 
 /** Each page's text, with where it starts. */
@@ -284,6 +304,63 @@ describe("printing a return", () => {
     await finish(alex, revision);
     const refused = await json<{ error: { code: string; message: string } }>(download(alex.id), 503);
     expect(refused.error).toMatchObject({ code: "unavailable", message: expect.stringMatching(/The CRA has changed T1 Income Tax and Benefit Return/) });
+  });
+
+  it.each([
+    [null, /Say whether Alex Martin lived in Canada all year\./],
+  ])("refuses a return whose 'lived in Canada all year' is %s, though every slip is confirmed", async (residentAllYear, reason) => {
+    const source = standIn();
+    server = await startServer({ forms: source });
+    const { alex, revision } = await alexWithT4({ residentAllYear });
+    const year = await finish(alex, revision);
+    expect(year.returns[0]!.steps.finish).toBe("todo");
+    const refused = await json<{ error: { code: string; message: string } }>(download(alex.id), 409);
+    expect(refused.error.message).toMatch(reason);
+    expect(source.fetched).toEqual([]);
+  });
+
+  it("refuses a return with a kind of income added without its slip", async () => {
+    const source = standIn();
+    server = await startServer({ forms: source });
+    const { alex, revision } = await alexWithT4({ slip: { type: "T5", issuer: "Maple Bank", boxes: { 13: "1200" } } });
+    const year = await finish(alex, revision, { hasEmploymentIncome: true });
+    expect(year.returns[0]!.steps).toMatchObject({ income: "todo", confirm: "done", finish: "todo" });
+    const refused = await json<{ error: { code: string; message: string } }>(download(alex.id), 409);
+    expect(refused.error.message).toMatch(/Waiting for a slip: the T4 \(Employment income\)\./);
+    expect(source.fetched).toEqual([]);
+  });
+
+  it("waits for the spouse's slips to be confirmed, as a couple's returns read each other", async () => {
+    server = await startServer({ forms: standIn() });
+    const { alex, sam, revision } = await couple();
+    let year = await finish(alex, revision);
+    expect(year.returns.find((each) => each.personId === alex.id)!.steps.finish).toBe("todo");
+    const refused = await json<{ error: { code: string; message: string } }>(download(alex.id), 409);
+    expect(refused.error.message).toMatch(/Sam Martin's return: 1 slip is not confirmed yet\./);
+
+    year = await json<TaxYear>(server.call("POST", "/api/years/2025/slips/confirm", { body: { revision: year.revision, personId: sam.id } }));
+    expect(year.returns.map((each) => each.steps.finish)).toEqual(["done", "done"]);
+    expect((await download(alex.id)).status).toBe(200);
+  });
+
+  it("waits for the spouse's facts on Personal info, as this return reads their income", async () => {
+    server = await startServer({ forms: standIn() });
+    const { alex, sam, revision } = await couple(null);
+    let year = await json<TaxYear>(server.call("POST", "/api/years/2025/slips/confirm", { body: { revision, personId: sam.id } }));
+    year = await finish(alex, year.revision);
+    expect(year.returns.find((each) => each.personId === alex.id)!.steps.finish).toBe("todo");
+    const refused = await json<{ error: { code: string; message: string } }>(download(alex.id), 409);
+    expect(refused.error.message).toMatch(/Sam Martin's return: Say whether Sam Martin lived in Canada all year\./);
+
+    const adults = [{ personId: sam.id, province: "ON", residentAllYear: true }];
+    year = await json<TaxYear>(server.call("PUT", "/api/years/2025/personal-info", { body: { revision: year.revision, maritalStatus: "married", adults } }));
+    const debug = await json<Estimate>(server.call("GET", "/api/years/2025/estimate"));
+    // Now a full-year resident, Sam's return asks what it didn't before (the Canada training credit limit).
+    const estimate = await json<Estimate>(server.call("GET", "/api/years/2025/estimate"));
+    const assumed = Object.fromEntries(estimate.result.people.find((person) => person.personId === sam.id)!.estimates.map((item) => [item.question, item.assumed]));
+    year = await json<TaxYear>(server.call("PUT", "/api/years/2025/answers", { body: { revision: year.revision, personId: sam.id, answers: assumed } }));
+    expect(year.returns.map((each) => each.steps.finish)).toEqual(["done", "done"]);
+    expect((await download(alex.id)).status).toBe(200);
   });
 
   it("answers 404 for someone who has no return in the year", async () => {

@@ -63,6 +63,7 @@
         "tuitionTransfer": "0",
         "medicalExpenses": "0",
         "donations": "0",
+        "dependantNetIncome": "0",
         "unusedProvincialTuition": "0",
         "physicalActivityFees": "0",
         "childActivityFees": "0",
@@ -125,8 +126,8 @@
         "type": "T5008",
         "issuer": "Harbour Brokerage",
         "boxes": {
-          "20": "15000",
-          "21": "9000"
+          "20": "9000",
+          "21": "15000"
         }
       },
       {

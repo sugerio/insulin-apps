@@ -83,7 +83,8 @@ the Insulin template and stay byte-identical to it (`test/server/framework-templ
 - **Two permissions**, declared in `package.json` `insulin.permissions` and in `shared/access.ts`:
   `taxi.prepare` (Owner, Admin, Editor: every change) and `taxi.view` (every role: every read). Each
   route in `shared/routes.ts` names the one it needs and `mount()` in `app.ts` enforces it; decide by permission, never
-  by role name. `x-suger-app-permissions` narrows a role, never widens it (`readGrant`).
+  by role name. `x-suger-app-permissions` narrows a role, never widens it (`readGrant`); `taxi.prepare` includes
+  `taxi.view` (`withIncluded`), so a custom role with only Prepare returns still reads.
 - **The organization is the tenant.** Every row has `org_id`, and every statement names it, from the caller's
   `x-suger-organization-id`. Another organization's ids answer 404.
 - **The tick** (`/api/scheduled`): only `x-suger-access-via: schedule` with no identity passes; such a request is

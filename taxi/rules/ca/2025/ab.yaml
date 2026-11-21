@@ -144,8 +144,8 @@ lines:
   AB428.23:
     label: Alberta amount for an eligible dependant
     formula: >-
-      round((if(line.HH.partner == 0 and family.childrenUnder18 > 0, param.abSpouseBase, 0)) * line.RES.factor, 2)
-    source: "AB428 lines 21 to 23. The app assumes the child had no income"
+      round((if(line.HH.partner == 0 and family.childrenUnder18 > 0, max(0, param.abSpouseBase - answer.dependantNetIncome), 0)) * line.RES.factor, 2)
+    source: "AB428 lines 21 to 23: the base minus their net income"
   # Lines 24 and 35: Alberta kept the infirm dependant and caregiver amounts that the Canada caregiver amount replaced
   # federally. A dependant who lived in your home gets the caregiver amount, one who didn't the infirm dependant amount;
   # never both for the same dependant (5009-PC). Federal line 30450 refuses more than one adult dependant, so these read

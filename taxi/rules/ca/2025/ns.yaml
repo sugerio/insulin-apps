@@ -179,8 +179,8 @@ lines:
   NS428.16:
     label: Nova Scotia amount for an eligible dependant
     formula: >-
-      round((if(line.HH.partner == 0 and family.childrenUnder18 > 0, min(param.nsSpouseMax, param.nsSpouseBase - param.nsSpouseIncomeFloor), 0)) * line.RES.factor, 2)
-    source: "NS428 lines 14 to 16. The app assumes the child had no income, so $874 is taken off"
+      round((if(line.HH.partner == 0 and family.childrenUnder18 > 0, min(param.nsSpouseMax, max(0, param.nsSpouseBase - max(param.nsSpouseIncomeFloor, answer.dependantNetIncome))), 0)) * line.RES.factor, 2)
+    source: "NS428 lines 14 to 16: $12,618 less whichever is more, $874 or their net income"
   # The amount for infirm dependants needs no shared home, unlike the caregiver amount (line 28), which the app can't
   # tell; so the infirm amount is claimed for an adult relative with an impairment.
   NS428.17:

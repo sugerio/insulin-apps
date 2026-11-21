@@ -20,7 +20,7 @@ import { useMe } from "../auth/AuthProvider.tsx";
 import { personName, roleLabel } from "../auth/access.ts";
 import { PreviewStrip } from "../auth/guards.tsx";
 import {
-  NAVIGATION, groupNavigation, matchNavigation, navigationFor, navigationRole, readNavCollapse, writeNavCollapse, type NavState,
+  NAVIGATION, groupNavigation, matchNavigation, navigationFor, navigationRole, readNavCollapse, writeNavCollapse, type NavCollapse,
 } from "../lib/navigation.ts";
 import {
   createOrganizationLink, httpUrl, initials, PlatformAccountContext, settingsLinks, signOut, switchOrganization, usePlatformAccount,
@@ -33,9 +33,9 @@ import { CrumbSlotContext } from "./Page.tsx";
 // The shell around every page: the two-level navigation every Insulin app shares (DESIGN.md §3.2 at the repository's
 // root), built from shadcn/ui's Sidebar. Level 1 has the organization switcher, the app's sections from the navigation
 // manifest (`insulin.navigation` in package.json) for the person's role, then Docs and Settings, and the person at the
-// bottom. Level 2 opens for Settings, whose pages are Insulin Apps' own pages on insulinapps.com. Level 1 collapses to
-// its icons (a collapsed item's label is its `title` and `aria-label`), remembered in this browser (`insulin-nav`). On
-// a narrow screen both levels open stacked in a sheet from the menu button beside the breadcrumb.
+// bottom. Level 2 opens for Settings, whose pages are Insulin Apps' own pages on insulinapps.com. Each level collapses
+// to its icons (a collapsed item's label is its `title` and `aria-label`), remembered in this browser (`insulin-nav`).
+// On a narrow screen both levels open stacked in a sheet from the menu button beside the breadcrumb.
 
 const PANELS_ID = "insulin-nav";
 const L1_ID = "insulin-nav-primary";
@@ -43,21 +43,28 @@ const L2_ID = "insulin-nav-section";
 const SETTINGS_ICONS: Record<SettingsPage, LucideIcon> = { users: Users, integrations: Plug, api: KeyRound, "connect-ai": Bot };
 
 export function AppLayout() {
-  const [collapse, setCollapse] = useState<NavState>(readNavCollapse);
-  function setL1(value: NavState) {
-    writeNavCollapse(value);
-    setCollapse(value);
+  const [collapse, setCollapse] = useState<NavCollapse>(readNavCollapse);
+  function setLevel(level: keyof NavCollapse, value: NavCollapse[keyof NavCollapse]) {
+    setCollapse((current) => {
+      const next: NavCollapse = { ...current, [level]: value };
+      writeNavCollapse(next);
+      return next;
+    });
   }
+  // Level 1 is shadcn's sidebar, controlled here so its state is the one this browser remembers.
   return (
     <TooltipProvider>
-      <SidebarProvider open={collapse === "expanded"} onOpenChange={(open) => setL1(open ? "expanded" : "collapsed")}>
-        <Shell collapse={collapse} setL1={setL1} />
+      <SidebarProvider open={collapse.l1 === "expanded"} onOpenChange={(open) => setLevel("l1", open ? "expanded" : "collapsed")}>
+        <Shell collapse={collapse} setLevel={setLevel} />
       </SidebarProvider>
     </TooltipProvider>
   );
 }
 
-function Shell({ collapse, setL1 }: { collapse: NavState; setL1: (value: NavState) => void }) {
+function Shell({ collapse, setLevel }: {
+  collapse: NavCollapse;
+  setLevel: (level: keyof NavCollapse, value: NavCollapse[keyof NavCollapse]) => void;
+}) {
   const me = useMe();
   const location = useLocation();
   const platform = usePlatformAccount();
@@ -69,7 +76,8 @@ function Shell({ collapse, setL1 }: { collapse: NavState; setL1: (value: NavStat
   const items = useMemo(() => navigationFor(NAVIGATION, navigationRole(me)), [me]);
   const inDocs = location.pathname === "/docs" || location.pathname.startsWith("/docs/");
   const match = inDocs ? null : matchNavigation(items, location.pathname);
-  const l1Collapsed = collapse === "collapsed" && !isMobile;
+  const l1Collapsed = collapse.l1 === "collapsed" && !isMobile;
+  const l2Collapsed = collapse.l2 === "collapsed" && !isMobile;
 
   // A new page closes the narrow screens' sheet and Settings' column.
   useEffect(() => {
@@ -91,10 +99,9 @@ function Shell({ collapse, setL1 }: { collapse: NavState; setL1: (value: NavStat
     setSettingsOpen(false);
     setOpenMobile(false);
   };
-  const settings = <SettingsItems platform={platform} collapsed={false} />;
 
   return (
-    <div className="flex min-h-svh w-full" data-insulin-shell="" data-l1={collapse} data-menu={openMobile ? "open" : "closed"}>
+    <div className="flex min-h-svh w-full" data-insulin-shell="" data-l1={collapse.l1} data-l2={collapse.l2} data-menu={openMobile ? "open" : "closed"}>
       <a className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-50 focus:rounded-md focus:bg-background focus:px-3 focus:py-2 focus:text-sm focus:shadow-md"
         href="#main">Skip to content</a>
       <div id={PANELS_ID} className="contents">
@@ -142,7 +149,7 @@ function Shell({ collapse, setL1 }: { collapse: NavState; setL1: (value: NavStat
             {isMobile && settingsOpen ? (
               <SidebarGroup id={L2_ID} className="border-t border-sidebar-border">
                 <SidebarGroupLabel>Settings</SidebarGroupLabel>
-                <nav aria-label="Section">{settings}</nav>
+                <nav aria-label="Section"><SettingsItems platform={platform} collapsed={false} /></nav>
               </SidebarGroup>
             ) : null}
           </SidebarContent>
@@ -151,22 +158,27 @@ function Shell({ collapse, setL1 }: { collapse: NavState; setL1: (value: NavStat
             {isMobile ? null : (
               <SidebarMenu>
                 <SidebarMenuItem>
-                  <CollapseToggle collapsed={collapse === "collapsed"} controls={L1_ID} onToggle={() => setL1(collapse === "collapsed" ? "expanded" : "collapsed")} />
+                  <CollapseToggle collapsed={collapse.l1 === "collapsed"} controls={L1_ID} name="navigation" menu
+                    onToggle={() => setLevel("l1", collapse.l1 === "collapsed" ? "expanded" : "collapsed")} />
                 </SidebarMenuItem>
               </SidebarMenu>
             )}
           </SidebarFooter>
         </Sidebar>
         {isMobile ? null : (
-          <Sidebar collapsible="none" id={L2_ID} hidden={!settingsOpen}
-            className="group sticky top-0 h-svh w-56 shrink-0 border-r border-sidebar-border">
+          <Sidebar collapsible="none" id={L2_ID} hidden={!settingsOpen} data-collapsible={l2Collapsed ? "icon" : ""}
+            data-state={l2Collapsed ? "collapsed" : "expanded"}
+            className={cn("group sticky top-0 h-svh shrink-0 border-r border-sidebar-border transition-[width] duration-200 ease-linear",
+              l2Collapsed ? "w-(--sidebar-width-icon)" : "w-56")}>
             {settingsOpen ? (
               <>
-                <SidebarHeader className="flex-row items-center gap-2">
-                  <h2 className="min-w-0 flex-1 truncate px-2 text-sm font-semibold">Settings</h2>
+                <SidebarHeader className="flex-row items-center gap-2 group-data-[collapsible=icon]:justify-center">
+                  <h2 className="min-w-0 flex-1 truncate px-2 text-sm font-semibold group-data-[collapsible=icon]:sr-only">Settings</h2>
+                  <CollapseToggle collapsed={l2Collapsed} controls={L2_ID} name="Settings"
+                    onToggle={() => setLevel("l2", l2Collapsed ? "expanded" : "collapsed")} />
                 </SidebarHeader>
                 <SidebarContent className="px-2">
-                  <nav aria-label="Section">{settings}</nav>
+                  <nav aria-label="Section"><SettingsItems platform={platform} collapsed={l2Collapsed} /></nav>
                 </SidebarContent>
               </>
             ) : null}
@@ -215,15 +227,29 @@ function NavEntry({ to, label, icon, current, collapsed, onClick }: {
   );
 }
 
-/** Level 1's toggle, in its menu at the foot. */
-function CollapseToggle({ collapsed, controls, onToggle }: { collapsed: boolean; controls: string; onToggle: () => void }) {
-  const label = `${collapsed ? "Expand" : "Collapse"} navigation`;
+/** A level's toggle: level 1's sits in its menu at the foot, level 2's in its header. */
+function CollapseToggle({ collapsed, controls, name, menu = false, onToggle }: {
+  collapsed: boolean;
+  controls: string;
+  name: string;
+  menu?: boolean;
+  onToggle: () => void;
+}) {
+  const label = `${collapsed ? "Expand" : "Collapse"} ${name}`;
   const Glyph = collapsed ? PanelLeftOpen : PanelLeftClose;
+  const props = { type: "button" as const, "aria-expanded": !collapsed, "aria-controls": controls, "aria-label": label, title: label, onClick: onToggle };
+  if (menu) {
+    return (
+      <SidebarMenuButton {...props}>
+        <Glyph aria-hidden="true" />
+        <span>{collapsed ? "Expand" : "Collapse"}</span>
+      </SidebarMenuButton>
+    );
+  }
   return (
-    <SidebarMenuButton type="button" aria-expanded={!collapsed} aria-controls={controls} aria-label={label} title={label} onClick={onToggle}>
+    <Button variant="ghost" size="icon-sm" className="shrink-0" {...props}>
       <Glyph aria-hidden="true" />
-      <span>{collapsed ? "Expand" : "Collapse"}</span>
-    </SidebarMenuButton>
+    </Button>
   );
 }
 

@@ -1,3 +1,4 @@
+import { Dec } from "./engine/decimal.ts";
 import type { Module, Question, RuleSet } from "./engine/rules.ts";
 import type { Slip } from "./returns.ts";
 
@@ -44,4 +45,37 @@ export function leftInModule(
     if (answers[question.id] === undefined) left.push({ question: question.id, ask: question.ask, reason: "unanswered" });
   }
   return left;
+}
+
+/** Boxes AI couldn't read that have no amount: the slip can't be confirmed until they are entered (0 when blank on the slip). */
+export function unreadBoxes(slip: Pick<Slip, "boxes" | "unsure">): string[] {
+  return slip.unsure.filter((box) => !(box in slip.boxes));
+}
+
+type SlipLike = Pick<Slip, "id" | "personId" | "type" | "issuer" | "boxes">;
+
+/**
+ * Two slips that may be one: the same person's, of one type and issuer (case and spaces aside), with no box holding
+ * different amounts, even when they have no box in common (a blurred copy with none read). Never merged: two partly read
+ * slips of one issuer can be different ones, so a person decides.
+ */
+export function maybeSameSlip(a: Omit<SlipLike, "id">, b: Omit<SlipLike, "id">): boolean {
+  if (a.personId !== b.personId || a.type !== b.type || a.issuer.trim().toLowerCase() !== b.issuer.trim().toLowerCase()) return false;
+  return Object.keys(a.boxes)
+    .filter((box) => b.boxes[box] !== undefined)
+    .every((box) => Dec.from(a.boxes[box]!).eq(b.boxes[box]!));
+}
+
+/**
+ * The slips that may be the same as one before them in the list, each with the first such slip, for Confirm to point
+ * out. Receipts aren't compared: two can hold the same amount from the same place (a monthly prescription).
+ */
+export function possibleDuplicates<T extends SlipLike>(rules: RuleSet, slips: T[]): Map<string, T> {
+  const flagged = new Map<string, T>();
+  slips.forEach((slip, index) => {
+    if (rules.slips.get(slip.type)?.receipt) return;
+    const earlier = slips.slice(0, index).find((other) => maybeSameSlip(other, slip));
+    if (earlier) flagged.set(slip.id, earlier);
+  });
+  return flagged;
 }

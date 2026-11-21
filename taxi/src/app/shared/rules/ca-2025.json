@@ -2859,8 +2859,8 @@
     },
     "AB428.23": {
       "label": "Alberta amount for an eligible dependant",
-      "formula": "round((if(line.HH.partner == 0 and family.childrenUnder18 > 0, param.abSpouseBase, 0)) * line.RES.factor, 2)",
-      "source": "AB428 lines 21 to 23. The app assumes the child had no income"
+      "formula": "round((if(line.HH.partner == 0 and family.childrenUnder18 > 0, max(0, param.abSpouseBase - answer.dependantNetIncome), 0)) * line.RES.factor, 2)",
+      "source": "AB428 lines 21 to 23: the base minus their net income"
     },
     "AB428.24": {
       "label": "Alberta amount for infirm dependants age 18 or older",
@@ -3029,8 +3029,8 @@
     },
     "BC428.23": {
       "label": "British Columbia amount for an eligible dependant",
-      "formula": "round((if(line.HH.partner == 0 and family.childrenUnder18 > 0, min(param.bcSpouseMax, param.bcSpouseBase), 0)) * line.RES.factor, 2)",
-      "source": "BC428 lines 21 to 23. The app assumes the child had no income"
+      "formula": "round((if(line.HH.partner == 0 and family.childrenUnder18 > 0, min(param.bcSpouseMax, max(0, param.bcSpouseBase - answer.dependantNetIncome)), 0)) * line.RES.factor, 2)",
+      "source": "BC428 lines 21 to 23: the base minus their net income, up to the maximum"
     },
     "BC428.24": {
       "label": "British Columbia caregiver amount",
@@ -3780,10 +3780,15 @@
       "formula": "if(answer.hasWorkFromHome, min(round(answer.homeOfficeExpenses * answer.homeOfficeShare / 100, 2), max(0, line.T1.10100 + line.T1.10400 - line.T1.20700 - line.T1.21200)), 0)",
       "source": "Form T777, lines 48 to 54: home expenses times the employment-use share, up to employment income"
     },
+    "DED.foreignTax": {
+      "label": "Foreign tax on foreign interest and dividends above 15% of them",
+      "formula": "if(answer.hasForeignIncome, max(0, answer.foreignInvestmentTax - round(answer.foreignInvestmentIncome * param.foreignPropertyTaxRate, 2)), 0)",
+      "source": "Income Tax Act 20(11): deducted on line 23200 instead of counting for the foreign tax credit"
+    },
     "T1.23200": {
       "label": "Other deductions",
-      "formula": "if(answer.hasForeignIncome, max(0, answer.foreignInvestmentTax - round(answer.foreignInvestmentIncome * param.foreignPropertyTaxRate, 2)), 0) + sum(T4E.box30)",
-      "source": "Foreign tax on foreign interest and dividends above 15% of them (Income Tax Act 20(11)), and EI benefits repaid (box 30 of the T4E)"
+      "formula": "sum(T4AOAS.box20) + line.DED.foreignTax + sum(T4E.box30)",
+      "source": "An OAS overpayment recovered (T4A(OAS) box 20), foreign tax on foreign interest and dividends above 15% of them (Income Tax Act 20(11)), and EI benefits repaid (box 30 of the T4E)"
     },
     "DED.other": {
       "label": "Deductions other than child care",
@@ -4080,8 +4085,8 @@
     },
     "T1.30400": {
       "label": "Amount for an eligible dependant",
-      "formula": "round((if(line.HH.partner == 0 and family.childrenUnder18 > 0, line.FULL.30000, 0)) * line.RES.factor, 2)",
-      "source": "Schedule 5 line 30400: for a single parent, one child under 18 who lived with you. The app assumes the child had no income"
+      "formula": "round((if(line.HH.partner == 0 and family.childrenUnder18 > 0, max(0, line.FULL.30000 - answer.dependantNetIncome), 0)) * line.RES.factor, 2)",
+      "source": "Schedule 5 line 30400: for a single parent, one child under 18 who lived with you: your basic personal amount minus their net income"
     },
     "T1.30425": {
       "label": "Canada caregiver amount for spouse or common-law partner",
@@ -4256,8 +4261,8 @@
     "T1.42900": {"label":"Basic federal tax","formula":"max(0, line.T1.40400 - line.T1.35000 - line.T1.40425)"},
     "FTC.netForeign": {
       "label": "Net foreign non-business income",
-      "formula": "if(answer.hasForeignIncome, answer.foreignInvestmentIncome + answer.foreignEmploymentIncome - (line.T1.23200 - sum(T4E.box30)), 0)",
-      "source": "Form T2209, note 2: the foreign income less the foreign tax deducted under 20(11) (line 23200, without the EI benefits repaid)"
+      "formula": "if(answer.hasForeignIncome, answer.foreignInvestmentIncome + answer.foreignEmploymentIncome - line.DED.foreignTax, 0)",
+      "source": "Form T2209, note 2: the foreign income less the foreign tax deducted under 20(11) (part of line 23200)"
     },
     "FTC.eligibleTax": {
       "label": "Non-business income tax paid to a foreign country",
@@ -4504,8 +4509,8 @@
     },
     "S3.13200": {
       "label": "Gain or loss on publicly traded shares and mutual fund units",
-      "formula": "sum(T5008.box20) - sum(T5008.box21)",
-      "source": "Schedule 3 line 4: proceeds (T5008 box 20) minus cost (box 21)"
+      "formula": "if(count(T5008.box20) != count(T5008.box21), unsupported(\"A T5008 without its cost or book value (box 20) or its proceeds (box 21) can't be counted. Brokers often leave the cost blank: type it from your records into the slip's box 20 on the Confirm step\"), sum(T5008.box21) - sum(T5008.box20))",
+      "source": "Schedule 3 line 4: proceeds (T5008 box 21) minus cost or book value (box 20)"
     },
     "S3.17400": {"label":"Capital gains from T5 slips","formula":"sum(T5.box18)"},
     "S3.17600": {"label":"Capital gains from T3 slips","formula":"sum(T3.box21)"},
@@ -4637,8 +4642,8 @@
     },
     "MB428.16": {
       "label": "Manitoba amount for an eligible dependant",
-      "formula": "round((if(line.HH.partner == 0 and family.childrenUnder18 > 0, param.mbSpouseBase, 0)) * line.RES.factor, 2)",
-      "source": "MB428 lines 14 to 16. The app assumes the child had no income"
+      "formula": "round((if(line.HH.partner == 0 and family.childrenUnder18 > 0, max(0, param.mbSpouseBase - answer.dependantNetIncome), 0)) * line.RES.factor, 2)",
+      "source": "MB428 lines 14 to 16: the base minus their net income"
     },
     "MB428.17": {
       "label": "Manitoba amount for infirm dependants age 18 or older",
@@ -5024,8 +5029,8 @@
     },
     "NB428.16": {
       "label": "New Brunswick amount for an eligible dependant",
-      "formula": "round((if(line.HH.partner == 0 and family.childrenUnder18 > 0, min(param.nbSpouseMax, param.nbSpouseBase), 0)) * line.RES.factor, 2)",
-      "source": "NB428 lines 14 to 16. The app assumes the child had no income"
+      "formula": "round((if(line.HH.partner == 0 and family.childrenUnder18 > 0, min(param.nbSpouseMax, max(0, param.nbSpouseBase - answer.dependantNetIncome)), 0)) * line.RES.factor, 2)",
+      "source": "NB428 lines 14 to 16: the base minus their net income, up to the maximum"
     },
     "NB.infirmAmount": {
       "label": "New Brunswick amount for an infirm dependant, before choosing",
@@ -5287,8 +5292,8 @@
     },
     "NL428.23": {
       "label": "Newfoundland and Labrador amount for an eligible dependant",
-      "formula": "round((if(line.HH.partner == 0 and family.childrenUnder18 > 0, min(param.nlSpouseMax, param.nlSpouseBase), 0)) * line.RES.factor, 2)",
-      "source": "NL428 lines 21 to 23. The app assumes the child had no income"
+      "formula": "round((if(line.HH.partner == 0 and family.childrenUnder18 > 0, min(param.nlSpouseMax, max(0, param.nlSpouseBase - answer.dependantNetIncome)), 0)) * line.RES.factor, 2)",
+      "source": "NL428 lines 21 to 23: the base minus their net income, up to the maximum"
     },
     "NL.infirmAmount": {
       "label": "Newfoundland and Labrador amount for an infirm dependant, before choosing",
@@ -5580,8 +5585,8 @@
     },
     "NS428.16": {
       "label": "Nova Scotia amount for an eligible dependant",
-      "formula": "round((if(line.HH.partner == 0 and family.childrenUnder18 > 0, min(param.nsSpouseMax, param.nsSpouseBase - param.nsSpouseIncomeFloor), 0)) * line.RES.factor, 2)",
-      "source": "NS428 lines 14 to 16. The app assumes the child had no income, so $874 is taken off"
+      "formula": "round((if(line.HH.partner == 0 and family.childrenUnder18 > 0, min(param.nsSpouseMax, max(0, param.nsSpouseBase - max(param.nsSpouseIncomeFloor, answer.dependantNetIncome))), 0)) * line.RES.factor, 2)",
+      "source": "NS428 lines 14 to 16: $12,618 less whichever is more, $874 or their net income"
     },
     "NS428.17": {
       "label": "Nova Scotia amount for infirm dependants age 18 or older",
@@ -5793,8 +5798,8 @@
     },
     "NT428.16": {
       "label": "Northwest Territories amount for an eligible dependant",
-      "formula": "round((if(line.HH.partner == 0 and family.childrenUnder18 > 0, param.ntSpouseBase, 0)) * line.RES.factor, 2)",
-      "source": "NT428 lines 14 to 16. The app assumes the child had no income"
+      "formula": "round((if(line.HH.partner == 0 and family.childrenUnder18 > 0, max(0, param.ntSpouseBase - answer.dependantNetIncome), 0)) * line.RES.factor, 2)",
+      "source": "NT428 lines 14 to 16: the base minus their net income"
     },
     "NT428.17": {
       "label": "Northwest Territories amount for infirm dependants age 18 or older",
@@ -5999,8 +6004,8 @@
     },
     "NU428.16": {
       "label": "Nunavut amount for an eligible dependant",
-      "formula": "round((if(line.HH.partner == 0 and family.childrenUnder18 > 0, param.nuSpouseBase, 0)) * line.RES.factor, 2)",
-      "source": "NU428 lines 14 to 16. The app assumes the child had no income"
+      "formula": "round((if(line.HH.partner == 0 and family.childrenUnder18 > 0, max(0, param.nuSpouseBase - answer.dependantNetIncome), 0)) * line.RES.factor, 2)",
+      "source": "NU428 lines 14 to 16: the base minus their net income"
     },
     "NU428.17": {
       "label": "Nunavut amount for infirm dependants age 18 or older",
@@ -6204,8 +6209,8 @@
     },
     "ON428.16": {
       "label": "Ontario amount for an eligible dependant",
-      "formula": "round((if(line.HH.partner == 0 and family.childrenUnder18 > 0, min(param.onSpouseMax, param.onSpouseBase), 0)) * line.RES.factor, 2)",
-      "source": "ON428 lines 14 to 16. The app assumes the child had no income"
+      "formula": "round((if(line.HH.partner == 0 and family.childrenUnder18 > 0, min(param.onSpouseMax, max(0, param.onSpouseBase - answer.dependantNetIncome)), 0)) * line.RES.factor, 2)",
+      "source": "ON428 lines 14 to 16: the base minus their net income, up to the maximum"
     },
     "ON428.17": {
       "label": "Ontario caregiver amount",
@@ -6521,8 +6526,8 @@
     },
     "PE428.16": {
       "label": "Prince Edward Island amount for an eligible dependant",
-      "formula": "round((if(line.HH.partner == 0 and family.childrenUnder18 > 0, min(param.peSpouseMax, param.peSpouseBase), 0)) * line.RES.factor, 2)",
-      "source": "PE428 lines 14 to 16. The app assumes the child had no income"
+      "formula": "round((if(line.HH.partner == 0 and family.childrenUnder18 > 0, min(param.peSpouseMax, max(0, param.peSpouseBase - answer.dependantNetIncome)), 0)) * line.RES.factor, 2)",
+      "source": "PE428 lines 14 to 16: the base minus their net income, up to the maximum"
     },
     "PE428.17": {
       "label": "Prince Edward Island amount for infirm dependants age 18 or older",
@@ -7199,7 +7204,7 @@
     },
     "QC.scope": {
       "label": "Quebec return cases this app doesn't handle",
-      "formula": "if(not person.residentAllYear, unsupported(\"A Quebec return for a year you moved to or from Canada isn't handled by this app yet\"), if(count(T4.box14) > count(RL1.boxA), unsupported(\"A Quebec resident's employer in Quebec issues an RL-1 with each T4: upload it. Employment outside Quebec (a T4 without an RL-1, Schedule R Part B) isn't handled by this app yet\"), if(answer.hasRentalIncome, unsupported(\"Rental income on the Quebec return (form TP-128-V) isn't handled by this app yet\"), if(answer.hasForeignIncome, unsupported(\"Foreign income on the Quebec return (the foreign tax credit, Schedule E) isn't handled by this app yet\"), if(sum(T4AOAS.box21) > 0, unsupported(\"Net federal supplements on the Quebec return (lines 148 and 295) aren't handled by this app yet\"), if(answer.hasMovingExpenses, unsupported(\"Moving expenses on the Quebec return (form TP-348-V) aren't handled by this app yet\"), 0))))))"
+      "formula": "if(not person.residentAllYear, unsupported(\"A Quebec return for a year you moved to or from Canada isn't handled by this app yet\"), if(count(T4.box14) > count(RL1.boxA), unsupported(\"A Quebec resident's employer in Quebec issues an RL-1 with each T4: upload it. Employment outside Quebec (a T4 without an RL-1, Schedule R Part B) isn't handled by this app yet\"), if(answer.hasRentalIncome, unsupported(\"Rental income on the Quebec return (form TP-128-V) isn't handled by this app yet\"), if(answer.hasForeignIncome, unsupported(\"Foreign income on the Quebec return (the foreign tax credit, Schedule E) isn't handled by this app yet\"), if(sum(T4AOAS.box21) > 0, unsupported(\"Net federal supplements on the Quebec return (lines 148 and 295) aren't handled by this app yet\"), if(sum(T4AOAS.box20) > 0, unsupported(\"An Old Age Security overpayment recovered (box 20 of the T4A(OAS)) on the Quebec return isn't handled by this app yet\"), if(answer.hasMovingExpenses, unsupported(\"Moving expenses on the Quebec return (form TP-348-V) aren't handled by this app yet\"), 0)))))))"
     },
     "TP1.97": {"label":"QPIP premium","formula":"sum(RL1.boxH)","source":"TP-1 line 97: box H of your RL-1 slips"},
     "TP1.98": {"label":"QPP contribution","formula":"sum(RL1.boxB_A)","source":"TP-1 line 98: box B.A of your RL-1 slips"},
@@ -7618,8 +7623,8 @@
     },
     "SK428.16": {
       "label": "Saskatchewan amount for an eligible dependant",
-      "formula": "round((if(line.HH.partner == 0 and family.childrenUnder18 > 0, min(param.skSpouseMax, param.skSpouseBase), 0)) * line.RES.factor, 2)",
-      "source": "SK428 lines 14 to 16. The app assumes the child had no income"
+      "formula": "round((if(line.HH.partner == 0 and family.childrenUnder18 > 0, min(param.skSpouseMax, max(0, param.skSpouseBase - answer.dependantNetIncome)), 0)) * line.RES.factor, 2)",
+      "source": "SK428 lines 14 to 16: the base minus their net income, up to the maximum"
     },
     "SK428.17": {
       "label": "Saskatchewan amount for infirm dependants age 18 or older",
@@ -8911,6 +8916,12 @@
       "receipts": "DONATION",
       "default": "0"
     },
+    "dependantNetIncome": {
+      "type": "money",
+      "ask": "Your eligible dependant's 2025 net income",
+      "module": "credits",
+      "help": "The net income (line 23600 of their return, if they file one) of the child you claim the amount for an eligible dependant for. The amount goes down by it. Enter 0 if they had no income."
+    },
     "childActivityFees": {
       "type": "money",
       "ask": "Children's sports, arts and activity fees",
@@ -9133,6 +9144,10 @@
         "11": "Taxable amount of dividends other than eligible dividends",
         "12": "Dividend tax credit for dividends other than eligible dividends",
         "13": "Interest from Canadian sources",
+        "14": "Other income from Canadian sources",
+        "15": "Foreign income",
+        "16": "Foreign tax paid",
+        "17": "Royalties from Canadian sources",
         "18": "Capital gains dividends",
         "24": "Actual amount of eligible dividends",
         "25": "Taxable amount of eligible dividends",
@@ -9166,7 +9181,7 @@
     "T5008": {
       "title": "T5008 Statement of Securities Transactions",
       "about": "A sale of shares, bonds or fund units through a broker, with the proceeds and, when the broker knows it, the cost",
-      "boxes": {"20":"Proceeds of disposition or settlement amount","21":"Cost or book value"},
+      "boxes": {"20":"Cost or book value","21":"Proceeds of disposition or settlement amount"},
       "informational": [],
       "counts": [],
       "receipt": false,
@@ -9226,7 +9241,8 @@
         "020": "Self-employed commissions",
         "022": "Income tax deducted",
         "024": "Annuities",
-        "028": "Other income"
+        "028": "Other income",
+        "048": "Fees for services"
       },
       "informational": [],
       "counts": [],
@@ -10115,7 +10131,7 @@
       "url": "https://www.canada.ca/content/dam/cra-arc/formspubs/pbg/5000-s3/5000-s3-25e.pdf",
       "sha256": "ec701834cf36e16319a2d44cd208819f1508ca6a80ec9b95110dc481cdeaabc1",
       "pages": 4,
-      "applies": "line.S3.19700 != 0 or sum(T5008.box20) > 0 or line.S3.13599 > 0 or (answer.soldProperty and answer.propertyUse == \"principal_residence\")",
+      "applies": "line.S3.19700 != 0 or sum(T5008.box21) > 0 or line.S3.13599 > 0 or (answer.soldProperty and answer.propertyUse == \"principal_residence\")",
       "fields": [
         {"key":"4","kind":"amount","page":3,"x":552,"y":449.3,"value":"line.S3.13200"},
         {"key":"5","kind":"amount","page":3,"x":552,"y":389.3,"value":"line.S3.13800"},
@@ -10131,7 +10147,7 @@
         {"key":"22","kind":"amount","page":4,"x":552,"y":485.3,"value":"line.S3.19700"},
         {"key":"24","kind":"amount","page":4,"x":552,"y":455.3,"value":"line.S3.19900"},
         {"key":"26","kind":"amount","page":4,"x":552,"y":389.3,"value":"line.S3.19900"},
-        {"key":"13199","kind":"amount","page":3,"x":315,"y":449.3,"value":"sum(T5008.box20)"},
+        {"key":"13199","kind":"amount","page":3,"x":315,"y":449.3,"value":"sum(T5008.box21)"},
         {"key":"13599","kind":"amount","page":3,"x":315,"y":389.3,"value":"line.S3.13599"},
         {
           "key": "flippedNo",
@@ -10207,6 +10223,15 @@
         },
         {"key":"p4:1","kind":"amount","page":4,"x":552,"y":593.3,"value":"line.T1.30000","when":"line.T1.30400 > 0"},
         {"key":"p4:3","kind":"amount","page":4,"x":552,"y":551.3,"value":"line.T1.30000","when":"line.T1.30400 > 0"},
+        {
+          "key": "p4:4",
+          "kind": "amount",
+          "page": 4,
+          "x": 552,
+          "y": 536.3,
+          "value": "answer.dependantNetIncome",
+          "when": "line.T1.30400 > 0"
+        },
         {"key":"p4:5","kind":"amount","page":4,"x":552,"y":509.3,"value":"line.T1.30400"},
         {
           "key": "p4:2.2",
@@ -11965,6 +11990,14 @@
           "value": "if(line.HH.partner == 1, line.HH.spouseNetIncome, 0)"
         },
         {"key":"13","kind":"amount","page":1,"x":552,"y":338.3,"value":"line.ON428.13"},
+        {
+          "key": "15",
+          "kind": "amount",
+          "page": 1,
+          "x": 444,
+          "y": 296.3,
+          "value": "if(line.HH.partner == 0 and family.childrenUnder18 > 0, answer.dependantNetIncome, 0)"
+        },
         {"key":"16","kind":"amount","page":1,"x":552,"y":281.3,"value":"line.ON428.16"},
         {"key":"17","kind":"amount","page":1,"x":552,"y":266.3,"value":"line.ON428.17"},
         {"key":"18","kind":"amount","page":1,"x":552,"y":251.3,"value":"line.ON428.18"},
@@ -12134,6 +12167,14 @@
           "value": "if(line.HH.partner == 1, line.HH.spouseNetIncome, 0)"
         },
         {"key":"20","kind":"amount","page":1,"x":552,"y":164.3,"value":"line.BC428.20"},
+        {
+          "key": "22",
+          "kind": "amount",
+          "page": 1,
+          "x": 444,
+          "y": 122.3,
+          "value": "if(line.HH.partner == 0 and family.childrenUnder18 > 0, answer.dependantNetIncome, 0)"
+        },
         {"key":"23","kind":"amount","page":1,"x":552,"y":107.3,"value":"line.BC428.23"},
         {"key":"24","kind":"amount","page":1,"x":552,"y":92.3,"value":"line.BC428.24"},
         {"key":"25","kind":"amount","page":1,"x":552,"y":77.3,"value":"line.BC428.25"},
@@ -12312,6 +12353,14 @@
           "value": "if(line.HH.partner == 1, line.HH.spouseNetIncome, 0)"
         },
         {"key":"20","kind":"amount","page":1,"x":552,"y":158.3,"value":"line.AB428.20"},
+        {
+          "key": "22",
+          "kind": "amount",
+          "page": 1,
+          "x": 444,
+          "y": 116.3,
+          "value": "if(line.HH.partner == 0 and family.childrenUnder18 > 0, answer.dependantNetIncome, 0)"
+        },
         {"key":"23","kind":"amount","page":1,"x":552,"y":101.3,"value":"line.AB428.23"},
         {"key":"24","kind":"amount","page":1,"x":552,"y":86.3,"value":"line.AB428.24"},
         {"key":"25","kind":"amount","page":1,"x":552,"y":71.3,"value":"line.AB428.25"},
@@ -12460,6 +12509,14 @@
           "value": "if(line.HH.partner == 1, line.HH.spouseNetIncome, 0)"
         },
         {"key":"13","kind":"amount","page":1,"x":552,"y":341.3,"value":"line.MB428.13"},
+        {
+          "key": "15",
+          "kind": "amount",
+          "page": 1,
+          "x": 444,
+          "y": 299.3,
+          "value": "if(line.HH.partner == 0 and family.childrenUnder18 > 0, answer.dependantNetIncome, 0)"
+        },
         {"key":"16","kind":"amount","page":1,"x":552,"y":284.3,"value":"line.MB428.16"},
         {"key":"17","kind":"amount","page":1,"x":552,"y":269.3,"value":"line.MB428.17"},
         {
@@ -12926,6 +12983,14 @@
           "value": "if(line.HH.partner == 1, line.HH.spouseNetIncome, 0)"
         },
         {"key":"13","kind":"amount","page":1,"x":552,"y":347.3,"value":"line.SK428.13"},
+        {
+          "key": "15",
+          "kind": "amount",
+          "page": 1,
+          "x": 444,
+          "y": 305.3,
+          "value": "if(line.HH.partner == 0 and family.childrenUnder18 > 0, answer.dependantNetIncome, 0)"
+        },
         {"key":"16","kind":"amount","page":1,"x":552,"y":290.3,"value":"line.SK428.16"},
         {"key":"17","kind":"amount","page":1,"x":552,"y":275.3,"value":"line.SK428.17"},
         {"key":"18","kind":"amount","page":1,"x":552,"y":248.1,"value":"line.SK428.18"},
@@ -13100,6 +13165,14 @@
           "value": "if(line.HH.partner == 1, line.HH.spouseNetIncome, 0)"
         },
         {"key":"13","kind":"amount","page":1,"x":552,"y":335.3,"value":"line.NB428.13"},
+        {
+          "key": "15",
+          "kind": "amount",
+          "page": 1,
+          "x": 444,
+          "y": 293.3,
+          "value": "if(line.HH.partner == 0 and family.childrenUnder18 > 0, answer.dependantNetIncome, 0)"
+        },
         {"key":"16","kind":"amount","page":1,"x":552,"y":278.3,"value":"line.NB428.16"},
         {"key":"17","kind":"amount","page":1,"x":552,"y":263.3,"value":"line.NB428.17"},
         {
@@ -13395,6 +13468,14 @@
           "value": "if(line.HH.partner == 1, line.HH.spouseNetIncome, 0)"
         },
         {"key":"20","kind":"amount","page":1,"x":552,"y":164.3,"value":"line.NL428.20"},
+        {
+          "key": "22",
+          "kind": "amount",
+          "page": 1,
+          "x": 444,
+          "y": 122.3,
+          "value": "if(line.HH.partner == 0 and family.childrenUnder18 > 0, answer.dependantNetIncome, 0)"
+        },
         {"key":"23","kind":"amount","page":1,"x":552,"y":107.3,"value":"line.NL428.23"},
         {"key":"24","kind":"amount","page":1,"x":552,"y":92.3,"value":"line.NL428.24"},
         {
@@ -13731,7 +13812,7 @@
           "page": 1,
           "x": 444,
           "y": 278.3,
-          "value": "if(line.NS428.16 > 0, param.nsSpouseIncomeFloor, 0)"
+          "value": "if(line.HH.partner == 0 and family.childrenUnder18 > 0, max(param.nsSpouseIncomeFloor, answer.dependantNetIncome), 0)"
         },
         {"key":"16","kind":"amount","page":1,"x":552,"y":263.3,"value":"line.NS428.16"},
         {"key":"17","kind":"amount","page":1,"x":552,"y":248.3,"value":"line.NS428.17"},
@@ -14057,6 +14138,14 @@
           "value": "if(line.HH.partner == 1, line.HH.spouseNetIncome, 0)"
         },
         {"key":"13","kind":"amount","page":1,"x":552,"y":305.3,"value":"line.PE428.13"},
+        {
+          "key": "15",
+          "kind": "amount",
+          "page": 1,
+          "x": 444,
+          "y": 263.3,
+          "value": "if(line.HH.partner == 0 and family.childrenUnder18 > 0, answer.dependantNetIncome, 0)"
+        },
         {"key":"16","kind":"amount","page":1,"x":552,"y":248.3,"value":"line.PE428.16"},
         {"key":"17","kind":"amount","page":1,"x":552,"y":233.3,"value":"line.PE428.17"},
         {"key":"18","kind":"amount","page":1,"x":552,"y":206.3,"value":"line.PE428.18"},
@@ -14631,6 +14720,14 @@
           "value": "if(line.HH.partner == 1, line.HH.spouseNetIncome, 0)"
         },
         {"key":"13","kind":"amount","page":1,"x":552,"y":338.3,"value":"line.NT428.13"},
+        {
+          "key": "15",
+          "kind": "amount",
+          "page": 1,
+          "x": 444,
+          "y": 296.3,
+          "value": "if(line.HH.partner == 0 and family.childrenUnder18 > 0, answer.dependantNetIncome, 0)"
+        },
         {"key":"16","kind":"amount","page":1,"x":552,"y":281.3,"value":"line.NT428.16"},
         {"key":"17","kind":"amount","page":1,"x":552,"y":266.3,"value":"line.NT428.17"},
         {
@@ -14966,6 +15063,14 @@
           "value": "if(line.HH.partner == 1, line.HH.spouseNetIncome, 0)"
         },
         {"key":"13","kind":"amount","page":1,"x":552,"y":338.3,"value":"line.NU428.13"},
+        {
+          "key": "15",
+          "kind": "amount",
+          "page": 1,
+          "x": 444,
+          "y": 296.3,
+          "value": "if(line.HH.partner == 0 and family.childrenUnder18 > 0, answer.dependantNetIncome, 0)"
+        },
         {"key":"16","kind":"amount","page":1,"x":552,"y":281.3,"value":"line.NU428.16"},
         {"key":"17","kind":"amount","page":1,"x":552,"y":266.3,"value":"line.NU428.17"},
         {"key":"18","kind":"amount","page":1,"x":552,"y":239.3,"value":"line.NU428.18"},
@@ -17761,5 +17866,5 @@
     }
   },
   "outcome": "RESULT.net",
-  "version": "dfd9df3fd94826c5"
+  "version": "548f2e82cab88f12"
 }

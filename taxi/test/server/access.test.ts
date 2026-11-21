@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import type { ApiCatalog, Me, Person } from "#shared";
+import { type ApiCatalog, type Me, type Person } from "#shared";
 import { OTHER_ORG, OWNER, VIEWER, startServer, type TestServer } from "../support/server.ts";
 
 let server: TestServer;
@@ -50,6 +50,19 @@ describe("permissions", () => {
     expect((await server.call("GET", "/api/years", { as: nothing })).status).toBe(403);
   });
 
+  it("lets a role narrowed to Prepare returns read too, as preparing includes viewing", async () => {
+    await seed();
+    const prepareOnly = { ...OWNER, role: "EDITOR" as const, permissions: "taxi.prepare" };
+    expect((await server.call("GET", "/api/years", { as: prepareOnly })).status).toBe(200);
+    expect((await server.call("GET", "/api/people", { as: prepareOnly })).status).toBe(200);
+    const me = (await (await server.call("GET", "/api/me", { as: prepareOnly })).json()) as Me;
+    expect(me.permissions).toEqual(["taxi.prepare", "taxi.view"]);
+    // A viewer narrowed to it gains nothing, and a viewer still can't change anything.
+    const forged = { ...VIEWER, permissions: "taxi.prepare" };
+    expect((await server.call("GET", "/api/years", { as: forged })).status).toBe(403);
+    expect((await server.call("POST", "/api/people", { as: VIEWER, body: { name: "X", relationship: "child", birthDate: "2020-01-01" } })).status).toBe(403);
+  });
+
   it("publishes only the routes the caller may use", async () => {
     const catalog = async (as: typeof OWNER) => ((await (await server.call("GET", "/api/catalog", { as })).json()) as ApiCatalog).endpoints;
     const ownerPaths = (await catalog(OWNER)).map((endpoint) => `${endpoint.method} ${endpoint.path}`);
@@ -57,6 +70,18 @@ describe("permissions", () => {
     expect(ownerPaths).not.toContain("POST /api/scheduled");
     const viewerMethods = new Set((await catalog(VIEWER)).map((endpoint) => endpoint.method));
     expect([...viewerMethods]).toEqual(["GET"]);
+  });
+
+  it("publishes the endpoints that answer with a file to those who may read them", async () => {
+    const catalog = async (as: typeof OWNER) => ((await (await server.call("GET", "/api/catalog", { as })).json()) as ApiCatalog).endpoints;
+    const viewer = await catalog(VIEWER);
+    const file = viewer.find((endpoint) => endpoint.path === "/api/years/{year}/documents/{id}/file");
+    expect(file).toMatchObject({ method: "GET", query: null, body: null, summary: expect.stringMatching(/PDF, PNG or JPEG/) });
+    const forms = viewer.find((endpoint) => endpoint.path === "/api/years/{year}/returns/{personId}/forms");
+    expect(forms).toMatchObject({ method: "GET", body: null, summary: expect.stringMatching(/PDF/) });
+    expect(forms!.query).toMatchObject({ type: "object", properties: { download: expect.objectContaining({ type: "string" }) } });
+    const nothing = (await catalog({ ...OWNER, permissions: "" })).map((endpoint) => endpoint.path);
+    expect(nothing.filter((path) => path.endsWith("/file") || path.endsWith("/forms"))).toEqual([]);
   });
 
   it("blocks a cross-site write", async () => {

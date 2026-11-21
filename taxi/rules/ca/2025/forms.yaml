@@ -432,7 +432,7 @@ forms:
     # Any disposition (a gain, a loss, or shares sold at cost), and a home sold under the principal residence exemption,
     # which the CRA asks to be reported here (Part 2) as well as on Form T2091.
     applies: >-
-      line.S3.19700 != 0 or sum(T5008.box20) > 0 or line.S3.13599 > 0
+      line.S3.19700 != 0 or sum(T5008.box21) > 0 or line.S3.13599 > 0
       or (answer.soldProperty and answer.propertyUse == "principal_residence")
     fields:
       # Part 1 – no housing unit owned less than 365 days was sold (the app doesn't handle a flipped property: "yes" stays
@@ -442,7 +442,7 @@ forms:
       principalResidenceAllYears: { tick: 'answer.soldProperty and answer.propertyUse == "principal_residence"' }
       # Part 3 gets the totals of each kind of property; the property by property rows (description, year acquired, cost)
       # aren't measured and stay for the person or an attached sheet.
-      "13199": sum(T5008.box20)
+      "13199": sum(T5008.box21)
       "4": line.S3.13200
       "13599": line.S3.13599
       "5": line.S3.13800
@@ -474,10 +474,11 @@ forms:
       "3": { value: "line.T1.30000 + if(answer.spouseInfirm, param.caregiverChildAmount, 0)", when: "line.T1.30300 + line.T1.30425 > 0" }
       "4": { value: line.HH.spouseNetIncome, when: "line.T1.30300 + line.T1.30425 > 0" }
       "5": line.T1.30300
-      # Line 30400: the app claims it for a child under 18 with no income and no infirmity, so the infirmity amount
-      # (51100, line 2) and the dependant's income (51106, line 4) are zero.
+      # Line 30400: the app claims it for a child under 18 with no infirmity, so the infirmity amount (51100, line 2)
+      # is zero.
       "p4:1": { value: line.T1.30000, when: "line.T1.30400 > 0" }
       "p4:3": { value: line.T1.30000, when: "line.T1.30400 > 0" }
+      "p4:4": { value: answer.dependantNetIncome, when: "line.T1.30400 > 0" }
       "p4:5": line.T1.30400
       # Line 30425, for the spouse (the app's only case): worked out only when it gives an amount, as the form asks.
       "p4:2.2": { value: line.HH.spouseNetIncome, when: "line.T1.30425 > 0" }
@@ -1056,6 +1057,7 @@ forms:
       "10": line.ON428.10
       "12": "if(line.HH.partner == 1, line.HH.spouseNetIncome, 0)"
       "13": line.ON428.13
+      "15": "if(line.HH.partner == 0 and family.childrenUnder18 > 0, answer.dependantNetIncome, 0)"
       "16": line.ON428.16
       "17": line.ON428.17
       "18": line.ON428.18
@@ -1166,6 +1168,7 @@ forms:
       "17": line.BC428.17
       "19": "if(line.HH.partner == 1, line.HH.spouseNetIncome, 0)"
       "20": line.BC428.20
+      "22": "if(line.HH.partner == 0 and family.childrenUnder18 > 0, answer.dependantNetIncome, 0)"
       "23": line.BC428.23
       "24": line.BC428.24
       "25": line.BC428.25
@@ -1263,6 +1266,7 @@ forms:
       "19": "if(line.HH.partner == 1, line.HH.spouseNetIncome, 0)"
       "58120": line.AB428.20
       "20": line.AB428.20
+      "22": "if(line.HH.partner == 0 and family.childrenUnder18 > 0, answer.dependantNetIncome, 0)"
       "58160": line.AB428.23
       "23": line.AB428.23
       "24": line.AB428.24
@@ -1352,6 +1356,7 @@ forms:
       "12": "if(line.HH.partner == 1, line.HH.spouseNetIncome, 0)"
       "58120": line.MB428.13
       "13": line.MB428.13
+      "15": "if(line.HH.partner == 0 and family.childrenUnder18 > 0, answer.dependantNetIncome, 0)"
       "58160": line.MB428.16
       "16": line.MB428.16
       "17": line.MB428.17
@@ -1555,6 +1560,7 @@ forms:
       "10": line.SK428.10
       "12": "if(line.HH.partner == 1, line.HH.spouseNetIncome, 0)"
       "13": line.SK428.13
+      "15": "if(line.HH.partner == 0 and family.childrenUnder18 > 0, answer.dependantNetIncome, 0)"
       "16": line.SK428.16
       "17": line.SK428.17
       "18": line.SK428.18
@@ -1662,6 +1668,7 @@ forms:
       "10": line.NB428.10
       "12": "if(line.HH.partner == 1, line.HH.spouseNetIncome, 0)"
       "13": line.NB428.13
+      "15": "if(line.HH.partner == 0 and family.childrenUnder18 > 0, answer.dependantNetIncome, 0)"
       "16": line.NB428.16
       "17": line.NB428.17
       "18": line.NB428.9 + line.NB428.10 + line.NB428.13 + line.NB428.16 + line.NB428.17
@@ -1800,6 +1807,7 @@ forms:
       "17": line.NL428.17
       "19": "if(line.HH.partner == 1, line.HH.spouseNetIncome, 0)"
       "20": line.NL428.20
+      "22": "if(line.HH.partner == 0 and family.childrenUnder18 > 0, answer.dependantNetIncome, 0)"
       "23": line.NL428.23
       "24": line.NL428.24
       "25": line.NL428.16 + line.NL428.17 + line.NL428.20 + line.NL428.23 + line.NL428.24
@@ -1954,7 +1962,7 @@ forms:
       "10": line.NS428.10
       "12": "if(line.HH.partner == 1, max(param.nsSpouseIncomeFloor, line.HH.spouseNetIncome), 0)"
       "13": line.NS428.13
-      "15": "if(line.NS428.16 > 0, param.nsSpouseIncomeFloor, 0)"
+      "15": "if(line.HH.partner == 0 and family.childrenUnder18 > 0, max(param.nsSpouseIncomeFloor, answer.dependantNetIncome), 0)"
       "16": line.NS428.16
       "17": line.NS428.17
       # The months (box 58229) aren't written: that box is narrower than the layout assumes for a line code's box.
@@ -2108,6 +2116,7 @@ forms:
       "10": line.PE428.10
       "12": "if(line.HH.partner == 1, line.HH.spouseNetIncome, 0)"
       "13": line.PE428.13
+      "15": "if(line.HH.partner == 0 and family.childrenUnder18 > 0, answer.dependantNetIncome, 0)"
       "16": line.PE428.16
       "17": line.PE428.17
       # The months (box 58229) aren't written: that box is narrower than the layout assumes for a line code's box.
@@ -2388,6 +2397,7 @@ forms:
       "10": line.NT428.10
       "12": "if(line.HH.partner == 1, line.HH.spouseNetIncome, 0)"
       "13": line.NT428.13
+      "15": "if(line.HH.partner == 0 and family.childrenUnder18 > 0, answer.dependantNetIncome, 0)"
       "16": line.NT428.16
       "17": line.NT428.17
       "18": line.NT428.9 + line.NT428.10 + line.NT428.13 + line.NT428.16 + line.NT428.17
@@ -2533,6 +2543,7 @@ forms:
       "10": line.NU428.10
       "12": "if(line.HH.partner == 1, line.HH.spouseNetIncome, 0)"
       "13": line.NU428.13
+      "15": "if(line.HH.partner == 0 and family.childrenUnder18 > 0, answer.dependantNetIncome, 0)"
       "16": line.NU428.16
       "17": line.NU428.17
       "18": line.NU428.18

@@ -1,5 +1,6 @@
-import type { ConfirmSlips, CreateSlip, SaveAnswers, SlipList, TaxYear, UpdateSlip } from "#shared";
+import { unreadBoxes, type ConfirmSlips, type CreateSlip, type SaveAnswers, type SlipList, type TaxYear, type UpdateSlip } from "#shared";
 import { Dec } from "../../shared/engine/decimal.ts";
+import { documentName } from "../../shared/engine/rules.ts";
 import { rulesFor } from "../../shared/rules/index.ts";
 import { audit, bumpRevision, getYear, runGuarded, yearRow, type YearRow } from "./people.ts";
 import { ApiError, notFound } from "./http.ts";
@@ -113,30 +114,36 @@ export async function addSlip(db: Db, caller: Caller, year: number, input: Creat
   return getYear(db, caller.orgId, year);
 }
 
-async function slipType(db: Db, orgId: string, taxYearId: string, id: string): Promise<string> {
-  const slip = await db.prepare("SELECT type FROM slips WHERE id = ? AND org_id = ? AND tax_year_id = ?").bind(id, orgId, taxYearId).first<{ type: string }>();
+async function slipRow(db: Db, orgId: string, taxYearId: string, id: string): Promise<{ type: string; unsure: string[] }> {
+  const slip = await db
+    .prepare("SELECT type, unsure FROM slips WHERE id = ? AND org_id = ? AND tax_year_id = ?")
+    .bind(id, orgId, taxYearId)
+    .first<{ type: string; unsure: string }>();
   if (!slip) throw notFound("No such slip in this year");
-  return slip.type;
+  return { type: slip.type, unsure: JSON.parse(slip.unsure) as string[] };
 }
 
 /**
  * Changes whose slip it is, its issuer or its boxes; it goes back to unconfirmed, since nobody checked the change yet.
- * New boxes clear the boxes AI was unsure of: the person just entered them.
+ * New boxes clear the marks of the boxes AI was unsure of that they enter: the person just entered those. A box AI
+ * couldn't read stays marked until it is entered (0 when it is blank on the slip), so saving the others never lets
+ * the slip be confirmed without it.
  */
 export async function updateSlip(db: Db, caller: Caller, year: number, id: string, input: UpdateSlip, now: number): Promise<TaxYear> {
   const { row, view } = await openYear(db, caller.orgId, year);
   if (input.personId !== undefined) checkAdult(view, input.personId, "personId");
-  const boxes = checkSlip(year, await slipType(db, caller.orgId, row.id, id), input.boxes);
+  const current = await slipRow(db, caller.orgId, row.id, id);
+  const boxes = checkSlip(year, current.type, input.boxes);
+  const unsure = boxes ? current.unsure.filter((box) => !(box in boxes)) : current.unsure;
   await runGuarded(db, [
     bumpRevision(db, caller.orgId, row.id, input.revision, now),
     db
       .prepare(
-        `UPDATE slips SET person_id = coalesce(?, person_id), issuer = coalesce(?, issuer), boxes = coalesce(?, boxes),
-           unsure = CASE WHEN ? IS NULL THEN unsure ELSE '[]' END,
+        `UPDATE slips SET person_id = coalesce(?, person_id), issuer = coalesce(?, issuer), boxes = coalesce(?, boxes), unsure = ?,
            status = 'unconfirmed', confirmed_at = NULL, confirmed_by = NULL, updated_at = ?
          WHERE id = ? AND org_id = ? AND tax_year_id = ?`,
       )
-      .bind(input.personId ?? null, input.issuer ?? null, boxes ? JSON.stringify(boxes) : null, boxes ? 1 : null, now, id, caller.orgId, row.id),
+      .bind(input.personId ?? null, input.issuer ?? null, boxes ? JSON.stringify(boxes) : null, JSON.stringify(unsure), now, id, caller.orgId, row.id),
     audit(db, caller, "slip.changed", id, now),
   ]);
   return getYear(db, caller.orgId, year);
@@ -144,7 +151,7 @@ export async function updateSlip(db: Db, caller: Caller, year: number, id: strin
 
 export async function removeSlip(db: Db, caller: Caller, year: number, id: string, revision: number, now: number): Promise<TaxYear> {
   const { row } = await openYear(db, caller.orgId, year);
-  await slipType(db, caller.orgId, row.id, id);
+  await slipRow(db, caller.orgId, row.id, id);
   await runGuarded(db, [
     bumpRevision(db, caller.orgId, row.id, revision, now),
     db.prepare("DELETE FROM slips WHERE id = ? AND org_id = ? AND tax_year_id = ?").bind(id, caller.orgId, row.id),
@@ -153,10 +160,31 @@ export async function removeSlip(db: Db, caller: Caller, year: number, id: strin
   return getYear(db, caller.orgId, year);
 }
 
-/** Confirms the unconfirmed slips of one adult (or, with no person, of every adult), recording who did and when. */
+/**
+ * Confirms the unconfirmed slips of one adult (or, with no person, of every adult), recording who did and when. A box
+ * AI couldn't read and has no amount is refused: confirmed, the slip would put nothing on that line.
+ */
 export async function confirmSlips(db: Db, caller: Caller, year: number, input: ConfirmSlips, now: number): Promise<TaxYear> {
   const { row, view } = await openYear(db, caller.orgId, year);
   if (input.personId !== undefined) checkAdult(view, input.personId, "personId");
+  const rules = rulesFor(year)!;
+  const unread = (await loadWorkspace(db, caller.orgId, row.id)).slips
+    .filter((slip) => slip.status === "unconfirmed" && (input.personId === undefined || slip.personId === input.personId))
+    .map((slip) => ({ slip, boxes: unreadBoxes(slip) }))
+    .filter((each) => each.boxes.length > 0);
+  if (unread.length > 0) {
+    const named = unread.map(({ slip, boxes }) => {
+      const type = rules.slips.get(slip.type);
+      const each = boxes.map((box) => (type?.boxes[box] ? `box ${box} (${type.boxes[box]})` : `box ${box}`));
+      return `${documentName(type, slip.type)} from ${slip.issuer}: ${each.join(", ")}`;
+    });
+    const many = unread.flatMap((each) => each.boxes).length > 1;
+    throw new ApiError(
+      "validation_failed",
+      `${named.join("; ")} couldn't be read. ${many ? "Enter each before confirming, or 0 for one that is blank on the slip." : "Enter it before confirming, or 0 if it is blank on the slip."}`,
+      unread.flatMap(({ slip, boxes }) => boxes.map((box) => ({ path: `slips.${slip.id}.boxes.${box}`, message: "Couldn't be read: enter it, or 0 if it is blank on the slip" }))),
+    );
+  }
   await runGuarded(db, [
     bumpRevision(db, caller.orgId, row.id, input.revision, now),
     db

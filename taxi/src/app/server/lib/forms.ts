@@ -8,7 +8,7 @@ import { buildReturnPdf, type Worksheet, type WorksheetRow } from "./forms-pdf.t
 import { hintsOf, stillApplied } from "./hints.ts";
 import { ApiError, conflict, notFound } from "./http.ts";
 import { openYear } from "./returns.ts";
-import { engineInputOf, loadWorkspace, spouseResult } from "./workspace.ts";
+import { engineInputOf, loadWorkspace, printYear, spouseResult } from "./workspace.ts";
 
 // A return printed on the CRA's own forms (and, for a resident of Quebec, on Revenu Québec's TP-1 and schedules after
 // them), with a worksheet: built on request from what is stored, only once the return is finished (shared/print.ts).
@@ -68,7 +68,7 @@ export async function printReturn(
   const evaluation = new Evaluation(rules, engineInputOf(view, workspace));
   const people = evaluation.result().people;
   const result = people.find((person) => person.personId === personId)!;
-  const blockers = printBlockers(result, workspace.slips, spouseResult(view, people, personId));
+  const blockers = printBlockers(printYear(rules, view.issues, workspace), result, spouseResult(view, people, personId));
   if (blockers.length > 0) {
     throw conflict(`The return isn't finished, so its forms can't be printed yet: ${blockers.map((blocker) => blocker.text).join(" ")}`);
   }

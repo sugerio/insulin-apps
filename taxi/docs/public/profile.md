@@ -19,6 +19,10 @@ Enter each person's name and birth date. Use the names as they appear on their t
 whose document each file is. The people stay the same from one year to the next. You can't remove yourself, and you
 can't change who "you" are. Someone with the Viewer role sees the people but can't change them.
 
+**Remove** asks first: removing someone deletes their facts, answers and slips (confirmed ones too) in every tax year
+they are in. Files uploaded in their return stay in the year. To leave someone out of one year only, change who is in
+that year instead.
+
 ## Start a tax year: who is in it
 
 Open **Returns** and choose **Start 2025**. The app lists everyone in the profile with a box to tick. Only you are ticked to begin with:

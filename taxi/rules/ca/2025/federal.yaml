@@ -1086,12 +1086,14 @@ lines:
       if(answer.hasWorkFromHome, min(round(answer.homeOfficeExpenses * answer.homeOfficeShare / 100, 2),
       max(0, line.T1.10100 + line.T1.10400 - line.T1.20700 - line.T1.21200)), 0)
     source: "Form T777, lines 48 to 54: home expenses times the employment-use share, up to employment income"
+  DED.foreignTax:
+    label: Foreign tax on foreign interest and dividends above 15% of them
+    formula: "if(answer.hasForeignIncome, max(0, answer.foreignInvestmentTax - round(answer.foreignInvestmentIncome * param.foreignPropertyTaxRate, 2)), 0)"
+    source: "Income Tax Act 20(11): deducted on line 23200 instead of counting for the foreign tax credit"
   T1.23200:
     label: Other deductions
-    formula: >-
-      if(answer.hasForeignIncome, max(0, answer.foreignInvestmentTax - round(answer.foreignInvestmentIncome * param.foreignPropertyTaxRate, 2)), 0)
-      + sum(T4E.box30)
-    source: "Foreign tax on foreign interest and dividends above 15% of them (Income Tax Act 20(11)), and EI benefits repaid (box 30 of the T4E)"
+    formula: "sum(T4AOAS.box20) + line.DED.foreignTax + sum(T4E.box30)"
+    source: "An OAS overpayment recovered (T4A(OAS) box 20), foreign tax on foreign interest and dividends above 15% of them (Income Tax Act 20(11)), and EI benefits repaid (box 30 of the T4E)"
   DED.other:
     label: Deductions other than child care
     formula: >-
@@ -1436,8 +1438,8 @@ lines:
   T1.30400:
     label: Amount for an eligible dependant
     formula: >-
-      round((if(line.HH.partner == 0 and family.childrenUnder18 > 0, line.FULL.30000, 0)) * line.RES.factor, 2)
-    source: "Schedule 5 line 30400: for a single parent, one child under 18 who lived with you. The app assumes the child had no income"
+      round((if(line.HH.partner == 0 and family.childrenUnder18 > 0, max(0, line.FULL.30000 - answer.dependantNetIncome), 0)) * line.RES.factor, 2)
+    source: "Schedule 5 line 30400: for a single parent, one child under 18 who lived with you: your basic personal amount minus their net income"
   T1.30425:
     label: Canada caregiver amount for spouse or common-law partner
     formula: >-
@@ -1637,8 +1639,8 @@ lines:
   # Form T2209 – federal foreign tax credit on non-business income
   FTC.netForeign:
     label: Net foreign non-business income
-    formula: "if(answer.hasForeignIncome, answer.foreignInvestmentIncome + answer.foreignEmploymentIncome - (line.T1.23200 - sum(T4E.box30)), 0)"
-    source: "Form T2209, note 2: the foreign income less the foreign tax deducted under 20(11) (line 23200, without the EI benefits repaid)"
+    formula: "if(answer.hasForeignIncome, answer.foreignInvestmentIncome + answer.foreignEmploymentIncome - line.DED.foreignTax, 0)"
+    source: "Form T2209, note 2: the foreign income less the foreign tax deducted under 20(11) (part of line 23200)"
   FTC.eligibleTax:
     label: Non-business income tax paid to a foreign country
     formula: >-
@@ -1937,8 +1939,11 @@ lines:
   # Schedule 3 – Capital gains or losses
   S3.13200:
     label: Gain or loss on publicly traded shares and mutual fund units
-    formula: "sum(T5008.box20) - sum(T5008.box21)"
-    source: "Schedule 3 line 4: proceeds (T5008 box 20) minus cost (box 21)"
+    formula: >-
+      if(count(T5008.box20) != count(T5008.box21),
+      unsupported("A T5008 without its cost or book value (box 20) or its proceeds (box 21) can't be counted. Brokers often leave the cost blank: type it from your records into the slip's box 20 on the Confirm step"),
+      sum(T5008.box21) - sum(T5008.box20))
+    source: "Schedule 3 line 4: proceeds (T5008 box 21) minus cost or book value (box 20)"
   S3.17400:
     label: Capital gains from T5 slips
     formula: "sum(T5.box18)"

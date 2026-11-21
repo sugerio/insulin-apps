@@ -264,6 +264,16 @@ describe("Income", () => {
 });
 
 describe("Confirm", () => {
+  it("says why a slip wasn't added when no field shows it", async () => {
+    await renderApp("/returns/2025/confirm", { seed: (s) => seed(s, { applies: true }).then(() => undefined) });
+    fireEvent.click(await screen.findByRole("button", { name: "Add a slip" }));
+    const form = screen.getByRole("form", { name: "Add a slip" });
+    fireEvent.change(within(form).getByLabelText("Issued by"), { target: { value: "Maple Corp" } });
+    fireEvent.click(within(form).getByRole("button", { name: "Add" }));
+    const banner = (await within(form).findByText("The slip wasn't saved")).closest<HTMLElement>("[role=alert]")!;
+    expect(within(banner).getByText("Enter at least one box")).toBeTruthy();
+  });
+
   it("adds a slip by hand from its boxes, and confirms it", async () => {
     const { server } = await renderApp("/returns/2025/confirm", { seed: (s) => seed(s, { applies: true }).then(() => undefined) });
     fireEvent.click(await screen.findByRole("button", { name: "Add a slip" }));
@@ -292,6 +302,38 @@ describe("Confirm", () => {
     expect(item.textContent).toContain("Box 25 Number of months full-time: 8 · Box 26 Eligible tuition fees: $6,000.00");
     fireEvent.click(screen.getByRole("link", { name: "Next: finish" }));
     await waitFor(() => expect(router.state.location.pathname).toMatch(/\/finish$/));
+  });
+
+  it("shows a box AI couldn't read, and waits for it, or 0 when it is blank, before confirming", async () => {
+    const reader: SlipReader = {
+      read: async () => ({ kind: "read", taxYear: 2025, model: "test-model", slips: [{ type: "T4", person: "ALEX MARTIN", issuer: "Maple Corp", boxes: { 22: "9000" }, unsure: ["14"] }] }),
+    };
+    const pdf = new TextEncoder().encode("%PDF-1.4\n% a sample T4\n%%EOF\n") as Uint8Array<ArrayBuffer>;
+    const { server } = await renderApp("/returns/2025/confirm", {
+      server: { reader: () => reader },
+      seed: async (s) => {
+        await seed(s, { applies: true });
+        await s.call("POST", "/api/years/2025/documents", { as: OWNER, raw: pdf, headers: { "Content-Type": "application/pdf", "X-File-Name": "T4.pdf" } });
+      },
+    });
+    const item = (await screen.findByText("T4 · Maple Corp")).closest("li")!;
+    expect(item.textContent).toContain("Box 14 Employment income: couldn't be read (check) · Box 22 Income tax deducted: $9,000.00");
+    expect((screen.getByRole("button", { name: "Confirm 1 slip" }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByText("Before confirming, enter each box that couldn't be read, or 0 if it is blank on the slip: choose Edit on its slip.")).toBeTruthy();
+
+    // Blank on the paper slip: 0 is an amount to save.
+    fireEvent.click(within(item).getByRole("button", { name: "Edit T4 from Maple Corp" }));
+    const form = screen.getByRole("form", { name: "Edit T4 from Maple Corp" });
+    const save = within(form).getByRole("button", { name: "Save" }) as HTMLButtonElement;
+    expect(save.disabled).toBe(true);
+    fireEvent.change(within(form).getByLabelText("Box 14 Employment income"), { target: { value: "0" } });
+    expect(save.disabled).toBe(false);
+    fireEvent.click(save);
+    await waitFor(() => expect((screen.getByRole("button", { name: "Confirm 1 slip" }) as HTMLButtonElement).disabled).toBe(false));
+    expect(screen.getByText("T4 · Maple Corp").closest("li")!.textContent).toContain("Box 14 Employment income: $0.00 · Box 22");
+    fireEvent.click(screen.getByRole("button", { name: "Confirm 1 slip" }));
+    expect(await screen.findByText("Confirmed")).toBeTruthy();
+    expect((await estimate(server)).input.slips).toEqual([expect.objectContaining({ type: "T4", boxes: { 14: "0", 22: "9000" } })]);
   });
 
   it("lists the boxes in the order printed", async () => {

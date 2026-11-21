@@ -25,7 +25,8 @@ Each return has seven steps:
    to add.
 4. **Deductions.** RRSP and FHSA contributions, working from home, child care and moving expenses, and what your
    slips already deduct.
-5. **Credits.** Tuition, medical expenses, donations, and what your slips already claim.
+5. **Credits.** Tuition, medical expenses, donations, a single parent's child's net income (for the eligible dependant
+   amount), and what your slips already claim.
 6. **Confirm.** Every number AI read, to check against the papers.
 7. **Finish.** The refund or balance owing, what to check before filing, and hints: ways to pay less, such as claiming
    both spouses' donations on one return, each with what it saves. Apply one to change your answers; you can undo it.

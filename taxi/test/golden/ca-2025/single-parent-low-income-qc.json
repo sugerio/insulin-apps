@@ -80,6 +80,7 @@
         "tuitionTransfer": "0",
         "physicalActivityFees": "0",
         "donations": "0",
+        "dependantNetIncome": "0",
         "childActivityFees": "0",
         "homeRenovationExpenses": "0",
         "fertilityExpenses": "0",

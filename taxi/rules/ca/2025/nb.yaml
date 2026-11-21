@@ -166,8 +166,8 @@ lines:
   NB428.16:
     label: New Brunswick amount for an eligible dependant
     formula: >-
-      round((if(line.HH.partner == 0 and family.childrenUnder18 > 0, min(param.nbSpouseMax, param.nbSpouseBase), 0)) * line.RES.factor, 2)
-    source: "NB428 lines 14 to 16. The app assumes the child had no income"
+      round((if(line.HH.partner == 0 and family.childrenUnder18 > 0, min(param.nbSpouseMax, max(0, param.nbSpouseBase - answer.dependantNetIncome)), 0)) * line.RES.factor, 2)
+    source: "NB428 lines 14 to 16: the base minus their net income, up to the maximum"
   # An adult dependant with an impairment gets the infirm dependant amount, or the caregiver amount when they lived in
   # your home, never both (5004-PC, line 58400). The app knows one such dependant.
   NB.infirmAmount:

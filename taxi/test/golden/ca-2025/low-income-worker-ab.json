@@ -61,6 +61,7 @@
         "unusedTuition": "0",
         "tuitionTransfer": "0",
         "donations": "0",
+        "dependantNetIncome": "0",
         "volunteerKind": "search_rescue",
         "unusedProvincialTuition": "0",
         "physicalActivityFees": "0",

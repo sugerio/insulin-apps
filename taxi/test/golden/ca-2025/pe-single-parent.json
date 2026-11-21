@@ -32,6 +32,7 @@
         "fhsaDeduction": "0",
         "medicalExpenses": "1500",
         "donations": "300",
+        "dependantNetIncome": "0",
         "unusedTuition": "0",
         "unusedProvincialTuition": "0",
         "tuitionTransfer": "0",

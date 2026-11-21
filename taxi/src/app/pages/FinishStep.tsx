@@ -56,10 +56,10 @@ function Results({ estimate, slips }: { estimate: Estimate; slips: SlipList }) {
   const other = spouseOf(estimate.result.people, owner.id);
   const spouse = other ? { name: year.people.find((each) => each.id === other.personId)?.name ?? "Your spouse", result: other } : undefined;
   const checks = groupUnanswered(
-    printBlockers(person, slips.slips, spouse).map((blocker) => ({
+    printBlockers({ rules, issues: year.issues, answers: estimate.input.answers, slips: slips.slips }, person, spouse).map((blocker) => ({
       text: blocker.text,
       personId: blocker.personId ?? owner.id,
-      step: blocker.confirm ? ("confirm" as const) : blocker.question ? stepOfQuestion(blocker.question) : null,
+      step: blocker.confirm ? ("confirm" as const) : blocker.issue ? ("personal" as const) : blocker.question ? stepOfQuestion(blocker.question) : null,
       ask: blocker.question && blocker.unanswered ? (rules.questions.get(blocker.question)?.ask ?? null) : null,
     })),
     (personId) => (personId === owner.id ? "" : `${spouse?.name ?? "Your spouse"}'s return: `),

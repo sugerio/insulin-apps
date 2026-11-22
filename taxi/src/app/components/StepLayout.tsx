@@ -1,6 +1,9 @@
 import type { ReactNode } from "react";
 import type { Step } from "#shared";
+import { Button } from "@/components/ui/button.tsx";
+import { describeError } from "../api/client.ts";
 import { EstimateSummary } from "./EstimateCard.tsx";
+import { Banner } from "./Feedback.tsx";
 import { Page, PageHead } from "./Page.tsx";
 import { ReturnSwitcher, STEP_LABELS, StepNav, stepPath, useReturn, useYear } from "./YearFrame.tsx";
 
@@ -10,7 +13,7 @@ import { ReturnSwitcher, STEP_LABELS, StepNav, stepPath, useReturn, useYear } fr
  * for the step) goes below it. `estimate={false}` leaves the estimate out (Finish shows the result itself).
  */
 export function StepLayout({ step, title, estimate = true, aside, children }: { step: Step; title: string; estimate?: boolean; aside?: ReactNode; children: ReactNode }) {
-  const { year } = useYear();
+  const { year, reload, reloadError } = useYear();
   const { person } = useReturn();
   return (
     <Page
@@ -26,6 +29,12 @@ export function StepLayout({ step, title, estimate = true, aside, children }: { 
       </div>
       <div className="flex min-w-0 flex-col gap-5">
         <PageHead title={title} />
+        {/* The year as last loaded stays, with what was typed in it: a save is refused (409) if the year has moved on. */}
+        {reloadError ? (
+          <Banner kind="error" title="The year couldn't be loaded again" action={<Button variant="outline" size="sm" onClick={reload}>Try again</Button>}>
+            {describeError(reloadError)}
+          </Banner>
+        ) : null}
         {children}
         {aside}
       </div>

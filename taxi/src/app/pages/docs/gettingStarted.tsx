@@ -69,7 +69,10 @@ export const gettingStarted: DocTopic = {
               Under <b>Add to your return</b>, add the other kinds of income you had. One added without its slip is missing, to upload or enter
               right there. Self-employment, rental income, income earned abroad and a sale of real estate are groups: their card asks what
               they need, and shows a part only once it applies (a class's capital cost allowance once you pick the class, the years of a
-              home that was your residence only some of the years). What you don't add counts as none.
+              home that was your residence only some of the years). What you don't add counts as none. For a Quebec resident whose T4s show
+              more employment income than their RL-1s, Income also asks for the benefits Quebec doesn't tax, such as a monthly public transit
+              pass your employer provided for getting to work: it is in T4 box 14 but not in RL-1 box A. Enter the whole difference, to the
+              cent, if all of it is such benefits; Finish points back to this question when the slips still don't match.
             </li>
             <li>
               <b>Deductions.</b> RRSP and FHSA contributions (RRSP receipts and your notice of assessment give a starting amount, up to

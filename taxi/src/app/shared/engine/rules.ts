@@ -12,7 +12,7 @@ import { parseFormula, references, type Formula } from "./formula.ts";
 //   line.<form>.<line>            another line of the same person's return
 //   answer.<question>             the person's answer; the question's default when there is none (an estimate)
 //   <SLIP>.box<key>               that box of every one of the person's slips of that type (a list: sum, count,
-//                                 countNonZero, max)
+//                                 countNonZero, countIssuers, max)
 //   <SLIP>.slips                  how many slips of that type the person has, whatever boxes they show
 //   person.age, person.province, person.role   the person's age and province on December 31, and "self" for the
 //                                 person preparing or "spouse"; person.residentAllYear whether they lived in Canada all year
@@ -558,6 +558,12 @@ const FUNCTIONS: Record<string, { args: [number, number]; check: (types: Type[],
   // The slips whose box holds an amount other than 0: a box left blank on the paper slip is entered as 0, and count()
   // counts it.
   countNonZero: { args: [1, 1], check: (types) => (types[0] === "list" ? "number" : "takes slip boxes") },
+  // The issuers of the slips whose box holds an amount other than 0, each counted once: an employer's two T4s are one
+  // employer. Names are compared without case or surrounding spaces, as Confirm compares slips.
+  countIssuers: {
+    args: [1, 1],
+    check: (types, args) => (types[0] === "list" && args[0]?.kind === "ref" && args[0].path[0] !== "family" ? "number" : "takes slip boxes"),
+  },
   round: {
     args: [1, 2],
     check: (types, args) => {

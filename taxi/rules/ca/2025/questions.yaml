@@ -26,6 +26,16 @@ questions:
     slip: RL1
     ask: Employment income in Quebec (RL-1)
     help: An RL-1 from each employer in Quebec, which also gives you a T4. The Quebec return reads the RL-1.
+  # Asked only when the T4s' box 14 is more than the RL-1s' box A less box J (qc.yaml, QC.scope), so most never see it.
+  qcExemptBenefits:
+    type: money
+    module: income
+    ask: Benefits on your T4 slips that Quebec doesn't tax
+    help: >-
+      Your T4 slips show more employment income (box 14) than your RL-1 slips (box A, less box J). If all of the
+      difference is benefits taxed federally but not in Quebec, enter the difference, to the cent; otherwise enter 0. The
+      main one is a public transit pass valid for at least a month (or a paratransit pass) that your employer gave you
+      mainly to get to work, or paid back against your receipts. A transit allowance is taxed in Quebec too.
   hasInvestmentIncome:
     type: boolean
     module: income

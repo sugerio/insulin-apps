@@ -1,4 +1,4 @@
-import { createContext, useContext, useRef } from "react";
+import { createContext, useContext, useRef, useState } from "react";
 import { Link, Navigate, Outlet, useLocation, useParams } from "react-router";
 import { Check, ChevronRight, ChevronsUpDown } from "lucide-react";
 import { STEPS, SUPPORTED_YEARS, routes, type AdultYear, type Estimate, type Person, type SlipList, type Step, type StepStatuses, type TaxYear } from "#shared";
@@ -9,7 +9,7 @@ import { ApiError, apiRequest } from "../api/client.ts";
 import { formatMoney } from "../lib/format.ts";
 import { useResource, type Resource } from "../lib/useResource.ts";
 import { NotFoundPage } from "../pages/Pages.tsx";
-import { ResourceView } from "./Feedback.tsx";
+import { ErrorState, Loading } from "./Feedback.tsx";
 
 // A tax year's pages. The year is loaded once here, with its estimate and slips (again whenever its revision changes),
 // and shared through YearContext. Each adult of the year has a return of their own at `/returns/:year/:personId/:step`:
@@ -41,7 +41,10 @@ export const stepPath = (year: number, personId: string, step: Step) => `/return
 interface YearValue {
   year: TaxYear;
   replace: (year: TaxYear) => void;
+  /** Loads the year again; the year held stays shown meanwhile. */
   reload: () => void;
+  /** Why loading the year again failed (the year held is still shown), or null. */
+  reloadError: unknown;
   estimate: Resource<Estimate>;
   slips: Resource<SlipList>;
 }
@@ -81,33 +84,37 @@ export function YearFrame() {
   const year = Number(useParams().year);
   const known = (SUPPORTED_YEARS as readonly number[]).includes(year);
   const resource = useResource(`year-${year}`, (signal) => apiRequest(routes.getYear, { params: { year }, signal }));
-  // Answers arrive in any order, some for a page no longer open (an upload in the other return): one with an older
-  // revision than the year held would undo a newer change here, and the next save would be refused.
+  // The newest year known, loaded or answered by a save. Answers arrive in any order, some for a page no longer open (an
+  // upload in the other return): one with an older revision than the year held would undo a newer change here, and the
+  // next save would be refused. It stays on screen while the year loads again (Reload, after someone else changed it),
+  // so the step below isn't unmounted and keeps what was typed; once the newer year arrives, each step's drafts give
+  // way only where it changed what they were typed over. A save meanwhile is under this year's revision: refused (409)
+  // if the year has moved on, never applied to a newer one.
   const held = useRef<TaxYear | null>(null);
-  held.current = resource.status === "ready" ? resource.data : null;
+  const [, setReplaced] = useState(0);
+  if (held.current?.year !== year) held.current = null;
+  if (resource.status === "ready" && (held.current === null || resource.data.revision >= held.current.revision)) held.current = resource.data;
   const replace = (next: TaxYear) => {
     const current = held.current;
-    if (resource.status !== "ready" || current === null || next.year !== current.year || next.revision < current.revision) return;
+    if (current === null || next.year !== current.year || next.revision < current.revision) return;
     held.current = next;
-    resource.replace(next);
+    setReplaced((count) => count + 1);
   };
   if (!known) return <NotFoundPage />;
-  // A year that hasn't been started opens on the list of years, where it can be.
+  // A year that hasn't been started (or no longer is) opens on the list of years, where it can be.
   if (resource.status === "error" && resource.error instanceof ApiError && resource.error.status === 404) {
     return <Navigate to="/returns" replace />;
   }
-  return (
-    <ResourceView resource={resource}>
-      {(data) => <YearData year={data} replace={replace} reload={resource.reload} />}
-    </ResourceView>
-  );
+  // Loading it the first time, or failing to: nothing to show yet.
+  if (held.current === null) return resource.status === "error" ? <ErrorState error={resource.error} onRetry={resource.reload} /> : <Loading />;
+  return <YearData year={held.current} replace={replace} reload={resource.reload} reloadError={resource.status === "error" ? resource.error : null} />;
 }
 
-function YearData({ year, replace, reload }: Pick<YearValue, "year" | "replace" | "reload">) {
+function YearData({ year, replace, reload, reloadError }: Pick<YearValue, "year" | "replace" | "reload" | "reloadError">) {
   const estimate = useResource(`estimate-${year.year}-${year.revision}`, (signal) => apiRequest(routes.getEstimate, { params: { year: year.year }, signal }));
   const slips = useResource(`slips-${year.year}-${year.revision}`, (signal) => apiRequest(routes.listSlips, { params: { year: year.year }, signal }));
   return (
-    <YearContext value={{ year, replace, reload, estimate, slips }}>
+    <YearContext value={{ year, replace, reload, reloadError, estimate, slips }}>
       <Outlet />
     </YearContext>
   );

@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import type { Estimate, Person, TaxYear } from "#shared";
 import type { SlipReader } from "../../src/app/server/lib/reader.ts";
 import { OWNER, type TestServer } from "../support/server.ts";
-import { holdRequests, renderApp } from "./support.tsx";
+import { clickWhenEnabled, holdRequests, renderApp } from "./support.tsx";
 
 // The requests of Income, Deductions and Credits: a save, an upload in a card, a slip saved in its card. The form starts
 // again whenever the year changes, so what a request does to the page mustn't depend on the form that sent it.
@@ -122,6 +122,26 @@ describe("a step's requests", () => {
     fireEvent.change(rents(), { target: { value: "1000" } });
     fireEvent.change(screen.getByLabelText("Upload the T4"), { target: { files: [new File(["not a PDF at all"], "T4.pdf", { type: "application/pdf" })] } });
   }
+
+  it("keeps a typed amount when the year is loaded again after someone else changed it, and saves it", async () => {
+    const { server } = await renderApp("/returns/2025/income", { seed: (s) => seed(s) });
+    fireEvent.click(within(await screen.findByRole("region", { name: "Add to your return" })).getByRole("button", { name: "Add Rental income" }));
+    fireEvent.change(rents(), { target: { value: "1000" } });
+    // Another tab adds a slip: the year moves on, the amount typed here doesn't.
+    const year = (await (await server.call("GET", "/api/years/2025")).json()) as TaxYear;
+    const slip = { revision: year.revision, personId: year.adults[0]!.personId, type: "T4", issuer: "Maple Corp", boxes: { 14: "60000" } };
+    expect((await server.call("POST", "/api/years/2025/slips", { as: OWNER, body: slip })).status).toBe(201);
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    const banner = (await screen.findByText("Someone else changed this year")).closest<HTMLElement>("[role=alert]")!;
+    const before = rents();
+    fireEvent.click(within(banner).getByRole("button", { name: "Reload" }));
+    // The newer year is here once the form starts again from it: a new field, still holding what was typed.
+    await waitFor(() => expect(rents()).not.toBe(before));
+    expect(screen.queryByText("Someone else changed this year")).toBeNull();
+    expect(rents().value).toBe("1000");
+    await clickWhenEnabled(() => screen.getByRole("button", { name: "Save" }));
+    await waitFor(async () => expect(await answersOf(server)).toMatchObject({ hasRentalIncome: true, rentalGross: "1000" }));
+  });
 
   it("says why an upload in a card was refused", async () => {
     await renderApp("/returns/2025/income", { seed: (s) => seed(s) });

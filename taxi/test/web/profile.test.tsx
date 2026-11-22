@@ -3,7 +3,7 @@ import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import type { Person, TaxYear } from "#shared";
 import { OWNER, VIEWER, type TestServer } from "../support/server.ts";
-import { holdRequests, renderApp } from "./support.tsx";
+import { clickWhenEnabled, holdRequests, renderApp } from "./support.tsx";
 
 async function add(server: TestServer, name: string, relationship: string, birthDate: string): Promise<Person> {
   return (await (await server.call("POST", "/api/people", { as: OWNER, body: { name, relationship, birthDate } })).json()) as Person;
@@ -180,7 +180,8 @@ describe("step 1 of a year", () => {
     expect(screen.getByRole("link", { name: "Add a spouse or partner" }).getAttribute("href")).toBe(`/profile?back=${encodeURIComponent(back)}`);
     fireEvent.change(screen.getByLabelText("Province on December 31"), { target: { value: "BC" } });
     fireEvent.click(screen.getByRole("radio", { name: "Yes" }));
-    fireEvent.click(screen.getByRole("button", { name: "Save and continue" }));
+    // Saving waits for the answers (the estimate), which the facts above don't.
+    await clickWhenEnabled(() => screen.getByRole("button", { name: "Save and continue" }));
     await waitFor(() => expect(router.state.location.pathname).toBe(`/returns/2025/${alex!.id}/upload`));
     expect(await screen.findByRole("heading", { name: "Upload documents" })).toBeTruthy();
     const stored = (await (await server.call("GET", "/api/years/2025")).json()) as TaxYear;
@@ -256,7 +257,7 @@ describe("step 1 of a year", () => {
     expect(await province()).toBe("BC");
     expect(screen.getByRole("radio", { name: "No" }).getAttribute("aria-checked")).toBe("true");
 
-    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await clickWhenEnabled(() => screen.getByRole("button", { name: "Save" }));
     await waitFor(async () => {
       const stored = (await (await server.call("GET", "/api/years/2025")).json()) as TaxYear;
       expect(stored.revision).toBe(3);
@@ -272,7 +273,7 @@ describe("step 1 of a year", () => {
     fireEvent.click(await screen.findByRole("radio", { name: "Married" }));
     expect(screen.queryByText("Fill these in to continue")).toBeNull();
     const path = router.state.location.pathname;
-    fireEvent.click(screen.getByRole("button", { name: "Save and continue" }));
+    await clickWhenEnabled(() => screen.getByRole("button", { name: "Save and continue" }));
     expect(await screen.findByText("Fill these in to continue")).toBeTruthy();
     expect(screen.getByText("Choose Alex Martin's province on December 31.")).toBeTruthy();
     // Sam's facts are Sam's return's.

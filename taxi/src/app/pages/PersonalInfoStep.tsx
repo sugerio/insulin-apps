@@ -1,4 +1,4 @@
-import { useId, useState, type ReactNode } from "react";
+import { useEffect, useId, useState, type ReactNode } from "react";
 import { Link, useNavigate } from "react-router";
 import {
   PROVINCES,
@@ -179,6 +179,28 @@ function YearFacts({
   const storedChoice = (id: string) => (typeof given[id] === "boolean" ? (given[id] as boolean) : null);
   const choiceOf = (id: string) => valueOf<boolean | null>(`answers.${id}`, storedChoice(id));
   const answerOf = (question: (typeof about)[number]) => (question.type === "boolean" ? choiceOf(question.id) : cleanAmount(amountOf(question.id)));
+  // What was typed over a stored value that has changed since (someone else's save) has given way to it for good: it is
+  // dropped, so it can't come back if the stored value later returns to what it was typed over. Answers are checked
+  // once the estimate, which holds them, is loaded for this year.
+  const storedOf = (key: string): { value: string | boolean | null } | null => {
+    if (key === "maritalStatus") return { value: storedStatus };
+    if (key === "province") return { value: adult.province };
+    if (key === "residentAllYear") return { value: adult.residentAllYear };
+    if (estimate.status !== "ready") return null;
+    const id = key.slice("answers.".length);
+    return { value: rulesFor(year.year)!.questions.get(id)?.type === "boolean" ? storedChoice(id) : storedAmount(id) };
+  };
+  const superseded = Object.entries(draft).flatMap(([key, change]) => {
+    const stored = storedOf(key);
+    return stored !== null && change.basis !== JSON.stringify(stored.value) ? [key] : [];
+  });
+  useEffect(() => {
+    if (superseded.length === 0) return;
+    onDraft((current) => Object.fromEntries(Object.entries(current).filter(([key, entry]) => !(superseded.includes(key) && entry === draft[key]))));
+  }, [superseded.join("\n")]);
+  // Saving waits for the answers: until the estimate is loaded the questions about the person aren't known, and what
+  // was typed for them can't be checked against what is stored.
+  const answersReady = estimate.status === "ready";
   const unanswered = about.filter((question) => answerOf(question) === null || answerOf(question) === "");
   // The spouse's questions (spouseNetIncome and the like) are asked under the spouse; the others are about where this
   // person lived.
@@ -212,16 +234,23 @@ function YearFacts({
 
   async function save(thenContinue: boolean) {
     const sent = draft;
+    // Each answer given; one emptied here is cleared (null), so the field and what is stored agree: unanswered, and
+    // listed as missing. Unlike an amount on Income or Deductions, an empty answer here doesn't mean 0.
     const answers = Object.fromEntries(
-      about.map((question) => [question.id, answerOf(question)] as const).filter((entry): entry is readonly [string, string | boolean] => entry[1] !== null && entry[1] !== ""),
+      about.flatMap((question): [string, string | boolean | null][] => {
+        const value = answerOf(question);
+        if (value !== null && value !== "") return [[question.id, value]];
+        return `answers.${question.id}` in draft ? [[question.id, null]] : [];
+      }),
     );
     await requests.run(async (answered) => {
       const saved = answered(
         await apiRequest(routes.savePersonalInfo, { params: { year: year.year }, body: { revision: year.revision, maritalStatus, adults: [{ personId: owner.id, ...facts }] } }),
       );
       answered(await saveAnswersFor(saved, { [owner.id]: answers }));
-      // What this save sent is stored now, so it is no longer a change.
-      onDraft((current) => Object.fromEntries(Object.entries(current).filter(([key, entry]) => sent[key] !== entry)));
+      // What this save sent is stored now, so it is no longer a change: the facts, and the answers it sent.
+      const stored = (key: string) => !key.startsWith("answers.") || key.slice("answers.".length) in answers;
+      onDraft((current) => Object.fromEntries(Object.entries(current).filter(([key, entry]) => !(sent[key] === entry && stored(key)))));
     }, thenContinue);
   }
 
@@ -309,13 +338,25 @@ function YearFacts({
         </Banner>
       ) : null}
 
-      <div className="flex justify-end">
+      <div className="flex flex-wrap items-center justify-end gap-3">
+        {editable && estimate.status === "loading" ? (
+          <p role="status" className="mr-auto text-xs text-muted-foreground">
+            Loading your answers…
+          </p>
+        ) : editable && estimate.status === "error" ? (
+          <p className="mr-auto flex items-center gap-2 text-xs text-destructive">
+            Your answers couldn't be loaded, so nothing can be saved yet.
+            <Button variant="outline" size="sm" onClick={estimate.reload}>
+              Try again
+            </Button>
+          </p>
+        ) : null}
         {editable ? (
           <div className="flex gap-2">
-            <Button variant="outline" onClick={() => void save(false)} disabled={locked}>
+            <Button variant="outline" onClick={() => void save(false)} disabled={locked || !answersReady}>
               Save
             </Button>
-            <Button onClick={() => void save(true)} disabled={locked}>
+            <Button onClick={() => void save(true)} disabled={locked || !answersReady}>
               {requests.state.status === "saving" ? "Saving…" : "Save and continue"}
             </Button>
           </div>

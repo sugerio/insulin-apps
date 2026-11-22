@@ -118,7 +118,8 @@ export const profile: DocTopic = {
           </p>
           <p>
             If someone else changed the same year while you were editing, your save is refused and nothing is lost on their side. Choose{" "}
-            <b>Reload</b> to see their changes, then make yours again.
+            <b>Reload</b> to see their changes: what you typed stays, except where they changed the same answer (theirs shows), and you can save
+            again.
           </p>
         </>
       ),

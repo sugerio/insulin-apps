@@ -61,7 +61,8 @@ describe("the forms on Finish", () => {
     expect(saved[0]!.name).toBe("Taxi 2025 return - Alex Martin.pdf");
     expect(saved[0]!.blob.type).toBe("application/pdf");
     expect(new TextDecoder().decode((await saved[0]!.blob.arrayBuffer()).slice(0, 5))).toBe("%PDF-");
-    expect(within(forms).queryByText(/Preparing your forms…/)).toBeNull();
+    // The download is handed over before the page says it is done, which it renders a moment later.
+    await waitFor(() => expect(within(forms).queryByText(/Preparing your forms…/)).toBeNull());
   });
 
   it("are downloaded by a viewer too", async () => {

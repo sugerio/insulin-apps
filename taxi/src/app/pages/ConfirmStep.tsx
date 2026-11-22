@@ -168,7 +168,22 @@ function ReturnSlips({
       />
       {state.status === "error" ? (
         state.error instanceof ApiError && state.error.status === 409 ? (
-          <Banner kind="error" title="Someone else changed this year" action={<Button variant="outline" size="sm" onClick={reload}>Reload</Button>}>
+          <Banner
+            kind="error"
+            title="Someone else changed this year"
+            action={
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setState({ status: "idle" });
+                  reload();
+                }}
+              >
+                Reload
+              </Button>
+            }
+          >
             {describeError(state.error)}
           </Banner>
         ) : (

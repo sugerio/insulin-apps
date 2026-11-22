@@ -108,7 +108,22 @@ function Hints({ hints, personId }: { hints: HintView[]; personId: string }) {
           </section>
         ) : null}
         {stale ? (
-          <Banner kind="error" title="Someone else changed this year" action={<Button variant="outline" size="sm" onClick={reload}>Reload</Button>}>
+          <Banner
+            kind="error"
+            title="Someone else changed this year"
+            action={
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setState({ status: "idle" });
+                  reload();
+                }}
+              >
+                Reload
+              </Button>
+            }
+          >
             {describeError(state.error)}
           </Banner>
         ) : state.status === "error" ? (

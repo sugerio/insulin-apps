@@ -1,6 +1,6 @@
-import { render } from "@testing-library/react";
+import { fireEvent, render, waitFor } from "@testing-library/react";
 import { createMemoryRouter, RouterProvider } from "react-router";
-import { afterEach, onTestFinished, vi } from "vitest";
+import { afterEach, expect, onTestFinished, vi } from "vitest";
 import { AuthProvider } from "../../src/app/auth/AuthProvider.tsx";
 import { routes } from "../../src/app/router.tsx";
 import type { AppOptions } from "../../src/app/server/app.ts";
@@ -58,6 +58,15 @@ export function holdRequests(match: (method: string, path: string) => boolean) {
   return { release, held: () => held };
 }
 
+/**
+ * Clicks a control once it is enabled: one an earlier request disabled is enabled again only once that request has
+ * ended and the page has rendered, and a click on it before then does nothing.
+ */
+export async function clickWhenEnabled(control: () => HTMLElement) {
+  await waitFor(() => expect((control() as HTMLButtonElement).disabled).toBe(false));
+  fireEvent.click(control());
+}
+
 /** Answers the page's next request that `match` with a 500, as a server having trouble would; the ones after reach it. */
 export function failRequestOnce(match: (method: string, path: string) => boolean) {
   const send = globalThis.fetch;
@@ -90,7 +99,11 @@ export function catchDownloads() {
   });
   onTestFinished(() => {
     URL.createObjectURL = created;
-    URL.revokeObjectURL = revoked;
+    // saveFile revokes its URL a second later, maybe after this test: jsdom has no revokeObjectURL, so a late call would
+    // throw in whichever test runs then. Its own URLs are let go quietly; any other goes to the original, if there is one.
+    URL.revokeObjectURL = (url: string) => {
+      if (!url.startsWith("blob:taxi-test/")) revoked?.call(URL, url);
+    };
     click.mockRestore();
   });
   return saved;

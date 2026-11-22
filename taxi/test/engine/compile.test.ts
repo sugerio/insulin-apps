@@ -90,6 +90,8 @@ describe("compiling rule files", () => {
     expect(compileError(withLine("countNonZero(1)"))).toContain("countNonZero takes slip boxes");
     expect(compileError(withLine("countNonZero(S.box1, S.box2)"))).toContain("countNonZero takes 1 values");
     expect(compileError(withLine("countNonZero(S.slips)"))).toContain("countNonZero takes slip boxes");
+    expect(compileError(withLine("countIssuers(S.slips)"))).toContain("countIssuers takes slip boxes");
+    expect(compileError(withLine("countIssuers(family.childMonthsUnder6)"))).toContain("countIssuers takes slip boxes");
     expect(compileError(withLine("S.slip"))).toContain("S.slip: S has boxes 1, 2 (and S.slips counts them)");
     expect(compileError(withLine("spouse.param.rate"))).toContain("params are the same for both spouses");
     expect(compileError(withLine("unsupported(1)"))).toContain("unsupported takes the reason, as text in quotes");

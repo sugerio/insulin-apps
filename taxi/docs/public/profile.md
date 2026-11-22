@@ -75,4 +75,5 @@ lists what is left. When nothing is missing, the step shows a check mark. While 
 an answer doesn't fit, such as part of a day, the answers aren't saved and the reason shows under it.
 
 If someone else changed the same year while you were editing, your save is refused and their changes are kept. Choose
-**Reload** to see them, then make your changes again.
+**Reload** to see them: what you typed stays, except where they changed the same answer (theirs shows), and you can save
+again. If the year can't be loaded, the page stays as it was and says so, with a way to try again.

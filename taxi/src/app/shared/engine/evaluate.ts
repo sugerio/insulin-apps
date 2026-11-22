@@ -103,7 +103,7 @@ interface Node extends Computed {
   /** The keys of the nodes it read, in order. */
   reads: string[];
   /** For a slip box: one entry per slip that has it. */
-  items?: { label: string; value: Dec }[];
+  items?: { label: string; value: Dec; issuer?: string }[];
   /** Why the value is missing when the rules can't compute it (`unsupported`). */
   notes?: string[];
 }
@@ -339,7 +339,7 @@ export class Evaluation {
         const box = rest[0]!.slice("box".length);
         const items = mine
           .filter((each) => box in each.boxes)
-          .map((each) => ({ label: `${slip.id} from ${each.issuer}`, value: Dec.from(each.boxes[box]!) }));
+          .map((each) => ({ label: `${slip.id} from ${each.issuer}`, value: Dec.from(each.boxes[box]!), issuer: each.issuer }));
         return {
           value: items.map((item) => item.value),
           status: "complete",
@@ -429,6 +429,14 @@ export class Evaluation {
         if (formula.name === "unsupported") {
           notes.push((formula.args[0] as Extract<Formula, { kind: "string" }>).value);
           return MISSING;
+        }
+        if (formula.name === "countIssuers") {
+          // The list's values carry no issuer, so the slip box is read here, where its slips are.
+          const key = this.key(personId, (formula.args[0] as Extract<Formula, { kind: "ref" }>).path);
+          reads.push(key);
+          const node = this.node(key);
+          const issuers = new Set((node.items ?? []).filter((item) => !item.value.isZero()).map((item) => item.issuer!.trim().toLowerCase()));
+          return { value: Dec.of(issuers.size), status: node.status };
         }
         if (formula.name === "if") {
           const condition = evaluate(formula.args[0]!);

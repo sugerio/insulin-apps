@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { Person, SlipList, TaxYear } from "#shared";
 import type { SlipReader } from "../../src/app/server/lib/reader.ts";
 import { OWNER, type TestServer } from "../support/server.ts";
-import { catchDownloads, renderApp } from "./support.tsx";
+import { catchDownloads, clickWhenEnabled, renderApp } from "./support.tsx";
 
 const reader: SlipReader = {
   read: async () => ({
@@ -407,7 +407,7 @@ describe("Upload documents", () => {
     await waitFor(() => expect(saved.map((file) => file.name)).toEqual(["t4.pdf"]));
     expect(await saved[0]!.blob.text()).toBe("%PDF-1.4 x");
     await deleteFileElsewhere(server);
-    fireEvent.click(screen.getByRole("button", { name: "Download t4.pdf" }));
+    await clickWhenEnabled(() => screen.getByRole("button", { name: "Download t4.pdf" }));
     expect(await screen.findByText("No such file in this year")).toBeTruthy();
     expect(saved).toHaveLength(1);
   });

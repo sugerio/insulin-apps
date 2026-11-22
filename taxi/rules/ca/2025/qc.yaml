@@ -223,11 +223,49 @@ lines:
   # box I of the RL-16 gross up both kinds of dividend at once, so each can round a cent under the T-slip's two boxes:
   # a cent a slip is allowed. An RL-2 puts a payment in box A, B or C as the payer chooses (box C holds an RPP's lump
   # sums, T4A box 018), and an RL-16 foreign income in box E or F, so those are compared together.
-  # Where the amounts differ by law, slips are counted instead, each T-slip that holds an amount needing an RL slip of
-  # its own: an RL-1's box A holds benefits taxable only in Quebec (an employer's group insurance), which can hide a
-  # whole T4 from another province in a comparison of amounts, so more T4s with employment income than RL-1s with
-  # box A are refused; Quebec's eligible tuition (RL-8 box B, which a CEGEP can leave blank) isn't the federal one
-  # (T2202 box 26), so more T2202s with tuition than RL-8 slips, whatever boxes they show, are refused.
+  # T4s and RL-1s. For employment in Quebec, RL-1 box A and T4 box 14 are the same pay, each with benefits the other
+  # leaves out. Box A adds those taxed only in Quebec: an employer's contribution to a private health services plan,
+  # also shown in box J (RL-1.G-V, 5.3.1 and 5.12), tips the employer allocated (box T, 5.3.2 and 5.22), a
+  # multi-employer group insurance contribution (box P, 5.18) and benefits in box L (5.14). Box 14 adds those taxed only
+  # federally: an eligible public transit pass, valid for at least a month (or an eligible paratransit pass), that the
+  # employer provides mainly for commuting or reimburses against supporting documents (Quebec exempts it, IN-253-V 5.8,
+  # while a transit allowance stays taxable; the CRA taxes it, T4130, "Transportation passes", code 40), and the
+  # employer's intermunicipal shared transportation meeting the conditions of IN-253-V 5.9, which keep it out of box A.
+  # (Computer or office equipment reimbursed for working from home isn't one: Quebec taxes it, in boxes A, G, I and L,
+  # IN-253-V 7.13.) Neither slip shows box 14's on its own, so the answer qcExemptBenefits (questions.yaml) gives
+  # their total. With S, the shortfall, box 14 less box A less box J: the answer is asked only when S is more than 0, so
+  # a return whose slips agree never sees it, and it must be S exactly. An employer reports such a benefit to the cent,
+  # so an honest answer is S, and an answer left from an earlier gap counts only if a new gap is the same to the cent
+  # (the employer moving the benefit to a T4 of its own, which is the same case). Boxes T, P and L aren't read. The
+  # guide also moves out of box A income situated on a reserve or premises (box R) and wage loss replacement benefits
+  # and top-up disability payments (box O, code RN, 5.17.16), which this TP-1 doesn't read either. Amounts are exact
+  # decimals: no tolerance. Three tests, any one refusing, each with its message:
+  # - more employers with a T4 showing employment income than with an RL-1 showing box A, since boxes T, P and L can
+  #   still hide a whole T4 from another employer in the amounts. A T4 and its RL-1 can name the employer differently
+  #   (in English and in French), so the counts are compared rather than the names matched; one employer spelled two
+  #   ways on two T4s counts as two, and is refused;
+  # - S more than 0 and the answer not S (an answer above box 14 among them): benefits Quebec doesn't tax not entered,
+  #   or entered wrong, which the message sends back to the Income step for first, then an RL-1 left out (one employer
+  #   can issue one for each payroll account, or for the Quebec part of a year it moved you to another province),
+  #   employment outside Quebec (an Ottawa employer's RL-1 for the health plan benefit alone), or income in box O or R.
+  #   One employer's two T4s under one RL-1 (two EI categories) carry the same total and pass. Transit benefits beside
+  #   tips, box P or box L in box A can't be S exactly and are refused, the cost below;
+  # - more T4s with employment income than RL-1s with box A, and box A less box J more than box 14 (S below 0; once the
+  #   answer, S, is taken off a shortfall, the amounts match). More T4s than RL-1s is what every RL-1 left out of one
+  #   employer looks like (a second payroll account, a move out of Quebec), and boxes T, P and L can hide one in the
+  #   amounts, so there one RL-1 covering several T4s must carry the same pay. One employer's two T4s under one RL-1
+  #   with only box J beside its pay pass; such an RL-1 that also carries tips, box P or a Quebec-only box L benefit, or
+  #   another employer's RL-1 carrying them beside it, is refused: rare on rare, and the safer failure, which the
+  #   message says.
+  # What none sees: as many RL-1s as T4s, one of them for a benefit alone (box J, an Ottawa employer's health plan, or
+  # the same employer's for the months it moved you out of Quebec) beside a T4 from outside Quebec, and that T4 smaller
+  # than the amounts in box A outside box J (box T, P or L) on another RL-1.
+  # T2202s and RL-8s: Quebec's eligible tuition (RL-8 box B, which a CEGEP can leave blank, and which leaves out fees
+  # for medical services the CRA allows, RL-8.G-V 3.5) isn't the federal one (T2202 box 26), so amounts aren't
+  # compared: more schools with a T2202 showing tuition than RL-8 slips, whatever boxes they show, are refused. A
+  # school issues one RL-8 for the year (box A takes one amount for all the terms begun in it, RL-8.G-V 3.4), so its
+  # two T2202s under one RL-8 pass; a second RL-8 from one school, if one were left out, would only lower the Quebec
+  # tuition credit, never leave out income.
   #
   # A slip box the federal return reads whose amount no TP-1 line reads is refused, naming the TP-1 line it belongs on.
   QC.scope:
@@ -235,8 +273,13 @@ lines:
     formula: >-
       if(not person.residentAllYear,
       unsupported("A Quebec return for a year you moved to or from Canada isn't handled by this app yet"),
-      if(countNonZero(T4.box14) > countNonZero(RL1.boxA),
-      unsupported("A Quebec resident's employer in Quebec issues an RL-1 with each T4: upload it. Employment outside Quebec (a T4 without an RL-1, Schedule R Part B) isn't handled by this app yet"),
+      if(countIssuers(T4.box14) > countIssuers(RL1.boxA),
+      unsupported("More employers gave you a T4 with employment income (box 14) than gave you an RL-1 with box A. A Quebec resident's employer in Quebec issues an RL-1 with each T4: upload it. Employment outside Quebec (a T4 with no RL-1, Schedule R Part B) isn't handled by this app yet"),
+      if(sum(T4.box14) > sum(RL1.boxA) - sum(RL1.boxJ)
+      and answer.qcExemptBenefits != sum(T4.box14) - (sum(RL1.boxA) - sum(RL1.boxJ)),
+      unsupported("Your RL-1 slips don't cover the employment income on your T4 slips: box 14 is more than box A of the RL-1s less the health plan benefit in box J. First check “Benefits on your T4 slips that Quebec doesn't tax” on the Income step: if all of the difference is such benefits (an eligible transit pass, say), enter exactly the difference there. Otherwise upload the RL-1 an employer in Quebec issues with each T4. If every RL-1 is here, the difference is employment outside Quebec (a T4 with no RL-1, or with an RL-1 for a health plan benefit only, Schedule R Part B) or employment income an RL-1 shows outside box A (box O or R), which this app doesn't handle yet"),
+      if(countNonZero(T4.box14) > countNonZero(RL1.boxA) and sum(RL1.boxA) - sum(RL1.boxJ) > sum(T4.box14),
+      unsupported("You have more T4 slips than RL-1 slips, and box A of the RL-1s, less the health plan benefit in box J, is more than box 14 of the T4s: one RL-1 covers several T4s from one employer only when it carries the same pay. Upload the RL-1 an employer in Quebec issues with each T4. If every RL-1 is here, an RL-1 adds amounts to box A that a T4 doesn't have (allocated tips in box T, box P or L), which this app doesn't handle yet"),
       if(sum(T5.box13) > sum(RL3.boxD),
       unsupported("The interest on your T5 slips (box 13) is more than box D of your RL-3 slips: upload the RL-3 issued with each T5, with its box D. A T5 without its RL-3 isn't handled on the Quebec return by this app yet"),
       if(sum(T5.box11) + sum(T5.box25) > sum(RL3.boxB) + 0.01 * count(RL3.boxB),
@@ -256,8 +299,8 @@ lines:
       if(sum(T4A.box016) + sum(T4A.box018) + sum(T4A.box024) + sum(T4RIF.box16) + sum(T4RSP.box16) + sum(T4RSP.box22)
       > sum(RL2.boxA) + sum(RL2.boxB) + sum(RL2.boxC),
       unsupported("Your T4A, T4RSP and T4RIF slips show more pension, annuity, RRSP and RRIF payments (T4A boxes 016, 018 and 024, T4RSP boxes 16 and 22, T4RIF box 16) than boxes A, B and C of your RL-2 slips: upload the RL-2 issued with each of them. A payment without its RL-2 isn't handled on the Quebec return by this app yet"),
-      if(countNonZero(T2202.box26) > RL8.slips,
-      unsupported("You have more T2202 slips with tuition (box 26) than RL-8 slips. A college or university in Quebec issues an RL-8 with each T2202: upload it. Tuition paid to a school outside Quebec (a T2202 without an RL-8, Schedule T) isn't handled on the Quebec return by this app yet"),
+      if(countIssuers(T2202.box26) > RL8.slips,
+      unsupported("More schools gave you a T2202 with tuition (box 26) than gave you an RL-8. A college or university in Quebec issues an RL-8 with each T2202: upload it. Tuition paid to a school outside Quebec (a T2202 without an RL-8, Schedule T) isn't handled on the Quebec return by this app yet"),
       if(sum(RL5.boxA) + sum(RL5.boxB) > 0 and sum(T5007.box11) > sum(RL5.boxA) + sum(RL5.boxB),
       unsupported("The social assistance on your T5007 slips (box 11) is more than boxes A and B of your RL-5 slips: upload the RL-5 issued with each T5007. The Quebec return takes the T5007 only when there is no RL-5 at all"),
       if(sum(T4.box39) + sum(T4.box41) > 0,
@@ -278,7 +321,7 @@ lines:
       if(answer.hasForeignIncome, unsupported("Foreign income on the Quebec return (the foreign tax credit, Schedule E) isn't handled by this app yet"),
       if(sum(T4AOAS.box21) > 0, unsupported("Net federal supplements on the Quebec return (lines 148 and 295) aren't handled by this app yet"),
       if(sum(T4AOAS.box20) > 0, unsupported("An Old Age Security overpayment recovered (box 20 of the T4A(OAS)) on the Quebec return isn't handled by this app yet"),
-      if(answer.hasMovingExpenses, unsupported("Moving expenses on the Quebec return (form TP-348-V) aren't handled by this app yet"), 0)))))))))))))))))))))))))
+      if(answer.hasMovingExpenses, unsupported("Moving expenses on the Quebec return (form TP-348-V) aren't handled by this app yet"), 0)))))))))))))))))))))))))))
 
   # Page 2 – contributions (not added into income)
   TP1.97:

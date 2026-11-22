@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import type { Estimate, Person, SlipList, TaxYear } from "#shared";
 import { OWNER, VIEWER, type TestServer } from "../support/server.ts";
 import type { SlipReader } from "../../src/app/server/lib/reader.ts";
-import { failRequestOnce, holdRequests, renderApp } from "./support.tsx";
+import { clickWhenEnabled, failRequestOnce, holdRequests, renderApp } from "./support.tsx";
 
 /** Every yes/no question of the income, deductions and credits modules. */
 const APPLIES = [
@@ -141,6 +141,28 @@ describe("Personal info", () => {
     );
   });
 
+  it("clears an answer emptied here, so what is stored is what is shown", async () => {
+    const { server } = await renderApp("/returns/2025/personal", {
+      seed: async (s) => {
+        const alex = (await (await s.call("POST", "/api/people", { as: OWNER, body: { name: "Alex Martin", relationship: "self", birthDate: "1985-04-02" } })).json()) as Person;
+        await s.call("POST", "/api/years", { as: OWNER, body: { year: 2025, people: [alex.id] } });
+        const year = (await (
+          await s.call("PUT", "/api/years/2025/personal-info", {
+            as: OWNER,
+            body: { revision: 1, maritalStatus: "single", adults: [{ personId: alex.id, province: "ON", residentAllYear: false }] },
+          })
+        ).json()) as TaxYear;
+        await s.call("PUT", "/api/years/2025/answers", { as: OWNER, body: { revision: year.revision, personId: alex.id, answers: { daysResident: "183" } } });
+      },
+    });
+    const days = async () => (await screen.findByLabelText("Days you lived in Canada in 2025")) as HTMLInputElement;
+    expect((await days()).value).toBe("183");
+    fireEvent.change(await days(), { target: { value: "" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(async () => expect(Object.values((await estimate(server)).input.answers)[0] ?? {}).not.toHaveProperty("daysResident"));
+    expect((await days()).value).toBe("");
+  });
+
   it("shows a refused answer's reason at its field", async () => {
     await renderApp("/returns/2025/personal", {
       seed: async (s) => {
@@ -236,6 +258,123 @@ describe("Personal info", () => {
     expect((await days()).value).toBe("183");
   });
 
+  describe("after someone else changed the year", () => {
+    /** Alex, single, in Ontario, who moved during the year; Personal info open with BC and 183 days typed, not saved. */
+    async function typedOnPersonalInfo() {
+      let alexId = "";
+      const rendered = await renderApp("/returns/2025/personal", {
+        seed: async (s) => {
+          const alex = (await (await s.call("POST", "/api/people", { as: OWNER, body: { name: "Alex Martin", relationship: "self", birthDate: "1985-04-02" } })).json()) as Person;
+          alexId = alex.id;
+          await s.call("POST", "/api/years", { as: OWNER, body: { year: 2025, people: [alex.id] } });
+          await s.call("PUT", "/api/years/2025/personal-info", {
+            as: OWNER,
+            body: { revision: 1, maritalStatus: "single", adults: [{ personId: alex.id, province: "ON", residentAllYear: false }] },
+          });
+        },
+      });
+      fireEvent.change(await screen.findByLabelText("Province on December 31"), { target: { value: "BC" } });
+      fireEvent.change(await screen.findByLabelText("Days you lived in Canada in 2025"), { target: { value: "183" } });
+      return { ...rendered, alexId };
+    }
+    const province = async () => (await screen.findByLabelText("Province on December 31")) as HTMLSelectElement;
+    const days = async () => (await screen.findByLabelText("Days you lived in Canada in 2025")) as HTMLInputElement;
+    const revisionOf = async (server: TestServer) => ((await (await server.call("GET", "/api/years/2025")).json()) as TaxYear).revision;
+    const save = () => clickWhenEnabled(() => screen.getByRole("button", { name: "Save" }));
+    /** Waits for the newer year a reload brings: the facts start again from it (a new form), and the old one is gone. */
+    async function newerYear(before: HTMLElement) {
+      await waitFor(() => expect(screen.getByLabelText("Province on December 31")).not.toBe(before));
+    }
+    /** Saves, is refused as someone else changed the year, and reloads it from the banner until the newer year is here. */
+    async function saveRefusedThenReload() {
+      await save();
+      const banner = (await screen.findByText("Someone else changed this year")).closest<HTMLElement>("[role=alert]")!;
+      const before = await province();
+      fireEvent.click(within(banner).getByRole("button", { name: "Reload" }));
+      await newerYear(before);
+      expect(screen.queryByText("Someone else changed this year")).toBeNull();
+    }
+
+    it("keeps what was typed when the year is loaded again, and saves it", async () => {
+      const { server, alexId } = await typedOnPersonalInfo();
+      // Another tab adds a slip: the year moves on, the facts typed here don't.
+      const slip = { revision: await revisionOf(server), personId: alexId, type: "T4", issuer: "Maple Corp", boxes: { 14: "60000" } };
+      expect((await server.call("POST", "/api/years/2025/slips", { as: OWNER, body: slip })).status).toBe(201);
+      await saveRefusedThenReload();
+      expect((await province()).value).toBe("BC");
+      expect((await days()).value).toBe("183");
+      await save();
+      await waitFor(async () => expect(((await (await server.call("GET", "/api/years/2025")).json()) as TaxYear).adults[0]).toMatchObject({ province: "BC" }));
+      expect(Object.values((await estimate(server)).input.answers)[0]).toMatchObject({ daysResident: "183" });
+    });
+
+    it("shows a fact someone else changed meanwhile, and keeps what was typed for the others", async () => {
+      const { server, alexId } = await typedOnPersonalInfo();
+      const facts = { revision: await revisionOf(server), maritalStatus: "single", adults: [{ personId: alexId, province: "NU", residentAllYear: false }] };
+      expect((await server.call("PUT", "/api/years/2025/personal-info", { as: OWNER, body: facts })).status).toBe(200);
+      await saveRefusedThenReload();
+      await waitFor(async () => expect((await province()).value).toBe("NU"));
+      expect((await days()).value).toBe("183");
+    });
+
+    it("drops what was typed over a fact someone else changed, so it can't come back and be saved over theirs", async () => {
+      const { server, alexId } = await typedOnPersonalInfo();
+      const saveElsewhere = async (province: string) => {
+        const facts = { revision: await revisionOf(server), maritalStatus: "single", adults: [{ personId: alexId, province, residentAllYear: false }] };
+        expect((await server.call("PUT", "/api/years/2025/personal-info", { as: OWNER, body: facts })).status).toBe(200);
+      };
+      await saveElsewhere("NU");
+      await saveRefusedThenReload();
+      await waitFor(async () => expect((await province()).value).toBe("NU"));
+      // The other tab puts back the province BC was typed over: theirs shows, not BC.
+      await saveElsewhere("ON");
+      await saveRefusedThenReload();
+      await waitFor(async () => expect((await province()).value).toBe("ON"));
+      const before = await revisionOf(server);
+      await save();
+      await waitFor(async () => expect(await revisionOf(server)).toBeGreaterThan(before));
+      expect(((await (await server.call("GET", "/api/years/2025")).json()) as TaxYear).adults[0]).toMatchObject({ province: "ON" });
+    });
+
+    it("waits for the answers to load before saving, so none typed is lost", async () => {
+      const { server, alexId } = await typedOnPersonalInfo();
+      const slip = { revision: await revisionOf(server), personId: alexId, type: "T4", issuer: "Maple Corp", boxes: { 14: "60000" } };
+      expect((await server.call("POST", "/api/years/2025/slips", { as: OWNER, body: slip })).status).toBe(201);
+      await save();
+      const refused = (await screen.findByText("Someone else changed this year")).closest<HTMLElement>("[role=alert]")!;
+      const held = holdRequests((method, path) => method === "GET" && path === "/api/years/2025/estimate");
+      fireEvent.click(within(refused).getByRole("button", { name: "Reload" }));
+      // The newer year is here; its answers (the estimate) aren't yet.
+      await waitFor(() => expect(held.held()).toBe(1));
+      expect((screen.getByRole("button", { name: "Save" }) as HTMLButtonElement).disabled).toBe(true);
+      expect(screen.getByText("Loading your answers…")).toBeTruthy();
+      held.release();
+      expect((await days()).value).toBe("183");
+      await save();
+      await waitFor(async () => expect(Object.values((await estimate(server)).input.answers)[0]).toMatchObject({ daysResident: "183" }));
+    });
+
+    it("keeps the page and what was typed when the year can't be loaded again, with a way to try again", async () => {
+      const { server, alexId } = await typedOnPersonalInfo();
+      const slip = { revision: await revisionOf(server), personId: alexId, type: "T4", issuer: "Maple Corp", boxes: { 14: "60000" } };
+      expect((await server.call("POST", "/api/years/2025/slips", { as: OWNER, body: slip })).status).toBe(201);
+      await save();
+      const refused = (await screen.findByText("Someone else changed this year")).closest<HTMLElement>("[role=alert]")!;
+      failRequestOnce((method, path) => method === "GET" && path === "/api/years/2025");
+      fireEvent.click(within(refused).getByRole("button", { name: "Reload" }));
+      const banner = (await screen.findByText("The year couldn't be loaded again")).closest<HTMLElement>("[role=alert]")!;
+      expect((await province()).value).toBe("BC");
+      expect((await days()).value).toBe("183");
+      const before = await province();
+      fireEvent.click(within(banner).getByRole("button", { name: "Try again" }));
+      await newerYear(before);
+      expect(screen.queryByText("The year couldn't be loaded again")).toBeNull();
+      expect((await province()).value).toBe("BC");
+      await save();
+      await waitFor(async () => expect(((await (await server.call("GET", "/api/years/2025")).json()) as TaxYear).adults[0]).toMatchObject({ province: "BC" }));
+    });
+  });
+
   it("asks where you lived under its own heading and your spouse's income under theirs, and says what a move to or from Canada does", async () => {
     await renderApp("/returns/2025/personal", {
       seed: async (s) => {
@@ -305,6 +444,53 @@ describe("Income", () => {
     const slips = (await (await server.call("GET", "/api/years/2025/slips")).json()) as { slips: { boxes: Record<string, string>; status: string }[] };
     expect(slips.slips[0]).toMatchObject({ boxes: { 14: "61500", 16: "3361.75" }, status: "unconfirmed" });
     expect(Object.values((await estimate(server)).input.answers)[0]).toMatchObject({ hasRentalIncome: true });
+  });
+
+  /** Alex in Quebec: $62,000 of pay and $1,800 of transit passes on the T4 (box 14), the pay alone on the RL-1 (box A). */
+  const transitPass = async (s: TestServer) => {
+    const alex = await seed(s, { province: "QC" });
+    for (const [type, boxes] of [
+      ["T4", { 14: "63800", 17: "3744", 22: "9000" }],
+      ["RL1", { A: "62000", B_A: "3744", E: "6900" }],
+    ] as const) {
+      const year = (await (await s.call("GET", "/api/years/2025", { as: OWNER })).json()) as TaxYear;
+      await s.call("POST", "/api/years/2025/slips", { as: OWNER, body: { revision: year.revision, personId: alex.id, type, issuer: "Maple Corp", boxes } });
+    }
+  };
+  const exemptBenefits = "Benefits on your T4 slips that Quebec doesn't tax";
+
+  it("asks a Quebec resident for the benefits Quebec doesn't tax when the T4 shows more than the RL-1", async () => {
+    const { server } = await renderApp("/returns/2025/income", { seed: transitPass });
+    const ask = exemptBenefits;
+    fireEvent.click(within(await screen.findByRole("region", { name: "Add to your return" })).getByRole("button", { name: `Add ${ask}` }));
+    expect(screen.getByText(/enter the difference, to the cent; otherwise enter 0\. The main one is a public transit pass/)).toBeTruthy();
+    fireEvent.change(screen.getByLabelText(ask), { target: { value: "1,800" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(async () => expect(Object.values((await estimate(server)).input.answers)[0]).toMatchObject({ qcExemptBenefits: "1800" }));
+    const [result] = (await estimate(server)).result.people;
+    expect(result!.missing.map((each) => each.question)).not.toContain("qcExemptBenefits");
+    expect(result!.unhandled.join(" ")).not.toMatch(/don't cover the employment income/);
+  });
+
+  it("sends a Quebec resident who skipped those benefits back to Income from Finish, and takes the difference there", async () => {
+    const { router } = await renderApp("/returns/2025/income", { seed: transitPass });
+    const sendsBack = /First check “Benefits on your T4 slips that Quebec doesn't tax” on the Income step/;
+    // Saved without adding the amount: it is recorded as none, so the T4 shows $1,800 the RL-1 doesn't.
+    fireEvent.click(await screen.findByRole("button", { name: "Save and continue" }));
+    await waitFor(() => expect(router.state.location.pathname).toMatch(/\/deductions$/));
+    await act(() => router.navigate(router.state.location.pathname.replace(/deductions$/, "finish")));
+    expect(within(await screen.findByRole("region", { name: "Before you file" })).getByText(sendsBack)).toBeTruthy();
+    await act(() => router.navigate(router.state.location.pathname.replace(/finish$/, "income")));
+    const add = within(await screen.findByRole("region", { name: "Add to your return" })).queryByRole("button", { name: `Add ${exemptBenefits}` });
+    if (add) fireEvent.click(add);
+    fireEvent.change(screen.getByLabelText(exemptBenefits), { target: { value: "1800" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect((screen.getByLabelText(exemptBenefits) as HTMLInputElement).value).toBe("1800"));
+    await act(() => router.navigate(router.state.location.pathname.replace(/income$/, "finish")));
+    await screen.findByRole("list", { name: "Key lines" });
+    await waitFor(() => expect(screen.queryByText(sendsBack)).toBeNull());
+    // Still listed: the slips to confirm, which the amount didn't change.
+    expect(within(screen.getByRole("region", { name: "Before you file" })).getByText(/not confirmed yet/)).toBeTruthy();
   });
 
   it("shows a viewer the return's slips without anything to change or add", async () => {

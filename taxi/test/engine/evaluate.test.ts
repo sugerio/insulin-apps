@@ -26,6 +26,7 @@ const rules = loadRuleSet(
                 "R.slips": { label: "Slips with box 1", formula: "count(S.box1)" },
                 "R.slipsWithAmount": { label: "Slips with an amount in box 1", formula: "countNonZero(S.box1)" },
                 "R.allSlips": { label: "Slips", formula: "S.slips" },
+                "R.issuers": { label: "Issuers with an amount in box 1", formula: "countIssuers(S.box1)" },
                 "R.deduction": { label: "Deduction", formula: "answer.deduction" },
                 "R.total": { label: "Total", formula: "max(0, line.R.income - line.R.deduction)" },
                 "R.tax": { label: "Tax", formula: "round(bracket(param.brackets, line.R.total), 2)" },
@@ -97,6 +98,18 @@ describe("evaluating a year", () => {
     expect(value(evaluation, "a", "R.slipsWithAmount")).toEqual(["2", "complete"]);
     expect(value(evaluation, "b", "R.slipsWithAmount")).toEqual(["1", "complete"]);
     expect(value(new Evaluation(rules, input({ slips: [] })), "a", "R.allSlips")).toEqual(["0", "complete"]);
+  });
+
+  it("counts the issuers of the slips whose box holds an amount, each once, whatever their case or spaces", () => {
+    // One and Two have box 1; a second slip from " one " is One again, and Four's box 1 holds 0.
+    const again = { id: "s4", person: "a", type: "S", issuer: " one ", boxes: { 1: "5" } };
+    const blank = { id: "s5", person: "a", type: "S", issuer: "Four", boxes: { 1: "0" } };
+    const evaluation = new Evaluation(rules, input({ slips: [...input().slips, again, blank] }));
+    expect(value(evaluation, "a", "R.issuers")).toEqual(["2", "complete"]);
+    expect(value(evaluation, "b", "R.issuers")).toEqual(["1", "complete"]);
+    // Explained down to each slip, as sum() is.
+    const [box] = evaluation.explain("a", "line.R.issuers").inputs;
+    expect([box!.label, box!.inputs.map((each) => each.label)]).toEqual(["S box 1: Income", ["S from One", "S from Two", "S from  one ", "S from Four"]]);
   });
 
   it("reads a chart of rates: the rate of the row the amount falls in, up to and including its top", () => {
@@ -702,17 +715,114 @@ describe("the 2025 rules", () => {
       const scope = (evaluation: Evaluation) => evaluation.explain("p1", "line.QC.scope").notes ?? [];
       // The Quebec job's RL-1 shows $2,000 more than its T4 (group insurance is taxable in Quebec): that alone is fine.
       const quebecJob = employee.slips.map((slip) => (slip.type === "RL1" ? { ...slip, boxes: { ...slip.boxes, A: "64000" } } : slip));
-      const evaluate = (slips: EngineInput["slips"]) => new Evaluation(rulesFor(2025)!, { ...employee, slips });
+      const evaluate = (slips: EngineInput["slips"], answers: Record<string, string> = {}) =>
+        new Evaluation(rulesFor(2025)!, { ...employee, slips, answers: { ...employee.answers, p1: { ...employee.answers.p1, ...answers } } });
+      // Where box 14 is more than box A less box J, the benefits Quebec doesn't tax are asked; none here.
+      const none = { qcExemptBenefits: "0" };
       expect(scope(evaluate(quebecJob))).toEqual([]);
       // A $1,500 T4 from an Ottawa job has no RL-1: the amounts (63,500 against 64,000) would hide it, the slips don't.
       const ottawa = { id: "x0", person: "p1", type: "T4", issuer: "Rideau Outfitters", boxes: { 14: "1500", 22: "150", 24: "1500", 26: "1500", 56: "1500" } };
       const twoJobs = evaluate([...quebecJob, ottawa]);
       expect(twoJobs.line("p1", "TP1.478")).toEqual({ value: null, status: "missing" });
-      expect(scope(twoJobs)).toEqual([expect.stringMatching(/issues an RL-1 with each T4: upload it/)]);
+      expect(scope(twoJobs)).toEqual([expect.stringMatching(/More employers gave you a T4 .* issues an RL-1 with each T4: upload it/)]);
+      // One employer's two T4s (two EI categories) under the one RL-1 that covers both: one employer, one RL-1.
+      const slip = (id: string, type: string, issuer: string, boxes: Record<string, string>) => ({ id, person: "p1", type, issuer, boxes });
+      const t4 = (id: string, issuer: string, income: string, qpp: string, ei: string, ppip: string) =>
+        slip(id, "T4", issuer, { 14: income, 17: qpp, 18: ei, 22: "0", 24: income, 26: income, 55: ppip, 56: income });
+      const rl1 = employee.slips.find((each) => each.type === "RL1")!;
+      const twoCategories = evaluate([
+        t4("e1", "Érable Conseil inc.", "20000", "1056", "262", "98.80"),
+        t4("e2", " érable conseil inc. ", "42000", "2688", "550.20", "207.48"),
+        rl1,
+      ]);
+      expect(scope(twoCategories)).toEqual([]);
+      expect(twoCategories.line("p1", "TP1.478").status).toBe("complete");
+      // One employer's RL-1 for each payroll account, and only the $20,000 one uploaded: $42,000 would be left out.
+      // Box 14 short: the message sends back to the Income question first. Box A above box 14 on fewer RL-1s: its own.
+      const needsRl1 = [expect.stringMatching(/First check “Benefits on your T4 slips that Quebec doesn't tax” on the Income step/)];
+      const sameShortPay = [expect.stringMatching(/one RL-1 covers several T4s from one employer only when it carries the same pay/)];
+      const twoAccounts = evaluate([
+        t4("e1", "Érable Conseil inc.", "20000", "1056", "262", "98.80"),
+        t4("e2", "Érable Conseil inc.", "42000", "2688", "550.20", "207.48"),
+        slip("e3", "RL1", "Érable Conseil inc.", { A: "20000", B_A: "1056", G: "20000", H: "98.80", I: "20000" }),
+      ], none);
+      expect(twoAccounts.line("p1", "TP1.478")).toEqual({ value: null, status: "missing" });
+      expect(scope(twoAccounts)).toEqual(needsRl1);
+      // Moved by the employer from Montréal to Ottawa: a T4 for each province, and an RL-1 for the Quebec part only.
+      const moved = evaluate([
+        t4("e1", "Érable Conseil inc.", "30000", "1696", "393", "148.20"),
+        slip("e2", "T4", "Érable Conseil inc.", { 14: "20000", 16: "0", 22: "0", 24: "20000", 26: "20000", 56: "20000" }),
+        slip("e3", "RL1", "Érable Conseil inc.", { A: "30500", B_A: "1696", G: "30000", H: "148.20", I: "30000" }),
+      ], none);
+      expect(scope(moved)).toEqual(needsRl1);
+      // An Ottawa employer's RL-1 for its Quebec-taxable health plan benefit alone (boxes A and J), beside its T4 for the
+      // job in Ontario: one employer on each side, but box A covers $2,000 of the $62,000. The benefits Quebec doesn't
+      // tax are asked, and $1,800 of them doesn't explain $62,000.
+      const ontarioJob = [t4("e1", "Rideau Outfitters", "62000", "0", "1020.80", "0"), slip("e2", "RL1", "Rideau Outfitters", { A: "2000", J: "2000" })];
+      expect(evaluate(ontarioJob).result().people[0]!.missing.map((each) => each.question)).toContain("qcExemptBenefits");
+      const benefitOnly = evaluate(ontarioJob, { qcExemptBenefits: "1800" });
+      expect(benefitOnly.line("p1", "TP1.478")).toEqual({ value: null, status: "missing" });
+      expect(scope(benefitOnly)).toEqual([expect.stringMatching(/don't cover the employment income .* an RL-1 for a health plan benefit only/)]);
+      // The private health plan benefit (box J) is inside box A but never in box 14: a Quebec employee's RL-1 shows it
+      // on top of the T4's pay ...
+      const healthPlan = slip("e9", "RL1", "Érable Conseil inc.", { A: "62000", B_A: "3584", G: "60000", H: "296.40", I: "60000", J: "2000" });
+      const quebecEmployee = evaluate([t4("e1", "Érable Conseil inc.", "60000", "3584", "786", "296.40"), healthPlan]);
+      expect(scope(quebecEmployee)).toEqual([]);
+      expect(quebecEmployee.line("p1", "TP1.478").status).toBe("complete");
+      // ... so it can't hide the RL-1 of the employer's second payroll account, left out: $61,000 of pay against $60,000.
+      const secondAccount = evaluate([
+        t4("e1", "Érable Conseil inc.", "60000", "3584", "786", "296.40"),
+        t4("e2", "Érable Conseil inc.", "1000", "0", "13.10", "4.94"),
+        healthPlan,
+      ], none);
+      expect(secondAccount.line("p1", "TP1.478")).toEqual({ value: null, status: "missing" });
+      expect(scope(secondAccount)).toEqual(needsRl1);
+      // Tips the restaurant allocated (box T) are in box A but not in box 14, and box T isn't read: they could hide the
+      // second payroll account's RL-1, left out ($41,000 of pay against $42,000), but more T4s than RL-1s need the same pay.
+      const tips = slip("e8", "RL1", "Bistro Fleuve inc.", { A: "42000", B_A: "2464", G: "42000", H: "207.48", I: "42000" });
+      const restaurant = evaluate([
+        t4("e1", "Bistro Fleuve inc.", "40000", "2336", "524", "197.60"),
+        t4("e2", "Bistro Fleuve inc.", "1000", "0", "13.10", "4.94"),
+        tips,
+      ]);
+      expect(restaurant.line("p1", "TP1.478")).toEqual({ value: null, status: "missing" });
+      expect(scope(restaurant)).toEqual(sameShortPay);
+      // One RL-1 for two T4s (two EI categories) with the health plan benefit beside the pay: $64,000 less $2,000.
+      const consolidatedWithJ = evaluate([
+        t4("e1", "Érable Conseil inc.", "20000", "1056", "262", "98.80"),
+        t4("e2", "Érable Conseil inc.", "42000", "2688", "550.20", "207.48"),
+        slip("e3", "RL1", "Érable Conseil inc.", { A: "64000", B_A: "3744", G: "62000", H: "306.28", I: "62000", J: "2000" }),
+      ]);
+      expect(scope(consolidatedWithJ)).toEqual([]);
+      expect(consolidatedWithJ.line("p1", "TP1.478").status).toBe("complete");
+      // The same with $2,000 of allocated tips instead: the price of closing the gap above, and the safer failure.
+      const consolidatedWithTips = evaluate([
+        t4("e1", "Bistro Fleuve inc.", "20000", "1056", "262", "98.80"),
+        t4("e2", "Bistro Fleuve inc.", "42000", "2688", "550.20", "207.48"),
+        slip("e3", "RL1", "Bistro Fleuve inc.", { A: "64000", B_A: "3744", G: "64000", H: "306.28", I: "64000" }),
+      ]);
+      expect(scope(consolidatedWithTips)).toEqual([expect.stringMatching(/one RL-1 covers several T4s from one employer only when it carries the same pay/)]);
+      // Two employers, each with its T4 and its RL-1; and a T4 whose box 14 holds 0, with no RL-1, adds no employer.
+      const second = [t4("e3", "Bois Franc ltée", "8000", "288", "104.80", "39.52"), slip("e4", "RL1", "Bois Franc ltée", { A: "8000", B_A: "288", G: "8000", H: "39.52", I: "8000" })];
+      expect(scope(evaluate([...employee.slips, ...second]))).toEqual([]);
+      expect(scope(evaluate([...employee.slips, t4("e5", "Rideau Outfitters", "0", "0", "0", "0")]))).toEqual([]);
       // A Quebec university's T2202 and RL-8, and an Ontario university's T2202, which comes with no RL-8.
-      const twoSchools = withSlips(["T2202", { 25: "8", 26: "3000" }], ["RL8", { A: "2400", B: "3000" }], ["T2202", { 24: "4", 26: "6000" }]);
+      const quebecSchool = [slip("u1", "T2202", "Université du Fleuve", { 25: "8", 26: "3000" }), slip("u2", "RL8", "Université du Fleuve", { A: "2400", B: "3000" })];
+      const twoSchools = evaluate([...employee.slips, ...quebecSchool, slip("u3", "T2202", "Rideau University", { 24: "4", 26: "6000" })]);
       expect(twoSchools.line("p1", "TP1.478")).toEqual({ value: null, status: "missing" });
-      expect(scope(twoSchools)).toEqual([expect.stringMatching(/more T2202 slips with tuition \(box 26\) than RL-8 slips/)]);
+      expect(scope(twoSchools)).toEqual([expect.stringMatching(/More schools gave you a T2202 with tuition \(box 26\) than gave you an RL-8/)]);
+      // One school's two T2202s (two programs) under its one RL-8 for the year, whose Quebec tuition can be lower.
+      expect(scope(evaluate([...employee.slips, ...quebecSchool, slip("u4", "T2202", "Université du Fleuve", { 24: "4", 26: "900" })]))).toEqual([]);
+      // $350 and $200 of tuition on two T2202s, $500 on the RL-8 (medical-service fees aren't Quebec tuition).
+      const lowerQuebec = evaluate([
+        ...employee.slips,
+        slip("u5", "T2202", "Cégep du Fleuve", { 24: "4", 26: "350" }),
+        slip("u6", "T2202", "Cégep du Fleuve", { 24: "4", 26: "200" }),
+        slip("u7", "RL8", "Cégep du Fleuve", { B: "500" }),
+      ]);
+      expect(scope(lowerQuebec)).toEqual([]);
+      expect(lowerQuebec.line("p1", "TP1.478").status).toBe("complete");
+      expect(value(lowerQuebec, "p1", "QCT.41")).toEqual(["500", "complete"]);
       // A box entered as 0 isn't an amount the RL slip must carry: an RL-5 for a childcare allowance alone leaves the
       // T5007's social assistance on line 147, and an RL-2 without QPP leaves the T4A(P)'s CPP on line 119.
       const allowance = withSlips(["T5007", { 11: "1200" }], ["RL5", { A: "0", J: "500" }]);
@@ -720,6 +830,55 @@ describe("the 2025 rules", () => {
       expect(scope(allowance)).toEqual([]);
       const cpp = withSlips(["T4A", { "016": "20000" }], ["RL2", { A: "20000", C_QPP: "0" }], ["T4AP", { 14: "6000", 20: "6000" }]);
       expect(value(cpp, "p1", "TP1.119")).toEqual(["6000", "complete"]);
+    });
+
+    it("ask for the benefits Quebec doesn't tax when the T4s show more than the RL-1s, and take them off box 14", () => {
+      const scope = (evaluation: Evaluation) => evaluation.explain("p1", "line.QC.scope").notes ?? [];
+      const evaluate = (slips: EngineInput["slips"], answers: Record<string, string> = {}) =>
+        new Evaluation(rulesFor(2025)!, { ...employee, slips, answers: { ...employee.answers, p1: { ...employee.answers.p1, ...answers } } });
+      const slip = (id: string, type: string, boxes: Record<string, string>) => ({ id, person: "p1", type, issuer: "Érable Conseil inc.", boxes });
+      const t4 = (id: string, income: string, qpp: string, ei: string, ppip: string) =>
+        slip(id, "T4", { 14: income, 17: qpp, 18: ei, 22: "0", 24: income, 26: income, 55: ppip, 56: income });
+      const none = { qcExemptBenefits: "0" };
+      // $62,000 of salary and $1,800 of transit passes the employer paid: taxed federally (box 14), not in Quebec (box A).
+      const rl1 = slip("e2", "RL1", { A: "62000", B_A: "3744", G: "62000", H: "306.28", I: "62000" });
+      const transit = [t4("e1", "63800", "3744", "812.20", "306.28"), rl1];
+      const unanswered = evaluate(transit);
+      expect(unanswered.line("p1", "TP1.478")).toEqual({ value: null, status: "missing" });
+      expect(unanswered.result().people[0]!.missing).toContainEqual({ question: "qcExemptBenefits", ask: "Benefits on your T4 slips that Quebec doesn't tax" });
+      expect(scope(unanswered)).toEqual([]);
+      const passes = evaluate(transit, { qcExemptBenefits: "1800" });
+      expect(scope(passes)).toEqual([]);
+      expect(passes.line("p1", "TP1.478").status).toBe("complete");
+      expect(value(passes, "p1", "TP1.101")).toEqual(["62000", "complete"]);
+      // It must be the difference exactly: none, less, more, or more than box 14 send back to the Income step.
+      const checkIncome = [expect.stringMatching(/First check “Benefits on your T4 slips that Quebec doesn't tax” on the Income step: .* enter exactly the difference/)];
+      for (const entered of ["0", "1000", "2000", "70000"]) {
+        const wrong = evaluate(transit, { qcExemptBenefits: entered });
+        expect(wrong.line("p1", "TP1.478"), entered).toEqual({ value: null, status: "missing" });
+        expect(scope(wrong), entered).toEqual(checkIncome);
+      }
+      // An answer left from an earlier gap: the T4 was amended to $62,000, then the employer's second payroll account's
+      // $1,500 T4 came without its RL-1. $1,800 doesn't explain the new $1,500.
+      const dormant = evaluate([t4("e1", "62000", "3744", "812.20", "306.28"), t4("e8", "1500", "0", "19.65", "7.41"), rl1], { qcExemptBenefits: "1800" });
+      expect(dormant.line("p1", "TP1.478")).toEqual({ value: null, status: "missing" });
+      expect(scope(dormant)).toEqual(checkIncome);
+      // Equipment reimbursed for working from home is taxed in Quebec too (in box A), so the help doesn't name it: an
+      // employer's $63,000 T4 and RL-1 that both hold $1,000 of it, beside a second payroll account's $1,000 T4 with no
+      // RL-1, stay refused when the help is followed.
+      const equipment = evaluate([t4("e1", "63000", "3744", "812.20", "306.28"), t4("e9", "1000", "0", "13.10", "4.94"), slip("e2", "RL1", { A: "63000", G: "63000" })], none);
+      expect(equipment.line("p1", "TP1.478")).toEqual({ value: null, status: "missing" });
+      expect(scope(equipment)).toEqual(checkIncome);
+      // One RL-1 for two T4s (two EI categories), the passes on one of them: the same pay once they're taken off.
+      const consolidated = evaluate([t4("e3", "21800", "1056", "285.58", "107.69"), t4("e4", "42000", "2688", "550.20", "207.48"), rl1], { qcExemptBenefits: "1800" });
+      expect(scope(consolidated)).toEqual([]);
+      expect(consolidated.line("p1", "TP1.478").status).toBe("complete");
+      // Slips that agree never ask it, nor do slips refused before the amounts matter (box A above box 14 on one RL-1 for
+      // two T4s, as with allocated tips).
+      expect(new Evaluation(rulesFor(2025)!, employee).result().people[0]!.questions).not.toContain("qcExemptBenefits");
+      const tips = evaluate([t4("e5", "40000", "2336", "524", "197.60"), t4("e6", "1000", "0", "13.10", "4.94"), slip("e7", "RL1", { A: "42000", G: "42000" })]);
+      expect(tips.result().people[0]!.questions).not.toContain("qcExemptBenefits");
+      expect(scope(tips)).toEqual([expect.stringMatching(/If every RL-1 is here, .*allocated tips in box T.*which this app doesn't handle yet/)]);
     });
 
     it("deduct the social benefits repayment on line 250, and its EI part from the health services fund income", () => {

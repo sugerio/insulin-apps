@@ -1,10 +1,10 @@
 import "./setup.ts";
 import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import type { Estimate, Person, TaxYear } from "#shared";
+import type { Estimate, Person, SlipList, TaxYear } from "#shared";
 import { OWNER, VIEWER, type TestServer } from "../support/server.ts";
 import type { SlipReader } from "../../src/app/server/lib/reader.ts";
-import { holdRequests, renderApp } from "./support.tsx";
+import { failRequestOnce, holdRequests, renderApp } from "./support.tsx";
 
 /** Every yes/no question of the income, deductions and credits modules. */
 const APPLIES = [
@@ -110,6 +110,34 @@ describe("Personal info", () => {
     fireEvent.click(screen.getByRole("button", { name: "Save and continue" }));
     await waitFor(async () =>
       expect(Object.values((await estimate(server)).input.answers)[0]).toMatchObject({ daysResident: "183", nonResidentIncome: "28000", nonResidentCanadianIncome: "0" }),
+    );
+  });
+
+  it("asks whether a spouse who also moved lived in Canada on the same days, and if not their income on yours", async () => {
+    let alex: Person | undefined;
+    const { server } = await renderApp("/returns/2025/personal", {
+      seed: async (s) => {
+        alex = (await (await s.call("POST", "/api/people", { as: OWNER, body: { name: "Alex Martin", relationship: "self", birthDate: "1985-04-02" } })).json()) as Person;
+        const sam = (await (await s.call("POST", "/api/people", { as: OWNER, body: { name: "Sam Martin", relationship: "spouse", birthDate: "1987-09-15" } })).json()) as Person;
+        await s.call("POST", "/api/years", { as: OWNER, body: { year: 2025, people: [alex.id, sam.id] } });
+        const adults = [alex, sam].map((person) => ({ personId: person.id, province: "ON", residentAllYear: false }));
+        let year = (await (await s.call("PUT", "/api/years/2025/personal-info", { as: OWNER, body: { revision: 1, maritalStatus: "married", adults } })).json()) as TaxYear;
+        for (const person of [alex, sam]) {
+          const answers = { daysResident: "100", nonResidentIncome: "20000", nonResidentCanadianIncome: "0" };
+          year = (await (await s.call("PUT", "/api/years/2025/answers", { as: OWNER, body: { revision: year.revision, personId: person.id, answers } })).json()) as TaxYear;
+        }
+      },
+    });
+    const sameDays = await screen.findByRole("radiogroup", { name: "Did your spouse or partner live in Canada on the same days as you in 2025?" });
+    expect(screen.getByRole("heading", { name: "Your spouse or partner" })).toBeTruthy();
+    fireEvent.click(within(sameDays).getByRole("radio", { name: "No" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    // Not the same days: their income on Alex's days is asked next.
+    const income = await screen.findByLabelText("Your spouse's or partner's net world income for the days you lived in Canada in 2025");
+    fireEvent.change(income, { target: { value: "20,000" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save and continue" }));
+    await waitFor(async () =>
+      expect((await estimate(server)).input.answers[alex!.id]).toMatchObject({ spouseSameDays: false, spouseIncomeWhileResident: "20000" }),
     );
   });
 
@@ -224,6 +252,10 @@ describe("Personal info", () => {
     expect(headingOver(await screen.findByLabelText("Days you lived in Canada in 2025"))).toBe("Where you lived");
     expect(headingOver(screen.getByLabelText("The part of it from Canada"))).toBe("Where you lived");
     expect(headingOver(screen.getByLabelText("Your spouse's or partner's 2025 net income"))).toBe("Your spouse or partner");
+    // Alex moved: the spouse's income for the year (page 1 of the T1), and on Alex's days (the spouse amount).
+    expect(headingOver(screen.getByLabelText("Your spouse's or partner's net world income for the days you lived in Canada in 2025"))).toBe(
+      "Your spouse or partner",
+    );
 
     const notes = screen.getByRole("heading", { name: "How these answers affect the tax" }).closest<HTMLElement>('[data-slot="card"]')!.textContent;
     expect(notes).not.toMatch(/doesn't handle it yet/);
@@ -451,6 +483,113 @@ describe("Confirm", () => {
     held.release();
     expect(await screen.findByText("Confirmed")).toBeTruthy();
     expect(button("Edit T4 from Maple Corp").disabled).toBe(false);
+  });
+
+  describe("while the year changes in the background", () => {
+    /** Alex's T4 at Confirm, with an upload started on Upload documents whose reading waits for `read()`. */
+    async function confirmWhileUploading() {
+      let read!: () => void;
+      const reading = new Promise<void>((resolve) => (read = resolve));
+      const late: SlipReader = {
+        read: async () => {
+          await reading;
+          return { kind: "read", taxYear: 2025, model: "test-model", slips: [{ type: "T5", person: "Alex Martin", issuer: "Lakeview Credit Union", boxes: { 13: "1250" }, unsure: [] }] };
+        },
+      };
+      const rendered = await renderApp("/returns/2025/upload", { seed: (s) => seed(s, { applies: true, slip: true }).then(() => undefined), server: { reader: () => late } });
+      fireEvent.change(await screen.findByLabelText("Choose files"), { target: { files: [new File(["%PDF-1.4 late"], "T5.pdf", { type: "application/pdf" })] } });
+      await act(() => rendered.router.navigate(rendered.router.state.location.pathname.replace(/upload$/, "confirm")));
+      return { ...rendered, read };
+    }
+    const editor = () => screen.getByRole("form", { name: "Edit T4 from Maple Corp" });
+    const box = (number: number) => within(editor()).getByLabelText(new RegExp(`^Box ${number} `)) as HTMLInputElement;
+    const button = (name: string) => screen.getByRole("button", { name }) as HTMLButtonElement;
+    const reloadingSlips = (method: string, path: string) => method === "GET" && path === "/api/years/2025/slips";
+    /** The T4 as stored, and the year's revision, as another tab would read them. */
+    async function storedT4(server: TestServer) {
+      const { slips } = (await (await server.call("GET", "/api/years/2025/slips")).json()) as SlipList;
+      const { revision } = (await (await server.call("GET", "/api/years/2025")).json()) as TaxYear;
+      return { t4: slips.find((slip) => slip.type === "T4")!, revision };
+    }
+    async function openT4(box22: string) {
+      fireEvent.click(await screen.findByRole("button", { name: "Edit T4 from Maple Corp" }));
+      fireEvent.change(box(22), { target: { value: box22 } });
+    }
+
+    it("keeps a slip being changed open with what was typed, and saves it once the slips are loaded again", async () => {
+      const { server, read } = await confirmWhileUploading();
+      await openT4("9500");
+      const held = holdRequests(reloadingSlips);
+      read();
+      await waitFor(() => expect(held.held()).toBe(1));
+      // While the slips load again, typing goes on; saving and confirming wait.
+      fireEvent.change(box(22), { target: { value: "9600" } });
+      expect(within(editor()).getByRole<HTMLButtonElement>("button", { name: "Save" }).disabled).toBe(true);
+      held.release();
+      expect(await screen.findByText("T5 · Lakeview Credit Union")).toBeTruthy();
+      expect(box(22).value).toBe("9600");
+      fireEvent.click(within(editor()).getByRole("button", { name: "Save" }));
+      expect(await screen.findByText(/Box 22 Income tax deducted: \$9,600\.00/)).toBeTruthy();
+      expect((await storedT4(server)).t4.boxes).toMatchObject({ 14: "60000", 22: "9600" });
+    });
+
+    it("waits for the slips to load again before confirming, adding or removing", async () => {
+      const { read } = await confirmWhileUploading();
+      await screen.findByRole("button", { name: "Confirm 1 slip" });
+      const held = holdRequests(reloadingSlips);
+      read();
+      await waitFor(() => expect(held.held()).toBe(1));
+      expect(button("Confirm 1 slip").disabled).toBe(true);
+      expect(button("Add a slip").disabled).toBe(true);
+      expect(button("Remove T4 from Maple Corp").disabled).toBe(true);
+      held.release();
+      expect(await screen.findByText("T5 · Lakeview Credit Union")).toBeTruthy();
+      expect(button("Confirm 2 slips").disabled).toBe(false);
+      expect(button("Add a slip").disabled).toBe(false);
+    });
+
+    it("shows another tab's change to the slip being changed, and never saves over it", async () => {
+      const { server, read } = await confirmWhileUploading();
+      await openT4("9500");
+      const { t4, revision } = await storedT4(server);
+      const elsewhere = await server.call("PATCH", `/api/years/2025/slips/${t4.id}`, { as: OWNER, body: { revision, boxes: { ...t4.boxes, 14: "70000" } } });
+      expect(elsewhere.status).toBe(200);
+      read();
+      expect(await screen.findByText("T5 · Lakeview Credit Union")).toBeTruthy();
+      expect(await screen.findByText(/Someone else changed this slip while you were changing it/)).toBeTruthy();
+      expect(box(14).value).toBe("70000");
+      fireEvent.change(box(22), { target: { value: "9500" } });
+      fireEvent.click(within(editor()).getByRole("button", { name: "Save" }));
+      expect(await screen.findByText(/Box 22 Income tax deducted: \$9,500\.00/)).toBeTruthy();
+      expect((await storedT4(server)).t4.boxes).toMatchObject({ 14: "70000", 22: "9500" });
+    });
+
+    it("closes a slip being changed that was removed meanwhile, and says so", async () => {
+      const { server, read } = await confirmWhileUploading();
+      await openT4("9500");
+      const { t4, revision } = await storedT4(server);
+      expect((await server.call("DELETE", `/api/years/2025/slips/${t4.id}`, { as: OWNER, body: { revision } })).status).toBe(200);
+      read();
+      expect(await screen.findByText("The slip you were changing was removed or replaced.")).toBeTruthy();
+      expect(screen.queryByRole("form", { name: "Edit T4 from Maple Corp" })).toBeNull();
+      expect(button("Confirm 1 slip").disabled).toBe(false);
+    });
+
+    it("keeps a slip being changed, with the error and a way to try again, when the slips can't be loaded again", async () => {
+      const { server, read } = await confirmWhileUploading();
+      await openT4("9500");
+      const failing = failRequestOnce(reloadingSlips);
+      read();
+      const banner = (await screen.findByText("The slips couldn't be loaded again")).closest<HTMLElement>("[role=alert]")!;
+      expect(failing.failed()).toBe(true);
+      expect(box(22).value).toBe("9500");
+      fireEvent.click(within(banner).getByRole("button", { name: "Try again" }));
+      expect(await screen.findByText("T5 · Lakeview Credit Union")).toBeTruthy();
+      expect(box(22).value).toBe("9500");
+      fireEvent.click(within(editor()).getByRole("button", { name: "Save" }));
+      expect(await screen.findByText(/Box 22 Income tax deducted: \$9,500\.00/)).toBeTruthy();
+      expect((await storedT4(server)).t4.boxes).toMatchObject({ 22: "9500" });
+    });
   });
 
   it("goes on to Finish, and shows months of study as months, not dollars", async () => {

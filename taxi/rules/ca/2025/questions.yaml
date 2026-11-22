@@ -1012,7 +1012,19 @@ questions:
     type: money
     module: about
     ask: Your spouse's or partner's 2025 net income
-    help: Their net world income for 2025, whether or not they lived in Canada all year (line 23600 of their return, plus any income while they didn't live in Canada). Their return isn't prepared here, but some of your credits depend on it.
+    help: Their net world income for all of 2025, whether or not they lived in Canada all year (line 23600 of their return, plus any income from outside Canada while they didn't live here). Their return isn't prepared here, but some of your credits depend on it.
+  # When you moved to or from Canada in 2025: asked if both spouses moved and both returns are prepared here.
+  spouseSameDays:
+    type: boolean
+    module: about
+    ask: Did your spouse or partner live in Canada on the same days as you in 2025?
+    help: Yes if you arrived or left together. Their net income for your days in Canada is then worked out from their return.
+  # When you moved: asked unless the answer above works it out, also of a spouse whose return isn't prepared here.
+  spouseIncomeWhileResident:
+    type: money
+    module: about
+    ask: Your spouse's or partner's net world income for the days you lived in Canada in 2025
+    help: All their net income in that part of 2025, from inside and outside Canada, in Canadian dollars. Your spouse amount and similar credits go down by it.
 
   daysResident:
     type: count

@@ -166,7 +166,7 @@ lines:
   PE428.13:
     label: Prince Edward Island spouse or common-law partner amount
     formula: >-
-      round(if(line.HH.partner == 1, min(round(param.peSpouseMax * line.RES.factor, 2), max(0, round(param.peSpouseBase * line.RES.factor, 2) - line.HH.spouseNetIncome)), 0), 2)
+      round(if(line.HH.partner == 1, min(round(param.peSpouseMax * line.RES.factor, 2), max(0, round(param.peSpouseBase * line.RES.factor, 2) - line.HH.spouseIncomeForCredits)), 0), 2)
 
   PE428.16:
     label: Prince Edward Island amount for an eligible dependant

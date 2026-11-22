@@ -329,7 +329,7 @@ describe("2025 forms", () => {
 
   it("prints a part-year resident's Schedule 5 with the prorated amounts, and Schedule 2's whole transfer", () => {
     // In Canada for the last 100 days of 2025 (the 90% rule not met), with a spouse 67 and resident all year who had
-    // $800 of income.
+    // $800 of income, all of it on those days.
     const input = {
       year: 2025,
       people: [
@@ -337,7 +337,7 @@ describe("2025 forms", () => {
         { id: "p2", name: "Robin Moreau", role: "spouse", birthDate: "1958-05-01", province: "ON", residentAllYear: true },
       ],
       family: { maritalStatus: "married", dependants: [] },
-      answers: { p1: { daysResident: "100", nonResidentIncome: "60000", nonResidentCanadianIncome: "0" }, p2: {} },
+      answers: { p1: { daysResident: "100", nonResidentIncome: "60000", nonResidentCanadianIncome: "0", spouseIncomeWhileResident: "800" }, p2: {} },
       slips: [
         { id: "s1", person: "p1", type: "T4", issuer: "Maple Corp", boxes: { 14: "100000", 22: "20000" } },
         { id: "s2", person: "p2", type: "T4", issuer: "Birch Books", boxes: { 14: "800" } },
@@ -349,6 +349,23 @@ describe("2025 forms", () => {
     // Their unused age amount comes over whole on Schedule 2 (line 13), and 100/365 of it on line 32600 (row 105).
     expect(rows("S2")["13"]).toBe("9028");
     expect(rows("T1")["105"]).toBe("2473.42");
+  });
+
+  it("prints a newcomer's spouse's income for the year on page 1, and their income on the newcomer's days on Schedule 5", () => {
+    // Here for the last 100 days, married to a spouse whose return isn't prepared here: $20,000 before arriving and $800
+    // after.
+    const input = {
+      year: 2025,
+      people: [{ id: "p1", name: "Alex Moreau", role: "self", birthDate: "1985-04-02", province: "ON", residentAllYear: false }],
+      family: { maritalStatus: "married", dependants: [] },
+      answers: {
+        p1: { daysResident: "100", nonResidentIncome: "60000", nonResidentCanadianIncome: "0", spouseNetIncome: "20800", spouseIncomeWhileResident: "800" },
+      },
+      slips: [{ id: "s1", person: "p1", type: "T4", issuer: "Maple Corp", boxes: { 14: "100000", 22: "20000" } }],
+    };
+    const rows = (form: string) => marksOf(input as unknown as Golden["input"], 0, form).amounts;
+    expect(rows("T1").spouseNetIncome).toBe("20800");
+    expect(rows("S5")).toMatchObject({ "1": "4418.9", "4": "800", "5": "3618.9" });
   });
 
   it("prints every row of a provincial Schedule 2 that its transfer counts, so the rows add up to it", () => {

@@ -479,7 +479,7 @@ forms:
       "1": { value: line.T1.30000, when: "line.T1.30300 + line.T1.30425 > 0" }
       "2": { value: "round(param.caregiverChildAmount * line.RES.factor, 2)", when: "line.T1.30300 + line.T1.30425 > 0 and answer.spouseInfirm" }
       "3": { value: line.S5.3, when: "line.T1.30300 + line.T1.30425 > 0" }
-      "4": { value: line.HH.spouseNetIncome, when: "line.T1.30300 + line.T1.30425 > 0" }
+      "4": { value: line.HH.spouseIncomeForCredits, when: "line.T1.30300 + line.T1.30425 > 0" }
       "5": line.T1.30300
       # Line 30400: the app claims it for a child under 18 with no infirmity, so the infirmity amount (51100, line 2)
       # is zero.
@@ -490,9 +490,9 @@ forms:
       # Line 30425, for the spouse (the app's only case): worked out only when it gives an amount, as the form asks.
       # Line 1 has $28,798 printed (so does line 30450's line 1): for a part-year resident it is prorated in line 3,
       # with the $8,601 cap, as on the return.
-      "p4:2.2": { value: line.HH.spouseNetIncome, when: "line.T1.30425 > 0" }
+      "p4:2.2": { value: line.HH.spouseIncomeForCredits, when: "line.T1.30425 > 0" }
       "p4:3.2":
-        value: "min(round(param.caregiverMax * line.RES.factor, 2), max(0, round(param.caregiverBase * line.RES.factor, 2) - line.HH.spouseNetIncome))"
+        value: "min(round(param.caregiverMax * line.RES.factor, 2), max(0, round(param.caregiverBase * line.RES.factor, 2) - line.HH.spouseIncomeForCredits))"
         when: "line.T1.30425 > 0"
       "p4:4.2": { value: line.T1.30300, when: "line.T1.30425 > 0" }
       "p4:5.2": line.T1.30425
@@ -1074,7 +1074,7 @@ forms:
       # Part B – Ontario non-refundable tax credits
       "9": line.ON428.9
       "10": line.ON428.10
-      "12": "if(line.HH.partner == 1, line.HH.spouseNetIncome, 0)"
+      "12": "if(line.HH.partner == 1, line.HH.spouseIncomeForCredits, 0)"
       "13": line.ON428.13
       "15": "if(line.HH.partner == 0 and family.childrenUnder18 > 0, answer.dependantNetIncome, 0)"
       "16": line.ON428.16
@@ -1188,7 +1188,7 @@ forms:
       # Part B – British Columbia non-refundable tax credits
       "16": line.BC428.16
       "17": line.BC428.17
-      "19": "if(line.HH.partner == 1, line.HH.spouseNetIncome, 0)"
+      "19": "if(line.HH.partner == 1, line.HH.spouseIncomeForCredits, 0)"
       "20": line.BC428.20
       "22": "if(line.HH.partner == 0 and family.childrenUnder18 > 0, answer.dependantNetIncome, 0)"
       "23": line.BC428.23
@@ -1288,7 +1288,7 @@ forms:
       # to the right column: both boxes are filled.
       "16": line.AB428.16
       "17": line.AB428.17
-      "19": "if(line.HH.partner == 1, line.HH.spouseNetIncome, 0)"
+      "19": "if(line.HH.partner == 1, line.HH.spouseIncomeForCredits, 0)"
       "58120": line.AB428.20
       "20": line.AB428.20
       "22": "if(line.HH.partner == 0 and family.childrenUnder18 > 0, answer.dependantNetIncome, 0)"
@@ -1379,7 +1379,7 @@ forms:
       # to the right column: both boxes are filled.
       "9": line.MB428.9
       "10": line.MB428.10
-      "12": "if(line.HH.partner == 1, line.HH.spouseNetIncome, 0)"
+      "12": "if(line.HH.partner == 1, line.HH.spouseIncomeForCredits, 0)"
       "58120": line.MB428.13
       "13": line.MB428.13
       "15": "if(line.HH.partner == 0 and family.childrenUnder18 > 0, answer.dependantNetIncome, 0)"
@@ -1585,7 +1585,7 @@ forms:
       # write: its box is narrower than an amount's.
       "9": line.SK428.9
       "10": line.SK428.10
-      "12": "if(line.HH.partner == 1, line.HH.spouseNetIncome, 0)"
+      "12": "if(line.HH.partner == 1, line.HH.spouseIncomeForCredits, 0)"
       "13": line.SK428.13
       "15": "if(line.HH.partner == 0 and family.childrenUnder18 > 0, answer.dependantNetIncome, 0)"
       "16": line.SK428.16
@@ -1696,7 +1696,7 @@ forms:
       # Part B – New Brunswick non-refundable tax credits
       "9": line.NB428.9
       "10": line.NB428.10
-      "12": "if(line.HH.partner == 1, line.HH.spouseNetIncome, 0)"
+      "12": "if(line.HH.partner == 1, line.HH.spouseIncomeForCredits, 0)"
       "13": line.NB428.13
       "15": "if(line.HH.partner == 0 and family.childrenUnder18 > 0, answer.dependantNetIncome, 0)"
       "16": line.NB428.16
@@ -1836,7 +1836,7 @@ forms:
       # Part B – Newfoundland and Labrador non-refundable tax credits
       "16": line.NL428.16
       "17": line.NL428.17
-      "19": "if(line.HH.partner == 1, line.HH.spouseNetIncome, 0)"
+      "19": "if(line.HH.partner == 1, line.HH.spouseIncomeForCredits, 0)"
       "20": line.NL428.20
       "22": "if(line.HH.partner == 0 and family.childrenUnder18 > 0, answer.dependantNetIncome, 0)"
       "23": line.NL428.23
@@ -1992,7 +1992,7 @@ forms:
       # Part B – Nova Scotia non-refundable tax credits
       "9": line.NS428.9
       "10": line.NS428.10
-      "12": "if(line.HH.partner == 1, max(round(param.nsSpouseIncomeFloor * line.RES.factor, 2), line.HH.spouseNetIncome), 0)"
+      "12": "if(line.HH.partner == 1, max(round(param.nsSpouseIncomeFloor * line.RES.factor, 2), line.HH.spouseIncomeForCredits), 0)"
       "13": line.NS428.13
       "15": "if(line.HH.partner == 0 and family.childrenUnder18 > 0, max(round(param.nsSpouseIncomeFloor * line.RES.factor, 2), answer.dependantNetIncome), 0)"
       "16": line.NS428.16
@@ -2147,7 +2147,7 @@ forms:
       # Part B – Prince Edward Island non-refundable tax credits
       "9": line.PE428.9
       "10": line.PE428.10
-      "12": "if(line.HH.partner == 1, line.HH.spouseNetIncome, 0)"
+      "12": "if(line.HH.partner == 1, line.HH.spouseIncomeForCredits, 0)"
       "13": line.PE428.13
       "15": "if(line.HH.partner == 0 and family.childrenUnder18 > 0, answer.dependantNetIncome, 0)"
       "16": line.PE428.16
@@ -2431,7 +2431,7 @@ forms:
       # Part B – Northwest Territories non-refundable tax credits
       "9": line.NT428.9
       "10": line.NT428.10
-      "12": "if(line.HH.partner == 1, line.HH.spouseNetIncome, 0)"
+      "12": "if(line.HH.partner == 1, line.HH.spouseIncomeForCredits, 0)"
       "13": line.NT428.13
       "15": "if(line.HH.partner == 0 and family.childrenUnder18 > 0, answer.dependantNetIncome, 0)"
       "16": line.NT428.16
@@ -2578,7 +2578,7 @@ forms:
       # holds a count, not an amount.
       "9": line.NU428.9
       "10": line.NU428.10
-      "12": "if(line.HH.partner == 1, line.HH.spouseNetIncome, 0)"
+      "12": "if(line.HH.partner == 1, line.HH.spouseIncomeForCredits, 0)"
       "13": line.NU428.13
       "15": "if(line.HH.partner == 0 and family.childrenUnder18 > 0, answer.dependantNetIncome, 0)"
       "16": line.NU428.16

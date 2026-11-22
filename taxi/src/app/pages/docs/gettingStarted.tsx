@@ -86,7 +86,9 @@ export const gettingStarted: DocTopic = {
             <li>
               <b>Confirm.</b> The slips (T4, T5, T3, T5008, T2202), receipts and notices of assessment, read by AI or entered. Check each one against the paper slip (a
               box AI wasn't sure of is marked; <b>Download the original file</b> saves the file a slip was read from, to look at beside it), then
-              confirm them. While a slip is being changed, save or cancel it first. A box AI couldn't read at all shows as <i>couldn't be read</i>: enter it with
+              confirm them. While a slip is being changed, save or cancel it first. When the slips change meanwhile (an upload finishing, say),
+              Confirm waits until they are shown again; what you typed stays, unless someone else changed that slip (it then shows theirs) or
+              removed it (it closes, saying so). A box AI couldn't read at all shows as <i>couldn't be read</i>: enter it with
               Edit (0 if it is blank on the paper slip) before the slip can be confirmed. A T5008 often has no cost (box 20): type it in from your records, or the gain
               can't be worked out. Changing a slip makes it unconfirmed again. A slip that may be the same as one above it (the same kind, from the same issuer,
               with no box holding a different amount) says so: if it is, remove one; if they're different slips, keep both. A slip that is the other

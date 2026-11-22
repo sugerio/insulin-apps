@@ -11,7 +11,9 @@ import { parseFormula, references, type Formula } from "./formula.ts";
 //   param.<name>                  a number or a bracket table of the year
 //   line.<form>.<line>            another line of the same person's return
 //   answer.<question>             the person's answer; the question's default when there is none (an estimate)
-//   <SLIP>.box<key>               that box of every one of the person's slips of that type (a list: sum, count, max)
+//   <SLIP>.box<key>               that box of every one of the person's slips of that type (a list: sum, count,
+//                                 countNonZero, max)
+//   <SLIP>.slips                  how many slips of that type the person has, whatever boxes they show
 //   person.age, person.province, person.role   the person's age and province on December 31, and "self" for the
 //                                 person preparing or "spouse"; person.residentAllYear whether they lived in Canada all year
 //   person.birthMonth             the month the person was born, 1 to 12 (with person.age, the month they turned an
@@ -553,6 +555,9 @@ const FUNCTIONS: Record<string, { args: [number, number]; check: (types: Type[],
   max: { args: [1, 20], check: (types) => (types.every((t) => t === "number" || t === "list") ? "number" : "takes numbers or slip boxes") },
   sum: { args: [1, 20], check: (types) => (types.every((t) => t === "number" || t === "list") ? "number" : "takes numbers or slip boxes") },
   count: { args: [1, 1], check: (types) => (types[0] === "list" ? "number" : "takes slip boxes") },
+  // The slips whose box holds an amount other than 0: a box left blank on the paper slip is entered as 0, and count()
+  // counts it.
+  countNonZero: { args: [1, 1], check: (types) => (types[0] === "list" ? "number" : "takes slip boxes") },
   round: {
     args: [1, 2],
     check: (types, args) => {
@@ -818,8 +823,9 @@ function refType(ruleSet: RuleSet, path: string[], fail: (message: string) => ne
     default: {
       const slip = ruleSet.slips.get(head ?? "");
       if (!slip) return fail(`Unknown name ${name}`);
+      if (rest.length === 1 && rest[0] === "slips") return "number";
       const box = rest.length === 1 && rest[0]!.startsWith("box") ? rest[0]!.slice(3) : undefined;
-      if (box === undefined || !(box in slip.boxes)) return fail(`${name}: ${slip.id} has boxes ${Object.keys(slip.boxes).join(", ")}`);
+      if (box === undefined || !(box in slip.boxes)) return fail(`${name}: ${slip.id} has boxes ${Object.keys(slip.boxes).join(", ")} (and ${slip.id}.slips counts them)`);
       return "list";
     }
   }

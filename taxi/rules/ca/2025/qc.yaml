@@ -216,16 +216,18 @@ lines:
   # Cases the TP-1 here doesn't handle: the return waits instead of guessing.
   #
   # The TP-1 reads RL slips, so what a T-slip's box holds reaches it only through the RL slip issued with that T-slip.
-  # Where Quebec counts the same amount as the federal return (interest, capital gains, dividends, a trust's other
-  # income, pensions, annuities, RRSP and RRIF payments, social assistance), the T-slips' box is compared with the RL
-  # boxes that carry it: a blank box entered as 0, or two T-slips under one RL slip, pass; a T-slip without its RL slip
-  # doesn't. Box B of the RL-3 and box I of the RL-16 gross up both kinds of dividend at once, so each can round a cent
-  # under the T-slip's two boxes: a cent a slip is allowed. An RL-2 puts a payment in box A, B or C as the payer
-  # chooses (box C holds an RPP's lump sums, T4A box 018), so the three are compared together. Where the amounts can
-  # differ, only a missing RL slip is refused: Quebec's eligible tuition (RL-8 box B) isn't the federal one (T2202
-  # box 26), so a T2202 with tuition needs an RL-8, whatever it shows; an RL-16 can report foreign income in box E or
-  # F; and an RL-1's box A can be more than the T4's box 14 (it holds benefits taxable only in Quebec), so a T4 is
-  # refused only when there are both more T4s than RL-1s and more employment income on them.
+  # Where Quebec counts the same amount as the federal return (interest, capital gains, dividends, a trust's other and
+  # foreign income, pensions, annuities, RRSP and RRIF payments, social assistance), the T-slips' box is compared with
+  # the RL boxes that carry it, since one RL slip can cover several T-slips (a bank's T5s on one RL-3): a blank box
+  # entered as 0, or two T-slips under one RL slip, pass; a T-slip without its RL slip doesn't. Box B of the RL-3 and
+  # box I of the RL-16 gross up both kinds of dividend at once, so each can round a cent under the T-slip's two boxes:
+  # a cent a slip is allowed. An RL-2 puts a payment in box A, B or C as the payer chooses (box C holds an RPP's lump
+  # sums, T4A box 018), and an RL-16 foreign income in box E or F, so those are compared together.
+  # Where the amounts differ by law, slips are counted instead, each T-slip that holds an amount needing an RL slip of
+  # its own: an RL-1's box A holds benefits taxable only in Quebec (an employer's group insurance), which can hide a
+  # whole T4 from another province in a comparison of amounts, so more T4s with employment income than RL-1s with
+  # box A are refused; Quebec's eligible tuition (RL-8 box B, which a CEGEP can leave blank) isn't the federal one
+  # (T2202 box 26), so more T2202s with tuition than RL-8 slips, whatever boxes they show, are refused.
   #
   # A slip box the federal return reads whose amount no TP-1 line reads is refused, naming the TP-1 line it belongs on.
   QC.scope:
@@ -233,7 +235,7 @@ lines:
     formula: >-
       if(not person.residentAllYear,
       unsupported("A Quebec return for a year you moved to or from Canada isn't handled by this app yet"),
-      if(count(T4.box14) > count(RL1.boxA) and sum(T4.box14) > sum(RL1.boxA),
+      if(countNonZero(T4.box14) > countNonZero(RL1.boxA),
       unsupported("A Quebec resident's employer in Quebec issues an RL-1 with each T4: upload it. Employment outside Quebec (a T4 without an RL-1, Schedule R Part B) isn't handled by this app yet"),
       if(sum(T5.box13) > sum(RL3.boxD),
       unsupported("The interest on your T5 slips (box 13) is more than box D of your RL-3 slips: upload the RL-3 issued with each T5, with its box D. A T5 without its RL-3 isn't handled on the Quebec return by this app yet"),
@@ -247,16 +249,16 @@ lines:
       unsupported("The taxable dividends on your T3 slips (boxes 32 and 50) are more than box I of your RL-16 slips: upload the RL-16 issued with each T3, with its box I. A T3 without its RL-16 isn't handled on the Quebec return by this app yet"),
       if(sum(T3.box26) > sum(RL16.boxG),
       unsupported("The other income on your T3 slips (box 26) is more than box G of your RL-16 slips: upload the RL-16 issued with each T3, with its box G. A T3 without its RL-16, or an RL-16 that reports this income in a box this app doesn't read, isn't handled on the Quebec return yet"),
-      if(sum(T3.box25) > 0 and sum(RL16.boxE) + sum(RL16.boxF) == 0,
-      unsupported("Your T3 slips show foreign non-business income (box 25) and your RL-16 slips none (box E or F): upload the RL-16 issued with each T3. A T3 without its RL-16 isn't handled on the Quebec return by this app yet"),
+      if(sum(T3.box25) > sum(RL16.boxE) + sum(RL16.boxF),
+      unsupported("The foreign non-business income on your T3 slips (box 25) is more than boxes E and F of your RL-16 slips: upload the RL-16 issued with each T3, with its box E or F. A T3 without its RL-16 isn't handled on the Quebec return by this app yet"),
       if(sum(T4RSP.box18) + sum(T4RSP.box20) + sum(T4RSP.box26) + sum(T4RSP.box28) + sum(T4RSP.box34) > 0,
       unsupported("RRSP amounts other than annuity payments and withdrawals (boxes 18, 20, 26, 28 and 34 of the T4RSP) go on the Quebec return from boxes of the RL-2 this app doesn't read (line 154, points 4 and 7): they aren't handled by this app yet"),
       if(sum(T4A.box016) + sum(T4A.box018) + sum(T4A.box024) + sum(T4RIF.box16) + sum(T4RSP.box16) + sum(T4RSP.box22)
       > sum(RL2.boxA) + sum(RL2.boxB) + sum(RL2.boxC),
       unsupported("Your T4A, T4RSP and T4RIF slips show more pension, annuity, RRSP and RRIF payments (T4A boxes 016, 018 and 024, T4RSP boxes 16 and 22, T4RIF box 16) than boxes A, B and C of your RL-2 slips: upload the RL-2 issued with each of them. A payment without its RL-2 isn't handled on the Quebec return by this app yet"),
-      if(sum(T2202.box26) > 0 and count(RL8.boxA) + count(RL8.boxB) + count(RL8.boxC) == 0,
-      unsupported("A college or university in Quebec issues an RL-8 with each T2202: upload it. Tuition paid to a school outside Quebec (a T2202 without an RL-8, Schedule T) isn't handled on the Quebec return by this app yet"),
-      if(count(RL5.boxA) + count(RL5.boxB) > 0 and sum(T5007.box11) > sum(RL5.boxA) + sum(RL5.boxB),
+      if(countNonZero(T2202.box26) > RL8.slips,
+      unsupported("You have more T2202 slips with tuition (box 26) than RL-8 slips. A college or university in Quebec issues an RL-8 with each T2202: upload it. Tuition paid to a school outside Quebec (a T2202 without an RL-8, Schedule T) isn't handled on the Quebec return by this app yet"),
+      if(sum(RL5.boxA) + sum(RL5.boxB) > 0 and sum(T5007.box11) > sum(RL5.boxA) + sum(RL5.boxB),
       unsupported("The social assistance on your T5007 slips (box 11) is more than boxes A and B of your RL-5 slips: upload the RL-5 issued with each T5007. The Quebec return takes the T5007 only when there is no RL-5 at all"),
       if(sum(T4.box39) + sum(T4.box41) > 0,
       unsupported("The security option deduction (boxes 39 and 41 of the T4) on the Quebec return (line 297, point 2, from boxes L-9 to L-13 of the RL-1) isn't handled by this app yet"),
@@ -315,7 +317,7 @@ lines:
     source: "TP-1 line 114: the T4A(OAS) slip (box 18)"
   TP1.119:
     label: QPP or CPP benefits
-    formula: "if(count(RL2.boxC_QPP) > 0, sum(RL2.boxC_QPP), sum(T4AP.box20))"
+    formula: "if(sum(RL2.boxC_QPP) > 0, sum(RL2.boxC_QPP), sum(T4AP.box20))"
     source: "TP-1 line 119: box C of the RL-2 slip for QPP benefits; a CPP pension (Service Canada issues no RL-2) from box 20 of the T4A(P)"
   TP1.122:
     label: Payments from a pension plan, an RRSP or a RRIF, or annuities
@@ -355,8 +357,8 @@ lines:
     source: "Work Chart 142: support received less the non-taxable child support, as on the federal return"
   TP1.147:
     label: Social assistance payments
-    formula: "if(count(RL5.boxA) + count(RL5.boxB) > 0, sum(RL5.boxA) + sum(RL5.boxB), sum(T5007.box11))"
-    source: "Guide, line 147: boxes A and B of the RL-5 slip, or the amount on the T5007 slip (box 11) if you did not receive an RL-5"
+    formula: "if(sum(RL5.boxA) + sum(RL5.boxB) > 0, sum(RL5.boxA) + sum(RL5.boxB), sum(T5007.box11))"
+    source: "Guide, line 147: boxes A and B of the RL-5 slip, or the amount on the T5007 slip (box 11) if you did not receive an RL-5 (one with no amount in box A or B, such as a childcare allowance's, doesn't count)"
   TP1.154:
     label: Other income
     formula: "sum(RL2.boxC)"

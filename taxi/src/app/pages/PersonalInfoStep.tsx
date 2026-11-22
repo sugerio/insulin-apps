@@ -175,28 +175,46 @@ function YearFacts({
   const about = [...rulesFor(year.year)!.questions.values()].filter((question) => question.module === "about" && (reached.has(question.id) || question.id in given));
   const storedAmount = (id: string) => (typeof given[id] === "string" ? (given[id] as string) : "");
   const amountOf = (id: string) => valueOf(`answers.${id}`, storedAmount(id));
-  const unanswered = about.filter((question) => cleanAmount(amountOf(question.id)) === "");
-  // The spouse's questions (spouseNetIncome) are asked under the spouse; the others are about where this person lived.
+  // A yes/no question (spouseSameDays) is null until answered.
+  const storedChoice = (id: string) => (typeof given[id] === "boolean" ? (given[id] as boolean) : null);
+  const choiceOf = (id: string) => valueOf<boolean | null>(`answers.${id}`, storedChoice(id));
+  const answerOf = (question: (typeof about)[number]) => (question.type === "boolean" ? choiceOf(question.id) : cleanAmount(amountOf(question.id)));
+  const unanswered = about.filter((question) => answerOf(question) === null || answerOf(question) === "");
+  // The spouse's questions (spouseNetIncome and the like) are asked under the spouse; the others are about where this
+  // person lived.
   const spouseQuestions = about.filter((question) => question.id.startsWith("spouse"));
   const fields = new Set(about.map((question) => `answers.${question.id}`));
   const { issueFor, unshown, inBanner } = fieldIssues(error, (path) => fields.has(path));
-  const field = (question: (typeof about)[number]) => (
-    <AmountField
-      key={question.id}
-      label={question.ask}
-      help={question.help}
-      unit={question.type === "count" ? "" : "$"}
-      max={question.max}
-      value={amountOf(question.id)}
-      disabled={locked}
-      issue={issueFor(`answers.${question.id}`)}
-      onChange={(value) => type(`answers.${question.id}`, storedAmount(question.id), value)}
-    />
-  );
+  const field = (question: (typeof about)[number]) =>
+    question.type === "boolean" ? (
+      <YesNoField
+        key={question.id}
+        label={question.ask}
+        help={question.help}
+        value={choiceOf(question.id)}
+        disabled={locked}
+        issue={issueFor(`answers.${question.id}`)}
+        onChange={(value) => type(`answers.${question.id}`, storedChoice(question.id), value)}
+      />
+    ) : (
+      <AmountField
+        key={question.id}
+        label={question.ask}
+        help={question.help}
+        unit={question.type === "count" ? "" : "$"}
+        max={question.max}
+        value={amountOf(question.id)}
+        disabled={locked}
+        issue={issueFor(`answers.${question.id}`)}
+        onChange={(value) => type(`answers.${question.id}`, storedAmount(question.id), value)}
+      />
+    );
 
   async function save(thenContinue: boolean) {
     const sent = draft;
-    const answers = Object.fromEntries(about.map((question) => [question.id, cleanAmount(amountOf(question.id))] as const).filter(([, value]) => value !== ""));
+    const answers = Object.fromEntries(
+      about.map((question) => [question.id, answerOf(question)] as const).filter((entry): entry is readonly [string, string | boolean] => entry[1] !== null && entry[1] !== ""),
+    );
     await requests.run(async (answered) => {
       const saved = answered(
         await apiRequest(routes.savePersonalInfo, { params: { year: year.year }, body: { revision: year.revision, maritalStatus, adults: [{ personId: owner.id, ...facts }] } }),
@@ -379,6 +397,45 @@ function AdultCard({
   );
 }
 
+
+/** A yes/no question about the person, answered with two choices; null until one is chosen. */
+function YesNoField({
+  label,
+  help,
+  value,
+  onChange,
+  disabled,
+  issue,
+}: {
+  label: string;
+  help?: string;
+  value: boolean | null;
+  onChange: (value: boolean) => void;
+  disabled: boolean;
+  issue?: string;
+}) {
+  const id = useId();
+  return (
+    <div className="flex flex-col gap-2">
+      <p className="text-sm font-medium" id={`${id}-label`}>
+        {label}
+      </p>
+      {help ? <p className="text-xs text-muted-foreground">{help}</p> : null}
+      <RadioGroup
+        aria-labelledby={`${id}-label`}
+        value={value === null ? "" : value ? "yes" : "no"}
+        onValueChange={(choice) => onChange(choice === "yes")}
+        disabled={disabled}
+        aria-invalid={issue ? true : undefined}
+        className="grid grid-cols-2 gap-2"
+      >
+        <Choice value="yes" label="Yes" />
+        <Choice value="no" label="No" />
+      </RadioGroup>
+      {issue ? <p className="text-xs text-destructive">{issue}</p> : null}
+    </div>
+  );
+}
 
 /** One option of a radio group, drawn as a bordered row that is wholly clickable. */
 function Choice({ value, label }: { value: string; label: string }) {

@@ -192,7 +192,7 @@ lines:
   NL428.20:
     label: Newfoundland and Labrador spouse or common-law partner amount
     formula: >-
-      round(if(line.HH.partner == 1, min(round(param.nlSpouseMax * line.RES.factor, 2), max(0, round(param.nlSpouseBase * line.RES.factor, 2) - line.HH.spouseNetIncome)), 0), 2)
+      round(if(line.HH.partner == 1, min(round(param.nlSpouseMax * line.RES.factor, 2), max(0, round(param.nlSpouseBase * line.RES.factor, 2) - line.HH.spouseIncomeForCredits)), 0), 2)
 
   NL428.23:
     label: Newfoundland and Labrador amount for an eligible dependant

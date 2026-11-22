@@ -58,6 +58,21 @@ export function holdRequests(match: (method: string, path: string) => boolean) {
   return { release, held: () => held };
 }
 
+/** Answers the page's next request that `match` with a 500, as a server having trouble would; the ones after reach it. */
+export function failRequestOnce(match: (method: string, path: string) => boolean) {
+  const send = globalThis.fetch;
+  let failed = false;
+  vi.stubGlobal("fetch", async (input: RequestInfo | URL, init: RequestInit = {}) => {
+    const url = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url, ORIGIN);
+    if (!failed && match(init.method ?? "GET", url.pathname)) {
+      failed = true;
+      return new Response(JSON.stringify({ error: { code: "internal", message: "Something went wrong" } }), { status: 500, headers: { "Content-Type": "application/json" } });
+    }
+    return send(input, init);
+  });
+  return { failed: () => failed };
+}
+
 /** The files the page hands to the browser's download (a Blob URL and an `<a download>` click): each one's name and bytes. */
 export function catchDownloads() {
   const saved: { name: string; blob: Blob }[] = [];

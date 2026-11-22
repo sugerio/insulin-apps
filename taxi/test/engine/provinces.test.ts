@@ -120,12 +120,13 @@ describe("someone who lived in Canada for part of the year", () => {
     });
 
   it("prorate the provincial spouse amount's base and maximum, then subtract the spouse's net income", () => {
-    // 100 days: Ontario's base $11,905 → 3,261.64 and maximum $10,823 → 2,965.21; less $800.
-    expect(amount(alone("ON", { ...partYear("100"), spouseNetIncome: "800" }), "p1", "ON428.13")).toBe("2461.64");
+    // 100 days: Ontario's base $11,905 → 3,261.64 and maximum $10,823 → 2,965.21; less the spouse's $800 on those days.
+    const onTheseDays = (income: string) => ({ ...partYear("100"), spouseNetIncome: "20800", spouseIncomeWhileResident: income });
+    expect(amount(alone("ON", onTheseDays("800")), "p1", "ON428.13")).toBe("2461.64");
     // British Columbia's base $12,181 → 3,337.26 and maximum $11,073 → 3,033.70; less $800.
-    expect(amount(alone("BC", { ...partYear("100"), spouseNetIncome: "800" }), "p1", "BC428.20")).toBe("2537.26");
+    expect(amount(alone("BC", onTheseDays("800")), "p1", "BC428.20")).toBe("2537.26");
     // Nova Scotia's base $12,618 → 3,456.99, less whichever is more, $874 prorated (239.45) or the net income.
-    const novaScotia = (spouseNetIncome: string) => alone("NS", { ...partYear("100"), spouseNetIncome });
+    const novaScotia = (income: string) => alone("NS", onTheseDays(income));
     expect(amount(novaScotia("500"), "p1", "NS428.13")).toBe("2956.99");
     expect(amount(novaScotia("100"), "p1", "NS428.13")).toBe("3217.53");
     const row12 = fillForms(rules, novaScotia("100"), "p1", personalFacts(novaScotia("100").input, "p1"))
@@ -179,8 +180,30 @@ describe("someone who lived in Canada for part of the year", () => {
   it("prorate the British Columbia caregiver amount once, less the spouse amount claimed", () => {
     // 219 days is 60% of the year: line 3 of the worksheet is $5,659 → 3,395.40 at most, from $24,810 → 14,886 less
     // $9,000; the spouse amount, $12,181 → 7,308.60 less $9,000, is nothing.
-    const infirmSpouse = alone("BC", { ...partYear("219"), spouseNetIncome: "9000", spouseInfirm: true });
+    const infirmSpouse = alone("BC", { ...partYear("219"), spouseNetIncome: "15000", spouseIncomeWhileResident: "9000", spouseInfirm: true });
     expect([amount(infirmSpouse, "p1", "BC428.20"), amount(infirmSpouse, "p1", "BC428.24")]).toEqual(["0", "3395.4"]);
+  });
+
+  it("test family income on both returns' incomes for the year, while the spouse amount takes off the income on their days", () => {
+    // In Saskatchewan for 100 days with $90,000 of net income; the spouse lived here all year on $60,000, $20,000 of it
+    // on those days. One child, $300 of activity fees.
+    const evaluation = new Evaluation(rules, {
+      year: 2025,
+      people: [
+        { id: "p1", name: "Alex", role: "self", birthDate: "1985-04-02", province: "SK", residentAllYear: false },
+        { id: "p2", name: "Sam", role: "spouse", birthDate: "1986-09-15", province: "SK" },
+      ],
+      family: { maritalStatus: "married", dependants: [{ id: "d1", name: "Jamie", birthDate: "2015-04-04" }] },
+      answers: { p1: { ...partYear("100"), spouseIncomeWhileResident: "20000", childActivityFees: "300" }, p2: { childActivityFees: "0" } },
+      slips: [
+        { id: "s1", person: "p1", type: "T4", issuer: "Prairie Grain", boxes: { 14: "90000" } },
+        { id: "s2", person: "p2", type: "T4", issuer: "Prairie Grain", boxes: { 14: "60000" } },
+      ],
+    });
+    // SK479 lines 1 to 6: the incomes of both returns, $150,000, over $120,000: no active families benefit.
+    expect([amount(evaluation, "p1", "SK479.6"), amount(evaluation, "p1", "SK479.8")]).toEqual(["150000", "0"]);
+    // The spouse amount, its $21,440 base → 5,873.97 less the $20,000 of those days, is nothing.
+    expect(amount(evaluation, "p1", "SK428.13")).toBe("0");
   });
 
   it("prorate the provincial amounts transferred to them, while the schedule shows the whole transfer", () => {

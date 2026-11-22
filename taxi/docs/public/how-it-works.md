@@ -149,7 +149,9 @@ left under Before you file, and the download is refused.
 
 Each change is written in one step with its history entry: either all of it is saved, or none of it. A year's personal
 info is saved under the year's revision. A save based on an older revision is refused, so two people editing the same
-year never overwrite each other without knowing.
+year never overwrite each other without knowing. At Confirm, a slip being changed stays open while the slips load again
+after the year changed (saving and confirming wait for them); if someone else changed that slip meanwhile, the form
+shows what is stored instead of what was typed, and if it was removed, the form closes and says so.
 
 ## Usage reports
 

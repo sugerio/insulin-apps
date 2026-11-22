@@ -142,7 +142,7 @@ lines:
   AB428.20:
     label: Alberta spouse or common-law partner amount
     formula: >-
-      round(if(line.HH.partner == 1, max(0, round(param.abSpouseBase * line.RES.factor, 2) - line.HH.spouseNetIncome), 0), 2)
+      round(if(line.HH.partner == 1, max(0, round(param.abSpouseBase * line.RES.factor, 2) - line.HH.spouseIncomeForCredits), 0), 2)
 
   AB428.23:
     label: Alberta amount for an eligible dependant

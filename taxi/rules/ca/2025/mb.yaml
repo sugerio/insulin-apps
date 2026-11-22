@@ -259,7 +259,7 @@ lines:
   MB428.13:
     label: Manitoba spouse or common-law partner amount
     formula: >-
-      round(if(line.HH.partner == 1, max(0, round(param.mbSpouseBase * line.RES.factor, 2) - line.HH.spouseNetIncome), 0), 2)
+      round(if(line.HH.partner == 1, max(0, round(param.mbSpouseBase * line.RES.factor, 2) - line.HH.spouseIncomeForCredits), 0), 2)
 
   MB428.16:
     label: Manitoba amount for an eligible dependant

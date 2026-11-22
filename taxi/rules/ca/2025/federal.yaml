@@ -735,24 +735,32 @@ lines:
   SPOUSES.together:
     label: Both spouses' returns are prepared here (1 for yes)
     formula: "if(family.partnerInYear and line.HH.partner == 1, 1, 0)"
-  # A spouse who moved to or from Canada has only their income while resident on line 23600. The credits take off
-  # their net income for the part of the year you were resident (canada.ca, Completing your return for newcomers,
-  # Example 3): their world income for 2025 if you were resident all year, their line 23600 if you both lived here the
-  # same days. Otherwise how their income splits over your days isn't known: their world income for the year is taken,
-  # which never claims more than allowed but can claim less. Your answer, when their return isn't prepared here, is
-  # their world income for 2025.
+  # The spouse's net income, three ways. For the year (HH.spouseNetIncome): what family-income tests and income
+  # comparisons read, the incomes of both returns (Form 479s, who has the lower income). Their net world income for 2025
+  # (HH.spouseWorldIncome): T1 page 1. For your days in Canada (HH.spouseIncomeForCredits): what the spouse and other
+  # amounts take off (canada.ca, Completing your return for newcomers, Example 3). A spouse who moved has on line 23600
+  # their income while resident and their Canadian income of the rest of the year (nonResidentCanadianIncome). If you
+  # moved, their income on your days is asked: whether they lived here on the same days (the same number of days can be
+  # other days), and if not, or if their return isn't prepared here, their net world income on your days.
+  HH.spouseNetIncome:
+    label: Your spouse's or partner's net income
+    formula: "if(line.HH.partner == 1, if(family.partnerInYear, spouse.line.T1.23600, answer.spouseNetIncome), 0)"
+    source: "Line 23600 of their return when both returns are prepared here; otherwise your answer, their net world income for 2025"
   HH.spouseWorldIncome:
     label: Your spouse's or partner's net world income for 2025
     formula: >-
-      if(line.HH.partner == 1, if(family.partnerInYear, spouse.line.T1.23600
-      + if(spouse.person.residentAllYear, 0, spouse.answer.nonResidentIncome), answer.spouseNetIncome), 0)
-    source: "T1, Step 1, and canada.ca, Completing your return for newcomers: their net world income for 2025 whatever their residency, line 23600 of their return plus their world income while not resident; otherwise from your answer"
-  HH.spouseNetIncome:
-    label: Your spouse's or partner's net income
+      if(line.HH.partner == 1, if(family.partnerInYear, spouse.line.T1.23600 + if(spouse.person.residentAllYear, 0,
+      max(0, spouse.answer.nonResidentIncome - spouse.answer.nonResidentCanadianIncome)), answer.spouseNetIncome), 0)
+    source: "T1, Step 1, and canada.ca, Completing your return for newcomers: their net world income for 2025 whatever their residency: line 23600 of their return, plus their income from outside Canada while not resident (the Canadian part is on line 23600 already); otherwise from your answer"
+  HH.spouseIncomeForCredits:
+    label: Your spouse's or partner's net income while you lived in Canada
     formula: >-
-      if(line.HH.partner == 1 and family.partnerInYear and not person.residentAllYear and not spouse.person.residentAllYear
-      and line.RES.days == spouse.line.RES.days, spouse.line.T1.23600, line.HH.spouseWorldIncome)
-    source: "Their net income for the part of 2025 you were resident: their line 23600 when you both lived in Canada the same days, else their world income for 2025"
+      if(line.HH.partner == 1 and not person.residentAllYear,
+      if(family.partnerInYear and not spouse.person.residentAllYear and answer.spouseSameDays,
+      max(0, spouse.line.T1.23600 - spouse.answer.nonResidentCanadianIncome),
+      min(answer.spouseIncomeWhileResident, line.HH.spouseWorldIncome)),
+      line.HH.spouseWorldIncome)
+    source: "Their net income for the days you lived in Canada: their world income for 2025 if that was all year; on the same days as theirs, their line 23600 less their Canadian income from before they arrived or after they left; otherwise your answer, which can't be more than their world income for the year (asked too when their return isn't prepared here)"
 
   # Step 2 – Total income
   T1.10100:
@@ -1581,7 +1589,7 @@ lines:
     source: "Schedule 5, line 30300, lines 1 to 3: your basic personal amount (line 30000), plus $2,687 for a spouse with an infirmity, prorated as line 30000 is"
   T1.30300:
     label: Spouse or common-law partner amount
-    formula: "if(line.HH.partner == 1, max(0, line.S5.3 - line.HH.spouseNetIncome), 0)"
+    formula: "if(line.HH.partner == 1, max(0, line.S5.3 - line.HH.spouseIncomeForCredits), 0)"
     source: "Schedule 5, line 30300, lines 4 and 5: line 3 minus their net income"
   T1.30400:
     label: Amount for an eligible dependant
@@ -1591,7 +1599,7 @@ lines:
     label: Canada caregiver amount for spouse or common-law partner
     formula: >-
       if(line.HH.partner == 1 and answer.spouseInfirm, max(0, min(round(param.caregiverMax * line.RES.factor, 2),
-      max(0, round(param.caregiverBase * line.RES.factor, 2) - line.HH.spouseNetIncome)) - line.T1.30300), 0)
+      max(0, round(param.caregiverBase * line.RES.factor, 2) - line.HH.spouseIncomeForCredits)) - line.T1.30300), 0)
     source: "Schedule 5 line 30425: $28,798 less their net income (up to $8,601), less the spouse amount on line 30300"
   T1.30450:
     label: Canada caregiver amount for other infirm dependants age 18 or older

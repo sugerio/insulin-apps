@@ -206,7 +206,7 @@ lines:
   BC428.20:
     label: British Columbia spouse or common-law partner amount
     formula: >-
-      round(if(line.HH.partner == 1, min(round(param.bcSpouseMax * line.RES.factor, 2), max(0, round(param.bcSpouseBase * line.RES.factor, 2) - line.HH.spouseNetIncome)), 0), 2)
+      round(if(line.HH.partner == 1, min(round(param.bcSpouseMax * line.RES.factor, 2), max(0, round(param.bcSpouseBase * line.RES.factor, 2) - line.HH.spouseIncomeForCredits)), 0), 2)
 
   BC428.23:
     label: British Columbia amount for an eligible dependant
@@ -219,7 +219,7 @@ lines:
   BC428.24:
     label: British Columbia caregiver amount
     formula: >-
-      round(if(line.HH.partner == 1 and answer.spouseInfirm, max(0, min(round(param.bcCaregiverMax * line.RES.factor, 2), max(0, round(param.bcCaregiverBase * line.RES.factor, 2) - line.HH.spouseNetIncome)) - line.BC428.20), 0)
+      round(if(line.HH.partner == 1 and answer.spouseInfirm, max(0, min(round(param.bcCaregiverMax * line.RES.factor, 2), max(0, round(param.bcCaregiverBase * line.RES.factor, 2) - line.HH.spouseIncomeForCredits)) - line.BC428.20), 0)
       + if(answer.hasInfirmDependant, if(answer.infirmDependants > 0, min(round(param.bcCaregiverMax * line.RES.factor, 2), max(0, round(param.bcCaregiverBase * line.RES.factor, 2) - answer.infirmDependantIncome)), 0), 0), 2)
     source: "Worksheet BC428, line 58175: for each dependant, $24,810 less their net income (up to $5,659), less what line 58120 claims for them"
   BC428.25:

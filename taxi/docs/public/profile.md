@@ -60,6 +60,13 @@ Canada and their income for the rest of the year. Taxi reduces the personal amou
 by the days in Canada, unless they had income for the rest of the year and at least 90% of it came from Canada. Taxi
 doesn't prepare a Quebec return (TP-1) for the year of a move yet: it says so on that return.
 
+The spouse amount and similar credits go down by the spouse's net income for the days the person lived in Canada. If
+the person lived here all year, that is the spouse's net world income for the year. If the person moved and the
+spouse's return is prepared here too, Personal info asks whether the spouse lived in Canada on the same days (Taxi then
+works it out from the spouse's return) and, if not, the spouse's net world income on the person's days. When the
+spouse's return isn't prepared here, it asks the spouse's net world income for the year, and for the person's days too
+if the person moved. Credits that depend on family income use both spouses' net incomes for the year.
+
 ## Save the step
 
 People are saved as you add or change them, and who is in the year with **Save people**. The year's facts are saved

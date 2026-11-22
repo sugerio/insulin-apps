@@ -23,6 +23,9 @@ const rules = loadRuleSet(
               },
               lines: {
                 "R.income": { label: "Income", formula: "sum(S.box1)" },
+                "R.slips": { label: "Slips with box 1", formula: "count(S.box1)" },
+                "R.slipsWithAmount": { label: "Slips with an amount in box 1", formula: "countNonZero(S.box1)" },
+                "R.allSlips": { label: "Slips", formula: "S.slips" },
                 "R.deduction": { label: "Deduction", formula: "answer.deduction" },
                 "R.total": { label: "Total", formula: "max(0, line.R.income - line.R.deduction)" },
                 "R.tax": { label: "Tax", formula: "round(bracket(param.brackets, line.R.total), 2)" },
@@ -82,6 +85,18 @@ describe("evaluating a year", () => {
     expect(value(evaluation, "a", "R.tax")).toEqual(["55.25", "estimate"]);
     const answered = new Evaluation(rules, input({ answers: { a: { deduction: "50.5" } } }));
     expect(value(answered, "a", "R.tax")).toEqual(["30", "complete"]);
+  });
+
+  it("counts a person's slips, those that show a box, and those whose box holds an amount other than 0", () => {
+    // A box left blank on the paper slip is entered as 0: count() counts it, countNonZero() doesn't.
+    const blank = { id: "s4", person: "a", type: "S", issuer: "Four", boxes: { 1: "0.00", 2: "3" } };
+    const noBox = { id: "s5", person: "a", type: "S", issuer: "Five", boxes: { 2: "3" } };
+    const evaluation = new Evaluation(rules, input({ slips: [...input().slips, blank, noBox] }));
+    expect(value(evaluation, "a", "R.allSlips")).toEqual(["4", "complete"]);
+    expect(value(evaluation, "a", "R.slips")).toEqual(["3", "complete"]);
+    expect(value(evaluation, "a", "R.slipsWithAmount")).toEqual(["2", "complete"]);
+    expect(value(evaluation, "b", "R.slipsWithAmount")).toEqual(["1", "complete"]);
+    expect(value(new Evaluation(rules, input({ slips: [] })), "a", "R.allSlips")).toEqual(["0", "complete"]);
   });
 
   it("reads a chart of rates: the rate of the row the amount falls in, up to and including its top", () => {
@@ -442,19 +457,21 @@ describe("the 2025 rules", () => {
     const line = (evaluation: Evaluation, id: string, person = "p1") => evaluation.line(person, id).value?.toString();
 
     it("prorate the spouse and eligible dependant amounts before taking off the other person's net income", () => {
-      // canada.ca, Completing your return for newcomers, Example 3: 100/365 × $16,129 = $4,418.90, less $800.
-      const couple = arrived("100", { maritalStatus: "married", dependants: [] }, { spouseNetIncome: "800" });
+      // canada.ca, Completing your return for newcomers, Example 3: 100/365 × $16,129 = $4,418.90, less the spouse's
+      // $800 on those days. Their return isn't prepared here: $20,800 for the year, and $800 on Alex's days, are asked.
+      const couple = arrived("100", { maritalStatus: "married", dependants: [] }, { spouseNetIncome: "20800", spouseIncomeWhileResident: "800" });
       expect([line(couple, "T1.30000"), line(couple, "T1.30300")]).toEqual(["4418.9", "3618.9"]);
+      expect([line(couple, "HH.spouseNetIncome"), line(couple, "HH.spouseWorldIncome"), line(couple, "HH.spouseIncomeForCredits")]).toEqual(["20800", "20800", "800"]);
       expect(line(couple, "S5.3")).toBe("4418.9");
       const parent = arrived("100", { maritalStatus: "single", dependants: [{ id: "d1", name: "Jamie", birthDate: "2017-04-04" }] }, { dependantNetIncome: "800" });
       expect(line(parent, "T1.30400")).toBe("3618.9");
       // With an infirm spouse, the $2,687 is prorated too ($736.16), and so are the caregiver amount's $28,798 and
       // $8,601: min(2,356.44, 7,889.86 − 5,000) less the spouse amount of 155.06.
-      const infirm = arrived("100", { maritalStatus: "married", dependants: [] }, { spouseNetIncome: "5000", spouseInfirm: true });
+      const infirm = arrived("100", { maritalStatus: "married", dependants: [] }, { spouseNetIncome: "25000", spouseIncomeWhileResident: "5000", spouseInfirm: true });
       expect([line(infirm, "S5.3"), line(infirm, "T1.30300"), line(infirm, "T1.30425")]).toEqual(["5155.06", "155.06", "2201.38"]);
-      // A full year changes nothing: 16,129 − 800.
+      // Lived here all year: the full amount less their $20,800 for the year, which leaves nothing.
       const resident = new Evaluation(rulesFor(2025)!, { ...couple.input, people: [{ ...couple.input.people[0]!, residentAllYear: true }] });
-      expect(line(resident, "T1.30300")).toBe("15329");
+      expect([line(resident, "T1.30000"), line(resident, "T1.30300")]).toEqual(["16129", "0"]);
     });
 
     it("prorate the age amount's $9,028 and its $45,522 base, not the net income", () => {
@@ -489,35 +506,53 @@ describe("the 2025 rules", () => {
       expect(line(couple, "T1.32400")).toBe("2506.85");
     });
 
-    it("take off a part-year spouse's net income for the part of the year you were resident", () => {
-      // Alex earned `income` in Ontario, there all year unless `alexDays` says otherwise (after $30,000 abroad); Robin
-      // arrived for the last `robinDays` days after `abroad` of income abroad, and earned `here` in Canada.
-      const couple = (income: string, robinDays: string, abroad: string, here: string, alexDays?: string) =>
+    it("take off a part-year spouse's net income for the days you lived in Canada", () => {
+      // Robin's days in Canada (all year without them), income while not resident (`canadian` of it from Canada, so on
+      // their T4 too) and T4. Alex earned $100,000 in Ontario, there all year unless `days` says otherwise.
+      type Robin = { days?: string; abroad?: string; canadian?: string; t4: string };
+      const couple = (robin: Robin, alex: { days?: string; answers?: Record<string, string | boolean> } = {}) =>
         new Evaluation(rulesFor(2025)!, {
           year: 2025,
           people: [
-            { id: "p1", name: "Alex", role: "self", birthDate: "1985-04-02", province: "ON", residentAllYear: alexDays === undefined },
-            { id: "p2", name: "Robin", role: "spouse", birthDate: "1987-09-15", province: "ON", residentAllYear: false },
+            { id: "p1", name: "Alex", role: "self", birthDate: "1985-04-02", province: "ON", residentAllYear: alex.days === undefined },
+            { id: "p2", name: "Robin", role: "spouse", birthDate: "1987-09-15", province: "ON", residentAllYear: robin.days === undefined },
           ],
           family: { maritalStatus: "married", dependants: [] },
           answers: {
-            p1: alexDays === undefined ? {} : { daysResident: alexDays, nonResidentIncome: "30000", nonResidentCanadianIncome: "0" },
-            p2: { daysResident: robinDays, nonResidentIncome: abroad, nonResidentCanadianIncome: "0" },
+            p1: { ...(alex.days === undefined ? {} : { daysResident: alex.days, nonResidentIncome: "30000", nonResidentCanadianIncome: "0" }), ...alex.answers },
+            p2: robin.days === undefined ? {} : { daysResident: robin.days, nonResidentIncome: robin.abroad ?? "0", nonResidentCanadianIncome: robin.canadian ?? "0" },
           },
-          slips: [t4({ 14: income, 22: "9000" }), ...(here === "0" ? [] : [{ id: "s2", person: "p2", type: "T4", issuer: "Birch Books", boxes: { 14: here } }])],
+          slips: [t4({ 14: "100000", 22: "20000" }), { id: "s2", person: "p2", type: "T4", issuer: "Birch Books", boxes: { 14: robin.t4 } }],
         });
-      // Alex lived in Ontario all year; Robin arrived September 1 after $40,000 abroad. Robin's net world income for 2025
-      // leaves no spouse amount, federal or Ontario's (canada.ca, Completing your return for newcomers).
-      const resident = couple("60000", "122", "40000", "0");
+      const asked = (evaluation: Evaluation) =>
+        evaluation.result().people[0]!.questions.filter((id) => id === "spouseSameDays" || id === "spouseIncomeWhileResident");
+
+      // Alex lived in Ontario all year, so Robin's net world income for 2025 comes off (canada.ca, Completing your return
+      // for newcomers). Arrived September 1 after $40,000 abroad: no spouse amount, federal or Ontario's.
+      const resident = couple({ days: "122", abroad: "40000", t4: "0" });
       expect([line(resident, "T1.30300"), line(resident, "ON428.13")]).toEqual(["0", "0"]);
-      expect([line(resident, "HH.spouseWorldIncome"), line(resident, "HH.spouseNetIncome")]).toEqual(["40000", "40000"]);
-      // Both arrived for the last 100 days, Robin with $800 here after $20,000 abroad: the $800 of that period, as in
-      // Example 3 (the T1 still shows their $20,800 for the year).
-      const together = couple("100000", "100", "20000", "800", "100");
-      expect([line(together, "HH.spouseNetIncome"), line(together, "T1.30300"), line(together, "HH.spouseWorldIncome")]).toEqual(["800", "3618.9", "20800"]);
-      // Robin came earlier: how the $20,800 splits over Alex's days isn't known, so all of it is taken off.
-      const apart = couple("100000", "200", "20000", "800", "100");
-      expect([line(apart, "HH.spouseNetIncome"), line(apart, "T1.30300")]).toEqual(["20800", "0"]);
+      expect(asked(resident)).toEqual([]);
+      // Arrived October 1, with an $8,000 T4: $6,000 of it earned in Canada before, which isn't counted twice.
+      const commuter = couple({ days: "92", abroad: "6000", canadian: "6000", t4: "8000" });
+      expect([line(commuter, "HH.spouseWorldIncome"), line(commuter, "T1.30300")]).toEqual(["8000", "8129"]);
+
+      // Both moved: same days or not is asked. Example 3, arrived together for the last 100 days, Robin with $800 here
+      // after $20,000 abroad: the $800 of those days (the T1 still shows the $20,800 of the year).
+      const together = (robin: Robin, answers: Record<string, string | boolean>) => couple(robin, { days: "100", answers });
+      const example3 = together({ days: "100", abroad: "20000", t4: "800" }, { spouseSameDays: true });
+      expect([line(example3, "HH.spouseIncomeForCredits"), line(example3, "T1.30300"), line(example3, "HH.spouseWorldIncome")]).toEqual(["800", "3618.9", "20800"]);
+      // On the same days, their Canadian income from before arriving isn't in yours: $8,000 less $6,000.
+      expect(line(together({ days: "92", abroad: "6000", canadian: "6000", t4: "8000" }, { spouseSameDays: true }), "HH.spouseIncomeForCredits")).toBe("2000");
+      // Alex left after 100 days, January 1 to April 10, and Robin arrived for the last 100: as many days, but other
+      // days. Robin's $20,000 abroad was earned while Alex lived here, so there is no spouse amount.
+      const opposite = together({ days: "100", abroad: "20000", t4: "800" }, { spouseSameDays: false });
+      expect(line(opposite, "T1.30300")).toBeUndefined();
+      expect(asked(opposite)).toEqual(["spouseSameDays", "spouseIncomeWhileResident"]);
+      const answered = together({ days: "100", abroad: "20000", t4: "800" }, { spouseSameDays: false, spouseIncomeWhileResident: "20000" });
+      expect([line(answered, "T1.30300"), line(answered, "ON428.13")]).toEqual(["0", "0"]);
+      // Alex moved and Robin lived here all year: only the income on Alex's days is asked.
+      const stayed = couple({ t4: "30000" }, { days: "100", answers: { spouseIncomeWhileResident: "2000" } });
+      expect([line(stayed, "T1.30300"), asked(stayed)]).toEqual(["2418.9", ["spouseIncomeWhileResident"]]);
     });
   });
 
@@ -608,7 +643,7 @@ describe("the 2025 rules", () => {
         [["T3", { 21: "2000", 26: "300" }], ["RL16", { A: "2000", G: "300" }], /T3 slips \(box 21\) are more than box A of your RL-16/],
         [["T3", { 26: "300" }], ["RL16", { G: "300" }], /T3 slips \(box 26\) is more than box G of your RL-16/],
         [["T3", { 49: "500", 50: "690", 51: "103.64" }], ["RL16", { C1: "500", I: "690", J: "80.78" }], /T3 slips \(boxes 32 and 50\) are more than box I of your RL-16/],
-        [["T3", { 25: "400" }], ["RL16", { F: "400" }], /foreign non-business income \(box 25\) and your RL-16 slips none/],
+        [["T3", { 25: "400" }], ["RL16", { F: "400" }], /T3 slips \(box 25\) is more than boxes E and F of your RL-16/],
         [["T4A", { "016": "20000", "022": "3000" }], ["RL2", { A: "20000", J: "3000" }], /more pension, annuity, RRSP and RRIF payments .* than boxes A, B and C of your RL-2/],
         // A pension plan's lump sum: box C of the RL-2.
         [["T4A", { "018": "5000" }], ["RL2", { C: "5000" }], /than boxes A, B and C of your RL-2/],
@@ -661,6 +696,30 @@ describe("the 2025 rules", () => {
       expect(refund.line("p1", "TP1.478")).toEqual({ value: null, status: "missing" });
       expect(scope(refund)).toEqual([expect.stringMatching(/boxes 18, 20, 26, 28 and 34 of the T4RSP.*aren't handled/)]);
       expect(scope(refund)[0]).not.toMatch(/upload/);
+    });
+
+    it("count the T4s and T2202s that hold an amount against their RL slips, where Quebec's amount differs by law", () => {
+      const scope = (evaluation: Evaluation) => evaluation.explain("p1", "line.QC.scope").notes ?? [];
+      // The Quebec job's RL-1 shows $2,000 more than its T4 (group insurance is taxable in Quebec): that alone is fine.
+      const quebecJob = employee.slips.map((slip) => (slip.type === "RL1" ? { ...slip, boxes: { ...slip.boxes, A: "64000" } } : slip));
+      const evaluate = (slips: EngineInput["slips"]) => new Evaluation(rulesFor(2025)!, { ...employee, slips });
+      expect(scope(evaluate(quebecJob))).toEqual([]);
+      // A $1,500 T4 from an Ottawa job has no RL-1: the amounts (63,500 against 64,000) would hide it, the slips don't.
+      const ottawa = { id: "x0", person: "p1", type: "T4", issuer: "Rideau Outfitters", boxes: { 14: "1500", 22: "150", 24: "1500", 26: "1500", 56: "1500" } };
+      const twoJobs = evaluate([...quebecJob, ottawa]);
+      expect(twoJobs.line("p1", "TP1.478")).toEqual({ value: null, status: "missing" });
+      expect(scope(twoJobs)).toEqual([expect.stringMatching(/issues an RL-1 with each T4: upload it/)]);
+      // A Quebec university's T2202 and RL-8, and an Ontario university's T2202, which comes with no RL-8.
+      const twoSchools = withSlips(["T2202", { 25: "8", 26: "3000" }], ["RL8", { A: "2400", B: "3000" }], ["T2202", { 24: "4", 26: "6000" }]);
+      expect(twoSchools.line("p1", "TP1.478")).toEqual({ value: null, status: "missing" });
+      expect(scope(twoSchools)).toEqual([expect.stringMatching(/more T2202 slips with tuition \(box 26\) than RL-8 slips/)]);
+      // A box entered as 0 isn't an amount the RL slip must carry: an RL-5 for a childcare allowance alone leaves the
+      // T5007's social assistance on line 147, and an RL-2 without QPP leaves the T4A(P)'s CPP on line 119.
+      const allowance = withSlips(["T5007", { 11: "1200" }], ["RL5", { A: "0", J: "500" }]);
+      expect(value(allowance, "p1", "TP1.147")).toEqual(["1200", "complete"]);
+      expect(scope(allowance)).toEqual([]);
+      const cpp = withSlips(["T4A", { "016": "20000" }], ["RL2", { A: "20000", C_QPP: "0" }], ["T4AP", { 14: "6000", 20: "6000" }]);
+      expect(value(cpp, "p1", "TP1.119")).toEqual(["6000", "complete"]);
     });
 
     it("deduct the social benefits repayment on line 250, and its EI part from the health services fund income", () => {

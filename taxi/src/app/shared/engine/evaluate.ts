@@ -334,9 +334,11 @@ export class Evaluation {
         return { value: person.province, status: person.province === null ? "missing" : "complete", label: "Province on December 31", reads: [] };
       default: {
         const slip = this.rules.slips.get(head!)!;
+        const mine = this.input.slips.filter((each) => each.person === personId && each.type === slip.id);
+        if (rest[0] === "slips") return { value: Dec.of(mine.length), status: "complete", label: `${slip.id} slips`, reads: [] };
         const box = rest[0]!.slice("box".length);
-        const items = this.input.slips
-          .filter((each) => each.person === personId && each.type === slip.id && box in each.boxes)
+        const items = mine
+          .filter((each) => box in each.boxes)
           .map((each) => ({ label: `${slip.id} from ${each.issuer}`, value: Dec.from(each.boxes[box]!) }));
         return {
           value: items.map((item) => item.value),
@@ -526,6 +528,8 @@ function call(name: string, args: Value[]): Value {
     }
     case "count":
       return Dec.of((args[0] as Dec[]).length);
+    case "countNonZero":
+      return Dec.of((args[0] as Dec[]).filter((amount) => !amount.isZero()).length);
     case "round":
       // The CRA rounds half a cent up.
       return (args[0] as Dec).roundTo(args[1] === undefined ? 2 : Number((args[1] as Dec).toString()), "HALF_UP");

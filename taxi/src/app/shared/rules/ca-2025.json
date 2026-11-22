@@ -2986,7 +2986,7 @@
     },
     "AB428.20": {
       "label": "Alberta spouse or common-law partner amount",
-      "formula": "round(if(line.HH.partner == 1, max(0, round(param.abSpouseBase * line.RES.factor, 2) - line.HH.spouseNetIncome), 0), 2)"
+      "formula": "round(if(line.HH.partner == 1, max(0, round(param.abSpouseBase * line.RES.factor, 2) - line.HH.spouseIncomeForCredits), 0), 2)"
     },
     "AB428.23": {
       "label": "Alberta amount for an eligible dependant",
@@ -3156,7 +3156,7 @@
     },
     "BC428.20": {
       "label": "British Columbia spouse or common-law partner amount",
-      "formula": "round(if(line.HH.partner == 1, min(round(param.bcSpouseMax * line.RES.factor, 2), max(0, round(param.bcSpouseBase * line.RES.factor, 2) - line.HH.spouseNetIncome)), 0), 2)"
+      "formula": "round(if(line.HH.partner == 1, min(round(param.bcSpouseMax * line.RES.factor, 2), max(0, round(param.bcSpouseBase * line.RES.factor, 2) - line.HH.spouseIncomeForCredits)), 0), 2)"
     },
     "BC428.23": {
       "label": "British Columbia amount for an eligible dependant",
@@ -3165,7 +3165,7 @@
     },
     "BC428.24": {
       "label": "British Columbia caregiver amount",
-      "formula": "round(if(line.HH.partner == 1 and answer.spouseInfirm, max(0, min(round(param.bcCaregiverMax * line.RES.factor, 2), max(0, round(param.bcCaregiverBase * line.RES.factor, 2) - line.HH.spouseNetIncome)) - line.BC428.20), 0) + if(answer.hasInfirmDependant, if(answer.infirmDependants > 0, min(round(param.bcCaregiverMax * line.RES.factor, 2), max(0, round(param.bcCaregiverBase * line.RES.factor, 2) - answer.infirmDependantIncome)), 0), 0), 2)",
+      "formula": "round(if(line.HH.partner == 1 and answer.spouseInfirm, max(0, min(round(param.bcCaregiverMax * line.RES.factor, 2), max(0, round(param.bcCaregiverBase * line.RES.factor, 2) - line.HH.spouseIncomeForCredits)) - line.BC428.20), 0) + if(answer.hasInfirmDependant, if(answer.infirmDependants > 0, min(round(param.bcCaregiverMax * line.RES.factor, 2), max(0, round(param.bcCaregiverBase * line.RES.factor, 2) - answer.infirmDependantIncome)), 0), 0), 2)",
       "source": "Worksheet BC428, line 58175: for each dependant, $24,810 less their net income (up to $5,659), less what line 58120 claims for them"
     },
     "BC428.25": {
@@ -3470,15 +3470,20 @@
       "label": "Both spouses' returns are prepared here (1 for yes)",
       "formula": "if(family.partnerInYear and line.HH.partner == 1, 1, 0)"
     },
-    "HH.spouseWorldIncome": {
-      "label": "Your spouse's or partner's net world income for 2025",
-      "formula": "if(line.HH.partner == 1, if(family.partnerInYear, spouse.line.T1.23600 + if(spouse.person.residentAllYear, 0, spouse.answer.nonResidentIncome), answer.spouseNetIncome), 0)",
-      "source": "T1, Step 1, and canada.ca, Completing your return for newcomers: their net world income for 2025 whatever their residency, line 23600 of their return plus their world income while not resident; otherwise from your answer"
-    },
     "HH.spouseNetIncome": {
       "label": "Your spouse's or partner's net income",
-      "formula": "if(line.HH.partner == 1 and family.partnerInYear and not person.residentAllYear and not spouse.person.residentAllYear and line.RES.days == spouse.line.RES.days, spouse.line.T1.23600, line.HH.spouseWorldIncome)",
-      "source": "Their net income for the part of 2025 you were resident: their line 23600 when you both lived in Canada the same days, else their world income for 2025"
+      "formula": "if(line.HH.partner == 1, if(family.partnerInYear, spouse.line.T1.23600, answer.spouseNetIncome), 0)",
+      "source": "Line 23600 of their return when both returns are prepared here; otherwise your answer, their net world income for 2025"
+    },
+    "HH.spouseWorldIncome": {
+      "label": "Your spouse's or partner's net world income for 2025",
+      "formula": "if(line.HH.partner == 1, if(family.partnerInYear, spouse.line.T1.23600 + if(spouse.person.residentAllYear, 0, max(0, spouse.answer.nonResidentIncome - spouse.answer.nonResidentCanadianIncome)), answer.spouseNetIncome), 0)",
+      "source": "T1, Step 1, and canada.ca, Completing your return for newcomers: their net world income for 2025 whatever their residency: line 23600 of their return, plus their income from outside Canada while not resident (the Canadian part is on line 23600 already); otherwise from your answer"
+    },
+    "HH.spouseIncomeForCredits": {
+      "label": "Your spouse's or partner's net income while you lived in Canada",
+      "formula": "if(line.HH.partner == 1 and not person.residentAllYear, if(family.partnerInYear and not spouse.person.residentAllYear and answer.spouseSameDays, max(0, spouse.line.T1.23600 - spouse.answer.nonResidentCanadianIncome), min(answer.spouseIncomeWhileResident, line.HH.spouseWorldIncome)), line.HH.spouseWorldIncome)",
+      "source": "Their net income for the days you lived in Canada: their world income for 2025 if that was all year; on the same days as theirs, their line 23600 less their Canadian income from before they arrived or after they left; otherwise your answer, which can't be more than their world income for the year (asked too when their return isn't prepared here)"
     },
     "T1.10100": {"label":"Employment income","formula":"sum(T4.box14)"},
     "T1.10120": {"label":"Commissions included on line 10100","formula":"sum(T4.box42)"},
@@ -4217,7 +4222,7 @@
     },
     "T1.30300": {
       "label": "Spouse or common-law partner amount",
-      "formula": "if(line.HH.partner == 1, max(0, line.S5.3 - line.HH.spouseNetIncome), 0)",
+      "formula": "if(line.HH.partner == 1, max(0, line.S5.3 - line.HH.spouseIncomeForCredits), 0)",
       "source": "Schedule 5, line 30300, lines 4 and 5: line 3 minus their net income"
     },
     "T1.30400": {
@@ -4227,7 +4232,7 @@
     },
     "T1.30425": {
       "label": "Canada caregiver amount for spouse or common-law partner",
-      "formula": "if(line.HH.partner == 1 and answer.spouseInfirm, max(0, min(round(param.caregiverMax * line.RES.factor, 2), max(0, round(param.caregiverBase * line.RES.factor, 2) - line.HH.spouseNetIncome)) - line.T1.30300), 0)",
+      "formula": "if(line.HH.partner == 1 and answer.spouseInfirm, max(0, min(round(param.caregiverMax * line.RES.factor, 2), max(0, round(param.caregiverBase * line.RES.factor, 2) - line.HH.spouseIncomeForCredits)) - line.T1.30300), 0)",
       "source": "Schedule 5 line 30425: $28,798 less their net income (up to $8,601), less the spouse amount on line 30300"
     },
     "T1.30450": {
@@ -4790,7 +4795,7 @@
     },
     "MB428.13": {
       "label": "Manitoba spouse or common-law partner amount",
-      "formula": "round(if(line.HH.partner == 1, max(0, round(param.mbSpouseBase * line.RES.factor, 2) - line.HH.spouseNetIncome), 0), 2)"
+      "formula": "round(if(line.HH.partner == 1, max(0, round(param.mbSpouseBase * line.RES.factor, 2) - line.HH.spouseIncomeForCredits), 0), 2)"
     },
     "MB428.16": {
       "label": "Manitoba amount for an eligible dependant",
@@ -5177,7 +5182,7 @@
     },
     "NB428.13": {
       "label": "New Brunswick spouse or common-law partner amount",
-      "formula": "round(if(line.HH.partner == 1, min(round(param.nbSpouseMax * line.RES.factor, 2), max(0, round(param.nbSpouseBase * line.RES.factor, 2) - line.HH.spouseNetIncome)), 0), 2)"
+      "formula": "round(if(line.HH.partner == 1, min(round(param.nbSpouseMax * line.RES.factor, 2), max(0, round(param.nbSpouseBase * line.RES.factor, 2) - line.HH.spouseIncomeForCredits)), 0), 2)"
     },
     "NB428.16": {
       "label": "New Brunswick amount for an eligible dependant",
@@ -5441,7 +5446,7 @@
     },
     "NL428.20": {
       "label": "Newfoundland and Labrador spouse or common-law partner amount",
-      "formula": "round(if(line.HH.partner == 1, min(round(param.nlSpouseMax * line.RES.factor, 2), max(0, round(param.nlSpouseBase * line.RES.factor, 2) - line.HH.spouseNetIncome)), 0), 2)"
+      "formula": "round(if(line.HH.partner == 1, min(round(param.nlSpouseMax * line.RES.factor, 2), max(0, round(param.nlSpouseBase * line.RES.factor, 2) - line.HH.spouseIncomeForCredits)), 0), 2)"
     },
     "NL428.23": {
       "label": "Newfoundland and Labrador amount for an eligible dependant",
@@ -5734,7 +5739,7 @@
     },
     "NS428.13": {
       "label": "Nova Scotia spouse or common-law partner amount",
-      "formula": "round(if(line.HH.partner == 1, min(round(param.nsSpouseMax * line.RES.factor, 2), max(0, round(param.nsSpouseBase * line.RES.factor, 2) - max(round(param.nsSpouseIncomeFloor * line.RES.factor, 2), line.HH.spouseNetIncome))), 0), 2)",
+      "formula": "round(if(line.HH.partner == 1, min(round(param.nsSpouseMax * line.RES.factor, 2), max(0, round(param.nsSpouseBase * line.RES.factor, 2) - max(round(param.nsSpouseIncomeFloor * line.RES.factor, 2), line.HH.spouseIncomeForCredits))), 0), 2)",
       "source": "NS428 lines 11 to 13: $12,618 less whichever is more, $874 or their net income"
     },
     "NS428.16": {
@@ -5949,7 +5954,7 @@
     },
     "NT428.13": {
       "label": "Northwest Territories spouse or common-law partner amount",
-      "formula": "round(if(line.HH.partner == 1, max(0, round(param.ntSpouseBase * line.RES.factor, 2) - line.HH.spouseNetIncome), 0), 2)"
+      "formula": "round(if(line.HH.partner == 1, max(0, round(param.ntSpouseBase * line.RES.factor, 2) - line.HH.spouseIncomeForCredits), 0), 2)"
     },
     "NT428.16": {
       "label": "Northwest Territories amount for an eligible dependant",
@@ -6156,7 +6161,7 @@
     },
     "NU428.13": {
       "label": "Nunavut spouse or common-law partner amount",
-      "formula": "round(if(line.HH.partner == 1, max(0, round(param.nuSpouseBase * line.RES.factor, 2) - line.HH.spouseNetIncome), 0), 2)"
+      "formula": "round(if(line.HH.partner == 1, max(0, round(param.nuSpouseBase * line.RES.factor, 2) - line.HH.spouseIncomeForCredits), 0), 2)"
     },
     "NU428.16": {
       "label": "Nunavut amount for an eligible dependant",
@@ -6362,7 +6367,7 @@
     },
     "ON428.13": {
       "label": "Ontario spouse or common-law partner amount",
-      "formula": "round(if(line.HH.partner == 1, min(round(param.onSpouseMax * line.RES.factor, 2), max(0, round(param.onSpouseBase * line.RES.factor, 2) - line.HH.spouseNetIncome)), 0), 2)"
+      "formula": "round(if(line.HH.partner == 1, min(round(param.onSpouseMax * line.RES.factor, 2), max(0, round(param.onSpouseBase * line.RES.factor, 2) - line.HH.spouseIncomeForCredits)), 0), 2)"
     },
     "ON428.16": {
       "label": "Ontario amount for an eligible dependant",
@@ -6679,7 +6684,7 @@
     },
     "PE428.13": {
       "label": "Prince Edward Island spouse or common-law partner amount",
-      "formula": "round(if(line.HH.partner == 1, min(round(param.peSpouseMax * line.RES.factor, 2), max(0, round(param.peSpouseBase * line.RES.factor, 2) - line.HH.spouseNetIncome)), 0), 2)"
+      "formula": "round(if(line.HH.partner == 1, min(round(param.peSpouseMax * line.RES.factor, 2), max(0, round(param.peSpouseBase * line.RES.factor, 2) - line.HH.spouseIncomeForCredits)), 0), 2)"
     },
     "PE428.16": {
       "label": "Prince Edward Island amount for an eligible dependant",
@@ -7362,7 +7367,7 @@
     },
     "QC.scope": {
       "label": "Quebec return cases this app doesn't handle",
-      "formula": "if(not person.residentAllYear, unsupported(\"A Quebec return for a year you moved to or from Canada isn't handled by this app yet\"), if(count(T4.box14) > count(RL1.boxA) and sum(T4.box14) > sum(RL1.boxA), unsupported(\"A Quebec resident's employer in Quebec issues an RL-1 with each T4: upload it. Employment outside Quebec (a T4 without an RL-1, Schedule R Part B) isn't handled by this app yet\"), if(sum(T5.box13) > sum(RL3.boxD), unsupported(\"The interest on your T5 slips (box 13) is more than box D of your RL-3 slips: upload the RL-3 issued with each T5, with its box D. A T5 without its RL-3 isn't handled on the Quebec return by this app yet\"), if(sum(T5.box11) + sum(T5.box25) > sum(RL3.boxB) + 0.01 * count(RL3.boxB), unsupported(\"The taxable dividends on your T5 slips (boxes 11 and 25) are more than box B of your RL-3 slips: upload the RL-3 issued with each T5, with its box B. A T5 without its RL-3 isn't handled on the Quebec return by this app yet\"), if(sum(T5.box18) > sum(RL3.boxI), unsupported(\"The capital gains dividends on your T5 slips (box 18) are more than box I of your RL-3 slips: upload the RL-3 issued with each T5, with its box I. A T5 without its RL-3 isn't handled on the Quebec return by this app yet\"), if(sum(T3.box21) > sum(RL16.boxA), unsupported(\"The capital gains on your T3 slips (box 21) are more than box A of your RL-16 slips: upload the RL-16 issued with each T3, with its box A. A T3 without its RL-16 isn't handled on the Quebec return by this app yet\"), if(sum(T3.box32) + sum(T3.box50) > sum(RL16.boxI) + 0.01 * count(RL16.boxI), unsupported(\"The taxable dividends on your T3 slips (boxes 32 and 50) are more than box I of your RL-16 slips: upload the RL-16 issued with each T3, with its box I. A T3 without its RL-16 isn't handled on the Quebec return by this app yet\"), if(sum(T3.box26) > sum(RL16.boxG), unsupported(\"The other income on your T3 slips (box 26) is more than box G of your RL-16 slips: upload the RL-16 issued with each T3, with its box G. A T3 without its RL-16, or an RL-16 that reports this income in a box this app doesn't read, isn't handled on the Quebec return yet\"), if(sum(T3.box25) > 0 and sum(RL16.boxE) + sum(RL16.boxF) == 0, unsupported(\"Your T3 slips show foreign non-business income (box 25) and your RL-16 slips none (box E or F): upload the RL-16 issued with each T3. A T3 without its RL-16 isn't handled on the Quebec return by this app yet\"), if(sum(T4RSP.box18) + sum(T4RSP.box20) + sum(T4RSP.box26) + sum(T4RSP.box28) + sum(T4RSP.box34) > 0, unsupported(\"RRSP amounts other than annuity payments and withdrawals (boxes 18, 20, 26, 28 and 34 of the T4RSP) go on the Quebec return from boxes of the RL-2 this app doesn't read (line 154, points 4 and 7): they aren't handled by this app yet\"), if(sum(T4A.box016) + sum(T4A.box018) + sum(T4A.box024) + sum(T4RIF.box16) + sum(T4RSP.box16) + sum(T4RSP.box22) > sum(RL2.boxA) + sum(RL2.boxB) + sum(RL2.boxC), unsupported(\"Your T4A, T4RSP and T4RIF slips show more pension, annuity, RRSP and RRIF payments (T4A boxes 016, 018 and 024, T4RSP boxes 16 and 22, T4RIF box 16) than boxes A, B and C of your RL-2 slips: upload the RL-2 issued with each of them. A payment without its RL-2 isn't handled on the Quebec return by this app yet\"), if(sum(T2202.box26) > 0 and count(RL8.boxA) + count(RL8.boxB) + count(RL8.boxC) == 0, unsupported(\"A college or university in Quebec issues an RL-8 with each T2202: upload it. Tuition paid to a school outside Quebec (a T2202 without an RL-8, Schedule T) isn't handled on the Quebec return by this app yet\"), if(count(RL5.boxA) + count(RL5.boxB) > 0 and sum(T5007.box11) > sum(RL5.boxA) + sum(RL5.boxB), unsupported(\"The social assistance on your T5007 slips (box 11) is more than boxes A and B of your RL-5 slips: upload the RL-5 issued with each T5007. The Quebec return takes the T5007 only when there is no RL-5 at all\"), if(sum(T4.box39) + sum(T4.box41) > 0, unsupported(\"The security option deduction (boxes 39 and 41 of the T4) on the Quebec return (line 297, point 2, from boxes L-9 to L-13 of the RL-1) isn't handled by this app yet\"), if(sum(T4.box43) > 0, unsupported(\"The Canadian Forces personnel and police deduction (box 43 of the T4) on the Quebec return (line 297, point 23) isn't handled by this app yet\"), if(sum(T4A.box028) > 0, unsupported(\"Other income on a T4A (box 028) on the Quebec return (line 154, point 3, from box O of the RL-1) isn't handled by this app yet\"), if(sum(T4A.box105) > 0, unsupported(\"Scholarships and bursaries (box 105 of the T4A) on the Quebec return (line 154, point 1, from box O of the RL-1, and their deduction on line 295) aren't handled by this app yet\"), if(sum(T4A.box131) > 0, unsupported(\"Income from an RDSP (box 131 of the T4A) on the Quebec return (line 278, from box O of the RL-1) isn't handled by this app yet\"), if(sum(T4FHSA.box22) + sum(T4FHSA.box24) + sum(T4FHSA.box26) > 0, unsupported(\"Taxable FHSA amounts (boxes 22, 24 and 26 of the T4FHSA) on the Quebec return (line 154, point 19, from the RL-32) aren't handled by this app yet\"), if(sum(T5007.box10) > 0, unsupported(\"Workers' compensation (box 10 of the T5007) on the Quebec return (line 148, and its deduction on line 295) isn't handled by this app yet\"), if(answer.hasRentalIncome, unsupported(\"Rental income on the Quebec return (form TP-128-V) isn't handled by this app yet\"), if(answer.hasForeignIncome, unsupported(\"Foreign income on the Quebec return (the foreign tax credit, Schedule E) isn't handled by this app yet\"), if(sum(T4AOAS.box21) > 0, unsupported(\"Net federal supplements on the Quebec return (lines 148 and 295) aren't handled by this app yet\"), if(sum(T4AOAS.box20) > 0, unsupported(\"An Old Age Security overpayment recovered (box 20 of the T4A(OAS)) on the Quebec return isn't handled by this app yet\"), if(answer.hasMovingExpenses, unsupported(\"Moving expenses on the Quebec return (form TP-348-V) aren't handled by this app yet\"), 0)))))))))))))))))))))))))"
+      "formula": "if(not person.residentAllYear, unsupported(\"A Quebec return for a year you moved to or from Canada isn't handled by this app yet\"), if(countNonZero(T4.box14) > countNonZero(RL1.boxA), unsupported(\"A Quebec resident's employer in Quebec issues an RL-1 with each T4: upload it. Employment outside Quebec (a T4 without an RL-1, Schedule R Part B) isn't handled by this app yet\"), if(sum(T5.box13) > sum(RL3.boxD), unsupported(\"The interest on your T5 slips (box 13) is more than box D of your RL-3 slips: upload the RL-3 issued with each T5, with its box D. A T5 without its RL-3 isn't handled on the Quebec return by this app yet\"), if(sum(T5.box11) + sum(T5.box25) > sum(RL3.boxB) + 0.01 * count(RL3.boxB), unsupported(\"The taxable dividends on your T5 slips (boxes 11 and 25) are more than box B of your RL-3 slips: upload the RL-3 issued with each T5, with its box B. A T5 without its RL-3 isn't handled on the Quebec return by this app yet\"), if(sum(T5.box18) > sum(RL3.boxI), unsupported(\"The capital gains dividends on your T5 slips (box 18) are more than box I of your RL-3 slips: upload the RL-3 issued with each T5, with its box I. A T5 without its RL-3 isn't handled on the Quebec return by this app yet\"), if(sum(T3.box21) > sum(RL16.boxA), unsupported(\"The capital gains on your T3 slips (box 21) are more than box A of your RL-16 slips: upload the RL-16 issued with each T3, with its box A. A T3 without its RL-16 isn't handled on the Quebec return by this app yet\"), if(sum(T3.box32) + sum(T3.box50) > sum(RL16.boxI) + 0.01 * count(RL16.boxI), unsupported(\"The taxable dividends on your T3 slips (boxes 32 and 50) are more than box I of your RL-16 slips: upload the RL-16 issued with each T3, with its box I. A T3 without its RL-16 isn't handled on the Quebec return by this app yet\"), if(sum(T3.box26) > sum(RL16.boxG), unsupported(\"The other income on your T3 slips (box 26) is more than box G of your RL-16 slips: upload the RL-16 issued with each T3, with its box G. A T3 without its RL-16, or an RL-16 that reports this income in a box this app doesn't read, isn't handled on the Quebec return yet\"), if(sum(T3.box25) > sum(RL16.boxE) + sum(RL16.boxF), unsupported(\"The foreign non-business income on your T3 slips (box 25) is more than boxes E and F of your RL-16 slips: upload the RL-16 issued with each T3, with its box E or F. A T3 without its RL-16 isn't handled on the Quebec return by this app yet\"), if(sum(T4RSP.box18) + sum(T4RSP.box20) + sum(T4RSP.box26) + sum(T4RSP.box28) + sum(T4RSP.box34) > 0, unsupported(\"RRSP amounts other than annuity payments and withdrawals (boxes 18, 20, 26, 28 and 34 of the T4RSP) go on the Quebec return from boxes of the RL-2 this app doesn't read (line 154, points 4 and 7): they aren't handled by this app yet\"), if(sum(T4A.box016) + sum(T4A.box018) + sum(T4A.box024) + sum(T4RIF.box16) + sum(T4RSP.box16) + sum(T4RSP.box22) > sum(RL2.boxA) + sum(RL2.boxB) + sum(RL2.boxC), unsupported(\"Your T4A, T4RSP and T4RIF slips show more pension, annuity, RRSP and RRIF payments (T4A boxes 016, 018 and 024, T4RSP boxes 16 and 22, T4RIF box 16) than boxes A, B and C of your RL-2 slips: upload the RL-2 issued with each of them. A payment without its RL-2 isn't handled on the Quebec return by this app yet\"), if(countNonZero(T2202.box26) > RL8.slips, unsupported(\"You have more T2202 slips with tuition (box 26) than RL-8 slips. A college or university in Quebec issues an RL-8 with each T2202: upload it. Tuition paid to a school outside Quebec (a T2202 without an RL-8, Schedule T) isn't handled on the Quebec return by this app yet\"), if(sum(RL5.boxA) + sum(RL5.boxB) > 0 and sum(T5007.box11) > sum(RL5.boxA) + sum(RL5.boxB), unsupported(\"The social assistance on your T5007 slips (box 11) is more than boxes A and B of your RL-5 slips: upload the RL-5 issued with each T5007. The Quebec return takes the T5007 only when there is no RL-5 at all\"), if(sum(T4.box39) + sum(T4.box41) > 0, unsupported(\"The security option deduction (boxes 39 and 41 of the T4) on the Quebec return (line 297, point 2, from boxes L-9 to L-13 of the RL-1) isn't handled by this app yet\"), if(sum(T4.box43) > 0, unsupported(\"The Canadian Forces personnel and police deduction (box 43 of the T4) on the Quebec return (line 297, point 23) isn't handled by this app yet\"), if(sum(T4A.box028) > 0, unsupported(\"Other income on a T4A (box 028) on the Quebec return (line 154, point 3, from box O of the RL-1) isn't handled by this app yet\"), if(sum(T4A.box105) > 0, unsupported(\"Scholarships and bursaries (box 105 of the T4A) on the Quebec return (line 154, point 1, from box O of the RL-1, and their deduction on line 295) aren't handled by this app yet\"), if(sum(T4A.box131) > 0, unsupported(\"Income from an RDSP (box 131 of the T4A) on the Quebec return (line 278, from box O of the RL-1) isn't handled by this app yet\"), if(sum(T4FHSA.box22) + sum(T4FHSA.box24) + sum(T4FHSA.box26) > 0, unsupported(\"Taxable FHSA amounts (boxes 22, 24 and 26 of the T4FHSA) on the Quebec return (line 154, point 19, from the RL-32) aren't handled by this app yet\"), if(sum(T5007.box10) > 0, unsupported(\"Workers' compensation (box 10 of the T5007) on the Quebec return (line 148, and its deduction on line 295) isn't handled by this app yet\"), if(answer.hasRentalIncome, unsupported(\"Rental income on the Quebec return (form TP-128-V) isn't handled by this app yet\"), if(answer.hasForeignIncome, unsupported(\"Foreign income on the Quebec return (the foreign tax credit, Schedule E) isn't handled by this app yet\"), if(sum(T4AOAS.box21) > 0, unsupported(\"Net federal supplements on the Quebec return (lines 148 and 295) aren't handled by this app yet\"), if(sum(T4AOAS.box20) > 0, unsupported(\"An Old Age Security overpayment recovered (box 20 of the T4A(OAS)) on the Quebec return isn't handled by this app yet\"), if(answer.hasMovingExpenses, unsupported(\"Moving expenses on the Quebec return (form TP-348-V) aren't handled by this app yet\"), 0)))))))))))))))))))))))))"
     },
     "TP1.97": {"label":"QPIP premium","formula":"sum(RL1.boxH)","source":"TP-1 line 97: box H of your RL-1 slips"},
     "TP1.98": {"label":"QPP contribution","formula":"sum(RL1.boxB_A)","source":"TP-1 line 98: box B.A of your RL-1 slips"},
@@ -7386,7 +7391,7 @@
     "TP1.114": {"label":"Old Age Security pension","formula":"line.T1.11300","source":"TP-1 line 114: the T4A(OAS) slip (box 18)"},
     "TP1.119": {
       "label": "QPP or CPP benefits",
-      "formula": "if(count(RL2.boxC_QPP) > 0, sum(RL2.boxC_QPP), sum(T4AP.box20))",
+      "formula": "if(sum(RL2.boxC_QPP) > 0, sum(RL2.boxC_QPP), sum(T4AP.box20))",
       "source": "TP-1 line 119: box C of the RL-2 slip for QPP benefits; a CPP pension (Service Canada issues no RL-2) from box 20 of the T4A(P)"
     },
     "TP1.122": {
@@ -7436,8 +7441,8 @@
     },
     "TP1.147": {
       "label": "Social assistance payments",
-      "formula": "if(count(RL5.boxA) + count(RL5.boxB) > 0, sum(RL5.boxA) + sum(RL5.boxB), sum(T5007.box11))",
-      "source": "Guide, line 147: boxes A and B of the RL-5 slip, or the amount on the T5007 slip (box 11) if you did not receive an RL-5"
+      "formula": "if(sum(RL5.boxA) + sum(RL5.boxB) > 0, sum(RL5.boxA) + sum(RL5.boxB), sum(T5007.box11))",
+      "source": "Guide, line 147: boxes A and B of the RL-5 slip, or the amount on the T5007 slip (box 11) if you did not receive an RL-5 (one with no amount in box A or B, such as a childcare allowance's, doesn't count)"
     },
     "TP1.154": {
       "label": "Other income",
@@ -7787,7 +7792,7 @@
     },
     "SK428.13": {
       "label": "Saskatchewan spouse or common-law partner amount",
-      "formula": "round(if(line.HH.partner == 1, min(round(param.skSpouseMax * line.RES.factor, 2), max(0, round(param.skSpouseBase * line.RES.factor, 2) - line.HH.spouseNetIncome)), 0), 2)"
+      "formula": "round(if(line.HH.partner == 1, min(round(param.skSpouseMax * line.RES.factor, 2), max(0, round(param.skSpouseBase * line.RES.factor, 2) - line.HH.spouseIncomeForCredits)), 0), 2)"
     },
     "SK428.16": {
       "label": "Saskatchewan amount for an eligible dependant",
@@ -9253,7 +9258,19 @@
       "type": "money",
       "ask": "Your spouse's or partner's 2025 net income",
       "module": "about",
-      "help": "Their net world income for 2025, whether or not they lived in Canada all year (line 23600 of their return, plus any income while they didn't live in Canada). Their return isn't prepared here, but some of your credits depend on it."
+      "help": "Their net world income for all of 2025, whether or not they lived in Canada all year (line 23600 of their return, plus any income from outside Canada while they didn't live here). Their return isn't prepared here, but some of your credits depend on it."
+    },
+    "spouseSameDays": {
+      "type": "boolean",
+      "ask": "Did your spouse or partner live in Canada on the same days as you in 2025?",
+      "module": "about",
+      "help": "Yes if you arrived or left together. Their net income for your days in Canada is then worked out from their return."
+    },
+    "spouseIncomeWhileResident": {
+      "type": "money",
+      "ask": "Your spouse's or partner's net world income for the days you lived in Canada in 2025",
+      "module": "about",
+      "help": "All their net income in that part of 2025, from inside and outside Canada, in Canadian dollars. Your spouse amount and similar credits go down by it."
     },
     "daysResident": {
       "type": "count",
@@ -10392,7 +10409,7 @@
           "page": 2,
           "x": 552,
           "y": 479.3,
-          "value": "line.HH.spouseNetIncome",
+          "value": "line.HH.spouseIncomeForCredits",
           "when": "line.T1.30300 + line.T1.30425 > 0"
         },
         {"key":"5","kind":"amount","page":2,"x":552,"y":452.3,"value":"line.T1.30300"},
@@ -10423,7 +10440,7 @@
           "page": 4,
           "x": 552,
           "y": 302.3,
-          "value": "line.HH.spouseNetIncome",
+          "value": "line.HH.spouseIncomeForCredits",
           "when": "line.T1.30425 > 0"
         },
         {
@@ -10432,7 +10449,7 @@
           "page": 4,
           "x": 552,
           "y": 287.3,
-          "value": "min(round(param.caregiverMax * line.RES.factor, 2), max(0, round(param.caregiverBase * line.RES.factor, 2) - line.HH.spouseNetIncome))",
+          "value": "min(round(param.caregiverMax * line.RES.factor, 2), max(0, round(param.caregiverBase * line.RES.factor, 2) - line.HH.spouseIncomeForCredits))",
           "when": "line.T1.30425 > 0"
         },
         {"key":"p4:4.2","kind":"amount","page":4,"x":552,"y":272.3,"value":"line.T1.30300","when":"line.T1.30425 > 0"},
@@ -12171,7 +12188,7 @@
           "page": 1,
           "x": 444,
           "y": 353.3,
-          "value": "if(line.HH.partner == 1, line.HH.spouseNetIncome, 0)"
+          "value": "if(line.HH.partner == 1, line.HH.spouseIncomeForCredits, 0)"
         },
         {"key":"13","kind":"amount","page":1,"x":552,"y":338.3,"value":"line.ON428.13"},
         {
@@ -12364,7 +12381,7 @@
           "page": 1,
           "x": 444,
           "y": 179.3,
-          "value": "if(line.HH.partner == 1, line.HH.spouseNetIncome, 0)"
+          "value": "if(line.HH.partner == 1, line.HH.spouseIncomeForCredits, 0)"
         },
         {"key":"20","kind":"amount","page":1,"x":552,"y":164.3,"value":"line.BC428.20"},
         {
@@ -12567,7 +12584,7 @@
           "page": 1,
           "x": 444,
           "y": 173.3,
-          "value": "if(line.HH.partner == 1, line.HH.spouseNetIncome, 0)"
+          "value": "if(line.HH.partner == 1, line.HH.spouseIncomeForCredits, 0)"
         },
         {"key":"20","kind":"amount","page":1,"x":552,"y":158.3,"value":"line.AB428.20"},
         {
@@ -12724,7 +12741,7 @@
           "page": 1,
           "x": 444,
           "y": 356.3,
-          "value": "if(line.HH.partner == 1, line.HH.spouseNetIncome, 0)"
+          "value": "if(line.HH.partner == 1, line.HH.spouseIncomeForCredits, 0)"
         },
         {"key":"13","kind":"amount","page":1,"x":552,"y":341.3,"value":"line.MB428.13"},
         {
@@ -13199,7 +13216,7 @@
           "page": 1,
           "x": 444,
           "y": 362.3,
-          "value": "if(line.HH.partner == 1, line.HH.spouseNetIncome, 0)"
+          "value": "if(line.HH.partner == 1, line.HH.spouseIncomeForCredits, 0)"
         },
         {"key":"13","kind":"amount","page":1,"x":552,"y":347.3,"value":"line.SK428.13"},
         {
@@ -13383,7 +13400,7 @@
           "page": 1,
           "x": 444,
           "y": 350.3,
-          "value": "if(line.HH.partner == 1, line.HH.spouseNetIncome, 0)"
+          "value": "if(line.HH.partner == 1, line.HH.spouseIncomeForCredits, 0)"
         },
         {"key":"13","kind":"amount","page":1,"x":552,"y":335.3,"value":"line.NB428.13"},
         {
@@ -13687,7 +13704,7 @@
           "page": 1,
           "x": 444,
           "y": 179.3,
-          "value": "if(line.HH.partner == 1, line.HH.spouseNetIncome, 0)"
+          "value": "if(line.HH.partner == 1, line.HH.spouseIncomeForCredits, 0)"
         },
         {"key":"20","kind":"amount","page":1,"x":552,"y":164.3,"value":"line.NL428.20"},
         {
@@ -14026,7 +14043,7 @@
           "page": 1,
           "x": 444,
           "y": 347.3,
-          "value": "if(line.HH.partner == 1, max(round(param.nsSpouseIncomeFloor * line.RES.factor, 2), line.HH.spouseNetIncome), 0)"
+          "value": "if(line.HH.partner == 1, max(round(param.nsSpouseIncomeFloor * line.RES.factor, 2), line.HH.spouseIncomeForCredits), 0)"
         },
         {"key":"13","kind":"amount","page":1,"x":552,"y":332.3,"value":"line.NS428.13"},
         {
@@ -14359,7 +14376,7 @@
           "page": 1,
           "x": 444,
           "y": 320.3,
-          "value": "if(line.HH.partner == 1, line.HH.spouseNetIncome, 0)"
+          "value": "if(line.HH.partner == 1, line.HH.spouseIncomeForCredits, 0)"
         },
         {"key":"13","kind":"amount","page":1,"x":552,"y":305.3,"value":"line.PE428.13"},
         {
@@ -14944,7 +14961,7 @@
           "page": 1,
           "x": 444,
           "y": 353.3,
-          "value": "if(line.HH.partner == 1, line.HH.spouseNetIncome, 0)"
+          "value": "if(line.HH.partner == 1, line.HH.spouseIncomeForCredits, 0)"
         },
         {"key":"13","kind":"amount","page":1,"x":552,"y":338.3,"value":"line.NT428.13"},
         {
@@ -15288,7 +15305,7 @@
           "page": 1,
           "x": 444,
           "y": 353.3,
-          "value": "if(line.HH.partner == 1, line.HH.spouseNetIncome, 0)"
+          "value": "if(line.HH.partner == 1, line.HH.spouseIncomeForCredits, 0)"
         },
         {"key":"13","kind":"amount","page":1,"x":552,"y":338.3,"value":"line.NU428.13"},
         {
@@ -18105,5 +18122,5 @@
     }
   },
   "outcome": "RESULT.net",
-  "version": "3f6b4e1676534f27"
+  "version": "c50175239b59ddac"
 }

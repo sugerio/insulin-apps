@@ -95,6 +95,13 @@ export const profile: DocTopic = {
             their income for the rest of the year, and the personal amounts are reduced by the days in Canada. The app doesn't prepare a Quebec
             return (TP-1) for the year of a move yet: it says so on that return.
           </p>
+          <p>
+            The spouse amount and similar credits go down by the spouse's net income for the days the person lived in Canada: for the whole year
+            if they lived here all year. If the person moved and the spouse's return is prepared here too, Personal info asks whether the spouse
+            lived in Canada on the same days (the app then works it out from the spouse's return) and, if not, the spouse's net world income on
+            the person's days. When the spouse's return isn't prepared here, it asks the spouse's net world income for the year, and for the
+            person's days too if the person moved. Credits that depend on family income use both spouses' net incomes for the year.
+          </p>
         </>
       ),
     },

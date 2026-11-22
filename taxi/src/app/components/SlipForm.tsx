@@ -140,8 +140,9 @@ export interface SlipValues {
 }
 
 /**
- * A page that runs and keeps a slip form's save (Income): the form starts again whenever the year changes, which can
- * happen while it saves (an upload finishing on another step), so what was typed and why the save failed are kept there.
+ * A page that runs and keeps a slip form's save (Income, Confirm): the form can start again whenever the year changes,
+ * which can happen while it saves (an upload finishing on another step), so what was typed and why the save failed are
+ * kept there.
  */
 export interface SlipFormHost {
   /** Calls `send` with the revision to save under, applies the year, and answers whether everything was saved. */
@@ -153,6 +154,11 @@ export interface SlipFormHost {
   error: unknown;
   /** A request of the page is running: nothing here can change. */
   busy: boolean;
+  /**
+   * The page is loading the slips again (Confirm, after the year changed): typing goes on, but saving waits, as the slip
+   * this form changes may not be the one stored.
+   */
+  waiting?: boolean;
 }
 
 /**
@@ -194,6 +200,7 @@ export function SlipForm({
 
   async function submit(event: FormEvent) {
     event.preventDefault();
+    if (host?.waiting) return;
     setState({ status: "saving" });
     const change = { issuer, boxes: filled(boxes) };
     const send = (revision: number) =>
@@ -286,7 +293,7 @@ export function SlipForm({
       {inBanner ? <RefusedBanner title="The slip wasn't saved" error={error} unshown={unshown} /> : null}
       {showActions ? (
         <div className="flex gap-2">
-          <Button type="submit" size="sm" disabled={disabled || !changed}>
+          <Button type="submit" size="sm" disabled={disabled || !changed || host?.waiting === true}>
             {state.status === "saving" ? "Saving…" : slip ? "Save" : "Add"}
           </Button>
           <Button

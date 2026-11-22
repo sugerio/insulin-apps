@@ -180,7 +180,7 @@ lines:
   SK428.13:
     label: Saskatchewan spouse or common-law partner amount
     formula: >-
-      round(if(line.HH.partner == 1, min(round(param.skSpouseMax * line.RES.factor, 2), max(0, round(param.skSpouseBase * line.RES.factor, 2) - line.HH.spouseNetIncome)), 0), 2)
+      round(if(line.HH.partner == 1, min(round(param.skSpouseMax * line.RES.factor, 2), max(0, round(param.skSpouseBase * line.RES.factor, 2) - line.HH.spouseIncomeForCredits)), 0), 2)
 
   SK428.16:
     label: Saskatchewan amount for an eligible dependant

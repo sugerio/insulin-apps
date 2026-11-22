@@ -178,7 +178,7 @@ lines:
     label: Nova Scotia spouse or common-law partner amount
     formula: >-
       round(if(line.HH.partner == 1, min(round(param.nsSpouseMax * line.RES.factor, 2), max(0, round(param.nsSpouseBase * line.RES.factor, 2)
-      - max(round(param.nsSpouseIncomeFloor * line.RES.factor, 2), line.HH.spouseNetIncome))), 0), 2)
+      - max(round(param.nsSpouseIncomeFloor * line.RES.factor, 2), line.HH.spouseIncomeForCredits))), 0), 2)
     source: "NS428 lines 11 to 13: $12,618 less whichever is more, $874 or their net income"
   NS428.16:
     label: Nova Scotia amount for an eligible dependant

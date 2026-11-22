@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router";
 import { Plus } from "lucide-react";
 import { canPrepare, possibleDuplicates, routes, unreadBoxes, type Person, type Slip, type SlipList } from "#shared";
@@ -7,8 +7,8 @@ import { Button } from "@/components/ui/button.tsx";
 import { Card, CardAction, CardContent, CardHeader, CardTitle } from "@/components/ui/card.tsx";
 import { ApiError, apiRequest, describeError } from "../api/client.ts";
 import { useMe } from "../auth/AuthProvider.tsx";
-import { Banner, ResourceView } from "../components/Feedback.tsx";
-import { OriginalFile, SlipForm } from "../components/SlipForm.tsx";
+import { Banner, ErrorState, Loading } from "../components/Feedback.tsx";
+import { OriginalFile, SlipForm, type SlipFormHost, type SlipValues } from "../components/SlipForm.tsx";
 import { StepLayout } from "../components/StepLayout.tsx";
 import { stepPath, useReturn, useYear } from "../components/YearFrame.tsx";
 import { byBox, formatBox } from "../lib/format.ts";
@@ -23,22 +23,116 @@ import { rulesFor } from "../shared/rules/index.ts";
 
 export function ConfirmStep() {
   const slips = useSlips();
+  const { year, replace } = useYear();
+  const { person } = useReturn();
+  // Kept here, over the slips, which load again whenever the year changes (a save, an upload finishing on another step):
+  // the slip open to change ("new" for one being added), what was typed in it and why its save failed, and what the page
+  // has to say about it. This step is mounted once per return, so each has its own.
+  const [editing, setEditing] = useState<string | "new" | null>(null);
+  const values = useRef<Record<string, SlipValues>>({});
+  const [errors, setErrors] = useState<Record<string, unknown>>({});
+  const [saving, setSaving] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
+  // The slips as last loaded, shown while they load again so an open form stays open; until they are loaded, nothing
+  // that rests on them can be done (ReturnSlips' `waiting`, SlipFormHost.waiting).
+  const last = useRef<SlipList | null>(null);
+  if (slips.status === "ready") last.current = slips.data;
+  const fresh = slips.status === "ready" ? slips.data : null;
+  const forget = (key: string) => {
+    delete values.current[key];
+    setErrors(({ [key]: _forgotten, ...others }) => others);
+  };
+
+  // Once the slips are loaded again, the slip being changed: gone, its form closes; changed meanwhile, its form starts
+  // again from what is stored (SlipForm keeps typed values only over the version of the slip they were typed on).
+  useEffect(() => {
+    if (!fresh || editing === null || editing === "new") return;
+    const slip = fresh.slips.find((each) => each.id === editing && each.personId === person.id);
+    if (!slip) {
+      forget(editing);
+      setEditing(null);
+      setNotice("The slip you were changing was removed or replaced.");
+    } else if (values.current[editing] && values.current[editing].basis !== slip.updatedAt) {
+      forget(editing);
+      setNotice("Someone else changed this slip while you were changing it. It shows what is stored now: make your change again.");
+    }
+  }, [fresh, editing, person.id]);
+
+  const hostOf = (key: string): SlipFormHost => ({
+    async save(send) {
+      setSaving(true);
+      setErrors(({ [key]: _forgotten, ...others }) => others);
+      try {
+        replace(await send(year.revision));
+        delete values.current[key];
+        return true;
+      } catch (error) {
+        setErrors((current) => ({ ...current, [key]: error }));
+        return false;
+      } finally {
+        setSaving(false);
+      }
+    },
+    values: values.current[key],
+    onValues: (next) => (next ? void (values.current[key] = next) : forget(key)),
+    error: errors[key] ?? null,
+    busy: saving,
+    waiting: fresh === null,
+  });
+
+  const shown = fresh ?? last.current;
   return (
     <StepLayout step="confirm" title="Confirm your slips">
-      <ResourceView resource={slips}>{(data) => <ReturnSlips data={data} />}</ResourceView>
+      {shown ? (
+        <ReturnSlips
+          data={shown}
+          waiting={fresh === null}
+          reloadError={slips.status === "error" ? slips.error : null}
+          onRetry={slips.reload}
+          editing={editing}
+          onEditing={(next) => {
+            setNotice(null);
+            setEditing(next);
+          }}
+          hostOf={hostOf}
+          notice={notice}
+        />
+      ) : slips.status === "error" ? (
+        <ErrorState error={slips.error} onRetry={slips.reload} />
+      ) : (
+        <Loading />
+      )}
     </StepLayout>
   );
 }
 
-function ReturnSlips({ data }: { data: SlipList }) {
+function ReturnSlips({
+  data,
+  waiting,
+  reloadError,
+  onRetry,
+  editing,
+  onEditing: setEditing,
+  hostOf,
+  notice,
+}: {
+  data: SlipList;
+  /** The slips are loading again (the list shown may not be the one stored): confirming, adding, removing and moving wait. */
+  waiting: boolean;
+  /** Why loading them again failed, or null. */
+  reloadError: unknown;
+  onRetry: () => void;
+  /** The slip open to change, or "new" for one being added. Confirming waits for it: it would confirm the slip as stored. */
+  editing: string | "new" | null;
+  onEditing: (editing: string | "new" | null) => void;
+  hostOf: (key: string) => SlipFormHost;
+  notice: string | null;
+}) {
   const me = useMe();
   const { year, replace, reload } = useYear();
   const { person } = useReturn();
   const editable = canPrepare(me);
   const [state, setState] = useState<{ status: "idle" | "saving" } | { status: "error"; error: unknown }>({ status: "idle" });
-  // The slip open to change, or "new" for one being added. Confirming waits for it: it would confirm the slip as stored,
-  // and the year it answers with closes the form and drops what was typed.
-  const [editing, setEditing] = useState<string | "new" | null>(null);
   const slips = data.slips.filter((slip) => slip.personId === person.id);
   const unconfirmed = slips.filter((slip) => slip.status === "unconfirmed").length;
   // The server refuses to confirm a slip with a box AI couldn't read and no amount.
@@ -56,8 +150,22 @@ function ReturnSlips({ data }: { data: SlipList }) {
 
   return (
     <>
+      {notice ? <Banner kind="warning" title={notice} /> : null}
+      {reloadError ? (
+        <Banner kind="error" title="The slips couldn't be loaded again" action={<Button variant="outline" size="sm" onClick={onRetry}>Try again</Button>}>
+          {describeError(reloadError)} Until they are, nothing here can be saved or confirmed.
+        </Banner>
+      ) : null}
       {/* Confirming confirms the slips as stored: nothing in them changes until it ends. */}
-      <PersonSlips personId={person.id} slips={slips} editable={editable} busy={state.status === "saving"} editing={editing} onEditing={setEditing} />
+      <PersonSlips
+        personId={person.id}
+        slips={slips}
+        editable={editable}
+        busy={state.status === "saving" || waiting}
+        editing={editing}
+        onEditing={setEditing}
+        hostOf={hostOf}
+      />
       {state.status === "error" ? (
         state.error instanceof ApiError && state.error.status === 409 ? (
           <Banner kind="error" title="Someone else changed this year" action={<Button variant="outline" size="sm" onClick={reload}>Reload</Button>}>
@@ -68,13 +176,19 @@ function ReturnSlips({ data }: { data: SlipList }) {
         )
       ) : null}
       <div className="flex flex-wrap items-center justify-end gap-2">
-        {editable && editing !== null && unconfirmed > 0 ? (
+        {editable && waiting && !reloadError ? (
+          <p className="mr-auto text-xs text-muted-foreground">Loading the slips again…</p>
+        ) : editable && editing !== null && unconfirmed > 0 ? (
           <p className="mr-auto text-xs text-muted-foreground">Save or cancel the slip you're changing before confirming.</p>
         ) : editable && unread ? (
           <p className="mr-auto text-xs text-muted-foreground">Before confirming, enter each box that couldn't be read, or 0 if it is blank on the slip: choose Edit on its slip.</p>
         ) : null}
         {editable ? (
-          <Button variant="outline" onClick={() => void confirmAll()} disabled={unconfirmed === 0 || unread || editing !== null || state.status === "saving"}>
+          <Button
+            variant="outline"
+            onClick={() => void confirmAll()}
+            disabled={unconfirmed === 0 || unread || editing !== null || waiting || state.status === "saving"}
+          >
             {unconfirmed === 0 ? "All slips confirmed" : `Confirm ${unconfirmed} ${unconfirmed === 1 ? "slip" : "slips"}`}
           </Button>
         ) : null}
@@ -93,14 +207,17 @@ function PersonSlips({
   busy,
   editing,
   onEditing: setEditing,
+  hostOf,
 }: {
   personId: string;
   slips: Slip[];
   editable: boolean;
-  /** The slips are being confirmed: none can be added, changed, removed or moved meanwhile. */
+  /** The slips are being confirmed, or loaded again: none can be added, opened, removed or moved meanwhile. */
   busy: boolean;
   editing: string | "new" | null;
   onEditing: (editing: string | "new" | null) => void;
+  /** Runs and keeps each slip form's save, by slip (or "new"), over the slips loading again. */
+  hostOf: (key: string) => SlipFormHost;
 }) {
   const { year } = useYear();
   const types = rulesFor(year.year)!.slips;
@@ -127,7 +244,8 @@ function PersonSlips({
           {slips.map((slip) =>
             editing === slip.id ? (
               <li key={slip.id} className="py-3">
-                <SlipForm personId={personId} slip={slip} onDone={() => setEditing(null)} />
+                {/* A new version of the slip (someone else's change) starts the form again from it. */}
+                <SlipForm key={slip.updatedAt} personId={personId} slip={slip} host={hostOf(slip.id)} onDone={() => setEditing(null)} />
               </li>
             ) : (
               <li key={slip.id} className="flex flex-wrap items-start gap-3 py-3">
@@ -181,7 +299,7 @@ function PersonSlips({
         </ul>
         {editing === "new" ? (
           <div className="rounded-lg border bg-muted/30 p-4">
-            <SlipForm personId={personId} onDone={() => setEditing(null)} />
+            <SlipForm personId={personId} host={hostOf("new")} onDone={() => setEditing(null)} />
           </div>
         ) : null}
       </CardContent>

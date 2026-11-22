@@ -14,7 +14,7 @@ import { hiddenNote } from '../kept.ts'
 import { readOrgSettings } from '../settings.ts'
 import { FILE_ID, inspect, sha256Hex, TooLargeError, verdictOf } from '../uploads.ts'
 import { fetchWebPage } from '../web-pages.ts'
-import { callerOf, engineFor, json, now, param } from './common.ts'
+import { callerOf, engineFor, json, now, onBehalfOf, param } from './common.ts'
 
 /** At most this much text is learned from one file. */
 const MAX_TEXT_BYTES = 2 * 1024 * 1024
@@ -55,8 +55,28 @@ export function noteBound(note: { title: string; text: string }, rules: Pick<Hid
 /**
  * What an import sends. `export`: an empty collection started from a Knowledge export, its one file the export's zip;
  * its documents and their text's bytes (read from the zip when it was uploaded) are what it reserves.
+ * `expectedVersion` (K4): the collection version a note or correction was based on, checked when it is accepted
+ * (checkVersion) and sent to the engine, which checks it again when it applies (engine API 2).
  */
-export type ImportRequestBody = { files: ImportFile[]; notes: { noteId: string; title: string; text: string; outdated: { documentId: string; textHash: string }[] }[]; export?: ExportContents }
+export type ImportRequestBody = { files: ImportFile[]; notes: { noteId: string; title: string; text: string; outdated: { documentId: string; textHash: string }[] }[]; export?: ExportContents; expectedVersion?: number }
+
+/** `expectedVersion` in a note's or a correction's body: a collection version, as `version` in GET /api/collections. */
+export const expectedVersionSchema = z.number().int('give a whole number').min(0, 'give 0 or more').max(Number.MAX_SAFE_INTEGER).optional()
+
+/**
+ * K4: the collection's version now, from the engine (its committed restore point, which `version` in D1 follows a
+ * little behind, never ahead), against the one the change was based on. At another version: 409 version_changed with
+ * `currentVersion`, and nothing is created. The engine checks again when the import applies.
+ */
+export async function checkVersion(engine: EngineClient, collectionId: string, expected: number): Promise<void> {
+  const { version } = await engine.getCollection(collectionId)
+  if (version === expected) return
+  throw new ApiError(
+    'version_changed',
+    `This collection has changed since version ${expected}: it is at version ${version} now, so nothing was added. Read it again and, if the change still applies, send it again with expectedVersion ${version}.`,
+    { currentVersion: version },
+  )
+}
 
 /** The type preflight records for a Knowledge export uploaded to start a collection; the engine stages it as a zip. */
 export const EXPORT_TYPE = 'application/vnd.insulin-knowledge.export+zip'
@@ -115,6 +135,8 @@ export async function waitForNextMonth(engine: EngineClient, collectionId: strin
   const waiting: WaitingRequest = {
     files: request.files, notes: request.notes, waitsFor: resetsAt(at), lost: request.lost ?? [],
     ...(request.export ? { export: request.export } : {}),
+    // The version it was based on goes with it: the engine checks it when it applies, on the 1st.
+    ...(request.expectedVersion !== undefined ? { expectedVersion: request.expectedVersion } : {}),
   }
   if (!request.files.length) return waiting
   const { kept } = await engine.keepStaged(collectionId, { fileIds: request.files.map((file) => file.fileId), until: new Date(keptUntil(at)).toISOString() })
@@ -168,6 +190,10 @@ function waitingFor(env: Bindings, at: number, lost: { name: string }[] = []): W
  * is found, in D1 and in the engine, and nothing is reserved or learned twice. Reservations are released only when
  * the engine refused the import; when it can't be known whether the engine took it, they stay for the outbox (or the
  * retry) to settle. They are settled when the import commits and released when it fails (outbox.ts).
+ *
+ * `request.expectedVersion` (K4) is checked first, for a new import only: one already accepted under this id answers as
+ * it is, whatever the collection's version now. `onBehalfOf` (K3, `x-on-behalf-of`) is kept with a new import; the
+ * status answered carries the one kept, so a retry with the same key keeps the first request's.
  */
 export async function startImport(
   env: Bindings,
@@ -178,15 +204,19 @@ export async function startImport(
   request: ImportRequestBody,
   at: number,
   importId: string = crypto.randomUUID(),
-): Promise<{ status: ImportStatus | ReturnType<typeof waitingStatus>; waiting: Waiting | null }> {
+  onBehalfOf: string | null = null,
+): Promise<{ status: (ImportStatus | ReturnType<typeof waitingStatus>) & { onBehalfOf: string | null }; waiting: Waiting | null }> {
   const db = env.DB
   const org = caller.organizationId
-  const existing = await db.prepare(`SELECT state, created_at, request FROM imports WHERE id = ? AND org_id = ? AND collection_id = ?`).bind(importId, org, collection.id).first<{ state: string; created_at: number; request: string | null }>()
+  const existing = await db.prepare(`SELECT state, created_at, request, on_behalf_of FROM imports WHERE id = ? AND org_id = ? AND collection_id = ?`).bind(importId, org, collection.id)
+    .first<{ state: string; created_at: number; request: string | null; on_behalf_of: string | null }>()
+  const label = existing ? existing.on_behalf_of : onBehalfOf
   if (existing?.state === 'waiting') {
     const waiting = JSON.parse(existing.request ?? '{"files":[],"notes":[]}') as WaitingRequest
-    return { status: waitingStatus(importId, waiting, existing.created_at), waiting: waitingFor(env, at, waiting.lost) }
+    return { status: { ...waitingStatus(importId, waiting, existing.created_at), onBehalfOf: label }, waiting: waitingFor(env, at, waiting.lost) }
   }
   if (!existing) {
+    if (request.expectedVersion !== undefined) await checkVersion(engine, collection.id, request.expectedVersion)
     await ensureAwakeBlock(env, org, collection.id, at)
     const { hiding } = await readOrgSettings(db, org, at)
     // An export brings back its documents, their text already read: hidden again with the organization's rules.
@@ -221,16 +251,17 @@ export async function startImport(
       }
       await db.batch([
         db.prepare(`UPDATE reservations SET expires_at = ? WHERE org_id = ? AND ref = ? AND state = 'held'`).bind(keptUntil(at), org, ref),
-        db.prepare(`INSERT INTO imports (id, org_id, collection_id, kind, created_by, created_at, state, files, detail, request) VALUES (?, ?, ?, ?, ?, ?, 'waiting', ?, ?, ?)`)
-          .bind(importId, org, collection.id, kind, caller.id, at, request.files.length, detail, JSON.stringify(waiting)),
+        db.prepare(
+          `INSERT INTO imports (id, org_id, collection_id, kind, created_by, created_by_type, on_behalf_of, created_at, state, files, detail, request) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'waiting', ?, ?, ?)`,
+        ).bind(importId, org, collection.id, kind, caller.id, caller.kind, label, at, request.files.length, detail, JSON.stringify(waiting)),
       ])
-      return { status: waitingStatus(importId, waiting, at), waiting: waitingFor(env, at, waiting.lost) }
+      return { status: { ...waitingStatus(importId, waiting, at), onBehalfOf: label }, waiting: waitingFor(env, at, waiting.lost) }
     }
     await db.prepare(
-      `INSERT INTO imports (id, org_id, collection_id, kind, created_by, created_at, state, files, detail) VALUES (?, ?, ?, ?, ?, ?, 'queued', ?, ?)`,
-    ).bind(importId, org, collection.id, kind, caller.id, at, request.files.length, detail).run()
+      `INSERT INTO imports (id, org_id, collection_id, kind, created_by, created_by_type, on_behalf_of, created_at, state, files, detail) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'queued', ?, ?)`,
+    ).bind(importId, org, collection.id, kind, caller.id, caller.kind, label, at, request.files.length, detail).run()
   }
-  return { status: await submitImport(env, engine, org, collection, kind, request, importId, at), waiting: null }
+  return { status: { ...(await submitImport(env, engine, org, collection, kind, request, importId, at)), onBehalfOf: label }, waiting: null }
 }
 
 /**
@@ -243,12 +274,14 @@ export async function submitImport(env: Bindings, engine: EngineClient, org: str
   let status: ImportStatus
   try {
     const small = kind === 'note' || kind === 'correction'
+    // Sent only when the change named one, so every other import's request is as before (engine API 2).
+    const expected = request.expectedVersion !== undefined ? { expectedVersion: request.expectedVersion } : {}
     status = request.export
       // The checksum of the zip Knowledge read and reserved from: the engine refuses any other file under that id.
       ? await engine.importExport(collection.id, { importId, fileId: request.files[0]!.fileId, sha256: request.files[0]!.sha256 })
       : kind === 'correction'
-        ? await engine.correct(collection.id, { importId, note: request.notes[0]! })
-        : await engine.startImport(collection.id, { importId, files: request.files, notes: request.notes, small })
+        ? await engine.correct(collection.id, { importId, note: request.notes[0]!, ...expected })
+        : await engine.startImport(collection.id, { importId, files: request.files, notes: request.notes, small, ...expected })
   } catch (error) {
     if (refused(error) && options.onRefused === 'fail') {
       await failWaiting(env, org, collection, importId, request.files, at)
@@ -375,6 +408,7 @@ export function sourceRoutes() {
   app.post('/:id/imports', async (c) => {
     const caller = callerOf(c)
     const body = await readJson(c, z.object({ fileIds: z.array(z.string().regex(FILE_ID)).min(1).max(100) }).strict())
+    const label = onBehalfOf(c)
     const { collection } = await authorize(c.env.DB, caller, param(c, 'id'), 'change')
     return idempotent(c, body, true, async () => {
       const db = c.env.DB
@@ -395,7 +429,7 @@ export function sourceRoutes() {
       }
       const engine = engineFor(c)
       const files: ImportFile[] = results.map((file) => ({ fileId: file.id, name: file.name, type: file.type, bytes: file.bytes, sha256: file.sha256 ?? '' }))
-      const { status, waiting } = await startImport(c.env, engine, caller, collection, 'files', { files, notes: [] }, at, importId)
+      const { status, waiting } = await startImport(c.env, engine, caller, collection, 'files', { files, notes: [] }, at, importId, label)
       await db.prepare(`UPDATE staged_files SET state = 'used', import_id = ?1 WHERE org_id = ?2 AND collection_id = ?3 AND id IN (SELECT value FROM json_each(?4))`)
         .bind(importId, caller.organizationId, collection.id, JSON.stringify(ids)).run()
       return json(c, { import: status, waiting }, 202)
@@ -407,6 +441,7 @@ export function sourceRoutes() {
   app.post('/:id/import-export', async (c) => {
     const caller = callerOf(c)
     const body = await readJson(c, z.object({ fileId: z.string().regex(FILE_ID) }).strict())
+    const label = onBehalfOf(c)
     const { collection } = await authorize(c.env.DB, caller, param(c, 'id'), 'change')
     return idempotent(c, body, true, async () => {
       const db = c.env.DB
@@ -422,7 +457,7 @@ export function sourceRoutes() {
       const contents = JSON.parse(file.detail) as ExportContents
       const { status, waiting } = await startImport(c.env, engineFor(c), caller, collection, 'files', {
         files: [{ fileId: file.id, name: file.name, type: 'application/zip', bytes: file.bytes, sha256: file.sha256 ?? '' }], notes: [], export: contents,
-      }, at, importId)
+      }, at, importId, label)
       await db.prepare(`UPDATE staged_files SET state = 'used', import_id = ? WHERE id = ? AND org_id = ?`).bind(importId, file.id, caller.organizationId).run()
       return json(c, { import: status, waiting }, 202)
     })
@@ -437,10 +472,10 @@ export function sourceRoutes() {
     const state = c.req.query('state')
     if (state !== 'waiting' && state !== 'queued') throw badRequest('List the imports waiting for the 1st (?state=waiting), or those Insulin hasn\'t started learning (?state=queued).')
     const { results } = await c.env.DB.prepare(
-      `SELECT i.id, i.kind, i.created_at, i.created_by, i.request, i.detail, COALESCE(m.name, m.email) AS name FROM imports i
-       LEFT JOIN members m ON m.org_id = i.org_id AND m.principal_type = 'person' AND m.principal_id = i.created_by
+      `SELECT i.id, i.kind, i.created_at, i.created_by, i.on_behalf_of, i.request, i.detail, COALESCE(m.name, m.email) AS name FROM imports i
+       LEFT JOIN members m ON m.org_id = i.org_id AND m.principal_type = COALESCE(i.created_by_type, 'person') AND m.principal_id = i.created_by
        WHERE i.org_id = ?1 AND i.collection_id = ?2 AND i.state = ?3 ORDER BY i.created_at, i.rowid LIMIT 100`,
-    ).bind(caller.organizationId, collection.id, state).all<{ id: string; kind: string; created_at: number; created_by: string; request: string | null; detail: string; name: string | null }>()
+    ).bind(caller.organizationId, collection.id, state).all<{ id: string; kind: string; created_at: number; created_by: string; on_behalf_of: string | null; request: string | null; detail: string; name: string | null }>()
     let rows = results
     if (state === 'queued' && rows.length && c.env.ENGINE) {
       // The engine tells Knowledge when it starts one, through its outbox, a little later: the one it is learning now
@@ -461,7 +496,7 @@ export function sourceRoutes() {
         const request = row.request ? (JSON.parse(row.request) as WaitingRequest) : null
         const sent = request ? null : (JSON.parse(row.detail || '{}') as { files?: string[] })
         return {
-          importId: row.id, kind: row.kind, createdAt: new Date(row.created_at).toISOString(), createdBy: { id: row.created_by, name: row.name },
+          importId: row.id, kind: row.kind, createdAt: new Date(row.created_at).toISOString(), createdBy: { id: row.created_by, name: row.name }, onBehalfOf: row.on_behalf_of,
           files: request ? request.files.map((file) => file.name) : sent?.files ?? [],
           notes: request ? request.notes.length : row.kind === 'note' || row.kind === 'correction' ? 1 : 0,
           titles: request ? request.notes.map((note) => note.title).filter(Boolean) : [],
@@ -529,12 +564,14 @@ export function sourceRoutes() {
     const caller = callerOf(c)
     const { collection } = await authorize(c.env.DB, caller, param(c, 'id'), 'read')
     const importId = param(c, 'importId')
-    const row = await c.env.DB.prepare(`SELECT id, state, request, error, created_at, finished_at FROM imports WHERE id = ? AND org_id = ? AND collection_id = ?`).bind(importId, caller.organizationId, collection.id)
-      .first<{ id: string; state: string; request: string | null; error: string | null; created_at: number; finished_at: number | null }>()
+    const row = await c.env.DB.prepare(`SELECT id, state, request, error, error_code, on_behalf_of, created_at, finished_at FROM imports WHERE id = ? AND org_id = ? AND collection_id = ?`).bind(importId, caller.organizationId, collection.id)
+      .first<{ id: string; state: string; request: string | null; error: string | null; error_code: string | null; on_behalf_of: string | null; created_at: number; finished_at: number | null }>()
     if (!row) throw notFound('There is no such import in this collection.')
+    // Whom the caller that added it said it acted for (K3), with the import as the engine sees it.
+    const onBehalfOf = row.on_behalf_of
     if (row.state === 'waiting') {
       const waiting = JSON.parse(row.request ?? '{"files":[],"notes":[]}') as WaitingRequest
-      return json(c, { import: waitingStatus(importId, waiting, row.created_at), waiting: waitingFor(c.env, now(c), waiting.lost) })
+      return json(c, { import: { ...waitingStatus(importId, waiting, row.created_at), onBehalfOf }, waiting: waitingFor(c.env, now(c), waiting.lost) })
     }
     // A waiting import that failed or was cancelled before the engine had it is answered from what Knowledge recorded.
     const status = await engineFor(c).getImport(collection.id, importId)
@@ -543,23 +580,32 @@ export function sourceRoutes() {
       return json(c, {
         import: {
           importId, state: row.state, attempt: 0, queuePosition: null, waitingFor: null, files: [], notes: 0, version: null, newFacts: null, failedFileId: null,
-          error: row.error ? { error: 'bad_request', message: row.error } : null, etaSeconds: null, createdAt: new Date(row.created_at).toISOString(), finishedAt: row.finished_at === null ? null : new Date(row.finished_at).toISOString(),
+          error: row.error ? { error: row.error_code ?? 'bad_request', message: row.error } : null, etaSeconds: null, createdAt: new Date(row.created_at).toISOString(), finishedAt: row.finished_at === null ? null : new Date(row.finished_at).toISOString(),
+          onBehalfOf,
         },
       })
     }
     await finishImport(c.env, caller.organizationId, collection, importId, status, now(c))
-    return json(c, { import: status })
+    return json(c, { import: { ...status, onBehalfOf } })
   })
 
-  // A note: learned like a file, ahead of normal imports.
+  // A note: learned like a file, ahead of normal imports. `expectedVersion` (K4): only if the collection is still at
+  // that version, now and when the note is learned. `x-on-behalf-of` (K3): kept as a label, outside the request a
+  // retry with the same Idempotency-Key must repeat; the first request's stays.
   app.post('/:id/notes', async (c) => {
     const caller = callerOf(c)
-    const body = await readJson(c, z.object({ title: z.string().trim().max(200).optional(), text: z.string().trim().min(1, 'write the note').max(MAX_NOTE_CHARS, 'a note can be up to 20,000 characters; split a longer one, or add it as a file') }).strict())
+    const body = await readJson(c, z.object({
+      title: z.string().trim().max(200).optional(),
+      text: z.string().trim().min(1, 'write the note').max(MAX_NOTE_CHARS, 'a note can be up to 20,000 characters; split a longer one, or add it as a file'),
+      expectedVersion: expectedVersionSchema,
+    }).strict())
+    const label = onBehalfOf(c)
     const { collection } = await authorize(c.env.DB, caller, param(c, 'id'), 'change')
     return idempotent(c, body, true, async () => {
       const importId = await stableId(c)
       const note = { noteId: importId.replace(/-/g, ''), title: body.title ?? '', text: body.text, outdated: [] }
-      const { status, waiting } = await startImport(c.env, engineFor(c), caller, collection, 'note', { files: [], notes: [note] }, now(c), importId)
+      const request = { files: [], notes: [note], ...(body.expectedVersion !== undefined ? { expectedVersion: body.expectedVersion } : {}) }
+      const { status, waiting } = await startImport(c.env, engineFor(c), caller, collection, 'note', request, now(c), importId, label)
       return json(c, { import: status, waiting }, 202)
     })
   })
@@ -568,6 +614,7 @@ export function sourceRoutes() {
   app.post('/:id/web-pages', async (c) => {
     const caller = callerOf(c)
     const body = await readJson(c, z.object({ url: z.string().trim().min(1).max(2000) }).strict())
+    const label = onBehalfOf(c)
     const { collection } = await authorize(c.env.DB, caller, param(c, 'id'), 'change')
     return idempotent(c, body, true, async () => {
       const at = now(c)
@@ -578,7 +625,7 @@ export function sourceRoutes() {
       const fileId = crypto.randomUUID().replace(/-/g, '')
       const name = `${page.title.replace(/[\\/:*?"<>|\u0000-\u001f]+/g, ' ').trim().slice(0, 150) || 'Web page'}.html`
       const staged = await engine.stage(collection.id, fileId, page.html, { name, type: page.type, sha256: await sha256Hex(page.html), bytes: page.html.byteLength })
-      const { status, waiting } = await startImport(c.env, engine, caller, collection, 'web_page', { files: [{ fileId, name, type: page.type, bytes: staged.bytes, sha256: staged.sha256 }], notes: [] }, at, await stableId(c))
+      const { status, waiting } = await startImport(c.env, engine, caller, collection, 'web_page', { files: [{ fileId, name, type: page.type, bytes: staged.bytes, sha256: staged.sha256 }], notes: [] }, at, await stableId(c), label)
       return json(c, { import: status, waiting, page: { url: page.url, title: page.title } }, 202)
     })
   })

@@ -8,7 +8,11 @@ what before it calls; the engine keeps one organization's collections apart from
 organization answers 404, exactly like an unknown one).
 
 The API is `src/contract.ts` (fixed; the in-memory engine in `src/stub/`, which the app's local stack and tests use,
-implements the same).
+implements the same). The engine serves API versions 1 and 2 (`insulin.serves` in `package.json`); the app calls 2.
+Version 2 adds an optional `expectedVersion` to imports and corrections: the collection version the change was based
+on, checked when the import applies (when its try starts, and again in the commit's transaction), failing it with the
+error `version_changed` at any other version and learning nothing. A request without it is the same in both versions.
+Drop version 1 from `serves` only once no app version in production calls it.
 
 ## What is in it
 

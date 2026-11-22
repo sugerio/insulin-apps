@@ -13,6 +13,7 @@ const STATUS: Record<EngineErrorCode, number> = {
   unsupported_type: 415,
   model_unavailable: 503,
   stale_settings: 409,
+  version_changed: 409, // an import's failure (ImportStatus.error), never a route's answer
   internal: 500,
 }
 

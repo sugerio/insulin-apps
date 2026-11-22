@@ -36,7 +36,7 @@
       { "key": "backup_days", "label": "Days of daily backups", "unit": "days", "default": 30 }
     ],
     "engine": "engine/",
-    "engineApi": 1
+    "engineApi": 2
   },
   "imports": {
     "#/*": "./src/*"

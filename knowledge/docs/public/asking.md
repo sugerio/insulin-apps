@@ -38,7 +38,11 @@ collection can open every source it used.
 ## "I won't guess"
 
 When nothing in the collections you picked covers the question, Knowledge answers "I couldn't find this in …, so I
-won't guess." It never answers without a source. The question is kept for the collection's owner as a gap.
+won't guess." It never answers without a source. The question is kept as a gap, something the collection doesn't
+cover yet, with how many times it was asked: the collection's owner, admins and editors can list them with
+`GET /api/collections/{id}/gaps` (see
+[Writing for people](/docs/knowledge/ai-assistants-and-api#writing-for-people-notes-corrections-and-open-questions)), so a
+note can answer them.
 
 ![A question nothing in the collection covers, answered I couldn't find this in “Partner Program”, so I won't guess, with the buttons Ask Ana Lima to add it and Write the answer](/docs/assets/screenshots/knowledge-wont-guess.png "“I won't guess”: no answer without a source")
 

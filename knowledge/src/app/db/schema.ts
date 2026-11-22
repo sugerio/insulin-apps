@@ -152,12 +152,21 @@ export const imports = sqliteTable('imports', {
   collection_id: text('collection_id').notNull().references(() => collections.id),
   kind: text('kind').notNull(),
   created_by: text('created_by').notNull(),
+  /** person or client (an API client): who `created_by` is. NULL on rows kept before it was recorded: a person. */
+  created_by_type: text('created_by_type'),
+  /**
+   * Whom the caller said it acted for (`x-on-behalf-of`, 1 to 200 characters), as it wrote it: a label for History and
+   * the import's status, never used for access. The first request's value stays: a retry with the same key keeps it.
+   */
+  on_behalf_of: text('on_behalf_of'),
   created_at: integer('created_at').notNull(),
   state: text('state').notNull(),
   files: integer('files').notNull().default(0),
   version: integer('version'),
   /** Plain words for a person: why it failed. */
   error: text('error'),
+  /** The engine's code for why it failed (`version_changed`, `bad_request`…), when it did. */
+  error_code: text('error_code'),
   /** JSON: the files' names, and the documents they became once learned (`documents`), for mail and Needs attention. */
   detail: text('detail').notNull().default('{}'),
   /** JSON: the request of an import waiting for next month's documents learned, sent to the engine on the 1st. */

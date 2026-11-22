@@ -10,8 +10,8 @@ import { hide } from '../kept.ts'
 import { readOrgSettings } from '../settings.ts'
 import { appLink, MAIL, sendMail, sendMailToAll } from '../mail.ts'
 import { memberOf } from '../members.ts'
-import { callerOf, engineFor, iso, json, now, param } from './common.ts'
-import { refused, startImport } from './sources.ts'
+import { callerOf, engineFor, iso, json, now, onBehalfOf, param } from './common.ts'
+import { expectedVersionSchema, refused, startImport } from './sources.ts'
 
 /**
  * What a collection knows, and fixing it once (design sections 09 and 11): facts as sentences; corrections, which are
@@ -68,8 +68,63 @@ async function authorsOf(db: D1Database, org: string, collectionId: string, docu
   return [...authors].map(([id, files]) => ({ id, files: [...files] }))
 }
 
+/** Open questions a page lists by default, and at most. */
+const GAPS_PAGE = 50
+const GAPS_MAX = 100
+
+/** A page's place in the open questions, newest asked first: after this one (its last time asked, then its key). */
+function gapCursor(lastAskedAt: number, key: string): string {
+  const bytes = new TextEncoder().encode(JSON.stringify([lastAskedAt, key]))
+  return btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+}
+
+function readGapCursor(raw: string): [number, string] {
+  const refused = () => badRequest('That cursor isn\'t valid. Send the `next` value of the previous page as it came, or leave it out to start again.')
+  if (!/^[A-Za-z0-9_-]{1,2400}$/.test(raw)) throw refused()
+  try {
+    const binary = atob(raw.replace(/-/g, '+').replace(/_/g, '/'))
+    const value = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(Uint8Array.from(binary, (char) => char.charCodeAt(0)))) as unknown
+    if (Array.isArray(value) && value.length === 2 && Number.isSafeInteger(value[0]) && typeof value[1] === 'string') return [value[0] as number, value[1]]
+  } catch {
+    // refused below
+  }
+  throw refused()
+}
+
 export function knowledgeRoutes() {
   const app = new Hono<AppEnv>()
+
+  /**
+   * K7: the questions nothing in the collection covered ("I won't guess"), still open: what a note or a correction could
+   * answer. For its Editors and above with permission to change content, every way in (the site, assistants, API
+   * clients), as Needs attention. Newest asked first, `limit` (1 to 100, 50 by default) at a time, `next` while there
+   * are more. Shown with the organization's hidden values hidden: these are other people's questions, kept as they
+   * were asked, and this is the one place they are shown.
+   */
+  app.get('/:id/gaps', async (c) => {
+    const caller = callerOf(c)
+    const rawLimit = c.req.query('limit')
+    if (rawLimit !== undefined && !/^\d{1,3}$/.test(rawLimit)) throw badRequest(`Check limit: give a whole number from 1 to ${GAPS_MAX}.`)
+    const limit = rawLimit === undefined ? GAPS_PAGE : Number(rawLimit)
+    if (limit < 1 || limit > GAPS_MAX) throw badRequest(`Check limit: give a whole number from 1 to ${GAPS_MAX}.`)
+    const rawCursor = c.req.query('cursor')
+    const after = rawCursor ? readGapCursor(rawCursor) : null
+    const db = c.env.DB
+    const { collection } = await authorize(db, caller, param(c, 'id'), 'gaps')
+    const { results } = await db.prepare(
+      `SELECT question_key, question, asked, first_asked_at, last_asked_at FROM gaps
+       WHERE org_id = ?1 AND collection_id = ?2 AND status = 'open'
+         AND (?3 IS NULL OR last_asked_at < ?3 OR (last_asked_at = ?3 AND question_key > ?4))
+       ORDER BY last_asked_at DESC, question_key ASC LIMIT ?5`,
+    ).bind(collection.org_id, collection.id, after?.[0] ?? null, after?.[1] ?? '', limit + 1).all<{ question_key: string; question: string; asked: number; first_asked_at: number; last_asked_at: number }>()
+    const page = results.slice(0, limit)
+    const { hiding } = await readOrgSettings(db, collection.org_id, now(c))
+    const last = page.at(-1)
+    return json(c, {
+      gaps: page.map((row) => ({ question: hide(row.question, hiding), asked: row.asked, firstAskedAt: iso(row.first_asked_at), lastAskedAt: iso(row.last_asked_at) })),
+      ...(results.length > limit && last ? { next: gapCursor(last.last_asked_at, last.question_key) } : {}),
+    })
+  })
 
   // Facts as sentences, each with who checked it ("Looks right"), when someone has.
   app.get('/:id/facts', async (c) => {
@@ -115,7 +170,10 @@ export function knowledgeRoutes() {
       reportId: z.string().min(1).max(64).optional(),
       /** Tell the people who added the files it corrects (an e-mail with a link, not the correction). */
       notifyAuthors: z.boolean().optional(),
+      /** K4: only if the collection is still at this version, now and when the correction is learned. */
+      expectedVersion: expectedVersionSchema,
     }).strict())
+    const label = onBehalfOf(c)
     const db = c.env.DB
     const { collection } = await authorize(db, caller, param(c, 'id'), 'change')
     return idempotent(c, body, true, async () => {
@@ -148,7 +206,8 @@ export function knowledgeRoutes() {
       ).bind(id, caller.organizationId, collection.id, caller.id, at, body.question === undefined ? null : hide(body.question, hiding), hide(body.text, hiding), JSON.stringify(outdated), importId, body.reportId ?? null, body.factId ?? null).run()
       let started
       try {
-        started = await startImport(c.env, engine, caller, collection, 'correction', { files: [], notes: [note] }, at, importId)
+        const request = { files: [], notes: [note], ...(body.expectedVersion !== undefined ? { expectedVersion: body.expectedVersion } : {}) }
+        started = await startImport(c.env, engine, caller, collection, 'correction', request, at, importId, label)
       } catch (error) {
         if (refused(error) || (error instanceof ApiError && error.status < 500)) await db.prepare(`DELETE FROM corrections WHERE id = ? AND org_id = ?`).bind(id, caller.organizationId).run()
         throw error

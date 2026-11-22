@@ -41,7 +41,7 @@ export const factsKey = (meta: Meta, importId: string) => `text/${meta.org}/${me
 export class AttemptFailure extends Error {
   failedFileId: string | null
   permanent: boolean
-  code: 'unsupported_type' | 'too_large' | 'bad_request' | 'internal'
+  code: 'unsupported_type' | 'too_large' | 'bad_request' | 'version_changed' | 'internal'
   constructor(message: string, failedFileId: string | null = null, permanent = false, code: AttemptFailure['code'] = 'internal') {
     super(message)
     this.failedFileId = failedFileId
@@ -145,6 +145,7 @@ interface ImportBody {
   notes?: unknown
   small?: unknown
   note?: unknown
+  expectedVersion?: unknown
 }
 
 export function submit(e: CollectionEngine, body: ImportBody): Promise<{ status: number; record: ImportRecord }> {
@@ -160,8 +161,9 @@ async function submitOnce(e: CollectionEngine, body: ImportBody): Promise<{ stat
   const notes = parseNotes(body.notes)
   if (!files.length && !notes.length) return fail('bad_request', 'An import needs at least one file or note.')
   const small = body.small === true
+  const expectedVersion = parseExpectedVersion(body.expectedVersion)
   const kind: ImportKind = notes.some((n) => n.outdated.length) && !files.length ? 'correction' : 'import'
-  return create(e, importId, kind, small || (!files.length && notes.length > 0), files, notes)
+  return create(e, importId, kind, small || (!files.length && notes.length > 0), files, notes, expectedVersion)
 }
 
 /** A correction: a small import of a note, with the passages it corrects marked outdated. */
@@ -176,11 +178,32 @@ async function submitCorrectionOnce(e: CollectionEngine, body: ImportBody): Prom
   if (await e.state.storage.get(tombstoneKey(importId))) return claim(e, cancelledSubmission(importId, 'correction', undefined))
   const notes = parseNotes(body.notes ?? (body.note ? [body.note] : undefined))
   if (!notes.length) return fail('bad_request', 'A correction needs a note.')
+  const expectedVersion = parseExpectedVersion(body.expectedVersion)
   const state = await e.currentState()
   for (const ref of notes.flatMap((n) => n.outdated)) {
     if (!state.documents.some((d) => d.documentId === ref.documentId)) return fail('bad_request', 'A corrected passage names a document this collection does not have.')
   }
-  return create(e, importId, 'correction', true, [], notes)
+  return create(e, importId, 'correction', true, [], notes, expectedVersion)
+}
+
+/**
+ * API 2: the collection version an import or a correction was based on (contract.ts, ExpectedVersion), checked when it
+ * applies; undefined (absent) checks nothing.
+ */
+function parseExpectedVersion(value: unknown): number | undefined {
+  if (value === undefined || value === null) return undefined
+  if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0) return fail('bad_request', 'expectedVersion must be a collection version: a whole number, 0 or more.')
+  return value
+}
+
+/** Whether the collection is no longer at the version an import was based on (none named: never). */
+function versionMoved(record: Pick<ImportRecord, 'expectedVersion'>, meta: Pick<Meta, 'version'>): boolean {
+  return typeof record.expectedVersion === 'number' && record.expectedVersion !== meta.version
+}
+
+/** Why an import based on an earlier version wasn't learned, in plain words. */
+export function versionChangedMessage(expected: number, current: number): string {
+  return `The collection changed after this was written: it is at version ${current} now, not ${expected}, so nothing was learned. Read it again, and send the change again if it still applies.`
 }
 
 async function create(
@@ -190,6 +213,7 @@ async function create(
   small: boolean,
   files: ImportFile[],
   notes: ImportNote[],
+  expectedVersion?: number,
 ): Promise<{ status: number; record: ImportRecord }> {
   const meta = await e.meta()
   for (const file of files) {
@@ -255,9 +279,10 @@ async function create(
     restoreFrom: null,
     result: null,
     test,
+    ...(expectedVersion === undefined ? {} : { expectedVersion }),
   }
 
-  // Everything was already here: nothing changes and no restore point is made.
+  // Everything was already here: nothing changes and no restore point is made (whatever the version: nothing is written).
   if (!recordFiles.some((f) => !f.duplicateOf) && !recordNotes.length) {
     record.status.state = 'duplicate'
     record.status.finishedAt = iso()
@@ -1320,6 +1345,9 @@ async function startJob(e: CollectionEngine, record: ImportRecord): Promise<void
       }
     })
     if (!record.files.some((f) => !f.duplicateOf) && !record.notes.length) return finishUnchanged(e, record)
+    // API 2: something committed since the version it was based on (while it waited in the queue, for the hold or for
+    // a removal, or between two tries): it fails now, before any container work. The commit checks again.
+    if (versionMoved(record, before)) return failVersionChanged(e, record, before.version)
   }
   if (record.kind === 'relearn' && record.restoreFrom === null && !(await e.currentSnapshot(before)).unusable) {
     return finishUnchanged(e, record) // something else brought the restore point back meanwhile
@@ -1453,6 +1481,38 @@ async function finishUnchanged(e: CollectionEngine, record: ImportRecord): Promi
   if (record.capacity === 'granted') await giveBack(e, record)
   await deleteOriginals(e, record.files.map((f) => f.fileId))
   await e.store.log('import-duplicate', { importId: record.status.importId })
+}
+
+/**
+ * API 2: an import based on another version than the collection's when its try starts fails at once, learning nothing,
+ * with `version_changed`. No container work was done for this try, so the container (which may be answering
+ * questions) is kept; texts an earlier try saved go, and the files stay staged a day, as after any failure.
+ */
+async function failVersionChanged(e: CollectionEngine, record: ImportRecord, current: number): Promise<void> {
+  const importId = record.status.importId
+  record.status.state = 'failed'
+  record.status.error = { error: 'version_changed', message: versionChangedMessage(record.expectedVersion!, current) }
+  record.status.finishedAt = iso()
+  record.status.failedFileId = null
+  record.status.files = record.files.map((f) => fileStatus(f))
+  record.status.queuePosition = null
+  record.status.waitingFor = null
+  record.phase = 'done'
+  record.jobId = null
+  record.retryAt = null
+  record.notes = scrubbed(record.notes)
+  await e.store.putImport(record)
+  await e.updateMeta((m) => {
+    if (m.active === importId) m.active = null
+    m.queue = m.queue.filter((id) => id !== importId)
+  })
+  if (record.textsSaved) {
+    const meta = await e.meta()
+    await deleteLater(e, [...record.files.filter((f) => !f.duplicateOf), ...record.notes].map((d) => textKey(meta, d.documentId)))
+  }
+  await e.event(`import:${importId}:failed`, { type: 'import', import: record.status })
+  await giveBack(e, record)
+  await e.store.log('import-version-changed', { importId, expected: record.expectedVersion, current })
 }
 
 /** Notes as written are kept only until they are read and hidden. */
@@ -1927,19 +1987,27 @@ export interface PointCommit {
 /**
  * The commit: the snapshot, its manifest, the answer state, the restore point, the import and the meta in one
  * storage transaction. Changes within 5 minutes of the last one share its restore point (the earlier one folds into
- * the new one). Returns false, committing nothing, when a removal for good arrived first.
+ * the new one). Returns false, committing nothing, when a removal for good arrived first; throws a permanent
+ * `version_changed` AttemptFailure, committing nothing, when the import names a version the collection is no longer at.
  */
 export async function commitPoint(e: CollectionEngine, c: PointCommit): Promise<boolean> {
   const now = iso()
   const runtime = (await e.store.getRuntime()) ?? null
   let committedMeta: Meta | null = null
   let point: RestorePointRecord | null = null
+  let moved: number | null = null
   await e.state.storage.transaction(async (txn) => {
     const meta = (await txn.get<Meta>('meta'))!
     if (meta.deleting || (meta.removals.length && c.record.kind !== 'remove')) return
     // The organization's hold arrived while this was learned: only a removal for good and a stop using / use again
     // (no container) commit while held; anything else keeps nothing and waits for the hold to end.
     if (isHeld(meta) && c.kind !== 'remove' && c.kind !== 'change') return
+    // API 2: a change committed while this import learned (a stop using needs no container): checked in the commit's
+    // own transaction, so nothing can come between the check and the commit.
+    if (versionMoved(c.record, meta)) {
+      moved = meta.version
+      return
+    }
     const version = Math.max(meta.nextVersion, c.record.reserveVersion ?? 0)
     const prev = meta.version ? await txn.get<RestorePointRecord>(`rp:${String(meta.version).padStart(10, '0')}`) : undefined
     const fold =
@@ -2074,6 +2142,8 @@ export async function commitPoint(e: CollectionEngine, c: PointCommit): Promise<
     )
     committedMeta = meta
   })
+  // The import fails, keeping nothing: its try's container holds what it learned, so it is discarded (attemptFailed).
+  if (moved !== null) throw new AttemptFailure(versionChangedMessage(c.record.expectedVersion!, moved), null, true, 'version_changed')
   if (!committedMeta || !point) return false
   const done = point as RestorePointRecord
   // A removal says which kept documents it learned again (they shared entities with it), their text and how long it

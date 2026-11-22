@@ -57,8 +57,9 @@ export const asking: DocTopic = {
         <>
           <p>
             When nothing in the collections you picked covers the question, Knowledge answers "I couldn't find this in …, so I
-            won't guess." It never answers without a source. The question is kept for the collection's owner as a gap, something
-            the collection doesn't cover yet.
+            won't guess." It never answers without a source. The question is kept as a gap, something the collection doesn't
+            cover yet, with how many times it was asked: the collection's owner, admins and editors can list them through the API
+            (<DocLink to="ai-assistants-and-api" section="writing-for-people">Writing for people</DocLink>), so a note can answer them.
           </p>
           <ul>
             <li><b>Ask &lt;owner&gt; to add it</b> sends the question to the collection's owner and its admins by e-mail.</li>

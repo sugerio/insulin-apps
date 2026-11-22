@@ -11,7 +11,9 @@ import { callerOf, engineFor, iso, json, now } from './common.ts'
  * (collection Editor, Admin or Owner, with permission to change content). At launch three kinds of items:
  *
  * - `unreadable`: an import that failed (a file Insulin couldn't read after three tries) or a file refused at upload (a
- *   scanned PDF with no text), from the last 30 days, until a file with the same name is learned in that collection;
+ *   scanned PDF with no text), from the last 30 days, until a file with the same name is learned in that collection.
+ *   Not an import that failed because the collection changed after the version it was based on (`version_changed`):
+ *   whoever sent it is told in its status, and reads the collection again;
  * - `hidden`: a file or note added in the last 30 days in which values were hidden before learning, with how many
  *   (the engine counts them in its list of documents: one call per collection);
  * - `reported`: answers reported as wrong and still open;
@@ -83,7 +85,7 @@ async function keptItems(db: D1Database, org: string, ids: string[], since: numb
   const [learned, failed, refused, reports, checks] = await db.batch([
     // Learned since: what settles an unreadable item, and which collections may hold values hidden recently.
     db.prepare(`SELECT collection_id, detail, created_at, finished_at FROM imports WHERE ${within} AND state = 'committed' AND (created_at >= ?3 OR finished_at >= ?3)`).bind(org, list, since),
-    db.prepare(newest(`SELECT collection_id, id, created_at, finished_at, error, detail FROM imports WHERE ${within} AND state = 'failed' AND created_at >= ?3`, 20)).bind(org, list, since),
+    db.prepare(newest(`SELECT collection_id, id, created_at, finished_at, error, detail FROM imports WHERE ${within} AND state = 'failed' AND created_at >= ?3 AND COALESCE(error_code, '') != 'version_changed'`, 20)).bind(org, list, since),
     db.prepare(newest(`SELECT collection_id, id, name, reason, created_at FROM staged_files WHERE ${within} AND state = 'refused' AND created_at >= ?3`, 20)).bind(org, list, since),
     db.prepare(newest(
       `SELECT r.collection_id, r.id, r.created_at, r.question, r.note, r.answer, r.reported_by, COALESCE(m.name, m.email) AS reporter FROM reports r

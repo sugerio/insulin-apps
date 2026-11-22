@@ -21,6 +21,7 @@ export type ErrorCode =
   | 'deleting'
   | 'not_restorable'
   | 'busy_learning'
+  | 'version_changed'
   | 'payload_too_large'
   | 'unsupported_type'
   | 'quota_exceeded'
@@ -45,6 +46,7 @@ const STATUS: Record<ErrorCode, number> = {
   deleting: 409,
   not_restorable: 409,
   busy_learning: 409,
+  version_changed: 409,
   payload_too_large: 413,
   unsupported_type: 415,
   quota_exceeded: 429,

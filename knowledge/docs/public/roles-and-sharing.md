@@ -23,7 +23,7 @@ See [Organizations and roles](/docs/platform/organizations-and-roles) for the pl
 | In a collection | Owner | Admin | Editor | Viewer |
 |---|---|---|---|---|
 | Ask, open sources, see what it knows and its history, report a wrong answer | ✓ | ✓ | ✓ | ✓ |
-| Add files, web pages and notes, fix answers and facts, stop using a file, go back | ✓ | ✓ | ✓ | |
+| Add files, web pages and notes, fix answers and facts, stop using a file, go back, list the questions it couldn't answer | ✓ | ✓ | ✓ | |
 | Remove a file for good | ✓ | ✓ | | |
 | Share it; change its settings; export it | ✓ | ✓ | | |
 | Transfer ownership; delete it | ✓ | | | |

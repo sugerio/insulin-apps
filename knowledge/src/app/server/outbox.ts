@@ -279,6 +279,8 @@ export async function finishImportStatements(db: D1Database, org: string, collec
   // What an import's end does is done once: asked about again (polled, or its event read again), nothing changes.
   if (!row || TERMINAL.has(row.state)) return []
   const failure = status.state === 'failed' ? plainFailure(status) : null
+  // The engine's code for it too (`version_changed` is the writer's to act on, not Needs attention's).
+  const failureCode = status.state === 'failed' ? status.error?.error ?? null : null
   // The documents each file became, so a fix can tell the person who added a file.
   let detail = row.detail
   const documents = (status.files ?? []).filter((file) => file.documentId && file.state === 'learned').map((file) => ({ id: file.documentId!, name: file.name }))
@@ -290,10 +292,10 @@ export async function finishImportStatements(db: D1Database, org: string, collec
     }
   }
   const statements = [db.prepare(
-    `UPDATE imports SET state = ?3, version = COALESCE(?4, version), error = COALESCE(?5, error), detail = ?6,
+    `UPDATE imports SET state = ?3, version = COALESCE(?4, version), error = COALESCE(?5, error), error_code = COALESCE(?9, error_code), detail = ?6,
        finished_at = CASE WHEN ?7 THEN COALESCE(finished_at, ?8) ELSE finished_at END, request = CASE WHEN ?7 THEN NULL ELSE request END
      WHERE id = ?1 AND org_id = ?2 AND state NOT IN ('committed', 'duplicate', 'failed', 'cancelled')`,
-  ).bind(importId, org, status.state, status.version ?? null, failure, detail, TERMINAL.has(status.state) ? 1 : 0, now)]
+  ).bind(importId, org, status.state, status.version ?? null, failure, detail, TERMINAL.has(status.state) ? 1 : 0, now, failureCode)]
   if (!TERMINAL.has(status.state)) return statements
   const held = await reservationsOf(db, org, `import:${importId}`)
   if (status.state === 'committed') {

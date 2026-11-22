@@ -178,6 +178,13 @@ describe('what the Docs say', () => {
     expect(text).toContain('400 too_many_collections')
     expect(text).toContain('Settings › Connect AI')
     expect(text).toContain('browser_only')
+    // Writing for people: the version a change was based on, whom a program acts for, and the open questions.
+    expect(text).toContain('409 version_changed with currentVersion, and adds nothing')
+    expect(text).toContain('its import fails with the error version_changed')
+    expect(text).toContain('The header x-on-behalf-of (1 to 200 characters, one line)')
+    expect(text).toContain('it gives no access')
+    expect(text).toContain('GET /api/collections/{id}/gaps lists the questions nothing in the collection covered')
+    expect(textOf('history')).toContain('"By Partner Agent, on behalf of Ana Lee"')
   })
 
   it('COL-04 states the rules the app follows, as the server keeps them', () => {

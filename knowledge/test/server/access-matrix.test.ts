@@ -81,6 +81,11 @@ const ROUTES: Route[] = [
   { name: 'preview going back', method: 'GET', path: (f) => `/api/collections/${f.id}/history/1/preview`, min: 'VIEWER', status: 200, effect: (_, body) => expect(body.preview).toMatchObject({ restorable: true }) },
   { name: 'report an answer', method: 'POST', path: (f) => `/api/collections/${f.id}/reports`, body: () => ({ question: 'Is this right?' }), min: 'VIEWER', status: 201, effect: async (f) => expect(await count(f.h, `SELECT COUNT(*) AS n FROM reports WHERE collection_id = ?`, f.id)).toBe(2) },
   { name: 'list its reports', method: 'GET', path: (f) => `/api/collections/${f.id}/reports`, min: 'VIEWER', status: 200, effect: (_, body) => expect(body.reports).toHaveLength(1) },
+  {
+    name: 'list the questions nothing in it answered', method: 'GET', path: (f) => `/api/collections/${f.id}/gaps`, min: 'EDITOR', status: 200,
+    setup: async (f) => { expect((await f.h.json<{ covered: boolean }>(PEOPLE.maya, 'POST', '/api/search', { collections: [f.id], query: 'What is the office parking policy?' })).body.covered).toBe(false) },
+    effect: (_, body) => expect(body.gaps).toEqual([expect.objectContaining({ question: 'What is the office parking policy?', asked: 1 })]),
+  },
   { name: 'add a note', method: 'POST', path: (f) => `/api/collections/${f.id}/notes`, body: () => ({ text: 'Silver partners renew every June.' }), min: 'EDITOR', status: 202, effect: async (f) => expect(await count(f.h, `SELECT COUNT(*) AS n FROM imports WHERE collection_id = ? AND kind = 'note'`, f.id)).toBe(3) },
   {
     name: 'preflight files', method: 'POST', path: (f) => `/api/collections/${f.id}/preflight`, body: () => ({ files: [{ name: 'Terms.md', bytes: 30 }] }), min: 'EDITOR', status: 200,

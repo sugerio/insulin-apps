@@ -1,5 +1,6 @@
 import { Hono } from 'hono'
-import { authorize } from '../access.ts'
+import type { RestorePoint } from '../../../../engine/src/contract.ts'
+import { authorize, type CollectionRow } from '../access.ts'
 import type { AppEnv } from '../env.ts'
 import { ApiError, badRequest, logError, notFound } from '../http.ts'
 import { idempotent, stableId } from '../idempotency.ts'
@@ -17,15 +18,53 @@ function versionOf(raw: string): number {
   return version
 }
 
+/** Who made a change a restore point holds, and whom they said they acted for (`x-on-behalf-of`). */
+export interface MadeBy {
+  id: string
+  type: 'person' | 'client'
+  name: string | null
+  onBehalfOf: string | null
+}
+
+/**
+ * Who made the changes each restore point holds: the imports (files, web pages, notes, corrections) committed at its
+ * version, or at a version folded into it (changes within 5 minutes share a restore point), so every import above the
+ * restore point listed before it. Each person or API client once per whom they acted for, in the order they changed
+ * it. Going back, undo, stop using and removals have no import, so they name no one.
+ */
+async function madeByOf(db: D1Database, collection: CollectionRow, points: RestorePoint[]): Promise<Map<number, MadeBy[]>> {
+  const versions = points.map((point) => point.version).sort((a, b) => a - b)
+  const made = new Map<number, MadeBy[]>()
+  if (!versions.length) return made
+  const { results } = await db.prepare(
+    `SELECT i.version, i.created_by, COALESCE(i.created_by_type, 'person') AS type, i.on_behalf_of, COALESCE(m.name, m.email) AS name FROM imports i
+     LEFT JOIN members m ON m.org_id = i.org_id AND m.principal_type = COALESCE(i.created_by_type, 'person') AND m.principal_id = i.created_by
+     WHERE i.org_id = ?1 AND i.collection_id = ?2 AND i.state = 'committed' AND i.version IS NOT NULL AND i.version <= ?3
+     ORDER BY i.version, i.finished_at, i.rowid`,
+  ).bind(collection.org_id, collection.id, versions.at(-1)).all<{ version: number; created_by: string; type: 'person' | 'client'; on_behalf_of: string | null; name: string | null }>()
+  let at = 0
+  for (const row of results) {
+    while (versions[at]! < row.version) at += 1
+    const list = made.get(versions[at]!) ?? []
+    if (!list.some((entry) => entry.id === row.created_by && entry.type === row.type && entry.onBehalfOf === row.on_behalf_of)) {
+      list.push({ id: row.created_by, type: row.type, name: row.name, onBehalfOf: row.on_behalf_of })
+    }
+    made.set(versions[at]!, list)
+  }
+  return made
+}
+
 export function historyRoutes() {
   const app = new Hono<AppEnv>()
 
-  // The engine's restore points (changes within 5 minutes share one); the history list in D1 follows them.
+  // The engine's restore points (changes within 5 minutes share one); the history list in D1 follows them. Each says
+  // who made its changes (`madeBy`), with whom they acted for.
   app.get('/:id/history', async (c) => {
     const { collection } = await authorize(c.env.DB, callerOf(c), param(c, 'id'), 'read')
     const listed = await engineFor(c).restorePoints(collection.id)
     await reconcileHistory(c.env, collection.org_id, collection.id, listed.restorePoints).catch((error) => logError('history_reconcile_failed', error, { org: collection.org_id }))
-    return json(c, listed)
+    const made = await madeByOf(c.env.DB, collection, listed.restorePoints)
+    return json(c, { ...listed, restorePoints: listed.restorePoints.map((point) => ({ ...point, madeBy: made.get(point.version) ?? [] })) })
   })
 
   app.get('/:id/history/:version/preview', async (c) => {

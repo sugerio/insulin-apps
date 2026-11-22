@@ -1,4 +1,5 @@
-import type { PersonResult } from "./engine/evaluate.ts";
+import type { Evaluation, PersonResult } from "./engine/evaluate.ts";
+import { parseFormula } from "./engine/formula.ts";
 import { documentName, type RuleSet } from "./engine/rules.ts";
 import { isIssueOf, type Issue } from "./people.ts";
 import { leftInModule } from "./progress.ts";
@@ -87,6 +88,58 @@ function slipsLeft(year: PrintYear, result: PersonResult): { toConfirm: number; 
 }
 
 const toConfirmText = (count: number) => `${count} ${count === 1 ? "slip is" : "slips are"} not confirmed yet.`;
+
+// Forms a return needs that aren't printed (forms.yaml has no layout for them), in the order they're attached: the
+// worksheet and Finish name them, for the person to fill in and file with the forms. Each applies when its formula,
+// read like a printed form's `applies`, is yes.
+const FORMS_TO_ADD = [
+  // CWB.schedule: a benefit on line 45300, or advance payments on an RC210 slip (Step 4), even with no benefit.
+  {
+    form: "Schedule 6 (5005-S6), Canada Workers Benefit for residents of Quebec",
+    why: "for the Canada workers benefit on line 45300 of your return, or its advance payments on an RC210 slip",
+    applies: 'person.province == "QC" and line.CWB.schedule == 1',
+  },
+  {
+    form: "Schedule 6 (5009-S6), Canada Workers Benefit for residents of Alberta",
+    why: "for the Canada workers benefit on line 45300 of your return, or its advance payments on an RC210 slip",
+    applies: 'person.province == "AB" and line.CWB.schedule == 1',
+  },
+  {
+    form: "Schedule 6 (5014-S6), Canada Workers Benefit for residents of Nunavut",
+    why: "for the Canada workers benefit on line 45300 of your return, or its advance payments on an RC210 slip",
+    applies: 'person.province == "NU" and line.CWB.schedule == 1',
+  },
+  {
+    form: "Schedule MB428-A (5007-A), Manitoba Family Tax Benefit",
+    why: "for the family tax benefit on line 41 of your MB428",
+    applies: 'person.province == "MB" and line.MB428.41 > 0',
+  },
+  {
+    form: "Schedule ON(S11) (5006-S11), Ontario Tuition and Education Amounts",
+    why: "for your unused Ontario tuition and education amounts",
+    applies: 'person.province == "ON" and answer.unusedProvincialTuition > 0',
+  },
+  {
+    form: "Schedule BC(S11) (5010-S11), British Columbia Tuition Amounts",
+    why: "for your British Columbia tuition amounts",
+    applies: 'person.province == "BC" and answer.unusedProvincialTuition + line.BCS11.2 > 0',
+  },
+  {
+    form: "Schedule SK(S11) (5008-S11), Saskatchewan Tuition and Education Amounts",
+    why: "for your unused Saskatchewan tuition and education amounts",
+    applies: 'person.province == "SK" and answer.unusedProvincialTuition > 0',
+  },
+  {
+    form: "Schedule D, Solidarity Tax Credit (Revenu Québec)",
+    why: "with your TP-1, to get the solidarity tax credit: Revenu Québec works it out from this schedule",
+    applies: 'person.province == "QC"',
+  },
+].map((each) => ({ ...each, applies: parseFormula(each.applies) }));
+
+/** The forms a person's return needs that aren't printed, each with what it is for. */
+export function formsToAdd(evaluation: Evaluation, personId: string): { form: string; why: string }[] {
+  return FORMS_TO_ADD.filter((each) => evaluation.evaluate(personId, each.applies).value === true).map(({ form, why }) => ({ form, why }));
+}
 
 /** The spouse's result, for printBlockers: the other adult of the year, when both returns are prepared here. */
 export function spouseOf<T extends { personId: string }>(people: T[], personId: string): T | undefined {

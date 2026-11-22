@@ -8,10 +8,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card.t
 import { Label } from "@/components/ui/label.tsx";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select.tsx";
 import { cn } from "@/lib/utils.ts";
-import { ApiError, describeError } from "../api/client.ts";
+import { ApiError, describeError, fieldIssues } from "../api/client.ts";
 import { useMe } from "../auth/AuthProvider.tsx";
 import { AmountField, cleanAmount } from "../components/AmountField.tsx";
-import { Banner, ResourceView } from "../components/Feedback.tsx";
+import { Banner, RefusedBanner, ResourceView } from "../components/Feedback.tsx";
 import { OriginalFile, SlipBoxTable, SlipForm, type SlipFormHost, type SlipValues } from "../components/SlipForm.tsx";
 import { StepLayout } from "../components/StepLayout.tsx";
 import { stepPath, useReturn, useYear } from "../components/YearFrame.tsx";
@@ -389,7 +389,6 @@ function ModuleForm({
   const toAdd = items.filter((item) => !added[item.question.id]);
   const missing = onReturn.filter((item) => item.kind === "slip" && slipsOf(item.question.slip!).length === 0).map((item) => item.question.slip!);
   const error = requests.state.status === "error" ? requests.state.error : null;
-  const issues = error instanceof ApiError ? (error.body?.error.issues ?? []) : [];
   const stale = error instanceof ApiError && error.status === 409;
   const busy = requests.state.status === "working";
   const hostOf: HostOf = (key) => ({
@@ -403,7 +402,7 @@ function ModuleForm({
   const fields = new Set(
     onReturn.flatMap(({ question, kind }) => (kind === "amount" ? [question.id] : kind === "group" ? partsOf(question).map((part) => part.id) : [])).map((id) => `answers.${id}`),
   );
-  const unshown = issues.filter((issue) => !fields.has(issue.path));
+  const { issueFor, unshown, inBanner } = fieldIssues(error, (path) => fields.has(path));
   // What keeps this step from done, as saved (the step's state in the row of steps says the same).
   const left = leftInModule(rules, module, given, slips.slips.filter((slip) => slip.personId === person.id), result?.questions ?? []);
   const unanswered = left.filter((item) => item.reason === "unanswered");
@@ -462,7 +461,7 @@ function ModuleForm({
                 value={amounts[question.id] ?? ""}
                 editable={editable}
                 busy={busy}
-                issue={issues.find((issue) => issue.path === `answers.${question.id}`)?.message}
+                issue={issueFor(`answers.${question.id}`)}
                 onChange={(value) => setAmountOf(question.id, value)}
                 open={open}
                 onToggle={onToggle}
@@ -480,7 +479,7 @@ function ModuleForm({
                       question={part}
                       value={amounts[part.id] ?? ""}
                       disabled={!editable || busy}
-                      issue={issues.find((issue) => issue.path === `answers.${part.id}`)?.message}
+                      issue={issueFor(`answers.${part.id}`)}
                       onChange={(value) => setAmountOf(part.id, value)}
                     />
                   ) : part.receipts ? (
@@ -494,7 +493,7 @@ function ModuleForm({
                         value={amounts[part.id] ?? ""}
                         editable={editable}
                         busy={busy}
-                        issue={issues.find((issue) => issue.path === `answers.${part.id}`)?.message}
+                        issue={issueFor(`answers.${part.id}`)}
                         onChange={(value) => setAmountOf(part.id, value)}
                         open={open}
                         onToggle={onToggle}
@@ -510,9 +509,10 @@ function ModuleForm({
                       label={part.ask}
                       help={part.help}
                       unit={part.type === "percent" ? "%" : part.type === "count" ? "" : "$"}
+                      max={part.max}
                       value={amounts[part.id] ?? ""}
                       disabled={!editable || busy}
-                      issue={issues.find((issue) => issue.path === `answers.${part.id}`)?.message}
+                      issue={issueFor(`answers.${part.id}`)}
                       onChange={(value) => setAmountOf(part.id, value)}
                     />
                   ),
@@ -558,17 +558,8 @@ function ModuleForm({
         <Banner kind="error" title="Someone else changed this year" action={<Button variant="outline" size="sm" onClick={requests.reload}>Reload</Button>}>
           {describeError(error)}
         </Banner>
-      ) : error !== null && (issues.length === 0 || unshown.length > 0) ? (
-        <Banner kind="error" title="That didn't work">
-          {describeError(error)}
-          {unshown.length > 0 ? (
-            <ul className="mt-1 list-disc pl-5">
-              {unshown.map((issue) => (
-                <li key={issue.path}>{issue.message}</li>
-              ))}
-            </ul>
-          ) : null}
-        </Banner>
+      ) : inBanner ? (
+        <RefusedBanner title="That didn't work" error={error} unshown={unshown} />
       ) : note ? (
         <Banner kind="error" title="That didn't work">{note}</Banner>
       ) : null}

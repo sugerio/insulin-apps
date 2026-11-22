@@ -1,4 +1,4 @@
-import { PROVINCE_NAMES, isAdult, printBlockers, type Province, type Slip, type TaxYear } from "#shared";
+import { PROVINCE_NAMES, formsToAdd, isAdult, printBlockers, type Province, type Slip, type TaxYear } from "#shared";
 import { Dec } from "../../shared/engine/decimal.ts";
 import { Evaluation } from "../../shared/engine/evaluate.ts";
 import { fillForms, personalFacts } from "../../shared/engine/forms.ts";
@@ -6,7 +6,7 @@ import { documentName, type FormLanguage, type FormSpec, type RuleSet } from "..
 import { rulesFor } from "../../shared/rules/index.ts";
 import { buildReturnPdf, type Worksheet, type WorksheetRow } from "./forms-pdf.ts";
 import { hintsOf, stillApplied } from "./hints.ts";
-import { ApiError, conflict, notFound } from "./http.ts";
+import { ApiError, conflict, logError, notFound } from "./http.ts";
 import { openYear } from "./returns.ts";
 import { engineInputOf, loadWorkspace, printYear, spouseResult } from "./workspace.ts";
 
@@ -32,20 +32,47 @@ function publisherOf(url: string): { name: string; site: string } {
 }
 const capital = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
 
-export const craForms: FormSource = {
-  checkHash: true,
-  async fetch(url) {
-    const { name, site } = publisherOf(url);
-    const response = await fetch(url, { headers: { Accept: "application/pdf" } });
-    const type = response.headers.get("Content-Type") ?? "";
-    if (!response.ok || !type.startsWith("application/pdf")) {
-      throw new ApiError("unavailable", `${capital(name)}'s form couldn't be downloaded from ${site} (HTTP ${response.status}). Try again later.`);
-    }
-    const bytes = new Uint8Array(await response.arrayBuffer());
-    if (bytes.byteLength > MAX_FORM_BYTES) throw new ApiError("unavailable", `${capital(name)}'s form from ${site} is larger than expected.`);
-    return bytes;
-  },
-};
+// canada.ca never answers a request without a User-Agent and revenuquebec.ca refuses it (403); a Worker's fetch sends
+// none of its own.
+const USER_AGENT = "Mozilla/5.0 (compatible; Insulin Apps Taxi)";
+// One form's download, its body included. The sites answer in a second or two; a first print downloads its few forms
+// one after another, and the whole print has to answer well within the 100 seconds Cloudflare waits for a response.
+const DOWNLOAD_TIMEOUT_MS = 15_000;
+
+/** The forms from their publishers' sites, through `send` (a test's stand-in for fetch), each within `timeoutMs`. */
+export function officialForms(send: typeof fetch = fetch, timeoutMs = DOWNLOAD_TIMEOUT_MS): FormSource {
+  return {
+    checkHash: true,
+    async fetch(url) {
+      const { name, site } = publisherOf(url);
+      const signal = AbortSignal.timeout(timeoutMs);
+      const download = async () => {
+        const response = await send(url, { headers: { Accept: "application/pdf", "User-Agent": USER_AGENT }, signal });
+        const type = response.headers.get("Content-Type") ?? "";
+        if (!response.ok || !type.startsWith("application/pdf")) {
+          throw new ApiError("unavailable", `${capital(name)}'s form couldn't be downloaded from ${site} (HTTP ${response.status}). Try again later.`);
+        }
+        const bytes = new Uint8Array(await response.arrayBuffer());
+        if (bytes.byteLength > MAX_FORM_BYTES) throw new ApiError("unavailable", `${capital(name)}'s form from ${site} is larger than expected.`);
+        return bytes;
+      };
+      try {
+        // Settled by the timeout too, whether or not `send` and the body honour the signal.
+        return await new Promise<Uint8Array>((resolve, reject) => {
+          signal.addEventListener("abort", () => reject(signal.reason), { once: true });
+          download().then(resolve, reject);
+        });
+      } catch (error) {
+        if (error instanceof ApiError) throw error;
+        if (signal.aborted) throw new ApiError("unavailable", `${capital(name)}'s form couldn't be downloaded: ${site} didn't answer in time. Try again later.`);
+        logError("form_download_failed", error, { site });
+        throw new ApiError("unavailable", `${capital(name)}'s form couldn't be downloaded: ${site} couldn't be reached. Try again later.`);
+      }
+    },
+  };
+}
+
+export const craForms = officialForms();
 
 /**
  * A person's return on the forms, with the worksheet. In French (`language` fr), Revenu Québec's forms are printed on
@@ -146,6 +173,8 @@ function worksheetOf(rules: RuleSet, evaluation: Evaluation, view: TaxYear, inpu
   const owing = line("T1.48500");
   const prepared = new Date(input.now).toISOString().slice(0, 10);
   const formNames = input.forms.map((form) => form.title).join("; ");
+  const toAdd: WorksheetRow[] = formsToAdd(evaluation, input.personId).map(({ form, why }) => ({ text: form, notes: [why] }));
+  const otherForms = toAdd.length > 0 ? 'the forms under "Forms to fill in yourself", below, and any other form not listed above' : "any form not listed above";
   // A resident of Quebec files two returns, the federal one and Revenu Québec's TP-1, each with its own result.
   const quebec = evaluation.input.people.find((each) => each.id === input.personId)?.province === "QC";
   const quebecOwing = line("TP1.479");
@@ -217,7 +246,7 @@ function worksheetOf(rules: RuleSet, evaluation: Evaluation, view: TaxYear, inpu
       ? [
           `Prepared with Taxi on ${prepared}. Taxi doesn't file returns. As a resident of Quebec you file two returns, and both are here, filled in with what Taxi knows: first the federal return on the CRA's forms, then your Quebec return on Revenu Québec's TP-1 and its schedules: ${formNames}.`,
           "Filled in for you: in Step 1 of the T1, your name, date of birth, marital status and province, and your spouse's or partner's first name and net income; on pages 1 and 2 of the TP-1, your name and date of birth, whether you had a spouse, and your spouse's name, date of birth and net income; on both returns and on each schedule and form above, every row Taxi works out. A row left blank is one Taxi doesn't know or that doesn't apply to you.",
-          "Still to do by hand before you file on paper: on both returns, your social insurance number, mailing address and your spouse's or partner's social insurance number; on the T1, your email address, language and the other Step 1 questions; on the TP-1, your sex, language of communication and the other questions on page 1; any blank row of a schedule that applies to you (such as each child's details on Schedule C); and any form not listed above. Keep your slips and receipts; the CRA and Revenu Québec may ask for them.",
+          `Still to do by hand before you file on paper: on both returns, your social insurance number, mailing address and your spouse's or partner's social insurance number; on the T1, your email address, language and the other Step 1 questions; on the TP-1, your sex, language of communication and the other questions on page 1; any blank row of a schedule that applies to you (such as each child's details on Schedule C); and ${otherForms}. Keep your slips and receipts; the CRA and Revenu Québec may ask for them.`,
           "Mail the two returns in two parts, each signed: the federal return (the T1 for residents of Quebec, with its schedules and forms) to the CRA, at your tax centre; the TP-1, with its schedules, to Revenu Québec.",
           "To file online: copy the amounts into tax software certified for NETFILE and for Revenu Québec's NetFile Québec, and file both returns there.",
           "Every line Taxi works out is listed below with how it was worked out.",
@@ -225,12 +254,13 @@ function worksheetOf(rules: RuleSet, evaluation: Evaluation, view: TaxYear, inpu
       : [
           `Prepared with Taxi on ${prepared}. Taxi doesn't file returns. Before this worksheet are the CRA's own forms, filled in with what Taxi knows: ${formNames}.`,
           "Filled in for you: in Step 1 of the T1, your name, date of birth, marital status and province of residence, and your spouse's or partner's first name and net income; on the T1 and on each schedule and form above, every row Taxi works out. A row left blank is one Taxi doesn't know or that doesn't apply to you.",
-          "Still to do by hand before you file on paper: in Step 1 of the T1, your social insurance number, mailing address, email address and language, your spouse's or partner's social insurance number, and the other questions (Elections Canada, income exempt under the Indian Act, the organ donor registry); any blank row of a schedule that applies to you (such as each dependant's details, or each property's address); and any form not listed above (such as Schedule 7 for RRSP contributions, Form T1135, or a provincial form such as ON428-A). Then sign the T1 and mail it with the other forms to your tax centre. Keep your slips and receipts; the CRA may ask for them.",
+          `Still to do by hand before you file on paper: in Step 1 of the T1, your social insurance number, mailing address, email address and language, your spouse's or partner's social insurance number, and the other questions (Elections Canada, income exempt under the Indian Act, the organ donor registry); any blank row of a schedule that applies to you (such as each dependant's details, or each property's address); and ${otherForms} (such as Schedule 7 for RRSP contributions, Form T1135, or a provincial form such as ON428-A). Then sign the T1 and mail it with the other forms to your tax centre. Keep your slips and receipts; the CRA may ask for them.`,
           "To file online: copy the amounts into NETFILE-certified tax software and file there.",
           "Every line Taxi works out is listed below with how it was worked out.",
         ],
     sections: [
       { heading: "Result", rows: result },
+      ...(toAdd.length > 0 ? [{ heading: "Forms to fill in yourself", rows: toAdd }] : []),
       { heading: "Slips, receipts and notices", rows: slips.length > 0 ? slips : [{ text: "None." }] },
       { heading: "Answers", rows: answers },
       ...(hints.length > 0 ? [{ heading: "Hints applied", rows: hints }] : []),

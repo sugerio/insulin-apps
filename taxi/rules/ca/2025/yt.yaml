@@ -117,11 +117,13 @@ lines:
     formula: "line.T1.30500"
     source: "YT428 line 15 (58189): line 30500 of your return"
   # The children's arts amount, like the fitness credit, is up to $500 for each child under 16; when both spouses
-  # claim more than that together, each claims a share of it.
+  # claim more than that together, each claims a share of it. Only residents of Yukon claim it: a spouse elsewhere
+  # has none, also when Schedule YT(S2) reads their line 24, and their fees go to their own province's credit.
   YT428.22:
     label: Children's arts amount
     formula: >-
-      if(family.childrenUnder17 > 0, if(family.partnerInYear and line.HH.partner == 1
+      if(person.province == "YT" and family.childrenUnder17 > 0, if(family.partnerInYear and line.HH.partner == 1
+      and spouse.person.province == "YT"
       and answer.childArtsFees + spouse.answer.childArtsFees > param.ytArtsMaxPerChild * family.childrenUnder17,
       round(answer.childArtsFees * param.ytArtsMaxPerChild * family.childrenUnder17 / (answer.childArtsFees + spouse.answer.childArtsFees), 2),
       min(answer.childArtsFees, param.ytArtsMaxPerChild * family.childrenUnder17)), 0)
@@ -162,12 +164,12 @@ lines:
     source: "YT428 line 31 (58560): Schedule YT(S11)"
   YT428.32:
     label: Yukon tuition amount transferred from a child or grandchild
-    formula: "line.CHILD.provincialTuition"
-    source: "YT428 line 32 (58600): the territorial amount designated to you on their T2202 (the app takes the federal one, line 32400)"
+    formula: "round(line.CHILD.provincialTuition * line.RES.factor, 2)"
+    source: "YT428 line 32 (58600): the territorial amount designated to you on their T2202 (the app takes the federal one, line 32400). Prorated for a part-year resident (RC4018, Appendix K)"
   YT428.33:
     label: Amounts transferred from your spouse or common-law partner
-    formula: "if(line.HH.partner == 1 and family.partnerInYear, line.YTS2.13, 0)"
-    source: "YT428 line 33 (58640): Schedule YT(S2)"
+    formula: "if(line.HH.partner == 1 and family.partnerInYear, round(line.YTS2.13 * line.RES.factor, 2), 0)"
+    source: "YT428 line 33 (58640): Schedule YT(S2). Prorated for a part-year resident (RC4018, Appendix K); the schedule shows the whole transfer"
   YT428.40:
     label: Allowable medical expenses
     formula: "max(0, line.T1.33099 - min(param.ytMedicalThresholdMax, round(line.T1.23600 * param.medicalThresholdRate, 2)))"
@@ -225,7 +227,8 @@ lines:
   # Schedule YT(S11) – Yukon tuition amounts (the student's own)
   YTS11.1:
     label: Unused Yukon tuition from your 2024 notice of assessment
-    formula: "answer.unusedProvincialTuition"
+    formula: 'if(person.province == "AB", 0, answer.unusedProvincialTuition)'
+    source: "None for a spouse in Alberta, whose own return doesn't carry unused provincial tuition forward (Schedule YT(S2) reads this schedule for them)"
   YTS11.4:
     label: Tuition fees for 2025
     formula: "line.S11.8"
@@ -277,13 +280,13 @@ lines:
   YT479.63800:
     label: Eligible children's fitness fees
     formula: >-
-      if(family.childrenUnder17 > 0, if(family.partnerInYear and line.HH.partner == 1
+      if(family.childrenUnder17 > 0, if(family.partnerInYear and line.HH.partner == 1 and spouse.person.province == "YT"
       and answer.childFitnessFees + spouse.answer.childFitnessFees > param.ytFitnessMaxPerChild * family.childrenUnder17,
       round(answer.childFitnessFees * param.ytFitnessMaxPerChild * family.childrenUnder17 / (answer.childFitnessFees + spouse.answer.childFitnessFees), 2),
       min(answer.childFitnessFees, param.ytFitnessMaxPerChild * family.childrenUnder17)), 0)
     source: >-
       YT479 line 63800: fees for children under 16 at the start of the year, up to $1,000 each. When both spouses
-      claim more than that together, each claims a share of it
+      claim more than that together, each claims a share of it. A spouse living outside Yukon doesn't share the limit
   YT479.1:
     label: Children's fitness tax credit
     formula: "round(line.YT479.63800 * param.ytFitnessRate, 2)"

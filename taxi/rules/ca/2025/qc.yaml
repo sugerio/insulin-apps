@@ -7,14 +7,20 @@
 # Only a Quebec return reads these lines: the result lines TP1.478 and TP1.479 are 0 for anyone else, and read nothing.
 # The TP-1 reads the RL slips (slips.yaml), never the matching T-slips: a payer in Quebec issues both, and their
 # amounts can differ. It reads the federal return only where the guide says the two are equal (RRSP, FHSA, RPP limit,
-# support, carrying charges, the T1032 split, self-employment) and for the federal slips that have no RL slip (T4E,
-# T4A(OAS), T4A(P)).
+# support, carrying charges, the T1032 split, self-employment, the social benefits repayment) and for the federal slips
+# that have no RL slip (T4E, T4A(OAS), T4A(P), and a T5007 when no RL-5 came).
 #
 # Left out (said not handled, or not entered): a year you moved to or from Canada; employment outside Quebec (a T4
-# without an RL-1, Schedule R Part B, line 454); CPP contributions on an RL-1 (lines 96 to 96.2, form LE-35-V); QPP in
-# the year you turned 18 or 73, an election to stop paying QPP (Schedule U Part A); rental and foreign income (TP-128-V,
-# Schedule E); net federal supplements (lines 148 and 295); an OAS overpayment recovered; moving expenses (line 228);
-# lines 105, 107, 136, 153, 169, 236, 241, 246, 250, 252, 260, 276, 278, 287, 291 to 297, 358, 378, 390 to 392, 396,
+# without an RL-1, Schedule R Part B, line 454); any other T-slip without the RL slip issued with it (a T5 without an
+# RL-3, a T3 without an RL-16, a pension, annuity, RRSP or RRIF slip without an RL-2, a T2202 from a school outside
+# Quebec, which issues no RL-8, some T5007 slips with an RL-5 and some without); a slip box whose amount belongs on a
+# TP-1 line or an RL box this app doesn't handle (security options and the Canadian Forces deduction on a T4, a T4A's
+# other income, scholarships and RDSP income, a T4FHSA's taxable amounts, workers' compensation on a T5007, RRSP
+# amounts other than annuity payments and withdrawals); CPP contributions on an RL-1 (lines 96 to 96.2, form
+# LE-35-V); QPP in the year you turned 18 or 73, an election to stop paying QPP (Schedule U Part A); rental and foreign
+# income (TP-128-V, Schedule E); net federal supplements (lines 148 and 295); an OAS overpayment recovered; moving
+# expenses (line 228); line 246 other than EI benefits repaid; line 250 other than point 3 (the social benefits
+# repayment); lines 105, 107, 136, 153, 169, 236, 241, 252, 260, 276, 278, 287, 291 to 297, 358, 378, 390 to 392, 396,
 # 422, 424, 438, 443, 454, 459, 460, 466; the refund transferred between spouses (lines 476 and 477); Schedule A Parts A
 # and C, Schedule B line 21, Schedule H, the adapted work premium (Schedule P column 2) and the supplement to the work
 # premium (Part D).
@@ -208,18 +214,69 @@ lines:
     formula: "max(0, line.TP1.101 - sum(RL1.box211)) + max(0, line.SE.net)"
     source: "Work Chart 201, lines 1 to 8, and Schedule P, line 29: line 101 less box 211 of the RL-1, plus net business income (no losses)"
   # Cases the TP-1 here doesn't handle: the return waits instead of guessing.
+  #
+  # The TP-1 reads RL slips, so what a T-slip's box holds reaches it only through the RL slip issued with that T-slip.
+  # Where Quebec counts the same amount as the federal return (interest, capital gains, dividends, a trust's other
+  # income, pensions, annuities, RRSP and RRIF payments, social assistance), the T-slips' box is compared with the RL
+  # boxes that carry it: a blank box entered as 0, or two T-slips under one RL slip, pass; a T-slip without its RL slip
+  # doesn't. Box B of the RL-3 and box I of the RL-16 gross up both kinds of dividend at once, so each can round a cent
+  # under the T-slip's two boxes: a cent a slip is allowed. An RL-2 puts a payment in box A, B or C as the payer
+  # chooses (box C holds an RPP's lump sums, T4A box 018), so the three are compared together. Where the amounts can
+  # differ, only a missing RL slip is refused: Quebec's eligible tuition (RL-8 box B) isn't the federal one (T2202
+  # box 26), so a T2202 with tuition needs an RL-8, whatever it shows; an RL-16 can report foreign income in box E or
+  # F; and an RL-1's box A can be more than the T4's box 14 (it holds benefits taxable only in Quebec), so a T4 is
+  # refused only when there are both more T4s than RL-1s and more employment income on them.
+  #
+  # A slip box the federal return reads whose amount no TP-1 line reads is refused, naming the TP-1 line it belongs on.
   QC.scope:
     label: Quebec return cases this app doesn't handle
     formula: >-
       if(not person.residentAllYear,
       unsupported("A Quebec return for a year you moved to or from Canada isn't handled by this app yet"),
-      if(count(T4.box14) > count(RL1.boxA),
+      if(count(T4.box14) > count(RL1.boxA) and sum(T4.box14) > sum(RL1.boxA),
       unsupported("A Quebec resident's employer in Quebec issues an RL-1 with each T4: upload it. Employment outside Quebec (a T4 without an RL-1, Schedule R Part B) isn't handled by this app yet"),
+      if(sum(T5.box13) > sum(RL3.boxD),
+      unsupported("The interest on your T5 slips (box 13) is more than box D of your RL-3 slips: upload the RL-3 issued with each T5, with its box D. A T5 without its RL-3 isn't handled on the Quebec return by this app yet"),
+      if(sum(T5.box11) + sum(T5.box25) > sum(RL3.boxB) + 0.01 * count(RL3.boxB),
+      unsupported("The taxable dividends on your T5 slips (boxes 11 and 25) are more than box B of your RL-3 slips: upload the RL-3 issued with each T5, with its box B. A T5 without its RL-3 isn't handled on the Quebec return by this app yet"),
+      if(sum(T5.box18) > sum(RL3.boxI),
+      unsupported("The capital gains dividends on your T5 slips (box 18) are more than box I of your RL-3 slips: upload the RL-3 issued with each T5, with its box I. A T5 without its RL-3 isn't handled on the Quebec return by this app yet"),
+      if(sum(T3.box21) > sum(RL16.boxA),
+      unsupported("The capital gains on your T3 slips (box 21) are more than box A of your RL-16 slips: upload the RL-16 issued with each T3, with its box A. A T3 without its RL-16 isn't handled on the Quebec return by this app yet"),
+      if(sum(T3.box32) + sum(T3.box50) > sum(RL16.boxI) + 0.01 * count(RL16.boxI),
+      unsupported("The taxable dividends on your T3 slips (boxes 32 and 50) are more than box I of your RL-16 slips: upload the RL-16 issued with each T3, with its box I. A T3 without its RL-16 isn't handled on the Quebec return by this app yet"),
+      if(sum(T3.box26) > sum(RL16.boxG),
+      unsupported("The other income on your T3 slips (box 26) is more than box G of your RL-16 slips: upload the RL-16 issued with each T3, with its box G. A T3 without its RL-16, or an RL-16 that reports this income in a box this app doesn't read, isn't handled on the Quebec return yet"),
+      if(sum(T3.box25) > 0 and sum(RL16.boxE) + sum(RL16.boxF) == 0,
+      unsupported("Your T3 slips show foreign non-business income (box 25) and your RL-16 slips none (box E or F): upload the RL-16 issued with each T3. A T3 without its RL-16 isn't handled on the Quebec return by this app yet"),
+      if(sum(T4RSP.box18) + sum(T4RSP.box20) + sum(T4RSP.box26) + sum(T4RSP.box28) + sum(T4RSP.box34) > 0,
+      unsupported("RRSP amounts other than annuity payments and withdrawals (boxes 18, 20, 26, 28 and 34 of the T4RSP) go on the Quebec return from boxes of the RL-2 this app doesn't read (line 154, points 4 and 7): they aren't handled by this app yet"),
+      if(sum(T4A.box016) + sum(T4A.box018) + sum(T4A.box024) + sum(T4RIF.box16) + sum(T4RSP.box16) + sum(T4RSP.box22)
+      > sum(RL2.boxA) + sum(RL2.boxB) + sum(RL2.boxC),
+      unsupported("Your T4A, T4RSP and T4RIF slips show more pension, annuity, RRSP and RRIF payments (T4A boxes 016, 018 and 024, T4RSP boxes 16 and 22, T4RIF box 16) than boxes A, B and C of your RL-2 slips: upload the RL-2 issued with each of them. A payment without its RL-2 isn't handled on the Quebec return by this app yet"),
+      if(sum(T2202.box26) > 0 and count(RL8.boxA) + count(RL8.boxB) + count(RL8.boxC) == 0,
+      unsupported("A college or university in Quebec issues an RL-8 with each T2202: upload it. Tuition paid to a school outside Quebec (a T2202 without an RL-8, Schedule T) isn't handled on the Quebec return by this app yet"),
+      if(count(RL5.boxA) + count(RL5.boxB) > 0 and sum(T5007.box11) > sum(RL5.boxA) + sum(RL5.boxB),
+      unsupported("The social assistance on your T5007 slips (box 11) is more than boxes A and B of your RL-5 slips: upload the RL-5 issued with each T5007. The Quebec return takes the T5007 only when there is no RL-5 at all"),
+      if(sum(T4.box39) + sum(T4.box41) > 0,
+      unsupported("The security option deduction (boxes 39 and 41 of the T4) on the Quebec return (line 297, point 2, from boxes L-9 to L-13 of the RL-1) isn't handled by this app yet"),
+      if(sum(T4.box43) > 0,
+      unsupported("The Canadian Forces personnel and police deduction (box 43 of the T4) on the Quebec return (line 297, point 23) isn't handled by this app yet"),
+      if(sum(T4A.box028) > 0,
+      unsupported("Other income on a T4A (box 028) on the Quebec return (line 154, point 3, from box O of the RL-1) isn't handled by this app yet"),
+      if(sum(T4A.box105) > 0,
+      unsupported("Scholarships and bursaries (box 105 of the T4A) on the Quebec return (line 154, point 1, from box O of the RL-1, and their deduction on line 295) aren't handled by this app yet"),
+      if(sum(T4A.box131) > 0,
+      unsupported("Income from an RDSP (box 131 of the T4A) on the Quebec return (line 278, from box O of the RL-1) isn't handled by this app yet"),
+      if(sum(T4FHSA.box22) + sum(T4FHSA.box24) + sum(T4FHSA.box26) > 0,
+      unsupported("Taxable FHSA amounts (boxes 22, 24 and 26 of the T4FHSA) on the Quebec return (line 154, point 19, from the RL-32) aren't handled by this app yet"),
+      if(sum(T5007.box10) > 0,
+      unsupported("Workers' compensation (box 10 of the T5007) on the Quebec return (line 148, and its deduction on line 295) isn't handled by this app yet"),
       if(answer.hasRentalIncome, unsupported("Rental income on the Quebec return (form TP-128-V) isn't handled by this app yet"),
       if(answer.hasForeignIncome, unsupported("Foreign income on the Quebec return (the foreign tax credit, Schedule E) isn't handled by this app yet"),
       if(sum(T4AOAS.box21) > 0, unsupported("Net federal supplements on the Quebec return (lines 148 and 295) aren't handled by this app yet"),
       if(sum(T4AOAS.box20) > 0, unsupported("An Old Age Security overpayment recovered (box 20 of the T4A(OAS)) on the Quebec return isn't handled by this app yet"),
-      if(answer.hasMovingExpenses, unsupported("Moving expenses on the Quebec return (form TP-348-V) aren't handled by this app yet"), 0)))))))
+      if(answer.hasMovingExpenses, unsupported("Moving expenses on the Quebec return (form TP-348-V) aren't handled by this app yet"), 0)))))))))))))))))))))))))
 
   # Page 2 – contributions (not added into income)
   TP1.97:
@@ -298,8 +355,8 @@ lines:
     source: "Work Chart 142: support received less the non-taxable child support, as on the federal return"
   TP1.147:
     label: Social assistance payments
-    formula: "sum(RL5.boxA) + sum(RL5.boxB)"
-    source: "TP-1 line 147: boxes A and B of the RL-5 slip"
+    formula: "if(count(RL5.boxA) + count(RL5.boxB) > 0, sum(RL5.boxA) + sum(RL5.boxB), sum(T5007.box11))"
+    source: "Guide, line 147: boxes A and B of the RL-5 slip, or the amount on the T5007 slip (box 11) if you did not receive an RL-5"
   TP1.154:
     label: Other income
     formula: "sum(RL2.boxC)"
@@ -349,6 +406,10 @@ lines:
     formula: >-
       if(line.QC.couple == 1 and person.age >= 65, min(line.T1.21000, round(line.QCQ.20 * 50%, 2)), 0)
     source: "Schedule Q, line 22: up to 50% of line 20, for a person born before 1961. The app transfers what the federal T1032 splits (line 21000)"
+  TP1.246:
+    label: Deduction for a repayment of amounts overpaid to you
+    formula: "sum(T4E.box30)"
+    source: "Guide, line 246: Employment Insurance benefits repaid (box 30 of the T4E), other than the repayment of line 250, point 3. Revenu Québec can instead give the credit of line 462, point 8, for benefits of an earlier year, on request; no other repayment of line 246 is handled"
   TP1.248:
     label: Deduction for QPP and CPP contributions and QPIP premiums
     formula: >-
@@ -356,11 +417,15 @@ lines:
       unsupported("QPP in the year you turned 18 is prorated by month, and none is due before 18 or from the year you turn 73 (Schedule U): this app doesn't handle QPP contributions at those ages yet"),
       if(line.QCU.33 > 0, line.QCU.124, line.QCU.23) + line.QCR.26)
     source: "TP-1 line 248: Schedule U, Part B line 23 (employees) or Part C line 124 (self-employed), plus Schedule R line 26"
+  TP1.250:
+    label: Other deductions
+    formula: "line.T1.23500"
+    source: "Guide, line 250, point 3 (code 03): the EI benefits, OAS pension and net federal supplements to repay, the amount on line 23500 of the federal return. No other deduction of line 250 is handled"
   TP1.254:
     label: Total deductions
     formula: >-
       line.TP1.201 + line.TP1.205 + line.TP1.207 + line.TP1.214 + line.TP1.215 + line.TP1.225 + line.TP1.231 + line.TP1.245
-      + line.TP1.248
+      + line.TP1.246 + line.TP1.248 + line.TP1.250
     source: "TP-1 line 254: lines 201 through 207, 214 through 231 and 234 through 252"
   TP1.256:
     label: Net income before adjustment
@@ -440,9 +505,13 @@ lines:
   TP1.393:
     label: Donations and gifts
     formula: >-
-      if(family.partnerInYear and spouse.answer.claimSpouseDonations and line.HH.partner == 1, 0, line.QC.ownDonations)
-      + if(family.partnerInYear and answer.claimSpouseDonations and line.HH.partner == 1, spouse.line.QC.ownDonations, 0)
-    source: "Work Chart 395, line 1: monetary donations made in 2025. Whoever claims both spouses' donations on the federal return claims them here too"
+      if(line.QC.couple == 1 and spouse.answer.claimSpouseDonations, 0, line.QC.ownDonations)
+      + if(family.partnerInYear and answer.claimSpouseDonations and line.HH.partner == 1,
+      if(line.QC.couple == 1, spouse.line.QC.ownDonations, spouse.line.OWN.donations), 0)
+    source: >-
+      Work Chart 395, line 1: monetary donations made in 2025. Whoever claims both spouses' donations on the federal
+      return claims them here too. A spouse outside Quebec has no TP-1 to claim on: their receipts are the ones on
+      their federal return, and yours stay on yours
   TP1.395:
     label: Tax credits for donations and gifts
     formula: >-

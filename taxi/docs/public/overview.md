@@ -46,8 +46,9 @@ income, what you earned and your expenses.
 
 ## Who it is for
 
-Residents of every Canadian province and territory, including people who moved to or from Canada during the year. For a
-resident of Quebec, Taxi prepares both returns: the federal return and Revenu Québec's TP-1.
+Residents of every Canadian province and territory, including people who moved to or from Canada during the year,
+except in Quebec. For a resident of Quebec, Taxi prepares both returns: the federal return and Revenu Québec's TP-1;
+a Quebec return for the year of a move to or from Canada isn't handled yet.
 
 The returns cover:
 

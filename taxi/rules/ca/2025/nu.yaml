@@ -155,25 +155,28 @@ lines:
   NU428.10:
     label: Nunavut age amount
     formula: >-
-      round((if(person.age >= 65, max(0, param.nuAgeAmountMax - round(max(0, line.T1.23600 - param.nuAgeAmountThreshold) * param.nuAgeAmountRate, 2)), 0)) * line.RES.factor, 2)
-    source: "Worksheet NU428, line 58080: for people born in 1960 or earlier"
+      if(person.age >= 65, max(0, round(param.nuAgeAmountMax * line.RES.factor, 2)
+      - round(max(0, line.T1.23600 - round(param.nuAgeAmountThreshold * line.RES.factor, 2)) * param.nuAgeAmountRate, 2)), 0)
+    source: "Worksheet NU428, line 58080: for people born in 1960 or earlier, $12,303 less 15% of net income over $45,522 (both amounts prorated for a part-year resident: canada.ca, Completing your return for newcomers, Example 2)"
+  # For a part-year resident, the base is prorated, and then the net income is subtracted, not prorated (canada.ca,
+  # completing a return for newcomers, Example 3 for line 30300).
   NU428.13:
     label: Nunavut spouse or common-law partner amount
     formula: >-
-      round((if(line.HH.partner == 1, max(0, param.nuSpouseBase - line.HH.spouseNetIncome), 0)) * line.RES.factor, 2)
+      round(if(line.HH.partner == 1, max(0, round(param.nuSpouseBase * line.RES.factor, 2) - line.HH.spouseNetIncome), 0), 2)
 
   NU428.16:
     label: Nunavut amount for an eligible dependant
     formula: >-
-      round((if(line.HH.partner == 0 and family.childrenUnder18 > 0, max(0, param.nuSpouseBase - answer.dependantNetIncome), 0)) * line.RES.factor, 2)
+      round(if(line.HH.partner == 0 and family.childrenUnder18 > 0, max(0, round(param.nuSpouseBase * line.RES.factor, 2) - answer.dependantNetIncome), 0), 2)
     source: "NU428 lines 14 to 16: the base minus their net income"
   # The worksheet's infirm dependant amount, which needn't live with you, rather than the caregiver amount (line 28),
   # which needs a dependant living with you: the app doesn't ask where they live. One dependant, as line 30450.
   NU428.17:
     label: Nunavut amount for infirm dependants age 18 or older
     formula: >-
-      round((if(line.T1.30450 > 0, min(param.nuInfirmDependantMax, max(0, param.nuInfirmDependantBase - answer.infirmDependantIncome)), 0)) * line.RES.factor, 2)
-    source: "Worksheet NU428, line 58200: $14,305 less the dependant's net income, up to $5,914"
+      if(line.T1.30450 > 0, min(round(param.nuInfirmDependantMax * line.RES.factor, 2), max(0, round(param.nuInfirmDependantBase * line.RES.factor, 2) - answer.infirmDependantIncome)), 0)
+    source: "Worksheet NU428, line 58200: $14,305 less the dependant's net income, up to $5,914 (both prorated for a part-year resident before the income comes off)"
   # Only one spouse claims the amount for each young child. The one with the higher net income claims it (the person
   # preparing when they are equal), unless the other lives outside Nunavut; what they can't use moves to the other on
   # NU(S2).
@@ -222,12 +225,12 @@ lines:
     source: "NU428 line 34 (58560): Schedule NU(S11)"
   NU428.35:
     label: Nunavut tuition, education and textbook amounts transferred from a child or grandchild
-    formula: "line.CHILD.provincialTuition"
-    source: "NU428 line 35 (58600): the territorial amount designated to you on their T2202 (the app takes the federal one, line 32400)"
+    formula: "round(line.CHILD.provincialTuition * line.RES.factor, 2)"
+    source: "NU428 line 35 (58600): the territorial amount designated to you on their T2202 (the app takes the federal one, line 32400). Prorated for a part-year resident (RC4018, Appendix K)"
   NU428.36:
     label: Amounts transferred from your spouse or common-law partner
-    formula: "if(line.HH.partner == 1 and family.partnerInYear, line.NUS2.13, 0)"
-    source: "NU428 line 36 (58640): Schedule NU(S2)"
+    formula: "if(line.HH.partner == 1 and family.partnerInYear, round(line.NUS2.13 * line.RES.factor, 2), 0)"
+    source: "NU428 line 36 (58640): Schedule NU(S2). Prorated for a part-year resident (RC4018, Appendix K); the schedule shows the whole transfer"
   NU428.43:
     label: Allowable medical expenses
     formula: "max(0, line.T1.33099 - min(param.nuMedicalThresholdMax, round(line.T1.23600 * param.medicalThresholdRate, 2)))"
@@ -283,7 +286,8 @@ lines:
   # full-time months first, up to 12 in all.
   NUS11.1:
     label: Unused Nunavut tuition, education and textbook amounts from your 2024 notice of assessment
-    formula: "answer.unusedProvincialTuition"
+    formula: 'if(person.province == "AB", 0, answer.unusedProvincialTuition)'
+    source: "None for a spouse in Alberta, whose own return doesn't carry unused provincial tuition forward (Schedule NU(S2) reads this schedule for them)"
   NUS11.9:
     label: Tuition, education and textbook amounts for 2025
     formula: >-

@@ -458,8 +458,8 @@ lines:
     label: Deductions
     formula: >-
       line.QCR.26 + line.QCU.101 + line.QCU.103 + if(line.QCU.33 > 0, min(line.QCU.94 - line.QCU.48, line.QCU.99), 0)
-      + line.TP1.245 + line.TP1.225 + line.TP1.231
-    source: "Schedule F, lines 41 to 68: Schedule R line 26, Schedule U lines 101, 103 and 115, and lines 245, 225 and 231"
+      + line.TP1.246 + line.EI.repayment + line.TP1.245 + line.TP1.225 + line.TP1.231
+    source: "Schedule F, lines 41 to 68: line 246 (EI benefits repaid, line 41), Schedule R line 26, Schedule U lines 101, 103 and 115, the EI benefits to repay on the federal return (line 44: the EI part of line 250, point 3; the OAS part is left out with line 114), and lines 245, 225 and 231"
   QCF.70:
     label: Income subject to the contribution
     formula: "max(0, line.QCF.36 - line.QCF.68)"

@@ -444,11 +444,11 @@ params:
     value: 30639
   cwbReductionRate:
     label: Canada workers benefit reduction rate
-    source: "Schedule 6, lines 26 and 38: 15%"
+    source: "Schedule 6, lines 26 and 38: 15% (the same on 5009-S6, Alberta's)"
     value: 15%
   cwbReductionRateBothDisabled:
     label: Disability supplement reduction rate when both spouses are eligible for the disability tax credit
-    source: "Schedule 6, line 38: 7.5%"
+    source: "Schedule 6, line 38: 7.5% (the same on 5009-S6, Alberta's)"
     value: 7.5%
   cwbSecondaryEarnerMax:
     label: Most secondary earner exemption
@@ -460,7 +460,7 @@ params:
     value: 1150
   cwbDisabilityMax:
     label: Most Canada workers benefit disability supplement
-    source: "Schedule 6, line 34: $843"
+    source: "Schedule 6, line 34: $843 (the same on 5009-S6, Alberta's)"
     value: 843
   cwbDisabilityIncomeBaseSingle:
     label: Adjusted family net income where the disability supplement starts to go down, single
@@ -472,8 +472,12 @@ params:
     value: 49389
   cwbFamilyLimit:
     label: Adjusted family net income from which a family gets no Canada workers benefit
-    source: "Schedule 6, the chart of limits: $49,393 for the basic benefit, $55,009 with the disability supplement"
-    value: 55009
+    source: "Schedule 6, page 3, the chart of limits: $60,629, the highest (an eligible spouse, both eligible for the disability tax credit)"
+    value: 60629
+  cwbFamilyLimitBasic:
+    label: Adjusted family net income from which a family gets no basic Canada workers benefit
+    source: "Schedule 6, page 3, the chart of limits: $49,393 for the basic CWB with an eligible spouse or dependant"
+    value: 49393
   cwbStudentMonths:
     label: Months of full-time study a person can have and still get the Canada workers benefit
     source: "Schedule 6: not a full-time student for more than 13 weeks in the year, unless they had an eligible dependant"
@@ -576,6 +580,130 @@ params:
     label: Adjusted family net income from which a family in Quebec gets no Canada workers benefit
     source: "5005-S6, the chart of limits: $60,017.19, the highest (an eligible spouse, no dependant, both eligible for the disability tax credit)"
     value: 60017.19
+  cwbQcFamilyLimitBasic:
+    label: Adjusted family net income from which a family in Quebec gets no basic Canada workers benefit
+    source: "5005-S6, page 3, the chart of limits: $51,504.09 for the basic CWB with an eligible spouse and no dependant, the higher of the two with a spouse ($41,048.90 with a dependant)"
+    value: 51504.09
+  # Schedule 6 for residents of Alberta (5009-S6): its own base amounts, rates and maximums. Its reduction rates (lines
+  # 26 and 38) and the most disability supplement (line 34) are the same as 5000-S6's: cwbReductionRate,
+  # cwbReductionRateBothDisabled and cwbDisabilityMax.
+  cwbAbWorkingIncomeBase:
+    label: Working income where the basic Canada workers benefit starts, Alberta
+    source: "5009-S6, line 17: $2,760"
+    value: 2760
+  cwbAbRate:
+    label: Canada workers benefit rate on working income, Alberta
+    source: "5009-S6, line 19: 21%"
+    value: 21%
+  cwbAbMaxSingle:
+    label: Most basic Canada workers benefit, Alberta, single
+    source: "5009-S6, line 21: $1,750"
+    value: 1750
+  cwbAbMaxFamily:
+    label: Most basic Canada workers benefit, Alberta, with an eligible spouse or dependant
+    source: "5009-S6, line 21: $2,619"
+    value: 2619
+  cwbAbIncomeBaseSingle:
+    label: Adjusted family net income where the basic benefit starts to go down, Alberta, single
+    source: "5009-S6, line 24: $26,159"
+    value: 26159
+  cwbAbIncomeBaseFamily:
+    label: Adjusted family net income where the basic benefit starts to go down, Alberta, with an eligible spouse or dependant
+    source: "5009-S6, line 24: $32,772"
+    value: 32772
+  cwbAbDisabilityWorkingBase:
+    label: Working income where the disability supplement starts, Alberta
+    source: "5009-S6, line 30: $910"
+    value: 910
+  cwbAbDisabilityRate:
+    label: Disability supplement rate on working income, Alberta
+    source: "5009-S6, line 32: 26%"
+    value: 26%
+  cwbAbDisabilityIncomeBaseSingle:
+    label: Adjusted family net income where the disability supplement starts to go down, Alberta, single
+    source: "5009-S6, line 36: $37,826"
+    value: 37826
+  cwbAbDisabilityIncomeBaseFamily:
+    label: Adjusted family net income where the disability supplement starts to go down, Alberta, with an eligible spouse or dependant
+    source: "5009-S6, line 36: $50,232"
+    value: 50232
+  cwbAbFamilyLimit:
+    label: Adjusted family net income from which a family in Alberta gets no Canada workers benefit
+    source: "5009-S6, page 3, the chart of limits: $61,472, the highest (an eligible spouse, both eligible for the disability tax credit)"
+    value: 61472
+  cwbAbFamilyLimitBasic:
+    label: Adjusted family net income from which a family in Alberta gets no basic Canada workers benefit
+    source: "5009-S6, page 3, the chart of limits: $50,232 for the basic CWB with an eligible spouse or dependant"
+    value: 50232
+  # Schedule 6 for residents of Nunavut (5014-S6).
+  cwbNuWorkingIncomeBase:
+    label: Working income where the basic Canada workers benefit starts, Nunavut
+    source: "5014-S6, line 17: $6,000"
+    value: 6000
+  cwbNuRate:
+    label: Canada workers benefit rate on working income, Nunavut
+    source: "5014-S6, line 19: 14%"
+    value: 14%
+  cwbNuMaxSingle:
+    label: Most basic Canada workers benefit, Nunavut, single
+    source: "5014-S6, line 21: $1,621"
+    value: 1621
+  cwbNuMaxFamily:
+    label: Most basic Canada workers benefit, Nunavut, with an eligible spouse or dependant
+    source: "5014-S6, line 21: $2,435"
+    value: 2435
+  cwbNuIncomeBaseSingle:
+    label: Adjusted family net income where the basic benefit starts to go down, Nunavut, single
+    source: "5014-S6, line 24: $26,832"
+    value: 26832
+  cwbNuIncomeBaseFamily:
+    label: Adjusted family net income where the basic benefit starts to go down, Nunavut, with an eligible spouse or dependant
+    source: "5014-S6, line 24: $36,927"
+    value: 36927
+  cwbNuReductionRateSingle:
+    label: Basic benefit reduction rate, Nunavut, single
+    source: "5014-S6, line 26: 4%"
+    value: 4%
+  cwbNuReductionRateFamily:
+    label: Basic benefit reduction rate, Nunavut, with an eligible spouse or dependant
+    source: "5014-S6, line 26: 8%"
+    value: 8%
+  cwbNuDisabilityWorkingBase:
+    label: Working income where the disability supplement starts, Nunavut
+    source: "5014-S6, line 30: $4,800"
+    value: 4800
+  cwbNuDisabilityRate:
+    label: Disability supplement rate on working income, Nunavut
+    source: "5014-S6, line 32: 26%"
+    value: 26%
+  cwbNuDisabilityMax:
+    label: Most Canada workers benefit disability supplement, Nunavut
+    source: "5014-S6, line 34: $936"
+    value: 936
+  cwbNuDisabilityIncomeBaseSingle:
+    label: Adjusted family net income where the disability supplement starts to go down, Nunavut, single
+    source: "5014-S6, line 36: $67,357"
+    value: 67357
+  cwbNuDisabilityIncomeBaseFamily:
+    label: Adjusted family net income where the disability supplement starts to go down, Nunavut, with an eligible spouse or dependant
+    source: "5014-S6, line 36: $67,365"
+    value: 67365
+  cwbNuDisabilityReductionRate:
+    label: Disability supplement reduction rate, Nunavut
+    source: "5014-S6, line 38: 12%"
+    value: 12%
+  cwbNuReductionRateBothDisabled:
+    label: Disability supplement reduction rate when both spouses are eligible for the disability tax credit, Nunavut
+    source: "5014-S6, line 38: 6% if you had an eligible spouse who is also eligible for the DTC"
+    value: 6%
+  cwbNuFamilyLimit:
+    label: Adjusted family net income from which a family in Nunavut gets no Canada workers benefit
+    source: "5014-S6, page 3, the chart of limits: $82,965, the highest (an eligible spouse, both eligible for the disability tax credit)"
+    value: 82965
+  cwbNuFamilyLimitBasic:
+    label: Adjusted family net income from which a family in Nunavut gets no basic Canada workers benefit
+    source: "5014-S6, page 3, the chart of limits: $67,365 for the basic CWB with an eligible spouse or dependant"
+    value: 67365
   trainingCreditRate:
     label: Canada training credit, share of tuition
     source: "Schedule 11, line 2: 50%"
@@ -607,10 +735,24 @@ lines:
   SPOUSES.together:
     label: Both spouses' returns are prepared here (1 for yes)
     formula: "if(family.partnerInYear and line.HH.partner == 1, 1, 0)"
+  # A spouse who moved to or from Canada has only their income while resident on line 23600. The credits take off
+  # their net income for the part of the year you were resident (canada.ca, Completing your return for newcomers,
+  # Example 3): their world income for 2025 if you were resident all year, their line 23600 if you both lived here the
+  # same days. Otherwise how their income splits over your days isn't known: their world income for the year is taken,
+  # which never claims more than allowed but can claim less. Your answer, when their return isn't prepared here, is
+  # their world income for 2025.
+  HH.spouseWorldIncome:
+    label: Your spouse's or partner's net world income for 2025
+    formula: >-
+      if(line.HH.partner == 1, if(family.partnerInYear, spouse.line.T1.23600
+      + if(spouse.person.residentAllYear, 0, spouse.answer.nonResidentIncome), answer.spouseNetIncome), 0)
+    source: "T1, Step 1, and canada.ca, Completing your return for newcomers: their net world income for 2025 whatever their residency, line 23600 of their return plus their world income while not resident; otherwise from your answer"
   HH.spouseNetIncome:
     label: Your spouse's or partner's net income
-    formula: "if(line.HH.partner == 1, if(family.partnerInYear, spouse.line.T1.23600, answer.spouseNetIncome), 0)"
-    source: "From their return when both returns are prepared here; otherwise from your answer"
+    formula: >-
+      if(line.HH.partner == 1 and family.partnerInYear and not person.residentAllYear and not spouse.person.residentAllYear
+      and line.RES.days == spouse.line.RES.days, spouse.line.T1.23600, line.HH.spouseWorldIncome)
+    source: "Their net income for the part of 2025 you were resident: their line 23600 when you both lived in Canada the same days, else their world income for 2025"
 
   # Step 2 – Total income
   T1.10100:
@@ -1398,16 +1540,21 @@ lines:
   # Step 5 Part B – Federal non-refundable tax credits
   # Part-year residents (the year they moved to or from Canada): these personal amounts are prorated by the days they
   # lived in Canada, unless their income from Canada while not resident was 90% or more of their world income then.
-  # The other credits count only what was paid or earned while resident, which the slips and answers already are.
+  # An amount that someone's net income reduces is prorated before the income comes off: the form's dollar amounts (the
+  # maximum, and the base the income is compared with) are each multiplied by RES.factor and rounded to the cent, the
+  # income isn't, and the caps still apply. canada.ca, "Completing your return for newcomers", Examples 2 and 3: 100/365
+  # × $16,129 = $4,418.90, less the spouse's net income of $800 = $3,618.90 on line 30300. With a factor of 1 nothing
+  # changes. The other credits count only what was paid or earned while resident, which the slips and answers already
+  # are.
   RES.days:
     label: Days you lived in Canada in 2025
     formula: "if(person.residentAllYear, param.daysInYear, min(param.daysInYear, answer.daysResident))"
   RES.full:
     label: Full personal amounts while not resident (1 for yes)
     formula: >-
-      if(person.residentAllYear, 1, if(answer.nonResidentIncome == 0
-      or answer.nonResidentCanadianIncome >= round(answer.nonResidentIncome * param.nonResidentCanadaShare, 2), 1, 0))
-    source: "canada.ca, newcomers and emigrants: the full amounts when Canadian income was 90% or more of world income for the part of the year not resident"
+      if(person.residentAllYear, 1, if(answer.nonResidentIncome > 0
+      and answer.nonResidentCanadianIncome >= round(answer.nonResidentIncome * param.nonResidentCanadaShare, 2), 1, 0))
+    source: "canada.ca, newcomers and emigrants: the full amounts when Canadian income was 90% or more of world income for the part of the year not resident. RC4018, Appendix K: for 2024 and later years, a part-year resident with no world income in that part of the year hasn't met the 90% rule"
   RES.factor:
     label: Share of the personal amounts you can claim
     formula: "if(person.residentAllYear, 1, max(line.RES.full, line.RES.days / param.daysInYear))"
@@ -1425,30 +1572,33 @@ lines:
   T1.30100:
     label: Age amount
     formula: >-
-      round((if(person.age >= 65, max(0, param.ageAmountMax - round(max(0, line.T1.23600 - param.ageAmountThreshold) * param.ageAmountRate, 2)), 0)) * line.RES.factor, 2)
-    source: "Federal Worksheet, line 30100: for people born in 1960 or earlier"
-  FULL.30300:
-    label: Spouse or common-law partner amount for a full year
-    formula: "if(line.HH.partner == 1, max(0, line.FULL.30000 + if(answer.spouseInfirm, param.caregiverChildAmount, 0) - line.HH.spouseNetIncome), 0)"
+      if(person.age >= 65, max(0, round(param.ageAmountMax * line.RES.factor, 2)
+      - round(max(0, line.T1.23600 - round(param.ageAmountThreshold * line.RES.factor, 2)) * param.ageAmountRate, 2)), 0)
+    source: "Federal Worksheet, line 30100: for people born in 1960 or earlier, $9,028 less 15% of net income over $45,522 (both amounts prorated for a part-year resident: canada.ca, Completing your return for newcomers, Example 2)"
+  S5.3:
+    label: Spouse or common-law partner amount before their net income
+    formula: "if(line.HH.partner == 1, line.T1.30000 + if(answer.spouseInfirm, round(param.caregiverChildAmount * line.RES.factor, 2), 0), 0)"
+    source: "Schedule 5, line 30300, lines 1 to 3: your basic personal amount (line 30000), plus $2,687 for a spouse with an infirmity, prorated as line 30000 is"
   T1.30300:
     label: Spouse or common-law partner amount
-    formula: >-
-      round(line.FULL.30300 * line.RES.factor, 2)
-    source: "Schedule 5 line 30300: your basic personal amount (plus $2,687 for a spouse with an infirmity) minus their net income"
+    formula: "if(line.HH.partner == 1, max(0, line.S5.3 - line.HH.spouseNetIncome), 0)"
+    source: "Schedule 5, line 30300, lines 4 and 5: line 3 minus their net income"
   T1.30400:
     label: Amount for an eligible dependant
-    formula: >-
-      round((if(line.HH.partner == 0 and family.childrenUnder18 > 0, max(0, line.FULL.30000 - answer.dependantNetIncome), 0)) * line.RES.factor, 2)
-    source: "Schedule 5 line 30400: for a single parent, one child under 18 who lived with you: your basic personal amount minus their net income"
+    formula: "if(line.HH.partner == 0 and family.childrenUnder18 > 0, max(0, line.T1.30000 - answer.dependantNetIncome), 0)"
+    source: "Schedule 5 line 30400: for a single parent, one child under 18 who lived with you: your basic personal amount (line 30000) minus their net income"
   T1.30425:
     label: Canada caregiver amount for spouse or common-law partner
     formula: >-
-      round((if(line.HH.partner == 1 and answer.spouseInfirm, max(0, min(param.caregiverMax, max(0, param.caregiverBase - line.HH.spouseNetIncome)) - line.FULL.30300), 0)) * line.RES.factor, 2)
-    source: "Schedule 5 line 30425: $28,798 less their net income (up to $8,601), less the spouse amount"
+      if(line.HH.partner == 1 and answer.spouseInfirm, max(0, min(round(param.caregiverMax * line.RES.factor, 2),
+      max(0, round(param.caregiverBase * line.RES.factor, 2) - line.HH.spouseNetIncome)) - line.T1.30300), 0)
+    source: "Schedule 5 line 30425: $28,798 less their net income (up to $8,601), less the spouse amount on line 30300"
   T1.30450:
     label: Canada caregiver amount for other infirm dependants age 18 or older
     formula: >-
-      round((if(answer.hasInfirmDependant, if(answer.infirmDependants > 1, unsupported("The Canada caregiver amount for more than one adult dependant isn't handled by this app yet"), if(answer.infirmDependants == 0, 0, min(param.caregiverMax, max(0, param.caregiverBase - answer.infirmDependantIncome)))), 0)) * line.RES.factor, 2)
+      if(answer.hasInfirmDependant, if(answer.infirmDependants > 1, unsupported("The Canada caregiver amount for more than one adult dependant isn't handled by this app yet"),
+      if(answer.infirmDependants == 0, 0, min(round(param.caregiverMax * line.RES.factor, 2),
+      max(0, round(param.caregiverBase * line.RES.factor, 2) - answer.infirmDependantIncome)))), 0)
     source: "Schedule 5 line 30450: $28,798 less the dependant's net income, up to $8,601"
   T1.30500:
     label: Canada caregiver amount for infirm children under 18 years of age
@@ -1579,17 +1729,19 @@ lines:
   T1.32300:
     label: Federal tuition amount
     formula: "line.S11.17"
+  # A part-year resident's transfers are prorated like the personal amounts (RC4018, Appendix K: lines 32400 and 32600).
   T1.32400:
     label: Tuition amount transferred from a child or grandchild
-    formula: "answer.childTuitionTransfer"
+    formula: "round(answer.childTuitionTransfer * line.RES.factor, 2)"
+    source: "The amount the student designates to you on their T2202"
   CHILD.provincialTuition:
     label: Provincial or territorial tuition transferred from a child or grandchild
     formula: "if(answer.childTuitionTransfer == 0, 0, answer.childProvincialTuitionTransfer)"
     source: "The amount on the student's T2202 for your province or territory, asked once a federal amount is transferred"
   T1.32600:
     label: Amounts transferred from your spouse or common-law partner
-    formula: "if(line.HH.partner == 1 and family.partnerInYear, line.S2.13, 0)"
-    source: "Schedule 2: their unused age amount and the tuition they designate to you"
+    formula: "if(line.HH.partner == 1 and family.partnerInYear, round(line.S2.13 * line.RES.factor, 2), 0)"
+    source: "Schedule 2, line 13: their unused age amount and the tuition they designate to you"
   T1.33099:
     label: Medical expenses for you, your spouse and your children
     formula: "if(family.partnerInYear and spouse.answer.claimSpouseMedical and line.HH.partner == 1, 0, line.OWN.medical) + if(family.partnerInYear and answer.claimSpouseMedical and line.HH.partner == 1, spouse.line.OWN.medical, 0)"
@@ -1743,7 +1895,8 @@ lines:
   # Schedule 6 – Canada workers benefit. A couple's basic benefit is claimed once: on the return of the spouse with the
   # higher working income (the person preparing when equal); each spouse claims their own disability supplement.
   # A resident of Quebec uses Schedule 6 for residents of Quebec (5005-S6): the same steps with Quebec's amounts and
-  # rates, which depend on four family types instead of two. CWB.workingBase to CWB.familyLimit pick them.
+  # rates, which depend on four family types instead of two. Alberta (5009-S6) and Nunavut (5014-S6) have their own
+  # amounts and rates too. CWB.familyLimit to CWB.disabilityReductionRate pick them.
   CWB.working:
     label: Working income
     formula: "line.T1.10100 + line.T1.10400 + line.T1.13010 + line.SE.earned"
@@ -1761,11 +1914,14 @@ lines:
     formula: "if(sum(T2202.box25) > param.cwbStudentMonths and line.CWB.dependant == 0, 1, 0)"
   CWB.spouse:
     label: An eligible spouse (1 for yes)
-    formula: "if(line.HH.partner == 1, if(family.partnerInYear, if(spouse.line.CWB.student == 1, 0, 1), 1), 0)"
+    formula: >-
+      if(line.HH.partner == 1, if(family.partnerInYear, if(spouse.line.CWB.student == 1 or not spouse.person.residentAllYear, 0, 1),
+      1), 0)
+    source: "Schedule 6 and Income Tax Act 122.7(1), eligible spouse: resident in Canada throughout the year, and not a full-time student for more than 13 weeks. Without one, you claim as a person with no spouse"
   CWB.eligible:
     label: Eligible for the Canada workers benefit (1 for yes)
-    formula: "if(person.residentAllYear and line.CWB.student == 0 and (person.age >= 19 or line.CWB.spouse == 1 or line.CWB.dependant == 1), 1, 0)"
-    source: "Schedule 6: resident in Canada all year, 19 or older (or with a spouse or a child) and not a full-time student for more than 13 weeks"
+    formula: "if(person.residentAllYear and line.CWB.student == 0 and (person.age >= 19 or line.HH.partner == 1 or line.CWB.dependant == 1), 1, 0)"
+    source: "Schedule 6: resident in Canada all year, 19 or older (or living with a spouse or partner, or a child) and not a full-time student for more than 13 weeks"
   CWB.familyWorking:
     label: Family working income
     formula: "line.CWB.working + if(line.CWB.spouse == 1 and family.partnerInYear, spouse.line.CWB.working, 0)"
@@ -1782,65 +1938,86 @@ lines:
     source: "Schedule 6, lines 13 to 15: with the secondary earner exemption (up to $16,386). With a spouse whose return isn't prepared here, a family that might get the benefit is asked to prepare it; one that can't is put at the limit"
   CWB.familyLimit:
     label: Adjusted family net income from which a family gets no Canada workers benefit
-    formula: 'if(person.province == "QC", param.cwbQcFamilyLimit, param.cwbFamilyLimit)'
-    source: "Schedule 6 (5005-S6 in Quebec), the chart of limits: the highest limit"
+    formula: >-
+      if(answer.hasDisability,
+      if(person.province == "QC", param.cwbQcFamilyLimit, if(person.province == "AB", param.cwbAbFamilyLimit,
+      if(person.province == "NU", param.cwbNuFamilyLimit, param.cwbFamilyLimit))),
+      if(person.province == "QC", param.cwbQcFamilyLimitBasic, if(person.province == "AB", param.cwbAbFamilyLimitBasic,
+      if(person.province == "NU", param.cwbNuFamilyLimitBasic, param.cwbFamilyLimitBasic))))
+    source: "Schedule 6 (5005-S6 in Quebec, 5009-S6 in Alberta, 5014-S6 in Nunavut), the chart of limits with an eligible spouse: the basic CWB's, or for a person eligible for the disability tax credit the highest, both spouses eligible for it (the spouse's isn't known without their return)"
   CWB.workingBase:
     label: Working income where the basic benefit starts
     formula: >-
       if(person.province == "QC", if(line.CWB.spouse == 1, param.cwbQcWorkingIncomeBaseSpouse, param.cwbQcWorkingIncomeBase),
-      param.cwbWorkingIncomeBase)
-    source: "Schedule 6, line 17: $3,000. In Quebec, 5005-S6 line 17: $3,600 with an eligible spouse, else $2,400"
+      if(person.province == "AB", param.cwbAbWorkingIncomeBase, if(person.province == "NU", param.cwbNuWorkingIncomeBase,
+      param.cwbWorkingIncomeBase)))
+    source: "Schedule 6, line 17: $3,000. In Quebec, 5005-S6 line 17: $3,600 with an eligible spouse, else $2,400. In Alberta, 5009-S6: $2,760; in Nunavut, 5014-S6: $6,000"
   CWB.rate:
     label: Basic benefit rate on working income
     formula: >-
       if(person.province == "QC", if(line.CWB.dependant == 1, if(line.CWB.spouse == 1, param.cwbQcRateSpouseDependant, param.cwbQcRateDependant),
-      param.cwbQcRate), param.cwbRate)
-    source: "Schedule 6, line 19: 27%. In Quebec, 5005-S6 line 19: 20% with an eligible dependant and no eligible spouse, 23.9% with both, else 37.3%"
+      param.cwbQcRate), if(person.province == "AB", param.cwbAbRate, if(person.province == "NU", param.cwbNuRate, param.cwbRate)))
+    source: "Schedule 6, line 19: 27%. In Quebec, 5005-S6 line 19: 20% with an eligible dependant and no eligible spouse, 23.9% with both, else 37.3%. In Alberta, 5009-S6: 21%; in Nunavut, 5014-S6: 14%"
   CWB.max:
     label: Most basic Canada workers benefit
     formula: >-
       if(person.province == "QC", if(line.CWB.spouse == 1, if(line.CWB.dependant == 1, param.cwbQcMaxSpouseDependant, param.cwbQcMaxSpouse),
       if(line.CWB.dependant == 1, param.cwbQcMaxDependant, param.cwbQcMaxSingle)),
-      if(line.CWB.spouse == 1 or line.CWB.dependant == 1, param.cwbMaxFamily, param.cwbMaxSingle))
-    source: "Schedule 6, line 21 (5005-S6 line 21 in Quebec, by family type)"
+      if(line.CWB.spouse == 1 or line.CWB.dependant == 1,
+      if(person.province == "AB", param.cwbAbMaxFamily, if(person.province == "NU", param.cwbNuMaxFamily, param.cwbMaxFamily)),
+      if(person.province == "AB", param.cwbAbMaxSingle, if(person.province == "NU", param.cwbNuMaxSingle, param.cwbMaxSingle))))
+    source: "Schedule 6, line 21 (5005-S6 line 21 in Quebec, by family type; 5009-S6 in Alberta; 5014-S6 in Nunavut)"
   CWB.incomeBase:
     label: Adjusted family net income where the basic benefit starts to go down
     formula: >-
       if(person.province == "QC", if(line.CWB.spouse == 1, if(line.CWB.dependant == 1, param.cwbQcIncomeBaseSpouseDependant, param.cwbQcIncomeBaseSpouse),
       if(line.CWB.dependant == 1, param.cwbQcIncomeBaseDependant, param.cwbQcIncomeBaseSingle)),
-      if(line.CWB.spouse == 1 or line.CWB.dependant == 1, param.cwbIncomeBaseFamily, param.cwbIncomeBaseSingle))
-    source: "Schedule 6, line 24 (5005-S6 line 24 in Quebec, by family type)"
+      if(line.CWB.spouse == 1 or line.CWB.dependant == 1,
+      if(person.province == "AB", param.cwbAbIncomeBaseFamily, if(person.province == "NU", param.cwbNuIncomeBaseFamily, param.cwbIncomeBaseFamily)),
+      if(person.province == "AB", param.cwbAbIncomeBaseSingle, if(person.province == "NU", param.cwbNuIncomeBaseSingle, param.cwbIncomeBaseSingle))))
+    source: "Schedule 6, line 24 (5005-S6 line 24 in Quebec, by family type; 5009-S6 in Alberta; 5014-S6 in Nunavut)"
   CWB.reductionRate:
     label: Basic benefit reduction rate
-    formula: 'if(person.province == "QC", param.cwbQcReductionRate, param.cwbReductionRate)'
-    source: "Schedule 6, line 26: 15%. In Quebec, 5005-S6 line 26: 20%"
+    formula: >-
+      if(person.province == "QC", param.cwbQcReductionRate, if(person.province == "NU",
+      if(line.CWB.spouse == 1 or line.CWB.dependant == 1, param.cwbNuReductionRateFamily, param.cwbNuReductionRateSingle),
+      param.cwbReductionRate))
+    source: "Schedule 6, line 26: 15% (also in Alberta). In Quebec, 5005-S6 line 26: 20%. In Nunavut, 5014-S6 line 26: 8% with an eligible spouse or dependant, else 4%"
   CWB.disabilityWorkingBase:
     label: Working income where the disability supplement starts
-    formula: 'if(person.province == "QC", param.cwbQcDisabilityWorkingBase, param.cwbDisabilityWorkingBase)'
-    source: "Schedule 6, line 30: $1,150. In Quebec, 5005-S6 line 30: $1,200"
+    formula: >-
+      if(person.province == "QC", param.cwbQcDisabilityWorkingBase, if(person.province == "AB", param.cwbAbDisabilityWorkingBase,
+      if(person.province == "NU", param.cwbNuDisabilityWorkingBase, param.cwbDisabilityWorkingBase)))
+    source: "Schedule 6, line 30: $1,150. In Quebec, 5005-S6 line 30: $1,200. In Alberta, 5009-S6: $910; in Nunavut, 5014-S6: $4,800"
   CWB.disabilityRate:
     label: Disability supplement rate on working income
     formula: >-
-      if(person.province == "QC", if(line.CWB.spouse == 1, param.cwbQcDisabilityRateSpouse, param.cwbQcDisabilityRate), param.cwbRate)
-    source: "Schedule 6, line 32: 27%. In Quebec, 5005-S6 line 32: 20% with an eligible spouse, else 40%"
+      if(person.province == "QC", if(line.CWB.spouse == 1, param.cwbQcDisabilityRateSpouse, param.cwbQcDisabilityRate),
+      if(person.province == "AB", param.cwbAbDisabilityRate, if(person.province == "NU", param.cwbNuDisabilityRate, param.cwbRate)))
+    source: "Schedule 6, line 32: 27%. In Quebec, 5005-S6 line 32: 20% with an eligible spouse, else 40%. In Alberta (5009-S6) and Nunavut (5014-S6): 26%"
   CWB.disabilityMax:
     label: Most Canada workers benefit disability supplement
-    formula: 'if(person.province == "QC", param.cwbQcDisabilityMax, param.cwbDisabilityMax)'
-    source: "Schedule 6, line 34: $843. In Quebec, 5005-S6 line 34: $851.31"
+    formula: 'if(person.province == "QC", param.cwbQcDisabilityMax, if(person.province == "NU", param.cwbNuDisabilityMax, param.cwbDisabilityMax))'
+    source: "Schedule 6, line 34: $843 (also in Alberta). In Quebec, 5005-S6 line 34: $851.31. In Nunavut, 5014-S6: $936"
   CWB.disabilityIncomeBase:
     label: Adjusted family net income where the disability supplement starts to go down
     formula: >-
       if(person.province == "QC", if(line.CWB.spouse == 1, if(line.CWB.dependant == 1, param.cwbQcDisabilityIncomeBaseSpouseDependant,
       param.cwbQcDisabilityIncomeBaseSpouse), if(line.CWB.dependant == 1, param.cwbQcDisabilityIncomeBaseDependant, param.cwbQcDisabilityIncomeBaseSingle)),
-      if(line.CWB.spouse == 1 or line.CWB.dependant == 1, param.cwbDisabilityIncomeBaseFamily, param.cwbDisabilityIncomeBaseSingle))
-    source: "Schedule 6, line 36 (5005-S6 line 36 in Quebec, by family type)"
+      if(line.CWB.spouse == 1 or line.CWB.dependant == 1,
+      if(person.province == "AB", param.cwbAbDisabilityIncomeBaseFamily, if(person.province == "NU", param.cwbNuDisabilityIncomeBaseFamily,
+      param.cwbDisabilityIncomeBaseFamily)),
+      if(person.province == "AB", param.cwbAbDisabilityIncomeBaseSingle, if(person.province == "NU", param.cwbNuDisabilityIncomeBaseSingle,
+      param.cwbDisabilityIncomeBaseSingle))))
+    source: "Schedule 6, line 36 (5005-S6 line 36 in Quebec, by family type; 5009-S6 in Alberta; 5014-S6 in Nunavut)"
   CWB.disabilityReductionRate:
     label: Disability supplement reduction rate
     formula: >-
       if(line.CWB.spouse == 1 and family.partnerInYear and spouse.answer.hasDisability,
-      if(person.province == "QC", param.cwbQcReductionRateBothDisabled, param.cwbReductionRateBothDisabled),
-      if(person.province == "QC", param.cwbQcReductionRate, param.cwbReductionRate))
-    source: "Schedule 6, line 38: 15% (7.5% when both spouses have the disability tax credit). In Quebec, 5005-S6 line 38: 20% (10%)"
+      if(person.province == "QC", param.cwbQcReductionRateBothDisabled, if(person.province == "NU", param.cwbNuReductionRateBothDisabled,
+      param.cwbReductionRateBothDisabled)),
+      if(person.province == "QC", param.cwbQcReductionRate, if(person.province == "NU", param.cwbNuDisabilityReductionRate, param.cwbReductionRate)))
+    source: "Schedule 6, line 38: 15% (7.5% when both spouses have the disability tax credit), also in Alberta. In Quebec, 5005-S6 line 38: 20% (10%). In Nunavut, 5014-S6: 12% (6%)"
   CWB.claimsBasic:
     label: This return claims the couple's basic benefit (1 for yes)
     formula: >-
@@ -1852,13 +2029,13 @@ lines:
     formula: >-
       if(line.CWB.claimsBasic == 1, max(0, min(round(max(0, line.CWB.familyWorking - line.CWB.workingBase) * line.CWB.rate, 2), line.CWB.max)
       - round(max(0, line.CWB.familyIncome - line.CWB.incomeBase) * line.CWB.reductionRate, 2)), 0)
-    source: "Schedule 6, Step 2, lines 16 to 28: 27% of family working income over $3,000, up to the maximum, less 15% of adjusted family net income over the base (in Quebec, 5005-S6 Step 2 with its own amounts and rates)"
+    source: "Schedule 6, Step 2, lines 16 to 28: 27% of family working income over $3,000, up to the maximum, less 15% of adjusted family net income over the base (in Quebec, Alberta and Nunavut, Step 2 of 5005-S6, 5009-S6 or 5014-S6 with their own amounts and rates)"
   CWB.disability:
     label: Canada workers benefit disability supplement
     formula: >-
       if(line.CWB.eligible == 1 and answer.hasDisability, max(0, min(round(max(0, line.CWB.working - line.CWB.disabilityWorkingBase) * line.CWB.disabilityRate, 2),
       line.CWB.disabilityMax) - round(max(0, line.CWB.familyIncome - line.CWB.disabilityIncomeBase) * line.CWB.disabilityReductionRate, 2)), 0)
-    source: "Schedule 6, Step 3, lines 29 to 40: 27% of working income over $1,150, up to $843, less 15% (7.5% when both spouses have the disability tax credit) of adjusted family net income over the base (in Quebec, 5005-S6 Step 3 with its own amounts and rates)"
+    source: "Schedule 6, Step 3, lines 29 to 40: 27% of working income over $1,150, up to $843, less 15% (7.5% when both spouses have the disability tax credit) of adjusted family net income over the base (in Quebec, Alberta and Nunavut, Step 3 of 5005-S6, 5009-S6 or 5014-S6 with their own amounts and rates)"
   T1.45300:
     label: Canada workers benefit
     formula: "line.CWB.basic + line.CWB.disability"
@@ -1866,9 +2043,21 @@ lines:
   T1.41500:
     label: Advanced Canada workers benefit
     formula: >-
-      min(max(line.CWB.basic, line.T1.45300), if(line.CWB.claimsBasic == 1, sum(RC210.box10)
+      min(max(line.CWB.basic, line.T1.45300), if(line.CWB.reportsAdvance == 1, sum(RC210.box10)
       + if(family.partnerInYear and line.HH.partner == 1, sum(spouse.RC210.box10), 0), 0) + sum(RC210.box11))
-    source: "Schedule 6, Step 4: the advance payments (RC210 box 10 of both spouses, on the return claiming the basic benefit, and box 11), up to the benefit"
+    source: "Schedule 6, Step 4: the advance payments (RC210 box 10 of both spouses, on the return that reports them, and box 11), up to the benefit"
+  CWB.reportsAdvance:
+    label: This return reports the basic advance payments of RC210 box 10 (1 for yes)
+    formula: >-
+      if(line.CWB.claimsBasic == 1 or line.HH.partner == 0 or not family.partnerInYear, 1,
+      if(spouse.line.CWB.claimsBasic == 1, 0, if(person.role == "self", 1, 0)))
+    source: "Schedule 6, Step 4: with a spouse, only the person claiming the basic CWB reports box 10 of both spouses' RC210 slips; when neither claims it, one of them does as if claiming it (here the person preparing)"
+  CWB.schedule:
+    label: Schedule 6 goes with the return (1 for yes)
+    formula: >-
+      if(line.T1.45300 > 0 or sum(RC210.box10) + sum(RC210.box11) > 0
+      or (line.CWB.reportsAdvance == 1 and line.HH.partner == 1 and family.partnerInYear and sum(spouse.RC210.box10) > 0), 1, 0)
+    source: "Schedule 6, page 1: for the benefit on line 45300, and for an RC210 slip (yours, or your spouse's that you report): Step 4 is completed even when no benefit is claimed"
 
   # Schedule 11 – the Canada training credit: half the tuition, up to the limit on the notice of assessment.
   T1.45350:

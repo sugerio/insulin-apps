@@ -92,7 +92,8 @@ export const profile: DocTopic = {
           <p>
             The app prepares returns for every province and territory. A resident of Quebec gets two returns: the federal one and Revenu Québec's
             TP-1. If the person moved to or from Canada during the year, answer No: Personal info then asks for the days they lived in Canada and
-            their income for the rest of the year, and the personal amounts are reduced by the days in Canada.
+            their income for the rest of the year, and the personal amounts are reduced by the days in Canada. The app doesn't prepare a Quebec
+            return (TP-1) for the year of a move yet: it says so on that return.
           </p>
         </>
       ),
@@ -105,7 +106,8 @@ export const profile: DocTopic = {
           <p>
             People are saved as you add or change them, and who is in the year with <b>Save people</b>. The year's facts are saved with <b>Save</b> or{" "}
             <b>Save and continue</b>. If something is still missing, <b>Save and continue</b> saves what you entered and lists what is left.
-            When nothing is missing, the step shows a check mark.
+            When nothing is missing, the step shows a check mark. While it saves, the step can't be changed. If an answer doesn't fit, such as
+            part of a day, the answers aren't saved and the reason shows under it.
           </p>
           <p>
             If someone else changed the same year while you were editing, your save is refused and nothing is lost on their side. Choose{" "}

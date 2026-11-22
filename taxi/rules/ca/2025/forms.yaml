@@ -46,8 +46,9 @@ forms:
       spouseFirstName: { text: spouseFirstName, when: "line.HH.partner == 1" }
       # Known only when the spouse's return is prepared here too.
       spouseSelfEmployed: { tick: "line.SPOUSES.together == 1 and spouse.answer.hasSelfEmployment" }
-      # The CRA asks for the spouse's net income even when it is zero.
-      spouseNetIncome: { value: line.HH.spouseNetIncome, when: "line.HH.partner == 1", zero: true }
+      # The CRA asks for the spouse's net income even when it is zero: their net world income for 2025, whatever their
+      # residency (canada.ca, Completing your return for newcomers).
+      spouseNetIncome: { value: line.HH.spouseWorldIncome, when: "line.HH.partner == 1", zero: true }
       foreignPropertyYes: { tick: answer.hasForeignProperty }
       foreignPropertyNo: { tick: not answer.hasForeignProperty }
       # Step 2 – Total income
@@ -212,7 +213,8 @@ forms:
 
   # The T1 for residents of Quebec (5005-R): the same rows as 5006-R, numbered from row 49 on as quebec-spec 1.1 maps
   # them, with Quebec's PPIP rows (49, 91, 93), the refundable Quebec abatement (156) and the net EI overpayment (159),
-  # and no rows for lines 42100, 44800 and 47900. Its Schedules 6, 8 and 10 (5005-S6, -S8, -S10) aren't printed.
+  # and no rows for lines 42100, 44800 and 47900. Its Schedules 6, 8 and 10 (5005-S6, -S8, -S10) aren't printed, nor
+  # the rest of Canada's 5000-S6.
   T1QC:
     title: T1 Income Tax and Benefit Return for residents of Quebec
     url: https://www.canada.ca/content/dam/cra-arc/formspubs/pbg/5005-r/5005-r-25e.pdf
@@ -234,8 +236,9 @@ forms:
       spouseFirstName: { text: spouseFirstName, when: "line.HH.partner == 1" }
       # Known only when the spouse's return is prepared here too.
       spouseSelfEmployed: { tick: "line.SPOUSES.together == 1 and spouse.answer.hasSelfEmployment" }
-      # The CRA asks for the spouse's net income even when it is zero.
-      spouseNetIncome: { value: line.HH.spouseNetIncome, when: "line.HH.partner == 1", zero: true }
+      # The CRA asks for the spouse's net income even when it is zero: their net world income for 2025, whatever their
+      # residency (canada.ca, Completing your return for newcomers).
+      spouseNetIncome: { value: line.HH.spouseWorldIncome, when: "line.HH.partner == 1", zero: true }
       foreignPropertyYes: { tick: answer.hasForeignProperty }
       foreignPropertyNo: { tick: not answer.hasForeignProperty }
       # Step 2 – Total income
@@ -406,6 +409,9 @@ forms:
     title: Schedule 2, Federal Amounts Transferred From Your Spouse or Common-law Partner
     url: https://www.canada.ca/content/dam/cra-arc/formspubs/pbg/5000-s2/5000-s2-25e.pdf
     # Worked out only when both returns are prepared here (line 32600 is zero otherwise), so the spouse's lines are known.
+    # The schedule has no place for a part-year resident's proration: line 13 is the whole transfer, and line 32600 of
+    # the return the prorated amount (RC4018 does the same for a pre-bankruptcy return: line 32600 is prorated, the
+    # lines of Schedule 2 aren't).
     applies: "line.T1.32600 > 0"
     fields:
       "1": spouse.line.T1.30100
@@ -468,10 +474,11 @@ forms:
     # no boxes). The marital status change (55220, 55290) and the dependants' names, SIN and details stay blank.
     applies: "line.T1.30300 + line.T1.30400 + line.T1.30425 + line.T1.30450 > 0"
     fields:
-      # Line 30300. Also worked out when only the caregiver amount (30425) is claimed: it starts from line 2 here.
+      # Line 30300. Also worked out when only the caregiver amount (30425) is claimed: it starts from line 2 here. For a
+      # part-year resident, line 1 (line 30000) and the $2,687 on line 2 are prorated, and their net income isn't.
       "1": { value: line.T1.30000, when: "line.T1.30300 + line.T1.30425 > 0" }
-      "2": { value: param.caregiverChildAmount, when: "line.T1.30300 + line.T1.30425 > 0 and answer.spouseInfirm" }
-      "3": { value: "line.T1.30000 + if(answer.spouseInfirm, param.caregiverChildAmount, 0)", when: "line.T1.30300 + line.T1.30425 > 0" }
+      "2": { value: "round(param.caregiverChildAmount * line.RES.factor, 2)", when: "line.T1.30300 + line.T1.30425 > 0 and answer.spouseInfirm" }
+      "3": { value: line.S5.3, when: "line.T1.30300 + line.T1.30425 > 0" }
       "4": { value: line.HH.spouseNetIncome, when: "line.T1.30300 + line.T1.30425 > 0" }
       "5": line.T1.30300
       # Line 30400: the app claims it for a child under 18 with no infirmity, so the infirmity amount (51100, line 2)
@@ -481,8 +488,12 @@ forms:
       "p4:4": { value: answer.dependantNetIncome, when: "line.T1.30400 > 0" }
       "p4:5": line.T1.30400
       # Line 30425, for the spouse (the app's only case): worked out only when it gives an amount, as the form asks.
+      # Line 1 has $28,798 printed (so does line 30450's line 1): for a part-year resident it is prorated in line 3,
+      # with the $8,601 cap, as on the return.
       "p4:2.2": { value: line.HH.spouseNetIncome, when: "line.T1.30425 > 0" }
-      "p4:3.2": { value: "min(param.caregiverMax, max(0, param.caregiverBase - line.HH.spouseNetIncome))", when: "line.T1.30425 > 0" }
+      "p4:3.2":
+        value: "min(round(param.caregiverMax * line.RES.factor, 2), max(0, round(param.caregiverBase * line.RES.factor, 2) - line.HH.spouseNetIncome))"
+        when: "line.T1.30425 > 0"
       "p4:4.2": { value: line.T1.30300, when: "line.T1.30425 > 0" }
       "p4:5.2": line.T1.30425
       # Line 30450, for one dependant (the app handles one).
@@ -493,7 +504,9 @@ forms:
   S6:
     title: Schedule 6, Canada Workers Benefit
     url: https://www.canada.ca/content/dam/cra-arc/formspubs/pbg/5000-s6/5000-s6-25e.pdf
-    applies: "line.T1.45300 > 0"
+    # 5000-S6 is for every province and territory but Quebec, Alberta and Nunavut, whose own Schedule 6 (5005-S6,
+    # 5009-S6, 5014-S6, with other amounts and rates) isn't printed here.
+    applies: 'line.CWB.schedule == 1 and person.province != "QC" and person.province != "AB" and person.province != "NU"'
     fields:
       # Step 1's yes/no questions (38100 to 38105) have no tick places in the layout: the person ticks them. Column 2 is
       # the eligible spouse, filled when their return is prepared here (without it the app can't work out the benefit).
@@ -589,14 +602,15 @@ forms:
       "40": { value: line.CWB.disability, when: "line.CWB.eligible == 1 and answer.hasDisability" }
       "41": { value: line.CWB.basic, when: "line.CWB.eligible == 1 and answer.hasDisability" }
       "42": { value: line.T1.45300, when: "line.CWB.eligible == 1 and answer.hasDisability" }
-      # Step 4 – Advanced CWB (RC210 slips). The return claiming the basic benefit reports both spouses' box 10.
+      # Step 4 – Advanced CWB (RC210 slips), also with no benefit. The return claiming the basic benefit reports both
+      # spouses' box 10, or when neither claims it, the person preparing's (CWB.reportsAdvance).
       "43": { value: line.T1.45300, when: "line.T1.41500 > 0" }
-      "44": { value: sum(RC210.box10), when: "line.CWB.claimsBasic == 1" }
-      "45": { value: sum(spouse.RC210.box10), when: "line.CWB.claimsBasic == 1 and family.partnerInYear and line.HH.partner == 1" }
-      "46": "if(line.CWB.claimsBasic == 1, sum(RC210.box10) + if(family.partnerInYear and line.HH.partner == 1, sum(spouse.RC210.box10), 0), 0)"
+      "44": { value: sum(RC210.box10), when: "line.CWB.reportsAdvance == 1" }
+      "45": { value: sum(spouse.RC210.box10), when: "line.CWB.reportsAdvance == 1 and family.partnerInYear and line.HH.partner == 1" }
+      "46": "if(line.CWB.reportsAdvance == 1, sum(RC210.box10) + if(family.partnerInYear and line.HH.partner == 1, sum(spouse.RC210.box10), 0), 0)"
       "47": sum(RC210.box11)
       "48": >-
-        if(line.CWB.claimsBasic == 1, sum(RC210.box10) + if(family.partnerInYear and line.HH.partner == 1, sum(spouse.RC210.box10), 0), 0)
+        if(line.CWB.reportsAdvance == 1, sum(RC210.box10) + if(family.partnerInYear and line.HH.partner == 1, sum(spouse.RC210.box10), 0), 0)
         + sum(RC210.box11)
       "49": line.T1.41500
 
@@ -1046,6 +1060,11 @@ forms:
       # years designated (lines 1 to 3) aren't known; Section 2 isn't needed.
       "9954": answer.propertyProceeds
 
+  # Each Form 428 prints the base of its spouse and eligible dependant amounts. A part-year resident's claim is worked
+  # out from the prorated base and maximum, less the net income (canada.ca, completing a return for newcomers, Example
+  # 3), so it is less than the printed base minus the net income row: the form has no place for the proration (nor
+  # has Schedule 5's line 30425). The net income row stays the income (on Nova Scotia's, whichever is more, the
+  # prorated $874 or the income), as the CRA can check it against the spouse's or dependant's return.
   ON428:
     title: Form ON428, Ontario Tax
     url: https://www.canada.ca/content/dam/cra-arc/formspubs/pbg/5006-c/5006-c-25e.pdf
@@ -1135,9 +1154,9 @@ forms:
           - { columns: "3", amount: "2", over: "4", times: "6", tax: "8" }
 
   # Each province's S2 and S11 follow its 428. On an S2, the spouse's rows are read from their return, prepared here
-  # too (the transfer is worked out only then). The app claims no disability amount and no unused tuition carried
-  # forward on a provincial form, so those rows stay blank. A line worked out in the middle column is carried to the
-  # right column: both boxes are filled.
+  # too (the transfer is worked out only then). Every row the transfer counts is printed, so the rows add up to it, and
+  # a total is the rule line that the transfer reads. A line worked out in the middle column is carried to the right
+  # column: both boxes are filled.
   ONS2:
     title: Schedule ON(S2), Provincial Amounts Transferred from your Spouse or Common-Law Partner
     url: https://www.canada.ca/content/dam/cra-arc/formspubs/pbg/5006-s2/5006-s2-25e.pdf
@@ -1145,14 +1164,17 @@ forms:
     fields:
       "1": spouse.line.ON428.10
       "2": spouse.line.ON428.27
-      "4": spouse.line.ON428.10 + spouse.line.ON428.27
+      "3": line.ONS2.3
+      "4": line.ONS2.4
       # Their taxable income, or above the first bracket their Ontario tax on it divided by the credit rate.
       "5@1": { value: spouse.line.ON428.8, when: "spouse.line.T1.26000 > param.onFirstBracketTop" }
       "5": line.ONS2.5
       "6": spouse.line.ON428.9
       "7": spouse.line.ON428.24
-      "9@1": spouse.line.ON428.9 + spouse.line.ON428.24
-      "9": spouse.line.ON428.9 + spouse.line.ON428.24
+      # Their unused Ontario tuition and education amounts (58560).
+      "8": spouse.line.ON428.33
+      "9@1": spouse.line.ON428.9 + spouse.line.ON428.24 + spouse.line.ON428.33
+      "9": spouse.line.ON428.9 + spouse.line.ON428.24 + spouse.line.ON428.33
       "59120": line.ONS2.10
       "10": line.ONS2.10
       "11": line.ONS2.11
@@ -1241,14 +1263,17 @@ forms:
     fields:
       "1": spouse.line.BC428.17
       "2": spouse.line.BC428.36
-      # British Columbia has no tuition credit for 2025, so nothing is designated on line 4.
-      "5": spouse.line.BC428.17 + spouse.line.BC428.36
+      "3": spouse.line.BC428.38
+      # The tuition they transfer to you on their Schedule BC(S11).
+      "4": spouse.line.BCS11.17
+      "5": line.BCS2.5
       "6@1": { value: spouse.line.BC428.8, when: "spouse.line.T1.26000 > param.bcFirstBracketTop" }
       "6": line.BCS2.6
       "7": spouse.line.BC428.16
       "8": spouse.line.BC428.33
-      "10@1": spouse.line.BC428.16 + spouse.line.BC428.33
-      "10": spouse.line.BC428.16 + spouse.line.BC428.33
+      "9": spouse.line.BC428.42
+      "10@1": spouse.line.BC428.16 + spouse.line.BC428.33 + spouse.line.BC428.42
+      "10": spouse.line.BC428.16 + spouse.line.BC428.33 + spouse.line.BC428.42
       "59120": line.BCS2.11
       "11": line.BCS2.11
       "12": line.BCS2.12
@@ -1332,7 +1357,8 @@ forms:
     fields:
       "1": spouse.line.AB428.17
       "2": spouse.line.AB428.34
-      "4": spouse.line.AB428.17 + spouse.line.AB428.34
+      "3": spouse.line.AB428.37
+      "4": line.ABS2.4
       "5@1": { value: spouse.line.AB428.8, when: "spouse.line.T1.26000 > param.abFirstBracketTop" }
       "5": line.ABS2.5
       "6": spouse.line.AB428.16
@@ -1430,6 +1456,7 @@ forms:
     fields:
       "1": spouse.line.MB428.10
       "2": spouse.line.MB428.31
+      "3": spouse.line.MB428.34
       # The tuition and education amounts they transfer to you on their Schedule MB(S11).
       "4": spouse.line.MBS11.20
       "5": line.MBS2.5
@@ -1632,11 +1659,14 @@ forms:
       "2": spouse.line.SK428.10
       "3": spouse.line.SK428.19
       "4": spouse.line.SK428.33
+      "5": spouse.line.SK428.36
       "6": line.SKS2.6
       "7@1": { value: spouse.line.SK428.8, when: "spouse.line.T1.26000 > param.skFirstBracketTop" }
       "7": line.SKS2.7
       "8": spouse.line.SK428.9
       "9": spouse.line.SK428.31
+      # Their unused tuition and education amounts (58560).
+      "10": spouse.line.SK428.40
       "11@1": line.SKS2.11
       "11": line.SKS2.11
       "59120": line.SKS2.12
@@ -1753,6 +1783,7 @@ forms:
     fields:
       "1": spouse.line.NB428.10
       "2": spouse.line.NB428.28
+      "3": spouse.line.NB428.31
       # The tuition they transfer to you on their Schedule NB(S11).
       "4": spouse.line.NBS11.17
       "5": line.NBS2.5
@@ -1892,6 +1923,7 @@ forms:
     fields:
       "1": spouse.line.NL428.17
       "2": spouse.line.NL428.37
+      "3": spouse.line.NL428.40
       # The tuition and education amounts they transfer to you on their Schedule NL(S11).
       "4": spouse.line.NLS11.20
       "5": line.NLS2.5
@@ -1960,9 +1992,9 @@ forms:
       # Part B – Nova Scotia non-refundable tax credits
       "9": line.NS428.9
       "10": line.NS428.10
-      "12": "if(line.HH.partner == 1, max(param.nsSpouseIncomeFloor, line.HH.spouseNetIncome), 0)"
+      "12": "if(line.HH.partner == 1, max(round(param.nsSpouseIncomeFloor * line.RES.factor, 2), line.HH.spouseNetIncome), 0)"
       "13": line.NS428.13
-      "15": "if(line.HH.partner == 0 and family.childrenUnder18 > 0, max(param.nsSpouseIncomeFloor, answer.dependantNetIncome), 0)"
+      "15": "if(line.HH.partner == 0 and family.childrenUnder18 > 0, max(round(param.nsSpouseIncomeFloor * line.RES.factor, 2), answer.dependantNetIncome), 0)"
       "16": line.NS428.16
       "17": line.NS428.17
       # The months (box 58229) aren't written: that box is narrower than the layout assumes for a line code's box.
@@ -2047,6 +2079,7 @@ forms:
     fields:
       "1": spouse.line.NS428.10
       "2": spouse.line.NS428.27
+      "3": spouse.line.NS428.30
       # The tuition and education amounts they transfer to you on their Schedule NS(S11).
       "4": spouse.line.NSS11.20
       "5": line.NSS2.5
@@ -2203,6 +2236,7 @@ forms:
     fields:
       "1": spouse.line.PE428.10
       "2": spouse.line.PE428.27
+      "3": spouse.line.PE428.31
       # The tuition and education amounts they transfer to you on their Schedule PE(S11).
       "4": spouse.line.PES11.20
       "5": line.PES2.5
@@ -2319,15 +2353,17 @@ forms:
         parts:
           - { columns: "3", amount: "2", over: "4", times: "6", tax: "8" }
 
-  # Yukon's personal amounts are the federal ones. The caregiver amount for infirm children (line 2) isn't claimed by
-  # the app.
+  # Yukon's personal amounts are the federal ones.
   YTS2:
     title: Schedule YT(S2), Territorial Amounts Transferred from your Spouse or Common-Law Partner
     url: https://www.canada.ca/content/dam/cra-arc/formspubs/pbg/5011-s2/5011-s2-25e.pdf
     applies: 'person.province == "YT" and line.YT428.33 > 0'
     fields:
       "1": spouse.line.YT428.10
+      # Their caregiver amount for infirm children under 18 (58189).
+      "2": spouse.line.YT428.15
       "3": spouse.line.YT428.25
+      "4": spouse.line.YT428.26
       # The tuition they transfer to you on their Schedule YT(S11).
       "5": spouse.line.YTS11.19
       "6": line.YTS2.6
@@ -2457,6 +2493,7 @@ forms:
     fields:
       "1": spouse.line.NT428.10
       "2": spouse.line.NT428.26
+      "3": spouse.line.NT428.29
       # The tuition and education amounts they transfer to you on their Schedule NT(S11).
       "4": spouse.line.NTS11.20
       "5": line.NTS2.5
@@ -2605,6 +2642,7 @@ forms:
       "1": 'if(spouse.person.province == "NU", spouse.line.NU428.18, 0)'
       "2": spouse.line.NU428.10
       "3": spouse.line.NU428.27
+      "4": spouse.line.NU428.30
       # The tuition, education and textbook amounts they transfer to you on their Schedule NU(S11).
       "5": spouse.line.NUS11.24
       "6": line.NUS2.6
@@ -2771,8 +2809,8 @@ forms:
   # numbers are copied by hand; Schedules A and M only carry an answer to lines 367, 398.1 and 385, so they aren't
   # printed; the work charts (TP-1.D.GR-V) are kept by the person, not sent.
 
-  # Rows the app has nothing for stay blank: the CPP lines (96 to 96.2, form LE-35-V), the codes of lines 206, 249,
-  # 286, 296 and 461, and lines it doesn't handle (see qc.yaml). Line 350 (the basic personal amount) is printed.
+  # Rows the app has nothing for stay blank: the CPP lines (96 to 96.2, form LE-35-V), the codes of lines 206, 286,
+  # 296 and 461, and lines it doesn't handle (see qc.yaml). Line 350 (the basic personal amount) is printed.
   TP1:
     title: TP-1 Income Tax Return (Revenu Québec)
     url: https://www.revenuquebec.ca/documents/en/formulaires/tp/2025-12/TP-1.D-V%282025-12%29.pdf
@@ -2829,7 +2867,11 @@ forms:
       "225": line.TP1.225
       "231": line.TP1.231
       "245": line.TP1.245
+      "246": line.TP1.246
       "248": line.TP1.248
+      # The social benefits repayment is the only deduction of line 250 the app enters: code 03 in box 249 (guide, line 250).
+      "249": { count: "if(line.TP1.250 > 0, 3, 0)" }
+      "250": line.TP1.250
       "254": line.TP1.254
       "256": line.TP1.256
       "275": line.TP1.275
@@ -2994,8 +3036,10 @@ forms:
       "28": line.TP1.147
       "34": line.QCF.34
       "36": line.QCF.36
+      "41": line.TP1.246
       "43": line.QCR.26
       "43.1": "line.QCU.101 + line.QCU.103 + if(line.QCU.33 > 0, min(line.QCU.94 - line.QCU.48, line.QCU.99), 0)"
+      "44": line.EI.repayment
       "46": line.TP1.245
       "54": line.TP1.225
       "56": line.TP1.231

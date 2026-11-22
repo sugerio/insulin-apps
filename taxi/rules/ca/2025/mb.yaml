@@ -251,25 +251,30 @@ lines:
   MB428.10:
     label: Manitoba age amount
     formula: >-
-      round((if(person.age >= 65, max(0, param.mbAgeAmountMax - round(max(0, line.T1.23600 - param.mbAgeAmountThreshold) * param.mbAgeAmountRate, 2)), 0)) * line.RES.factor, 2)
-    source: "Worksheet MB428, line 58080: for people born in 1960 or earlier"
+      if(person.age >= 65, max(0, round(param.mbAgeAmountMax * line.RES.factor, 2)
+      - round(max(0, line.T1.23600 - round(param.mbAgeAmountThreshold * line.RES.factor, 2)) * param.mbAgeAmountRate, 2)), 0)
+    source: "Worksheet MB428, line 58080: for people born in 1960 or earlier, $3,728 less 15% of net income over $27,749 (both amounts prorated for a part-year resident: canada.ca, Completing your return for newcomers, Example 2)"
+  # For a part-year resident, the base is prorated, and then the net income is subtracted, not prorated (canada.ca,
+  # completing a return for newcomers, Example 3 for line 30300).
   MB428.13:
     label: Manitoba spouse or common-law partner amount
     formula: >-
-      round((if(line.HH.partner == 1, max(0, param.mbSpouseBase - line.HH.spouseNetIncome), 0)) * line.RES.factor, 2)
+      round(if(line.HH.partner == 1, max(0, round(param.mbSpouseBase * line.RES.factor, 2) - line.HH.spouseNetIncome), 0), 2)
 
   MB428.16:
     label: Manitoba amount for an eligible dependant
     formula: >-
-      round((if(line.HH.partner == 0 and family.childrenUnder18 > 0, max(0, param.mbSpouseBase - answer.dependantNetIncome), 0)) * line.RES.factor, 2)
+      round(if(line.HH.partner == 0 and family.childrenUnder18 > 0, max(0, round(param.mbSpouseBase * line.RES.factor, 2) - answer.dependantNetIncome), 0), 2)
     source: "MB428 lines 14 to 16: the base minus their net income"
   MB428.17:
     label: Manitoba amount for infirm dependants age 18 or older
     formula: >-
-      round((if(answer.hasInfirmDependant, if(answer.infirmDependants > 1, unsupported("The Manitoba amount for more than one infirm dependant isn't handled by this app yet"), if(answer.infirmDependants == 0, 0, min(param.mbInfirmMax, max(0, param.mbInfirmBase - answer.infirmDependantIncome)))), 0)) * line.RES.factor, 2)
+      if(answer.hasInfirmDependant, if(answer.infirmDependants > 1, unsupported("The Manitoba amount for more than one infirm dependant isn't handled by this app yet"),
+      if(answer.infirmDependants == 0, 0, min(round(param.mbInfirmMax * line.RES.factor, 2), max(0, round(param.mbInfirmBase * line.RES.factor, 2) - answer.infirmDependantIncome)))), 0)
     source: >-
-      Worksheet MB428, line 58200: $8,720 less the dependant's net income, up to $3,605. The app claims this line, not
-      the caregiver amount (58400), which needs the dependant to have lived with you
+      Worksheet MB428, line 58200: $8,720 less the dependant's net income, up to $3,605 (both prorated for a part-year
+      resident before the income comes off). The app claims this line, not the caregiver amount (58400), which needs
+      the dependant to have lived with you
   MB428.23:
     label: Volunteer firefighters' amount
     formula: "if(line.T1.31220 > 0, param.mbVolunteerAmount, 0)"
@@ -286,10 +291,12 @@ lines:
       if(person.age < param.mbFitnessAgeLimit, 1, 0) + family.childrenUnder18
       + if(line.HH.partner == 1 and family.partnerInYear, if(spouse.person.age >= 18 and spouse.person.age < param.mbFitnessAgeLimit, 1, 0), 0)
     source: "Manitoba information guide, line 58325"
+  # The fitness and children's arts amounts are only for residents of Manitoba: a spouse elsewhere has none, also when
+  # Schedule MB(S2) reads their line 28, and isn't asked for fees.
   MB428.25:
     label: Fitness amount
     formula: >-
-      if(line.MB.fitnessPeople == 0, 0,
+      if(person.province != "MB" or line.MB.fitnessPeople == 0, 0,
       if(line.HH.partner == 1 and family.partnerInYear and spouse.person.province == "MB"
       and answer.physicalActivityFees + spouse.answer.physicalActivityFees > param.mbFitnessMax * line.MB.fitnessPeople,
       unsupported("Only one of you can claim the Manitoba fitness amount for a person, up to $500 each. Together you claim more: enter each person's fees on one return"),
@@ -298,7 +305,7 @@ lines:
   MB428.26:
     label: Children's arts amount
     formula: >-
-      if(family.childrenUnder17 == 0, 0,
+      if(person.province != "MB" or family.childrenUnder17 == 0, 0,
       if(line.HH.partner == 1 and family.partnerInYear and spouse.person.province == "MB"
       and answer.childArtsFees + spouse.answer.childArtsFees > param.mbArtsMax * family.childrenUnder17,
       unsupported("Only one of you can claim the Manitoba children's arts amount for a child, up to $500 each. Together you claim more: enter each child's fees on one return"),
@@ -351,12 +358,14 @@ lines:
     source: "Schedule MB(S11) line 13"
   MB428.39:
     label: Tuition and education amounts transferred from a child or grandchild
-    formula: "line.CHILD.provincialTuition"
-    source: "MB428 line 39 (58600): the app uses the amount the student designated to you federally (line 32400)"
+    formula: "round(line.CHILD.provincialTuition * line.RES.factor, 2)"
+    source: "MB428 line 39 (58600): the app uses the amount the student designated to you federally (line 32400). Prorated for a part-year resident (RC4018, Appendix K)"
   MB428.40:
     label: Manitoba amounts transferred from your spouse or common-law partner
-    formula: "if(line.HH.partner == 1 and family.partnerInYear, line.MBS2.12, 0)"
-    source: "Schedule MB(S2): their unused Manitoba age, pension, and tuition and education amounts"
+    formula: "if(line.HH.partner == 1 and family.partnerInYear, round(line.MBS2.12 * line.RES.factor, 2), 0)"
+    source: >-
+      Schedule MB(S2): their unused Manitoba age, pension, and tuition and education amounts. Prorated for a part-year
+      resident (RC4018, Appendix K: line 58640); the schedule shows the whole transfer
   MB428.41:
     label: Family tax benefit
     formula: "max(0, line.MB428A.10 - round(line.T1.23600 * param.mbFamilyBenefitRate, 2))"
@@ -534,8 +543,10 @@ lines:
     source: "MB(S11) lines 8 and 9: less line 36 of Form MB428"
   MBS11.10:
     label: Unused tuition and education amounts claimed for 2025
-    formula: "min(answer.unusedProvincialTuition, line.MBS11.9)"
-    source: "MB(S11) lines 1 and 10: the unused amounts on your 2024 notice of assessment"
+    formula: 'min(if(person.province == "AB", 0, answer.unusedProvincialTuition), line.MBS11.9)'
+    source: >-
+      MB(S11) lines 1 and 10: the unused amounts on your 2024 notice of assessment. None for a spouse in Alberta, whose
+      own return doesn't carry unused provincial tuition forward (Schedule MB(S2) reads this schedule for them)
   MBS11.12:
     label: 2025 tuition and education amounts claimed
     formula: "min(line.MBS11.5, line.MBS11.9 - line.MBS11.10)"

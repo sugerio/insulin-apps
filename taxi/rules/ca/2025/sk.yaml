@@ -172,25 +172,31 @@ lines:
   SK428.10:
     label: Saskatchewan age amount
     formula: >-
-      round((if(person.age >= 65, max(0, param.skAgeAmountMax - round(max(0, line.T1.23600 - param.skAgeAmountThreshold) * param.skAgeAmountRate, 2)), 0)) * line.RES.factor, 2)
-    source: "Worksheet SK428, line 58080: for people born in 1960 or earlier"
+      if(person.age >= 65, max(0, round(param.skAgeAmountMax * line.RES.factor, 2)
+      - round(max(0, line.T1.23600 - round(param.skAgeAmountThreshold * line.RES.factor, 2)) * param.skAgeAmountRate, 2)), 0)
+    source: "Worksheet SK428, line 58080: for people born in 1960 or earlier, $5,785 less 15% of net income over $43,066 (both amounts prorated for a part-year resident: canada.ca, Completing your return for newcomers, Example 2)"
+  # For a part-year resident, the base and the maximum are prorated, and then the net income is subtracted, not
+  # prorated (canada.ca, completing a return for newcomers, Example 3 for line 30300).
   SK428.13:
     label: Saskatchewan spouse or common-law partner amount
     formula: >-
-      round((if(line.HH.partner == 1, min(param.skSpouseMax, max(0, param.skSpouseBase - line.HH.spouseNetIncome)), 0)) * line.RES.factor, 2)
+      round(if(line.HH.partner == 1, min(round(param.skSpouseMax * line.RES.factor, 2), max(0, round(param.skSpouseBase * line.RES.factor, 2) - line.HH.spouseNetIncome)), 0), 2)
 
   SK428.16:
     label: Saskatchewan amount for an eligible dependant
     formula: >-
-      round((if(line.HH.partner == 0 and family.childrenUnder18 > 0, min(param.skSpouseMax, max(0, param.skSpouseBase - answer.dependantNetIncome)), 0)) * line.RES.factor, 2)
+      round(if(line.HH.partner == 0 and family.childrenUnder18 > 0, min(round(param.skSpouseMax * line.RES.factor, 2), max(0, round(param.skSpouseBase * line.RES.factor, 2) - answer.dependantNetIncome)), 0), 2)
     source: "SK428 lines 14 to 16: the base minus their net income, up to the maximum"
   # An adult with an impairment who lives with you gets the larger caregiver amount (line 34) instead: no one claims
-  # both for the same dependant.
+  # both for the same dependant. A spouse living elsewhere, whose SK428 Schedule SK(S2) reads, isn't asked where the
+  # dependant lived: theirs is this amount, which needs no shared home.
   SK428.17:
     label: Saskatchewan amount for infirm dependants age 18 or older
     formula: >-
-      round((if(answer.hasInfirmDependant, if(answer.infirmDependants > 1, unsupported("The Saskatchewan amount for more than one infirm dependant isn't handled by this app yet"), if(answer.infirmDependants == 0, 0, if(answer.infirmDependantHome == "with_you", 0, min(param.skDependantAmountMax, max(0, param.skInfirmDependantBase - answer.infirmDependantIncome))))), 0)) * line.RES.factor, 2)
-    source: "Worksheet SK428, line 58200: $21,924 less the dependant's net income, up to $13,986"
+      if(answer.hasInfirmDependant, if(answer.infirmDependants > 1, unsupported("The Saskatchewan amount for more than one infirm dependant isn't handled by this app yet"),
+      if(answer.infirmDependants == 0, 0, if(person.province == "SK" and answer.infirmDependantHome == "with_you", 0,
+      min(round(param.skDependantAmountMax * line.RES.factor, 2), max(0, round(param.skInfirmDependantBase * line.RES.factor, 2) - answer.infirmDependantIncome))))), 0)
+    source: "Worksheet SK428, line 58200: $21,924 less the dependant's net income, up to $13,986 (both prorated for a part-year resident before the income comes off)"
   # Line 58210: only a Saskatchewan resident can claim it, and of a couple who both can, the one with the lower taxable
   # income claims it; the other gets what they don't need through Schedule SK(S2).
   SK.childClaimant:
@@ -227,15 +233,17 @@ lines:
     source: "Line 58316 of the CRA's Saskatchewan information: $3,000 when you claim line 31240"
   # The family's renovations are claimed on one return here, so line 4 of SK(S12) (claimed by others) stays zero. The
   # larger limit needs everyone in the family to be 65 or older, which is known only when the spouse's return is here.
+  # Only a resident of Saskatchewan claims it: a spouse living elsewhere has none, also when Schedule SK(S2) reads
+  # their line 31, and isn't asked for expenses.
   SK428.29:
     label: Saskatchewan home renovation expenses
     formula: >-
-      if(answer.homeRenovationExpenses == 0, 0,
-      if(line.HH.partner == 1 and family.partnerInYear and spouse.answer.homeRenovationExpenses > 0,
+      if(person.province != "SK", 0, if(answer.homeRenovationExpenses == 0, 0,
+      if(line.HH.partner == 1 and family.partnerInYear and spouse.person.province == "SK" and spouse.answer.homeRenovationExpenses > 0,
       unsupported("The Saskatchewan home renovation tax credit is for the family: claim your renovation expenses on one of your returns"),
       max(0, min(answer.homeRenovationExpenses,
       if(person.age >= 65 and family.childrenUnder18 == 0 and (line.HH.partner == 0 or (family.partnerInYear and spouse.person.age >= 65)),
-      param.skHomeRenovationSeniorMax, param.skHomeRenovationMax)) - param.skHomeRenovationBase)))
+      param.skHomeRenovationSeniorMax, param.skHomeRenovationMax)) - param.skHomeRenovationBase))))
     source: "SK(S12) lines 1 to 5: expenses up to $5,000 ($6,000 when the whole family is 65 or older), less $1,000"
   SK428.30:
     label: Saskatchewan first-time home buyers' amount
@@ -252,8 +260,10 @@ lines:
   SK428.34:
     label: Saskatchewan caregiver amount
     formula: >-
-      round((if(answer.hasInfirmDependant, if(answer.infirmDependants > 1, unsupported("The Saskatchewan amount for more than one infirm dependant isn't handled by this app yet"), if(answer.infirmDependants == 0, 0, if(answer.infirmDependantHome == "with_you", min(param.skDependantAmountMax, max(0, param.skCaregiverBase - answer.infirmDependantIncome)), 0))), 0)) * line.RES.factor, 2)
-    source: "Worksheet SK428, line 58400: for a dependant with an impairment who lived with you, $33,094 less their net income, up to $13,986"
+      if(answer.hasInfirmDependant, if(answer.infirmDependants > 1, unsupported("The Saskatchewan amount for more than one infirm dependant isn't handled by this app yet"),
+      if(answer.infirmDependants == 0, 0, if(person.province == "SK" and answer.infirmDependantHome == "with_you",
+      min(round(param.skDependantAmountMax * line.RES.factor, 2), max(0, round(param.skCaregiverBase * line.RES.factor, 2) - answer.infirmDependantIncome)), 0))), 0)
+    source: "Worksheet SK428, line 58400: for a dependant with an impairment who lived with you, $33,094 less their net income, up to $13,986 (both prorated for a part-year resident before the income comes off)"
   SK428.36:
     label: Saskatchewan disability amount for self
     formula: >-
@@ -278,8 +288,10 @@ lines:
     source: "SK428 line 40 (58560): Schedule SK(S11)"
   SK428.41:
     label: Amounts transferred from your spouse or common-law partner
-    formula: "if(line.HH.partner == 1 and family.partnerInYear, line.SKS2.13, 0)"
-    source: "Schedule SK(S2): their unused Saskatchewan child, age, senior supplementary, pension income and disability amounts"
+    formula: "if(line.HH.partner == 1 and family.partnerInYear, round(line.SKS2.13 * line.RES.factor, 2), 0)"
+    source: >-
+      Schedule SK(S2): their unused Saskatchewan child, age, senior supplementary, pension income and disability
+      amounts. Prorated for a part-year resident (RC4018, Appendix K: line 58640); the schedule shows the whole transfer
   SK428.48:
     label: Allowable medical expenses
     formula: "max(0, line.T1.33099 - min(param.skMedicalThresholdMax, round(line.T1.23600 * param.medicalThresholdRate, 2)))"
@@ -350,8 +362,10 @@ lines:
     source: "SK(S11) lines 3 and 4: less SK428 line 38"
   SKS11.5:
     label: Unused Saskatchewan tuition and education amounts claimed for 2025
-    formula: "min(answer.unusedProvincialTuition, line.SKS11.4)"
-    source: "SK(S11) lines 1 and 5: the unused amounts on your 2024 notice of assessment"
+    formula: 'min(if(person.province == "AB", 0, answer.unusedProvincialTuition), line.SKS11.4)'
+    source: >-
+      SK(S11) lines 1 and 5: the unused amounts on your 2024 notice of assessment. None for a spouse in Alberta, whose
+      own return doesn't carry unused provincial tuition forward (Schedule SK(S2) reads this line for them)
 
   # Schedule SK(S2) – Saskatchewan amounts transferred from your spouse (read from their SK428, worked out under
   # Saskatchewan's rules wherever they live, as the schedule asks)
@@ -374,7 +388,9 @@ lines:
     label: Saskatchewan amounts transferred from your spouse
     formula: "max(0, line.SKS2.6 - line.SKS2.12)"
 
-  # Form SK479 – Saskatchewan credits: the active families benefit and the fertility treatment tax credit.
+  # Form SK479 – Saskatchewan credits: the active families benefit and the fertility treatment tax credit. Only a
+  # spouse who also lives in Saskatchewan shares them: one elsewhere answers the same questions for their own
+  # province's credits (Quebec's for children's activities, Ontario's for fertility treatment), not for these.
   SK479.6:
     label: Adjusted family income
     formula: "line.T1.23600 + line.HH.spouseNetIncome"
@@ -391,7 +407,8 @@ lines:
     label: Children's activity fees claimed
     formula: >-
       if(family.childrenUnder19 == 0, 0,
-      if(line.HH.partner == 1 and family.partnerInYear and answer.childActivityFees + spouse.answer.childActivityFees > line.SK.activeFamiliesLimit,
+      if(line.HH.partner == 1 and family.partnerInYear and spouse.person.province == "SK"
+      and answer.childActivityFees + spouse.answer.childActivityFees > line.SK.activeFamiliesLimit,
       unsupported("Only one of you can claim the active families benefit for a child, up to $300 a child ($400 for a child with the disability tax credit). Together you claim more: enter each child's fees on one return"),
       min(answer.childActivityFees, line.SK.activeFamiliesLimit)))
     source: "SK479 active families benefit worksheet: fees for children born in 2007 or later, less reimbursements"
@@ -403,7 +420,7 @@ lines:
     label: Fertility treatment tax credit
     formula: >-
       if(answer.fertilityExpenses == 0, 0,
-      if(line.HH.partner == 1 and family.partnerInYear and spouse.answer.fertilityExpenses > 0,
+      if(line.HH.partner == 1 and family.partnerInYear and spouse.person.province == "SK" and spouse.answer.fertilityExpenses > 0,
       unsupported("You or your spouse or partner can claim the Saskatchewan fertility treatment tax credit, but not both: enter the expenses on one return"),
       min(param.skFertilityMax, round(answer.fertilityExpenses * param.skFertilityRate, 2))))
     source: "SK479 line 9 (61268): 50% of the expenses, up to $10,000"

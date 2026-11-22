@@ -1,5 +1,5 @@
 {
-  "about": "A common-law couple in Alberta. One had two part-time jobs at once: each employer used the whole basic exemption, so less CPP was deducted than required and the credits use what was deducted (Schedule 8, Part 3b). The other, a student, earned less than the basic exemption and $2,000 of insurable earnings in a summer job: all the CPP and EI deducted comes back (lines 44800 and 45000). Synthetic data.",
+  "about": "A common-law couple in Alberta. One had two part-time jobs at once: each employer used the whole basic exemption, so less CPP was deducted than required and the credits use what was deducted (Schedule 8, Part 3b). The other, a student, earned less than the basic exemption and $2,000 of insurable earnings in a summer job: all the CPP and EI deducted comes back (lines 44800 and 45000). The first claims the couple's Canada workers benefit on Alberta's Schedule 6 (5009-S6): 21% of the $34,900 of family working income over $2,760, up to $2,619, not reduced since the adjusted family net income of $32,740 is under $32,772. Synthetic data.",
   "input": {
     "year": 2025,
     "people": [
@@ -264,7 +264,6 @@
       "RES.factor": "1",
       "FULL.30000": "16129",
       "T1.30000": "16129",
-      "FULL.30300": "14229",
       "T1.30300": "14229",
       "T1.T84": "30358",
       "T1.30800": "1287",
@@ -291,10 +290,10 @@
       "CWB.familyWorking": "34900",
       "CWB.familyIncome": "32740",
       "CWB.claimsBasic": "1",
-      "CWB.basic": "2497.85",
-      "T1.45300": "2497.85",
-      "T1.48200": "3997.85",
-      "T1.48400": "3997.85",
+      "CWB.basic": "2619",
+      "T1.45300": "2619",
+      "T1.48200": "4119",
+      "T1.48400": "4119",
       "T1.48500": "0",
       "S2.7": "1900",
       "S2.11": "17600",

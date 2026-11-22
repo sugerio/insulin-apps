@@ -134,17 +134,20 @@ lines:
   AB428.17:
     label: Alberta age amount
     formula: >-
-      round((if(person.age >= 65, max(0, param.abAgeAmountMax - round(max(0, line.T1.23600 - param.abAgeAmountThreshold) * param.abAgeAmountRate, 2)), 0)) * line.RES.factor, 2)
-    source: "Worksheet AB428, line 58080: for people born in 1960 or earlier"
+      if(person.age >= 65, max(0, round(param.abAgeAmountMax * line.RES.factor, 2)
+      - round(max(0, line.T1.23600 - round(param.abAgeAmountThreshold * line.RES.factor, 2)) * param.abAgeAmountRate, 2)), 0)
+    source: "Worksheet AB428, line 58080: for people born in 1960 or earlier, $6,221 less 15% of net income over $46,308 (both amounts prorated for a part-year resident: canada.ca, Completing your return for newcomers, Example 2)"
+  # For a part-year resident, the base is prorated, and then the net income is subtracted, not prorated (canada.ca,
+  # completing a return for newcomers, Example 3 for line 30300).
   AB428.20:
     label: Alberta spouse or common-law partner amount
     formula: >-
-      round((if(line.HH.partner == 1, max(0, param.abSpouseBase - line.HH.spouseNetIncome), 0)) * line.RES.factor, 2)
+      round(if(line.HH.partner == 1, max(0, round(param.abSpouseBase * line.RES.factor, 2) - line.HH.spouseNetIncome), 0), 2)
 
   AB428.23:
     label: Alberta amount for an eligible dependant
     formula: >-
-      round((if(line.HH.partner == 0 and family.childrenUnder18 > 0, max(0, param.abSpouseBase - answer.dependantNetIncome), 0)) * line.RES.factor, 2)
+      round(if(line.HH.partner == 0 and family.childrenUnder18 > 0, max(0, round(param.abSpouseBase * line.RES.factor, 2) - answer.dependantNetIncome), 0), 2)
     source: "AB428 lines 21 to 23: the base minus their net income"
   # Lines 24 and 35: Alberta kept the infirm dependant and caregiver amounts that the Canada caregiver amount replaced
   # federally. A dependant who lived in your home gets the caregiver amount, one who didn't the infirm dependant amount;
@@ -153,8 +156,9 @@ lines:
   AB428.24:
     label: Alberta amount for infirm dependants age 18 or older
     formula: >-
-      round((if(answer.hasInfirmDependant, if(answer.infirmDependants == 1, if(answer.infirmDependantHome == "elsewhere", min(param.abCaregiverMax, max(0, param.abInfirmDependantBase - answer.infirmDependantIncome)), 0), 0), 0)) * line.RES.factor, 2)
-    source: "Worksheet AB428, line 58200: $21,458 less the dependant's net income, up to $12,922"
+      if(answer.hasInfirmDependant, if(answer.infirmDependants == 1, if(answer.infirmDependantHome == "elsewhere",
+      min(round(param.abCaregiverMax * line.RES.factor, 2), max(0, round(param.abInfirmDependantBase * line.RES.factor, 2) - answer.infirmDependantIncome)), 0), 0), 0)
+    source: "Worksheet AB428, line 58200: $21,458 less the dependant's net income, up to $12,922 (both prorated for a part-year resident before the income comes off)"
   AB428.25:
     label: Alberta basic, age, spouse and dependant amounts
     formula: "line.AB428.16 + line.AB428.17 + line.AB428.20 + line.AB428.23 + line.AB428.24"
@@ -181,8 +185,9 @@ lines:
   AB428.35:
     label: Alberta caregiver amount
     formula: >-
-      round((if(answer.hasInfirmDependant, if(answer.infirmDependants == 1, if(answer.infirmDependantHome == "with_you", min(param.abCaregiverMax, max(0, param.abCaregiverBase - answer.infirmDependantIncome)), 0), 0), 0)) * line.RES.factor, 2)
-    source: "Worksheet AB428, line 58400: $33,467 less the dependant's net income, up to $12,922, for a dependant who lived with you"
+      if(answer.hasInfirmDependant, if(answer.infirmDependants == 1, if(answer.infirmDependantHome == "with_you",
+      min(round(param.abCaregiverMax * line.RES.factor, 2), max(0, round(param.abCaregiverBase * line.RES.factor, 2) - answer.infirmDependantIncome)), 0), 0), 0)
+    source: "Worksheet AB428, line 58400: $33,467 less the dependant's net income, up to $12,922 (both prorated for a part-year resident before the income comes off), for a dependant who lived with you"
   AB428.36:
     label: Alberta credit amounts with pension and caregiver amounts
     formula: "line.AB428.33 + line.AB428.34 + line.AB428.35"
@@ -207,8 +212,10 @@ lines:
     source: "AB428 line 40 (58520): line 31900 of your return"
   AB428.42:
     label: Amounts transferred from your spouse or common-law partner
-    formula: "if(line.HH.partner == 1 and family.partnerInYear, if(line.ABS2.4 == 0, 0, line.ABS2.11), 0)"
-    source: "Schedule AB(S2): their unused Alberta age, pension income and disability amounts"
+    formula: "if(line.HH.partner == 1 and family.partnerInYear, if(line.ABS2.4 == 0, 0, round(line.ABS2.11 * line.RES.factor, 2)), 0)"
+    source: >-
+      Schedule AB(S2): their unused Alberta age, pension income and disability amounts. Prorated for a part-year
+      resident (RC4018, Appendix K: line 58640); the schedule shows the whole transfer
   AB428.43:
     label: Alberta credit amounts before medical expenses
     formula: "line.AB428.39 + line.AB428.40 + line.AB428.42"

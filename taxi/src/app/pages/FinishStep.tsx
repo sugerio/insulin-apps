@@ -1,14 +1,15 @@
 import { useId, useMemo, useState } from "react";
 import { Link } from "react-router";
-import { ExternalLink, FileDown } from "lucide-react";
-import { printBlockers, spouseOf, type Estimate, type FormLanguage, type SlipList, type Step } from "#shared";
+import { FileDown } from "lucide-react";
+import { formsToAdd, printBlockers, spouseOf, type Estimate, type FormLanguage, type SlipList, type Step } from "#shared";
 import { Button } from "@/components/ui/button.tsx";
 import { Card, CardContent } from "@/components/ui/card.tsx";
 import { Label } from "@/components/ui/label.tsx";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group.tsx";
 import { ResultLine } from "../components/EstimateCard.tsx";
 import { HintList } from "../components/HintList.tsx";
-import { ResourceView } from "../components/Feedback.tsx";
+import { saveFile } from "../api/client.ts";
+import { RefusedBanner, ResourceView } from "../components/Feedback.tsx";
 import { StepLayout } from "../components/StepLayout.tsx";
 import { STEP_LABELS, stepPath, useReturn, useYear } from "../components/YearFrame.tsx";
 import { formatMoney } from "../lib/format.ts";
@@ -99,7 +100,13 @@ function Results({ estimate, slips }: { estimate: Estimate; slips: SlipList }) {
             </ul>
           </section>
         ) : null}
-        <Download ready={checks.length === 0} quebec={Boolean(quebecRefund && quebecOwing)} href={`/api/years/${year.year}/returns/${owner.id}/forms`} />
+        <Download
+          ready={checks.length === 0}
+          quebec={Boolean(quebecRefund && quebecOwing)}
+          toAdd={formsToAdd(evaluation, owner.id)}
+          href={`/api/years/${year.year}/returns/${owner.id}/forms`}
+          fileName={`Taxi ${year.year} return - ${owner.name}.pdf`}
+        />
       </CardContent>
     </Card>
   );
@@ -126,15 +133,37 @@ function Headline({ title, refund, owing }: { title?: string; refund: string | n
 
 /**
  * The return on the CRA's forms (and, for a resident of Quebec, on Revenu Québec's TP-1 after them), with its
- * worksheet: only a finished return can be printed. Revenu Québec's forms print in English or in French.
+ * worksheet: only a finished return can be printed. Revenu Québec's forms print in English or in French. `toAdd` are
+ * the forms the return needs that aren't printed. The PDF is fetched here and saved, so the page can say it is being
+ * prepared (a first print downloads each official form) and why it couldn't be.
  */
-function Download({ ready, quebec, href }: { ready: boolean; quebec: boolean; href: string }) {
+function Download({
+  ready,
+  quebec,
+  toAdd,
+  href,
+  fileName,
+}: {
+  ready: boolean;
+  quebec: boolean;
+  toAdd: { form: string; why: string }[];
+  href: string;
+  fileName: string;
+}) {
   const [language, setLanguage] = useState<FormLanguage>("en");
-  const url = (download: boolean) => {
-    const query = new URLSearchParams({ ...(quebec && language === "fr" ? { language } : {}), ...(download ? { download: "1" } : {}) }).toString();
-    return query ? `${href}?${query}` : href;
-  };
+  const [state, setState] = useState<{ status: "idle" | "preparing" } | { status: "error"; error: unknown }>({ status: "idle" });
   const languageLabel = useId();
+
+  async function download() {
+    const query = new URLSearchParams({ ...(quebec && language === "fr" ? { language } : {}), download: "1" });
+    setState({ status: "preparing" });
+    try {
+      await saveFile(`${href}?${query}`, fileName);
+      setState({ status: "idle" });
+    } catch (error) {
+      setState({ status: "error", error });
+    }
+  }
   return (
     <section aria-label="Your forms" className="flex flex-col gap-2 rounded-lg border p-4">
       <h2 className="text-sm font-medium">Your forms</h2>
@@ -153,6 +182,21 @@ function Download({ ready, quebec, href }: { ready: boolean; quebec: boolean; hr
           amounts into NETFILE-certified software.
         </p>
       )}
+      {toAdd.length > 0 ? (
+        <div className="flex flex-col gap-1 text-xs text-muted-foreground">
+          <p>
+            <span className="font-medium text-foreground">Forms to fill in yourself.</span> Your return needs these too, and Taxi doesn't print them:
+            file each with your forms.
+          </p>
+          <ul aria-label="Forms to fill in yourself" className="list-disc pl-5">
+            {toAdd.map(({ form, why }) => (
+              <li key={form}>
+                {form}: {why}.
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
       {quebec && ready ? (
         <div className="flex flex-wrap items-center gap-3 text-sm">
           <span id={languageLabel}>Revenu Québec's forms in</span>
@@ -167,20 +211,18 @@ function Download({ ready, quebec, href }: { ready: boolean; quebec: boolean; hr
         </div>
       ) : null}
       {ready ? (
-        <div className="flex flex-wrap gap-2">
-          <Button asChild size="sm">
-            <a href={url(false)} target="_blank" rel="noreferrer">
-              <ExternalLink aria-hidden="true" />
-              Open the forms (PDF)
-            </a>
-          </Button>
-          <Button asChild size="sm" variant="outline">
-            <a href={url(true)} download>
+        <>
+          <div className="flex flex-wrap items-center gap-3">
+            <Button size="sm" onClick={() => void download()} disabled={state.status === "preparing"}>
               <FileDown aria-hidden="true" />
-              Download
-            </a>
-          </Button>
-        </div>
+              Download the forms (PDF)
+            </Button>
+            <p role="status" className="text-xs text-muted-foreground">
+              {state.status === "preparing" ? "Preparing your forms… The first time, Taxi downloads each official form, which can take a little while." : null}
+            </p>
+          </div>
+          {state.status === "error" ? <RefusedBanner title="The forms weren't printed" error={state.error} unshown={[]} /> : null}
+        </>
       ) : (
         <p className="text-xs text-muted-foreground">Finish the items under Before you file, above, to download them.</p>
       )}

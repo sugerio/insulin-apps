@@ -2,7 +2,7 @@ import { PDFDocument } from "pdf-lib";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { afterEach, describe, expect, it } from "vitest";
 import type { Estimate, Person, TaxYear } from "#shared";
-import type { FormSource } from "../../src/app/server/lib/forms.ts";
+import { officialForms, type FormSource } from "../../src/app/server/lib/forms.ts";
 import { rulesFor } from "../../src/app/shared/rules/index.ts";
 import { VIEWER, startServer, type TestServer } from "../support/server.ts";
 
@@ -47,12 +47,12 @@ async function json<T>(response: Response | Promise<Response>, status = 200): Pr
 
 const T4: { type: string; issuer: string; boxes: Record<string, string> } = { type: "T4", issuer: "Maple Corp", boxes: { 14: "60000", 22: "9000" } };
 
-/** Alex, single in Ontario, with a T4 (or the slip given): the year at its revision, Alex's slips not yet confirmed. */
-async function alexWithT4({ residentAllYear = true as boolean | null, slip = T4 } = {}): Promise<{ alex: Person; revision: number }> {
+/** Alex, single in Ontario (or the province given), with a T4 (or the slip given): the year at its revision, Alex's slips not yet confirmed. */
+async function alexWithT4({ residentAllYear = true as boolean | null, slip = T4, province = "ON" } = {}): Promise<{ alex: Person; revision: number }> {
   const alex = await json<Person>(server.call("POST", "/api/people", { body: { name: "Alex Martin", relationship: "self", birthDate: "1985-04-02" } }), 201);
   await json<TaxYear>(server.call("POST", "/api/years", { body: { year: 2025, people: [alex.id] } }), 201);
   let year = await json<TaxYear>(
-    server.call("PUT", "/api/years/2025/personal-info", { body: { revision: 1, maritalStatus: "single", adults: [{ personId: alex.id, province: "ON", residentAllYear }] } }),
+    server.call("PUT", "/api/years/2025/personal-info", { body: { revision: 1, maritalStatus: "single", adults: [{ personId: alex.id, province, residentAllYear }] } }),
   );
   year = await json<TaxYear>(server.call("POST", "/api/years/2025/slips", { body: { revision: year.revision, personId: alex.id, ...slip } }), 201);
   return { alex, revision: year.revision };
@@ -363,9 +363,66 @@ describe("printing a return", () => {
     expect((await download(alex.id)).status).toBe(200);
   });
 
+  it("names on the worksheet the forms the return needs that Taxi doesn't print: Schedule D for a resident of Quebec", async () => {
+    const source = standIn();
+    server = await startServer({ forms: source });
+    const camille = await camilleInQuebec();
+    const text = (await pagesOf(await (await download(camille.id)).arrayBuffer())).flat().map((item) => item.text).join(" ");
+    expect(text).toMatch(/Forms to fill in yourself Schedule D, Solidarity Tax Credit \(Revenu Québec\)/);
+  });
+
+  it("names Alberta's own Schedule 6 (5009-S6) when an Alberta return gets the Canada workers benefit", async () => {
+    server = await startServer({ forms: standIn() });
+    const { alex, revision } = await alexWithT4({ province: "AB", slip: { type: "T4", issuer: "Maple Corp", boxes: { 14: "15000", 22: "300" } } });
+    await finish(alex, revision);
+    const text = (await pagesOf(await (await download(alex.id)).arrayBuffer())).flat().map((item) => item.text).join(" ");
+    expect(text).toMatch(/T1\.45300\s+Canada workers benefit/);
+    expect(text).toMatch(/Forms to fill in yourself Schedule 6 \(5009-S6\)/);
+    expect(text).not.toMatch(/Schedule 6 \((5005|5014)-S6\)/);
+  });
+
   it("answers 404 for someone who has no return in the year", async () => {
     server = await startServer({ forms: standIn() });
     await alexWithT4();
     expect((await download("00000000-0000-4000-8000-000000000000")).status).toBe(404);
+  });
+});
+
+describe("downloading the forms from canada.ca and revenuquebec.ca", () => {
+  /** Alex's finished return, printed with the forms downloaded through `send`. */
+  async function printWith(send: typeof fetch, timeoutMs?: number) {
+    server = await startServer({ forms: officialForms(send, timeoutMs) });
+    const { alex, revision } = await alexWithT4();
+    await finish(alex, revision);
+    return download(alex.id);
+  }
+
+  it("asks for each form with a User-Agent naming the app, and a time limit", async () => {
+    const asked: { url: string; init?: RequestInit }[] = [];
+    await printWith(async (url, init) => {
+      asked.push({ url: String(url), init });
+      return new Response(new Uint8Array([37, 80, 68, 70]), { headers: { "Content-Type": "application/pdf" } });
+    });
+    expect(asked[0]!.url).toBe(rules.forms.get("T1")!.url);
+    const headers = new Headers(asked[0]!.init?.headers);
+    expect(headers.get("User-Agent")).toMatch(/Taxi/);
+    expect(headers.get("Accept")).toBe("application/pdf");
+    expect(asked[0]!.init?.signal).toBeInstanceOf(AbortSignal);
+  });
+
+  it("answers 503 when canada.ca can't be reached", async () => {
+    const refused = await json<{ error: { code: string; message: string } }>(printWith(() => Promise.reject(new TypeError("fetch failed"))), 503);
+    expect(refused.error).toMatchObject({ code: "unavailable", message: expect.stringMatching(/couldn't be downloaded: canada\.ca couldn't be reached/) });
+  });
+
+  it("answers 503 when canada.ca doesn't answer in time", async () => {
+    const refused = await json<{ error: { code: string; message: string } }>(printWith(() => new Promise<Response>(() => {}), 50), 503);
+    expect(refused.error).toMatchObject({ code: "unavailable", message: expect.stringMatching(/canada\.ca didn't answer in time/) });
+  });
+
+  it("answers 503 when the form's download doesn't finish in time", async () => {
+    const endless = () => new Response(new ReadableStream({ start() {} }), { headers: { "Content-Type": "application/pdf" } });
+    const refused = await json<{ error: { code: string; message: string } }>(printWith(async () => endless(), 50), 503);
+    expect(refused.error).toMatchObject({ code: "unavailable", message: expect.stringMatching(/canada\.ca didn't answer in time/) });
   });
 });

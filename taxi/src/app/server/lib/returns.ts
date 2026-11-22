@@ -45,8 +45,8 @@ export async function saveAnswers(db: Db, caller: Caller, year: number, input: S
       issues.push({ path, message: "Enter an amount like 1234.56" });
     } else if (question.type === "percent" && !(typeof value === "string" && /^\d{1,3}(\.\d{1,2})?$/.test(value) && Number(value) <= 100)) {
       issues.push({ path, message: "Enter a percent from 0 to 100, like 12.5" });
-    } else if (question.type === "count" && !(typeof value === "string" && /^\d{1,3}$/.test(value))) {
-      issues.push({ path, message: "Enter a whole number from 0 to 999" });
+    } else if (question.type === "count" && !(typeof value === "string" && /^\d{1,3}$/.test(value) && Number(value) <= (question.max ?? 999))) {
+      issues.push({ path, message: `Enter a whole number from 0 to ${question.max ?? 999}` });
     } else if (question.type === "boolean" && typeof value !== "boolean") issues.push({ path, message: "Answer yes or no" });
     else if (question.type === "choice" && !(typeof value === "string" && question.options!.includes(value))) {
       issues.push({ path, message: `Choose one of ${question.options!.join(", ")}` });

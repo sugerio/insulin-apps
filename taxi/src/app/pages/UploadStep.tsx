@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge.tsx";
 import { Button } from "@/components/ui/button.tsx";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card.tsx";
 import { cn } from "@/lib/utils.ts";
-import { apiRequest, describeError } from "../api/client.ts";
+import { apiRequest, describeError, saveFile } from "../api/client.ts";
 import { useMe } from "../auth/AuthProvider.tsx";
 import { Banner, ResourceView } from "../components/Feedback.tsx";
 import { StepLayout } from "../components/StepLayout.tsx";
@@ -251,9 +251,9 @@ function Uploaded({ data, uploading, onNotice }: { data: DocumentList; uploading
   );
 }
 
-type FileState = { status: "idle" } | { status: "confirming" } | { status: "working"; action: "delete" | "read" } | { status: "error"; error: unknown };
+type FileState = { status: "idle" } | { status: "confirming" } | { status: "working"; action: "delete" | "read" | "download" } | { status: "error"; error: unknown };
 
-/** One uploaded file: open it, read it again when reading failed, or delete it (after saying which slips go with it). */
+/** One uploaded file: download it, read it again when reading failed, or delete it (after saying which slips go with it). */
 function UploadedFile({ document, uploading, onNotice }: { document: DocumentRecord; uploading: boolean; onNotice: (notice: string | null) => void }) {
   const me = useMe();
   const { year, replace } = useYear();
@@ -273,6 +273,16 @@ function UploadedFile({ document, uploading, onNotice }: { document: DocumentRec
     }
   }
 
+  async function download() {
+    setState({ status: "working", action: "download" });
+    try {
+      await saveFile(`/api/years/${year.year}/documents/${document.id}/file`, document.name);
+      setState({ status: "idle" });
+    } catch (error) {
+      setState({ status: "error", error });
+    }
+  }
+
   async function readAgain() {
     setState({ status: "working", action: "read" });
     try {
@@ -287,9 +297,15 @@ function UploadedFile({ document, uploading, onNotice }: { document: DocumentRec
   return (
     <li className="flex flex-col gap-1 py-2 text-sm">
       <div className="flex items-center gap-3">
-        <a className="min-w-0 flex-1 truncate font-medium underline-offset-2 hover:underline" href={`/api/years/${year.year}/documents/${document.id}/file`} target="_blank" rel="noreferrer">
-          {document.name}
-        </a>
+        <button
+          type="button"
+          className="min-w-0 flex-1 truncate text-left font-medium underline-offset-2 hover:underline disabled:opacity-50"
+          disabled={working}
+          aria-label={`Download ${document.name}`}
+          onClick={() => void download()}
+        >
+          {working && state.action === "download" ? `Downloading ${document.name}…` : document.name}
+        </button>
         {editable && state.status !== "confirming" ? (
           <span className="flex shrink-0 gap-1">
             {UNREAD.includes(document.status) ? (

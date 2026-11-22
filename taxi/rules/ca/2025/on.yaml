@@ -291,26 +291,31 @@ lines:
   ON428.10:
     label: Ontario age amount
     formula: >-
-      round((if(person.age >= 65, max(0, param.onAgeAmountMax - round(max(0, line.T1.23600 - param.onAgeAmountThreshold) * param.onAgeAmountRate, 2)), 0)) * line.RES.factor, 2)
-    source: "Worksheet ON428, line 58080: for people born in 1960 or earlier"
+      if(person.age >= 65, max(0, round(param.onAgeAmountMax * line.RES.factor, 2)
+      - round(max(0, line.T1.23600 - round(param.onAgeAmountThreshold * line.RES.factor, 2)) * param.onAgeAmountRate, 2)), 0)
+    source: "Worksheet ON428, line 58080: for people born in 1960 or earlier, $6,223 less 15% of net income over $46,330 (both amounts prorated for a part-year resident: canada.ca, Completing your return for newcomers, Example 2)"
+  # For a part-year resident, the base and the maximum are prorated, and then the net income is subtracted, not
+  # prorated (canada.ca, completing a return for newcomers, Example 3 for line 30300).
   ON428.13:
     label: Ontario spouse or common-law partner amount
     formula: >-
-      round((if(line.HH.partner == 1, min(param.onSpouseMax, max(0, param.onSpouseBase - line.HH.spouseNetIncome)), 0)) * line.RES.factor, 2)
+      round(if(line.HH.partner == 1, min(round(param.onSpouseMax * line.RES.factor, 2), max(0, round(param.onSpouseBase * line.RES.factor, 2) - line.HH.spouseNetIncome)), 0), 2)
 
   ON428.16:
     label: Ontario amount for an eligible dependant
     formula: >-
-      round((if(line.HH.partner == 0 and family.childrenUnder18 > 0, min(param.onSpouseMax, max(0, param.onSpouseBase - answer.dependantNetIncome)), 0)) * line.RES.factor, 2)
+      round(if(line.HH.partner == 0 and family.childrenUnder18 > 0, min(round(param.onSpouseMax * line.RES.factor, 2), max(0, round(param.onSpouseBase * line.RES.factor, 2) - answer.dependantNetIncome)), 0), 2)
     source: "ON428 lines 14 to 16: the base minus their net income, up to the maximum"
   ON428.17:
     label: Ontario caregiver amount
     formula: >-
-      round((if(answer.hasInfirmDependant, if(answer.infirmDependants > 1, unsupported("The Ontario caregiver amount for more than one adult dependant isn't handled by this app yet"), if(answer.infirmDependants == 0, 0, min(param.onCaregiverMax, max(0, param.onCaregiverBase - answer.infirmDependantIncome)))), 0)) * line.RES.factor, 2)
+      if(answer.hasInfirmDependant, if(answer.infirmDependants > 1, unsupported("The Ontario caregiver amount for more than one adult dependant isn't handled by this app yet"),
+      if(answer.infirmDependants == 0, 0, min(round(param.onCaregiverMax * line.RES.factor, 2), max(0, round(param.onCaregiverBase * line.RES.factor, 2) - answer.infirmDependantIncome)))), 0)
     source: >-
-      Worksheet ON428, line 58185: $26,562 less the dependant's net income, up to $6,008. Only for a dependant 18 or
-      older with an impairment, not a spouse or a child under 18; line 4 (an eligible dependant amount for the same
-      person) is zero, as the app's eligible dependant is a child under 18
+      Worksheet ON428, line 58185: $26,562 less the dependant's net income, up to $6,008 (both prorated for a part-year
+      resident before the income comes off). Only for a dependant 18 or older with an impairment, not a spouse or a
+      child under 18; line 4 (an eligible dependant amount for the same person) is zero, as the app's eligible
+      dependant is a child under 18
   ON428.18:
     label: Ontario amounts for you and your dependants
     formula: "line.ON428.9 + line.ON428.10 + line.ON428.13 + line.ON428.16 + line.ON428.17"
@@ -356,12 +361,17 @@ lines:
     source: "ON428 line 32 (58520): line 31900 of your return"
   ON428.33:
     label: Your unused Ontario tuition and education amounts
-    formula: "min(answer.unusedProvincialTuition, line.ONS11.4)"
-    source: "Schedule ON(S11), line 5: the unused amounts from your notice of assessment, up to line 4"
+    formula: 'min(if(person.province == "AB", 0, answer.unusedProvincialTuition), line.ONS11.4)'
+    source: >-
+      Schedule ON(S11), line 5: the unused amounts from your notice of assessment, up to line 4. None for a spouse in
+      Alberta, whose own return doesn't carry unused provincial tuition forward (Schedule ON(S2) reads this line for them)
   ON428.34:
     label: Ontario amounts transferred from your spouse or common-law partner
-    formula: "if(line.HH.partner == 1 and family.partnerInYear, if(line.ONS2.4 == 0, 0, line.ONS2.11), 0)"
-    source: "Schedule ON(S2): their unused Ontario age, pension income and disability amounts. A spouse living in another province is read as if they lived in Ontario, as the schedule asks: the engine works out Ontario's lines for anyone"
+    formula: "if(line.HH.partner == 1 and family.partnerInYear, if(line.ONS2.4 == 0, 0, round(line.ONS2.11 * line.RES.factor, 2)), 0)"
+    source: >-
+      Schedule ON(S2): their unused Ontario age, pension income and disability amounts. A spouse living in another
+      province is read as if they lived in Ontario, as the schedule asks: the engine works out Ontario's lines for
+      anyone. Prorated for a part-year resident (RC4018, Appendix K: line 58640); the schedule shows the whole transfer
   ON428.35:
     label: Ontario amounts before medical expenses
     formula: "line.ON428.31 + line.ON428.32 + line.ON428.33 + line.ON428.34"
@@ -562,10 +572,12 @@ lines:
   ON479.1:
     label: Ontario fertility treatment tax credit
     formula: >-
-      if(line.ON479.61268 == 0, 0, if(line.HH.partner == 1 and family.partnerInYear and spouse.answer.fertilityExpenses > 0,
+      if(line.ON479.61268 == 0, 0, if(line.HH.partner == 1 and family.partnerInYear and spouse.person.province == "ON" and spouse.answer.fertilityExpenses > 0,
       unsupported("Only one spouse can claim the Ontario fertility treatment tax credit. Enter the fertility treatment expenses on one return only"),
       min(param.onFertilityMax, round(line.ON479.61268 * param.onFertilityRate, 2))))
-    source: "ON479 line 1: 25% of the expenses, up to $5,000. Only one spouse may claim it, and the claim can't be split"
+    source: >-
+      ON479 line 1: 25% of the expenses, up to $5,000. Only one spouse may claim it, and the claim can't be split. A
+      spouse living in another province claims that province's credit, if any, not this one
   ON479.5:
     label: Medical expenses at the seniors care at home rate
     formula: "min(param.onSeniorsCareMax, round(line.ON428.43 * param.onSeniorsCareRate, 2))"

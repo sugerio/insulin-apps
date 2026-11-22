@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { compileRules } from "../../src/app/shared/engine/compile.ts";
@@ -58,7 +58,7 @@ describe("2025 forms", () => {
     ["consultant-ab", "T1,S8,T2125,T1M,T2209,T2036,AB428"],
     ["shop-owner-bc", "T1,S3,S8,T2125,T2209,T2036,BC428"],
     ["sales-rep-on", "T1,S8,T2125,ON428"],
-    ["low-income-worker-ab", "T1,S5,S6,S11,AB428"],
+    ["low-income-worker-ab", "T1,S5,S11,AB428"],
     ["cross-province-couple", "T1,S2,ON428,ONS2", "T1,BC428"],
     ["ab-senior-couple", "T1,S2,S5,AB428,ABS2", "T1,AB428"],
     ["mb-high-earner-couple", "T1,S2,S5,S9,T2209,T2036,MB428,MBS2", "T1,S11,MB428,MBS11"],
@@ -86,7 +86,9 @@ describe("2025 forms", () => {
     ["self-employed-qc", "T1QC,T2125,TP1,QCF,QCK,QCL,QCR,QCU"],
     ["senior-couple-qc", "T1QC,TP1,QCB,QCF,QCJ,QCK,QCQ", "T1QC,TP1,QCF,QCK"],
     ["single-employee-qc", "T1QC,S9,TP1,QCU"],
-    ["single-parent-low-income-qc", "T1QC,S5,S6,T778,TP1,QCB,QCC,QCP,QCU"],
+    ["single-parent-low-income-qc", "T1QC,S5,T778,TP1,QCB,QCC,QCP,QCU"],
+    ["oas-recovery-qc", "T1QC,TP1,QCF,QCK"],
+    ["ei-repaid-qc", "T1QC,TP1,QCK,QCU"],
   ] as const) {
     it(`${name}: its forms hold the case's expected lines`, () => {
       const example = golden(name);
@@ -157,6 +159,10 @@ describe("2025 forms", () => {
     expect(single.amounts["51"]).toBeUndefined();
     // The exemption code instead of Schedule K, as a whole number.
     expect(single.marks["449"]).toBe("14");
+    // The OAS repaid on the federal return, on line 250 with its code (point 3) in box 249; none without a repayment.
+    const repaid = marksOf("oas-recovery-qc", 0, "TP1");
+    expect([repaid.amounts["250"], repaid.marks["249"]]).toEqual(["2181.9", "3"]);
+    expect([single.amounts["250"], single.marks["249"]]).toEqual([undefined, undefined]);
     // Nobody outside Quebec gets a Revenu Québec form.
     expect(marksOf("on-couple-kids", 0, "TP1")).toEqual({ marks: {}, amounts: {} });
   });
@@ -284,6 +290,106 @@ describe("2025 forms", () => {
     expect(french.find((each) => each.form.id === "TP1")!.form.title).toBe("TP-1 Déclaration de revenus (Revenu Québec)");
     // Every Revenu Québec form has a French version; no CRA form has one.
     for (const form of rules.forms.values()) expect(form.french !== undefined, form.id).toBe(form.url.includes("revenuquebec.ca"));
+  });
+
+  /** Every golden case's returns, with their forms. */
+  const everyReturn = () =>
+    readdirSync(GOLDEN)
+      .filter((file) => file.endsWith(".json"))
+      .flatMap((file) => {
+        const input = golden(file.replace(/\.json$/, "")).input as { people: { id: string; province: string }[] };
+        const evaluation = new Evaluation(rules, input);
+        return input.people.map((person) => ({
+          label: `${file} ${person.id}`,
+          person,
+          evaluation,
+          filled: fillForms(rules, evaluation, person.id, personalFacts(evaluation.input, person.id)),
+        }));
+      });
+
+  it("prints Schedule 6 (5000-S6) only outside Quebec, Alberta and Nunavut, which have their own", () => {
+    let checked = 0;
+    for (const { label, person, evaluation, filled } of everyReturn()) {
+      if (!evaluation.line(person.id, "T1.45300").value?.isPositive()) continue;
+      expect(filled.some((each) => each.form.id === "S6"), label).toBe(!["QC", "AB", "NU"].includes(person.province));
+      checked += 1;
+    }
+    expect(checked).toBeGreaterThan(5);
+  });
+
+  it("prints Schedule 6 for advance payments on an RC210 slip, with no benefit, down to its Step 4", () => {
+    // $59,435 of net income gets no Canada workers benefit, but $400 of it was paid in advance: Step 4 shows the
+    // advance, and line 49 (line 41500) stays 0, since it can't be more than the benefit.
+    const input = structuredClone(golden("single-employee-on").input) as Golden["input"] & { slips: object[] };
+    input.slips.push({ id: "rc", person: input.people[0]!.id, type: "RC210", issuer: "Canada Revenue Agency", boxes: { 10: "400" } });
+    const { amounts } = marksOf(input, 0, "S6");
+    expect(amounts).toMatchObject({ "44": "400", "46": "400", "48": "400" });
+    expect([amounts["43"], amounts["49"]]).toEqual([undefined, undefined]);
+  });
+
+  it("prints a part-year resident's Schedule 5 with the prorated amounts, and Schedule 2's whole transfer", () => {
+    // In Canada for the last 100 days of 2025 (the 90% rule not met), with a spouse 67 and resident all year who had
+    // $800 of income.
+    const input = {
+      year: 2025,
+      people: [
+        { id: "p1", name: "Alex Moreau", role: "self", birthDate: "1985-04-02", province: "ON", residentAllYear: false },
+        { id: "p2", name: "Robin Moreau", role: "spouse", birthDate: "1958-05-01", province: "ON", residentAllYear: true },
+      ],
+      family: { maritalStatus: "married", dependants: [] },
+      answers: { p1: { daysResident: "100", nonResidentIncome: "60000", nonResidentCanadianIncome: "0" }, p2: {} },
+      slips: [
+        { id: "s1", person: "p1", type: "T4", issuer: "Maple Corp", boxes: { 14: "100000", 22: "20000" } },
+        { id: "s2", person: "p2", type: "T4", issuer: "Birch Books", boxes: { 14: "800" } },
+      ],
+    };
+    const rows = (form: string) => marksOf(input as unknown as Golden["input"], 0, form).amounts;
+    // Line 1 is line 30000 (100/365 × $16,129), less their net income: line 30300.
+    expect(rows("S5")).toMatchObject({ "1": "4418.9", "3": "4418.9", "4": "800", "5": "3618.9" });
+    // Their unused age amount comes over whole on Schedule 2 (line 13), and 100/365 of it on line 32600 (row 105).
+    expect(rows("S2")["13"]).toBe("9028");
+    expect(rows("T1")["105"]).toBe("2473.42");
+  });
+
+  it("prints every row of a provincial Schedule 2 that its transfer counts, so the rows add up to it", () => {
+    // The spouse's amounts and their total, their taxable income, what is taken off it and its total, the adjusted
+    // taxable income, and the amount transferred, by row.
+    const short = { amounts: ["1", "2", "3"], total: "4", income: "5", less: ["6", "7", "8"], lessTotal: "9", adjusted: "10", transfer: "11" };
+    const tuition = { amounts: ["1", "2", "3", "4"], total: "5", income: "6", less: ["7", "8", "9"], lessTotal: "10", adjusted: "11", transfer: "12" };
+    const long = { amounts: ["1", "2", "3", "4", "5"], total: "6", income: "7", less: ["8", "9", "10"], lessTotal: "11", adjusted: "12", transfer: "13" };
+    const layouts: Record<string, typeof short> = {
+      ONS2: short,
+      ABS2: short,
+      BCS2: tuition,
+      MBS2: tuition,
+      NBS2: tuition,
+      NLS2: tuition,
+      NSS2: tuition,
+      PES2: tuition,
+      NTS2: tuition,
+      SKS2: long,
+      YTS2: long,
+      NUS2: long,
+    };
+    const printed = new Set<string>();
+    for (const { label, person, evaluation, filled } of everyReturn()) {
+      for (const { form, amounts } of filled) {
+        const rows = layouts[form.id];
+        if (!rows) continue;
+        const row = (key: string) => amounts.find((amount) => amount.key === key)?.value ?? Dec.ZERO;
+        const sum = (keys: string[]) => Dec.sum(keys.map(row)).toString();
+        const ruleLine = (key: string) => evaluation.line(person.id, `${form.id}.${key}`).value!.roundTo(2, "HALF_UP").toString();
+        const at = `${label} ${form.id}`;
+        expect(row(rows.total).toString(), `${at} row ${rows.total}`).toBe(sum(rows.amounts));
+        expect(row(rows.total).toString(), `${at} row ${rows.total}`).toBe(ruleLine(rows.total));
+        expect(row(rows.lessTotal).toString(), `${at} row ${rows.lessTotal}`).toBe(sum(rows.less));
+        expect(row(rows.adjusted).toString(), `${at} row ${rows.adjusted}`).toBe(Dec.max(Dec.ZERO, row(rows.income).sub(row(rows.lessTotal))).toString());
+        expect(row(rows.transfer).toString(), `${at} row ${rows.transfer}`).toBe(Dec.max(Dec.ZERO, row(rows.total).sub(row(rows.adjusted))).toString());
+        expect(row(rows.transfer).toString(), `${at} row ${rows.transfer}`).toBe(ruleLine(rows.transfer));
+        printed.add(form.id);
+      }
+    }
+    expect([...printed].sort()).toEqual(Object.keys(layouts).sort());
   });
 });
 

@@ -36,6 +36,9 @@ function ReturnSlips({ data }: { data: SlipList }) {
   const { person } = useReturn();
   const editable = canPrepare(me);
   const [state, setState] = useState<{ status: "idle" | "saving" } | { status: "error"; error: unknown }>({ status: "idle" });
+  // The slip open to change, or "new" for one being added. Confirming waits for it: it would confirm the slip as stored,
+  // and the year it answers with closes the form and drops what was typed.
+  const [editing, setEditing] = useState<string | "new" | null>(null);
   const slips = data.slips.filter((slip) => slip.personId === person.id);
   const unconfirmed = slips.filter((slip) => slip.status === "unconfirmed").length;
   // The server refuses to confirm a slip with a box AI couldn't read and no amount.
@@ -53,7 +56,8 @@ function ReturnSlips({ data }: { data: SlipList }) {
 
   return (
     <>
-      <PersonSlips personId={person.id} slips={slips} editable={editable} />
+      {/* Confirming confirms the slips as stored: nothing in them changes until it ends. */}
+      <PersonSlips personId={person.id} slips={slips} editable={editable} busy={state.status === "saving"} editing={editing} onEditing={setEditing} />
       {state.status === "error" ? (
         state.error instanceof ApiError && state.error.status === 409 ? (
           <Banner kind="error" title="Someone else changed this year" action={<Button variant="outline" size="sm" onClick={reload}>Reload</Button>}>
@@ -64,11 +68,13 @@ function ReturnSlips({ data }: { data: SlipList }) {
         )
       ) : null}
       <div className="flex flex-wrap items-center justify-end gap-2">
-        {editable && unread ? (
+        {editable && editing !== null && unconfirmed > 0 ? (
+          <p className="mr-auto text-xs text-muted-foreground">Save or cancel the slip you're changing before confirming.</p>
+        ) : editable && unread ? (
           <p className="mr-auto text-xs text-muted-foreground">Before confirming, enter each box that couldn't be read, or 0 if it is blank on the slip: choose Edit on its slip.</p>
         ) : null}
         {editable ? (
-          <Button variant="outline" onClick={() => void confirmAll()} disabled={unconfirmed === 0 || unread || state.status === "saving"}>
+          <Button variant="outline" onClick={() => void confirmAll()} disabled={unconfirmed === 0 || unread || editing !== null || state.status === "saving"}>
             {unconfirmed === 0 ? "All slips confirmed" : `Confirm ${unconfirmed} ${unconfirmed === 1 ? "slip" : "slips"}`}
           </Button>
         ) : null}
@@ -80,12 +86,26 @@ function ReturnSlips({ data }: { data: SlipList }) {
   );
 }
 
-function PersonSlips({ personId, slips, editable }: { personId: string; slips: Slip[]; editable: boolean }) {
+function PersonSlips({
+  personId,
+  slips,
+  editable,
+  busy,
+  editing,
+  onEditing: setEditing,
+}: {
+  personId: string;
+  slips: Slip[];
+  editable: boolean;
+  /** The slips are being confirmed: none can be added, changed, removed or moved meanwhile. */
+  busy: boolean;
+  editing: string | "new" | null;
+  onEditing: (editing: string | "new" | null) => void;
+}) {
   const { year } = useYear();
   const types = rulesFor(year.year)!.slips;
   const duplicates = possibleDuplicates(rulesFor(year.year)!, slips);
   const others = year.adults.filter((adult) => adult.personId !== personId).map((adult) => year.people.find((person) => person.id === adult.personId)!);
-  const [editing, setEditing] = useState<string | "new" | null>(null);
   return (
     <Card>
       <CardHeader>
@@ -94,7 +114,7 @@ function PersonSlips({ personId, slips, editable }: { personId: string; slips: S
         </CardTitle>
         {editable && editing === null ? (
           <CardAction>
-            <Button variant="outline" size="sm" onClick={() => setEditing("new")}>
+            <Button variant="outline" size="sm" onClick={() => setEditing("new")} disabled={busy}>
               <Plus aria-hidden="true" />
               Add a slip
             </Button>
@@ -142,17 +162,17 @@ function PersonSlips({ personId, slips, editable }: { personId: string; slips: S
                   ) : null}
                   {editable && editing === null
                     ? others.map((other) => (
-                        <MoveSlip key={other.id} slip={slip} to={other} />
+                        <MoveSlip key={other.id} slip={slip} to={other} disabled={busy} />
                       ))
                     : null}
                 </div>
                 <Badge variant={slip.status === "confirmed" ? "secondary" : "outline"}>{slip.status === "confirmed" ? "Confirmed" : "To confirm"}</Badge>
                 {editable && editing === null ? (
                   <div className="flex gap-1">
-                    <Button variant="ghost" size="sm" onClick={() => setEditing(slip.id)} aria-label={`Edit ${slip.type} from ${slip.issuer}`}>
+                    <Button variant="ghost" size="sm" onClick={() => setEditing(slip.id)} disabled={busy} aria-label={`Edit ${slip.type} from ${slip.issuer}`}>
                       Edit
                     </Button>
-                    <RemoveSlip slip={slip} />
+                    <RemoveSlip slip={slip} disabled={busy} />
                   </div>
                 ) : null}
               </li>
@@ -169,7 +189,7 @@ function PersonSlips({ personId, slips, editable }: { personId: string; slips: S
   );
 }
 
-function RemoveSlip({ slip }: { slip: Slip }) {
+function RemoveSlip({ slip, disabled }: { slip: Slip; disabled: boolean }) {
   const { year, replace } = useYear();
   const [error, setError] = useState<unknown>(null);
   return (
@@ -177,6 +197,7 @@ function RemoveSlip({ slip }: { slip: Slip }) {
       <Button
         variant="ghost"
         size="sm"
+        disabled={disabled}
         aria-label={`Remove ${slip.type} from ${slip.issuer}`}
         onClick={() => {
           setError(null);
@@ -191,7 +212,7 @@ function RemoveSlip({ slip }: { slip: Slip }) {
 }
 
 /** A slip that is the other adult's goes to their return, unconfirmed. */
-function MoveSlip({ slip, to }: { slip: Slip; to: Person }) {
+function MoveSlip({ slip, to, disabled }: { slip: Slip; to: Person; disabled: boolean }) {
   const { year, replace } = useYear();
   const [error, setError] = useState<unknown>(null);
   const first = to.name.split(/\s+/)[0] ?? to.name;
@@ -199,7 +220,8 @@ function MoveSlip({ slip, to }: { slip: Slip; to: Person }) {
     <p className="text-xs">
       <button
         type="button"
-        className="text-muted-foreground underline underline-offset-2 hover:text-foreground"
+        disabled={disabled}
+        className="text-muted-foreground underline underline-offset-2 hover:text-foreground disabled:opacity-50"
         aria-label={`Move ${slip.type} from ${slip.issuer} to ${to.name}'s return`}
         onClick={() => {
           setError(null);

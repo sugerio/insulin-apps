@@ -146,25 +146,28 @@ lines:
   NT428.10:
     label: Northwest Territories age amount
     formula: >-
-      round((if(person.age >= 65, max(0, param.ntAgeAmountMax - round(max(0, line.T1.23600 - param.ntAgeAmountThreshold) * param.ntAgeAmountRate, 2)), 0)) * line.RES.factor, 2)
-    source: "Worksheet NT428, line 58080: for people born in 1960 or earlier"
+      if(person.age >= 65, max(0, round(param.ntAgeAmountMax * line.RES.factor, 2)
+      - round(max(0, line.T1.23600 - round(param.ntAgeAmountThreshold * line.RES.factor, 2)) * param.ntAgeAmountRate, 2)), 0)
+    source: "Worksheet NT428, line 58080: for people born in 1960 or earlier, $8,727 less 15% of net income over $45,522 (both amounts prorated for a part-year resident: canada.ca, Completing your return for newcomers, Example 2)"
+  # For a part-year resident, the base is prorated, and then the net income is subtracted, not prorated (canada.ca,
+  # completing a return for newcomers, Example 3 for line 30300).
   NT428.13:
     label: Northwest Territories spouse or common-law partner amount
     formula: >-
-      round((if(line.HH.partner == 1, max(0, param.ntSpouseBase - line.HH.spouseNetIncome), 0)) * line.RES.factor, 2)
+      round(if(line.HH.partner == 1, max(0, round(param.ntSpouseBase * line.RES.factor, 2) - line.HH.spouseNetIncome), 0), 2)
 
   NT428.16:
     label: Northwest Territories amount for an eligible dependant
     formula: >-
-      round((if(line.HH.partner == 0 and family.childrenUnder18 > 0, max(0, param.ntSpouseBase - answer.dependantNetIncome), 0)) * line.RES.factor, 2)
+      round(if(line.HH.partner == 0 and family.childrenUnder18 > 0, max(0, round(param.ntSpouseBase * line.RES.factor, 2) - answer.dependantNetIncome), 0), 2)
     source: "NT428 lines 14 to 16: the base minus their net income"
   # The worksheet's infirm dependant amount, which needn't live with you, rather than the caregiver amount (line 27),
   # which needs a dependant living with you: the app doesn't ask where they live. One dependant, as line 30450.
   NT428.17:
     label: Northwest Territories amount for infirm dependants age 18 or older
     formula: >-
-      round((if(line.T1.30450 > 0, min(param.ntInfirmDependantMax, max(0, param.ntInfirmDependantBase - answer.infirmDependantIncome)), 0)) * line.RES.factor, 2)
-    source: "Worksheet NT428, line 58200: $14,305 less the dependant's net income, up to $5,914"
+      if(line.T1.30450 > 0, min(round(param.ntInfirmDependantMax * line.RES.factor, 2), max(0, round(param.ntInfirmDependantBase * line.RES.factor, 2) - answer.infirmDependantIncome)), 0)
+    source: "Worksheet NT428, line 58200: $14,305 less the dependant's net income, up to $5,914 (both prorated for a part-year resident before the income comes off)"
   NT428.23:
     label: CPP and EI credit amounts
     formula: "line.T1.30800 + line.T1.31000 + line.T1.31200"
@@ -197,12 +200,12 @@ lines:
     source: "NT428 line 33 (58560): Schedule NT(S11)"
   NT428.35:
     label: Amounts transferred from your spouse or common-law partner
-    formula: "if(line.HH.partner == 1 and family.partnerInYear, line.NTS2.12, 0)"
-    source: "NT428 line 35 (58640): Schedule NT(S2)"
+    formula: "if(line.HH.partner == 1 and family.partnerInYear, round(line.NTS2.12 * line.RES.factor, 2), 0)"
+    source: "NT428 line 35 (58640): Schedule NT(S2). Prorated for a part-year resident (RC4018, Appendix K); the schedule shows the whole transfer"
   NT428.34:
     label: Northwest Territories tuition and education amounts transferred from a child or grandchild
-    formula: "line.CHILD.provincialTuition"
-    source: "NT428 line 34 (58600): the territorial amount designated to you on their T2202 (the app takes the federal one, line 32400)"
+    formula: "round(line.CHILD.provincialTuition * line.RES.factor, 2)"
+    source: "NT428 line 34 (58600): the territorial amount designated to you on their T2202 (the app takes the federal one, line 32400). Prorated for a part-year resident (RC4018, Appendix K)"
   NT428.42:
     label: Allowable medical expenses
     formula: "max(0, line.T1.33099 - min(param.ntMedicalThresholdMax, round(line.T1.23600 * param.medicalThresholdRate, 2)))"
@@ -264,7 +267,8 @@ lines:
   # full-time months first, up to 12 in all.
   NTS11.1:
     label: Unused Northwest Territories tuition and education from your 2024 notice of assessment
-    formula: "answer.unusedProvincialTuition"
+    formula: 'if(person.province == "AB", 0, answer.unusedProvincialTuition)'
+    source: "None for a spouse in Alberta, whose own return doesn't carry unused provincial tuition forward (Schedule NT(S2) reads this schedule for them)"
   NTS11.5:
     label: Tuition and education amounts for 2025
     formula: >-

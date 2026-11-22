@@ -7,7 +7,8 @@
 # - a yes/no question without one is a group: its parts (questions with `parent`) are asked in its card once it applies,
 #   or, with a `note`, something to know (a form to file separately);
 # - a money question is an amount to enter. Its `receipts` are shown with it; a line that adds them makes the amount
-#   what isn't on an uploaded receipt, and a `suggest` line works out the amount from the receipts to start from.
+#   what isn't on an uploaded receipt, and a `suggest` line works out the amount from the receipts to start from;
+# - a count is a whole number from 0 to 999, or to its `max` where the year sets one (12 months, 365 days).
 # A question without a module and with `decision: true` is a choice the app makes (its default) until a hint, accepted,
 # changes it: the result stays complete without an answer.
 
@@ -458,6 +459,7 @@ questions:
     default: "0"
   childCareSpouseMonths:
     type: count
+    max: 12
     module: deductions
     parent: childCareSpouseUnable
     ask: Months they were a part-time student
@@ -537,6 +539,7 @@ questions:
     default: false
   northernDays:
     type: count
+    max: 365
     module: deductions
     parent: hasNorthernResidence
     ask: Days you lived there in 2025
@@ -733,6 +736,7 @@ questions:
     help: For the home you lived in, not counting any part a roommate or someone else paid.
   rentMonths:
     type: count
+    max: 12
     module: credits
     parent: hasRentedHome
     ask: Months you paid rent
@@ -763,6 +767,7 @@ questions:
     help: The advance taken off your property tax statement, or credited to your property tax account. 0 if none.
   homeOwnedDays:
     type: count
+    max: 365
     module: credits
     parent: paidSchoolTaxes
     ask: Days in 2025 you owned it and lived in it
@@ -867,7 +872,7 @@ questions:
     type: money
     module: credits
     ask: Your eligible dependant's 2025 net income
-    help: The net income (line 23600 of their return, if they file one) of the child you claim the amount for an eligible dependant for. The amount goes down by it. Enter 0 if they had no income.
+    help: The net world income for 2025 of the child you claim the amount for an eligible dependant for (line 23600 of their return, if they file one, plus any income while they didn't live in Canada). The amount goes down by it. Enter 0 if they had no income.
   childActivityFees:
     type: money
     module: credits
@@ -933,6 +938,7 @@ questions:
     default: false
   qcDrugMonthsJanJun:
     type: count
+    max: 6
     module: credits
     parent: qcGroupDrugPlan
     ask: Months from January to June it covered you
@@ -940,6 +946,7 @@ questions:
     default: "6"
   qcDrugMonthsJulDec:
     type: count
+    max: 6
     module: credits
     parent: qcGroupDrugPlan
     ask: Months from July to December it covered you
@@ -971,6 +978,7 @@ questions:
     help: 0 if you lived in your own house or in a private seniors' residence. A seniors' residence (form TP-1029.61.MD-V) isn't handled.
   homeSupportRentMonths:
     type: count
+    max: 12
     module: credits
     parent: hasHomeSupport
     ask: Months you paid this rent in 2025
@@ -1004,10 +1012,11 @@ questions:
     type: money
     module: about
     ask: Your spouse's or partner's 2025 net income
-    help: Line 23600 of their return. Their return isn't prepared here, but some of your credits depend on it.
+    help: Their net world income for 2025, whether or not they lived in Canada all year (line 23600 of their return, plus any income while they didn't live in Canada). Their return isn't prepared here, but some of your credits depend on it.
 
   daysResident:
     type: count
+    max: 365
     module: about
     ask: Days you lived in Canada in 2025
     help: From the day you arrived, or up to the day you left, counting that day. 365 if you lived here all year.
@@ -1015,12 +1024,12 @@ questions:
     type: money
     module: about
     ask: Your world income for the part of 2025 you didn't live in Canada
-    help: All the income you had while you weren't a resident, from anywhere, in Canadian dollars. 0 if none.
+    help: All the income you had while you weren't a resident, from anywhere, in Canadian dollars. 0 if none (your personal amounts are then reduced by the days in Canada).
   nonResidentCanadianIncome:
     type: money
     module: about
     ask: The part of it from Canada
-    help: Employment or business income from Canada in that period. If it is 90% or more of that world income, you can claim your full personal amounts.
+    help: Employment or business income from Canada in that period. If it is 90% or more of that world income (and that income isn't 0), you can claim your full personal amounts.
   departureProperty:
     type: boolean
     module: income

@@ -57,13 +57,15 @@ and Revenu Québec's TP-1.
 
 If the person moved to or from Canada during the year, answer No. Personal info then asks for the days they lived in
 Canada and their income for the rest of the year. Taxi reduces the personal amounts (such as the basic personal amount)
-by the days in Canada, unless at least 90% of that other income came from Canada.
+by the days in Canada, unless they had income for the rest of the year and at least 90% of it came from Canada. Taxi
+doesn't prepare a Quebec return (TP-1) for the year of a move yet: it says so on that return.
 
 ## Save the step
 
 People are saved as you add or change them, and who is in the year with **Save people**. The year's facts are saved
 with **Save** or **Save and continue**. If something is still missing, **Save and continue** saves what you entered and
-lists what is left. When nothing is missing, the step shows a check mark.
+lists what is left. When nothing is missing, the step shows a check mark. While it saves, the step can't be changed. If
+an answer doesn't fit, such as part of a day, the answers aren't saved and the reason shows under it.
 
 If someone else changed the same year while you were editing, your save is refused and their changes are kept. Choose
 **Reload** to see them, then make your changes again.

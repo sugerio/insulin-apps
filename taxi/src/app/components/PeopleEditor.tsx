@@ -154,6 +154,8 @@ function PersonForm({ person, people, onDone, onCancel }: { person?: Person; peo
   }
   const issues = state.status === "error" && state.error instanceof ApiError ? (state.error.body?.error.issues ?? []) : [];
   const issueFor = (field: string) => issues.find((issue) => issue.path === field)?.message;
+  // Locked while it is saved: the form closes once saved, and a change typed meanwhile would be lost.
+  const saving = state.status === "saving";
 
   return (
     <form className="flex flex-col gap-4" onSubmit={(event) => void submit(event)} aria-label={person ? `Edit ${person.name}` : "Add a person"}>
@@ -161,13 +163,13 @@ function PersonForm({ person, people, onDone, onCancel }: { person?: Person; peo
         <div className="flex flex-col gap-1.5">
           <Label htmlFor={`${id}-name`}>Name</Label>
           <Input id={`${id}-name`} value={name} onChange={(event) => setName(event.target.value)} required maxLength={100} autoComplete="off"
-            aria-invalid={issueFor("name") ? true : undefined} />
+            disabled={saving} aria-invalid={issueFor("name") ? true : undefined} />
           {issueFor("name") ? <p className="text-xs text-destructive">{issueFor("name")}</p> : null}
         </div>
         <div className="flex flex-col gap-1.5">
           <Label htmlFor={`${id}-relationship`}>Relationship</Label>
           <NativeSelect id={`${id}-relationship`} value={relationship} onChange={(event) => setRelationship(event.target.value as Relationship)}
-            disabled={options.length === 1}>
+            disabled={options.length === 1 || saving}>
             {options.map((option) => (
               <NativeSelectOption key={option} value={option}>
                 {RELATIONSHIP_LABELS[option]}
@@ -178,7 +180,7 @@ function PersonForm({ person, people, onDone, onCancel }: { person?: Person; peo
         <div className="flex flex-col gap-1.5">
           <Label htmlFor={`${id}-birth`}>Birth date</Label>
           <Input id={`${id}-birth`} type="date" value={birthDate} onChange={(event) => setBirthDate(event.target.value)} required
-            aria-invalid={issueFor("birthDate") ? true : undefined} />
+            disabled={saving} aria-invalid={issueFor("birthDate") ? true : undefined} />
           {issueFor("birthDate") ? <p className="text-xs text-destructive">{issueFor("birthDate")}</p> : null}
         </div>
       </div>
@@ -186,11 +188,11 @@ function PersonForm({ person, people, onDone, onCancel }: { person?: Person; peo
         <Banner kind="error" title={person ? "The change wasn't saved" : "The person wasn't added"}>{describeError(state.error)}</Banner>
       ) : null}
       <div className="flex gap-2">
-        <Button type="submit" size="sm" disabled={state.status === "saving"}>
-          {state.status === "saving" ? "Saving…" : person ? "Save" : "Add"}
+        <Button type="submit" size="sm" disabled={saving}>
+          {saving ? "Saving…" : person ? "Save" : "Add"}
         </Button>
         {onCancel ? (
-          <Button type="button" variant="ghost" size="sm" onClick={onCancel}>
+          <Button type="button" variant="ghost" size="sm" onClick={onCancel} disabled={saving}>
             Cancel
           </Button>
         ) : null}

@@ -739,11 +739,15 @@
       "value": "30639",
       "source": "Schedule 6, line 24: $30,639"
     },
-    "cwbReductionRate": {"label":"Canada workers benefit reduction rate","value":"0.15","source":"Schedule 6, lines 26 and 38: 15%"},
+    "cwbReductionRate": {
+      "label": "Canada workers benefit reduction rate",
+      "value": "0.15",
+      "source": "Schedule 6, lines 26 and 38: 15% (the same on 5009-S6, Alberta's)"
+    },
     "cwbReductionRateBothDisabled": {
       "label": "Disability supplement reduction rate when both spouses are eligible for the disability tax credit",
       "value": "0.075",
-      "source": "Schedule 6, line 38: 7.5%"
+      "source": "Schedule 6, line 38: 7.5% (the same on 5009-S6, Alberta's)"
     },
     "cwbSecondaryEarnerMax": {"label":"Most secondary earner exemption","value":"16386","source":"Schedule 6, line 14: maximum $16,386"},
     "cwbDisabilityWorkingBase": {
@@ -751,7 +755,11 @@
       "value": "1150",
       "source": "Schedule 6, line 30: $1,150"
     },
-    "cwbDisabilityMax": {"label":"Most Canada workers benefit disability supplement","value":"843","source":"Schedule 6, line 34: $843"},
+    "cwbDisabilityMax": {
+      "label": "Most Canada workers benefit disability supplement",
+      "value": "843",
+      "source": "Schedule 6, line 34: $843 (the same on 5009-S6, Alberta's)"
+    },
     "cwbDisabilityIncomeBaseSingle": {
       "label": "Adjusted family net income where the disability supplement starts to go down, single",
       "value": "37740",
@@ -764,8 +772,13 @@
     },
     "cwbFamilyLimit": {
       "label": "Adjusted family net income from which a family gets no Canada workers benefit",
-      "value": "55009",
-      "source": "Schedule 6, the chart of limits: $49,393 for the basic benefit, $55,009 with the disability supplement"
+      "value": "60629",
+      "source": "Schedule 6, page 3, the chart of limits: $60,629, the highest (an eligible spouse, both eligible for the disability tax credit)"
+    },
+    "cwbFamilyLimitBasic": {
+      "label": "Adjusted family net income from which a family gets no basic Canada workers benefit",
+      "value": "49393",
+      "source": "Schedule 6, page 3, the chart of limits: $49,393 for the basic CWB with an eligible spouse or dependant"
     },
     "cwbStudentMonths": {
       "label": "Months of full-time study a person can have and still get the Canada workers benefit",
@@ -887,6 +900,124 @@
       "label": "Adjusted family net income from which a family in Quebec gets no Canada workers benefit",
       "value": "60017.19",
       "source": "5005-S6, the chart of limits: $60,017.19, the highest (an eligible spouse, no dependant, both eligible for the disability tax credit)"
+    },
+    "cwbQcFamilyLimitBasic": {
+      "label": "Adjusted family net income from which a family in Quebec gets no basic Canada workers benefit",
+      "value": "51504.09",
+      "source": "5005-S6, page 3, the chart of limits: $51,504.09 for the basic CWB with an eligible spouse and no dependant, the higher of the two with a spouse ($41,048.90 with a dependant)"
+    },
+    "cwbAbWorkingIncomeBase": {
+      "label": "Working income where the basic Canada workers benefit starts, Alberta",
+      "value": "2760",
+      "source": "5009-S6, line 17: $2,760"
+    },
+    "cwbAbRate": {"label":"Canada workers benefit rate on working income, Alberta","value":"0.21","source":"5009-S6, line 19: 21%"},
+    "cwbAbMaxSingle": {"label":"Most basic Canada workers benefit, Alberta, single","value":"1750","source":"5009-S6, line 21: $1,750"},
+    "cwbAbMaxFamily": {
+      "label": "Most basic Canada workers benefit, Alberta, with an eligible spouse or dependant",
+      "value": "2619",
+      "source": "5009-S6, line 21: $2,619"
+    },
+    "cwbAbIncomeBaseSingle": {
+      "label": "Adjusted family net income where the basic benefit starts to go down, Alberta, single",
+      "value": "26159",
+      "source": "5009-S6, line 24: $26,159"
+    },
+    "cwbAbIncomeBaseFamily": {
+      "label": "Adjusted family net income where the basic benefit starts to go down, Alberta, with an eligible spouse or dependant",
+      "value": "32772",
+      "source": "5009-S6, line 24: $32,772"
+    },
+    "cwbAbDisabilityWorkingBase": {
+      "label": "Working income where the disability supplement starts, Alberta",
+      "value": "910",
+      "source": "5009-S6, line 30: $910"
+    },
+    "cwbAbDisabilityRate": {"label":"Disability supplement rate on working income, Alberta","value":"0.26","source":"5009-S6, line 32: 26%"},
+    "cwbAbDisabilityIncomeBaseSingle": {
+      "label": "Adjusted family net income where the disability supplement starts to go down, Alberta, single",
+      "value": "37826",
+      "source": "5009-S6, line 36: $37,826"
+    },
+    "cwbAbDisabilityIncomeBaseFamily": {
+      "label": "Adjusted family net income where the disability supplement starts to go down, Alberta, with an eligible spouse or dependant",
+      "value": "50232",
+      "source": "5009-S6, line 36: $50,232"
+    },
+    "cwbAbFamilyLimit": {
+      "label": "Adjusted family net income from which a family in Alberta gets no Canada workers benefit",
+      "value": "61472",
+      "source": "5009-S6, page 3, the chart of limits: $61,472, the highest (an eligible spouse, both eligible for the disability tax credit)"
+    },
+    "cwbAbFamilyLimitBasic": {
+      "label": "Adjusted family net income from which a family in Alberta gets no basic Canada workers benefit",
+      "value": "50232",
+      "source": "5009-S6, page 3, the chart of limits: $50,232 for the basic CWB with an eligible spouse or dependant"
+    },
+    "cwbNuWorkingIncomeBase": {
+      "label": "Working income where the basic Canada workers benefit starts, Nunavut",
+      "value": "6000",
+      "source": "5014-S6, line 17: $6,000"
+    },
+    "cwbNuRate": {"label":"Canada workers benefit rate on working income, Nunavut","value":"0.14","source":"5014-S6, line 19: 14%"},
+    "cwbNuMaxSingle": {"label":"Most basic Canada workers benefit, Nunavut, single","value":"1621","source":"5014-S6, line 21: $1,621"},
+    "cwbNuMaxFamily": {
+      "label": "Most basic Canada workers benefit, Nunavut, with an eligible spouse or dependant",
+      "value": "2435",
+      "source": "5014-S6, line 21: $2,435"
+    },
+    "cwbNuIncomeBaseSingle": {
+      "label": "Adjusted family net income where the basic benefit starts to go down, Nunavut, single",
+      "value": "26832",
+      "source": "5014-S6, line 24: $26,832"
+    },
+    "cwbNuIncomeBaseFamily": {
+      "label": "Adjusted family net income where the basic benefit starts to go down, Nunavut, with an eligible spouse or dependant",
+      "value": "36927",
+      "source": "5014-S6, line 24: $36,927"
+    },
+    "cwbNuReductionRateSingle": {"label":"Basic benefit reduction rate, Nunavut, single","value":"0.04","source":"5014-S6, line 26: 4%"},
+    "cwbNuReductionRateFamily": {
+      "label": "Basic benefit reduction rate, Nunavut, with an eligible spouse or dependant",
+      "value": "0.08",
+      "source": "5014-S6, line 26: 8%"
+    },
+    "cwbNuDisabilityWorkingBase": {
+      "label": "Working income where the disability supplement starts, Nunavut",
+      "value": "4800",
+      "source": "5014-S6, line 30: $4,800"
+    },
+    "cwbNuDisabilityRate": {"label":"Disability supplement rate on working income, Nunavut","value":"0.26","source":"5014-S6, line 32: 26%"},
+    "cwbNuDisabilityMax": {
+      "label": "Most Canada workers benefit disability supplement, Nunavut",
+      "value": "936",
+      "source": "5014-S6, line 34: $936"
+    },
+    "cwbNuDisabilityIncomeBaseSingle": {
+      "label": "Adjusted family net income where the disability supplement starts to go down, Nunavut, single",
+      "value": "67357",
+      "source": "5014-S6, line 36: $67,357"
+    },
+    "cwbNuDisabilityIncomeBaseFamily": {
+      "label": "Adjusted family net income where the disability supplement starts to go down, Nunavut, with an eligible spouse or dependant",
+      "value": "67365",
+      "source": "5014-S6, line 36: $67,365"
+    },
+    "cwbNuDisabilityReductionRate": {"label":"Disability supplement reduction rate, Nunavut","value":"0.12","source":"5014-S6, line 38: 12%"},
+    "cwbNuReductionRateBothDisabled": {
+      "label": "Disability supplement reduction rate when both spouses are eligible for the disability tax credit, Nunavut",
+      "value": "0.06",
+      "source": "5014-S6, line 38: 6% if you had an eligible spouse who is also eligible for the DTC"
+    },
+    "cwbNuFamilyLimit": {
+      "label": "Adjusted family net income from which a family in Nunavut gets no Canada workers benefit",
+      "value": "82965",
+      "source": "5014-S6, page 3, the chart of limits: $82,965, the highest (an eligible spouse, both eligible for the disability tax credit)"
+    },
+    "cwbNuFamilyLimitBasic": {
+      "label": "Adjusted family net income from which a family in Nunavut gets no basic Canada workers benefit",
+      "value": "67365",
+      "source": "5014-S6, page 3, the chart of limits: $67,365 for the basic CWB with an eligible spouse or dependant"
     },
     "trainingCreditRate": {"label":"Canada training credit, share of tuition","value":"0.5","source":"Schedule 11, line 2: 50%"},
     "renovationRate": {"label":"Multigenerational home renovation tax credit rate","value":"0.145","source":"Schedule 12, line 9: 14.5%"},
@@ -2850,22 +2981,22 @@
     "AB428.16": {"label":"Alberta basic personal amount","formula":"round((param.abBasicPersonalAmount) * line.RES.factor, 2)"},
     "AB428.17": {
       "label": "Alberta age amount",
-      "formula": "round((if(person.age >= 65, max(0, param.abAgeAmountMax - round(max(0, line.T1.23600 - param.abAgeAmountThreshold) * param.abAgeAmountRate, 2)), 0)) * line.RES.factor, 2)",
-      "source": "Worksheet AB428, line 58080: for people born in 1960 or earlier"
+      "formula": "if(person.age >= 65, max(0, round(param.abAgeAmountMax * line.RES.factor, 2) - round(max(0, line.T1.23600 - round(param.abAgeAmountThreshold * line.RES.factor, 2)) * param.abAgeAmountRate, 2)), 0)",
+      "source": "Worksheet AB428, line 58080: for people born in 1960 or earlier, $6,221 less 15% of net income over $46,308 (both amounts prorated for a part-year resident: canada.ca, Completing your return for newcomers, Example 2)"
     },
     "AB428.20": {
       "label": "Alberta spouse or common-law partner amount",
-      "formula": "round((if(line.HH.partner == 1, max(0, param.abSpouseBase - line.HH.spouseNetIncome), 0)) * line.RES.factor, 2)"
+      "formula": "round(if(line.HH.partner == 1, max(0, round(param.abSpouseBase * line.RES.factor, 2) - line.HH.spouseNetIncome), 0), 2)"
     },
     "AB428.23": {
       "label": "Alberta amount for an eligible dependant",
-      "formula": "round((if(line.HH.partner == 0 and family.childrenUnder18 > 0, max(0, param.abSpouseBase - answer.dependantNetIncome), 0)) * line.RES.factor, 2)",
+      "formula": "round(if(line.HH.partner == 0 and family.childrenUnder18 > 0, max(0, round(param.abSpouseBase * line.RES.factor, 2) - answer.dependantNetIncome), 0), 2)",
       "source": "AB428 lines 21 to 23: the base minus their net income"
     },
     "AB428.24": {
       "label": "Alberta amount for infirm dependants age 18 or older",
-      "formula": "round((if(answer.hasInfirmDependant, if(answer.infirmDependants == 1, if(answer.infirmDependantHome == \"elsewhere\", min(param.abCaregiverMax, max(0, param.abInfirmDependantBase - answer.infirmDependantIncome)), 0), 0), 0)) * line.RES.factor, 2)",
-      "source": "Worksheet AB428, line 58200: $21,458 less the dependant's net income, up to $12,922"
+      "formula": "if(answer.hasInfirmDependant, if(answer.infirmDependants == 1, if(answer.infirmDependantHome == \"elsewhere\", min(round(param.abCaregiverMax * line.RES.factor, 2), max(0, round(param.abInfirmDependantBase * line.RES.factor, 2) - answer.infirmDependantIncome)), 0), 0), 0)",
+      "source": "Worksheet AB428, line 58200: $21,458 less the dependant's net income, up to $12,922 (both prorated for a part-year resident before the income comes off)"
     },
     "AB428.25": {
       "label": "Alberta basic, age, spouse and dependant amounts",
@@ -2894,8 +3025,8 @@
     },
     "AB428.35": {
       "label": "Alberta caregiver amount",
-      "formula": "round((if(answer.hasInfirmDependant, if(answer.infirmDependants == 1, if(answer.infirmDependantHome == \"with_you\", min(param.abCaregiverMax, max(0, param.abCaregiverBase - answer.infirmDependantIncome)), 0), 0), 0)) * line.RES.factor, 2)",
-      "source": "Worksheet AB428, line 58400: $33,467 less the dependant's net income, up to $12,922, for a dependant who lived with you"
+      "formula": "if(answer.hasInfirmDependant, if(answer.infirmDependants == 1, if(answer.infirmDependantHome == \"with_you\", min(round(param.abCaregiverMax * line.RES.factor, 2), max(0, round(param.abCaregiverBase * line.RES.factor, 2) - answer.infirmDependantIncome)), 0), 0), 0)",
+      "source": "Worksheet AB428, line 58400: $33,467 less the dependant's net income, up to $12,922 (both prorated for a part-year resident before the income comes off), for a dependant who lived with you"
     },
     "AB428.36": {
       "label": "Alberta credit amounts with pension and caregiver amounts",
@@ -2924,8 +3055,8 @@
     },
     "AB428.42": {
       "label": "Amounts transferred from your spouse or common-law partner",
-      "formula": "if(line.HH.partner == 1 and family.partnerInYear, if(line.ABS2.4 == 0, 0, line.ABS2.11), 0)",
-      "source": "Schedule AB(S2): their unused Alberta age, pension income and disability amounts"
+      "formula": "if(line.HH.partner == 1 and family.partnerInYear, if(line.ABS2.4 == 0, 0, round(line.ABS2.11 * line.RES.factor, 2)), 0)",
+      "source": "Schedule AB(S2): their unused Alberta age, pension income and disability amounts. Prorated for a part-year resident (RC4018, Appendix K: line 58640); the schedule shows the whole transfer"
     },
     "AB428.43": {
       "label": "Alberta credit amounts before medical expenses",
@@ -3020,21 +3151,21 @@
     },
     "BC428.17": {
       "label": "British Columbia age amount",
-      "formula": "round((if(person.age >= 65, max(0, param.bcAgeAmountMax - round(max(0, line.T1.23600 - param.bcAgeAmountThreshold) * param.bcAgeAmountRate, 2)), 0)) * line.RES.factor, 2)",
-      "source": "Worksheet BC428, line 58080: for people born in 1960 or earlier"
+      "formula": "if(person.age >= 65, max(0, round(param.bcAgeAmountMax * line.RES.factor, 2) - round(max(0, line.T1.23600 - round(param.bcAgeAmountThreshold * line.RES.factor, 2)) * param.bcAgeAmountRate, 2)), 0)",
+      "source": "Worksheet BC428, line 58080: for people born in 1960 or earlier, $5,799 less 15% of net income over $43,169 (both amounts prorated for a part-year resident: canada.ca, Completing your return for newcomers, Example 2)"
     },
     "BC428.20": {
       "label": "British Columbia spouse or common-law partner amount",
-      "formula": "round((if(line.HH.partner == 1, min(param.bcSpouseMax, max(0, param.bcSpouseBase - line.HH.spouseNetIncome)), 0)) * line.RES.factor, 2)"
+      "formula": "round(if(line.HH.partner == 1, min(round(param.bcSpouseMax * line.RES.factor, 2), max(0, round(param.bcSpouseBase * line.RES.factor, 2) - line.HH.spouseNetIncome)), 0), 2)"
     },
     "BC428.23": {
       "label": "British Columbia amount for an eligible dependant",
-      "formula": "round((if(line.HH.partner == 0 and family.childrenUnder18 > 0, min(param.bcSpouseMax, max(0, param.bcSpouseBase - answer.dependantNetIncome)), 0)) * line.RES.factor, 2)",
+      "formula": "round(if(line.HH.partner == 0 and family.childrenUnder18 > 0, min(round(param.bcSpouseMax * line.RES.factor, 2), max(0, round(param.bcSpouseBase * line.RES.factor, 2) - answer.dependantNetIncome)), 0), 2)",
       "source": "BC428 lines 21 to 23: the base minus their net income, up to the maximum"
     },
     "BC428.24": {
       "label": "British Columbia caregiver amount",
-      "formula": "round((if(line.HH.partner == 1 and answer.spouseInfirm, max(0, min(param.bcCaregiverMax, max(0, param.bcCaregiverBase - line.HH.spouseNetIncome)) - line.BC428.20), 0) + if(answer.hasInfirmDependant, if(answer.infirmDependants > 0, min(param.bcCaregiverMax, max(0, param.bcCaregiverBase - answer.infirmDependantIncome)), 0), 0)) * line.RES.factor, 2)",
+      "formula": "round(if(line.HH.partner == 1 and answer.spouseInfirm, max(0, min(round(param.bcCaregiverMax * line.RES.factor, 2), max(0, round(param.bcCaregiverBase * line.RES.factor, 2) - line.HH.spouseNetIncome)) - line.BC428.20), 0) + if(answer.hasInfirmDependant, if(answer.infirmDependants > 0, min(round(param.bcCaregiverMax * line.RES.factor, 2), max(0, round(param.bcCaregiverBase * line.RES.factor, 2) - answer.infirmDependantIncome)), 0), 0), 2)",
       "source": "Worksheet BC428, line 58175: for each dependant, $24,810 less their net income (up to $5,659), less what line 58120 claims for them"
     },
     "BC428.25": {
@@ -3099,13 +3230,13 @@
     },
     "BC428.43": {
       "label": "British Columbia tuition transferred from a child or grandchild",
-      "formula": "line.CHILD.provincialTuition",
-      "source": "BC428 line 43 (58600): the provincial amount each student designated to you on their T2202"
+      "formula": "round(line.CHILD.provincialTuition * line.RES.factor, 2)",
+      "source": "BC428 line 43 (58600): the provincial amount each student designated to you on their T2202. Prorated for a part-year resident (RC4018, Appendix K)"
     },
     "BC428.44": {
       "label": "Amounts transferred from your spouse or common-law partner",
-      "formula": "if(line.HH.partner == 1 and family.partnerInYear, if(line.BCS2.5 == 0, 0, line.BCS2.12), 0)",
-      "source": "Schedule BC(S2): their unused British Columbia age, pension income and disability amounts, and the tuition they designate to you"
+      "formula": "if(line.HH.partner == 1 and family.partnerInYear, if(line.BCS2.5 == 0, 0, round(line.BCS2.12 * line.RES.factor, 2)), 0)",
+      "source": "Schedule BC(S2): their unused British Columbia age, pension income and disability amounts, and the tuition they designate to you. Prorated for a part-year resident (RC4018, Appendix K: line 58640); the schedule shows the whole transfer"
     },
     "BC428.45": {
       "label": "British Columbia credit amounts before medical expenses",
@@ -3226,8 +3357,8 @@
     },
     "BCS11.7": {
       "label": "Unused tuition and education amounts claimed for 2025",
-      "formula": "min(answer.unusedProvincialTuition, line.BCS11.6)",
-      "source": "BC(S11) lines 1 and 7: the unused amounts on your 2024 notice of assessment"
+      "formula": "min(if(person.province == \"AB\", 0, answer.unusedProvincialTuition), line.BCS11.6)",
+      "source": "BC(S11) lines 1 and 7: the unused amounts on your 2024 notice of assessment. None for a spouse in Alberta, whose own return doesn't carry unused provincial tuition forward (Schedule BC(S2) reads this schedule for them)"
     },
     "BCS11.9": {
       "label": "2025 tuition amount claimed",
@@ -3339,10 +3470,15 @@
       "label": "Both spouses' returns are prepared here (1 for yes)",
       "formula": "if(family.partnerInYear and line.HH.partner == 1, 1, 0)"
     },
+    "HH.spouseWorldIncome": {
+      "label": "Your spouse's or partner's net world income for 2025",
+      "formula": "if(line.HH.partner == 1, if(family.partnerInYear, spouse.line.T1.23600 + if(spouse.person.residentAllYear, 0, spouse.answer.nonResidentIncome), answer.spouseNetIncome), 0)",
+      "source": "T1, Step 1, and canada.ca, Completing your return for newcomers: their net world income for 2025 whatever their residency, line 23600 of their return plus their world income while not resident; otherwise from your answer"
+    },
     "HH.spouseNetIncome": {
       "label": "Your spouse's or partner's net income",
-      "formula": "if(line.HH.partner == 1, if(family.partnerInYear, spouse.line.T1.23600, answer.spouseNetIncome), 0)",
-      "source": "From their return when both returns are prepared here; otherwise from your answer"
+      "formula": "if(line.HH.partner == 1 and family.partnerInYear and not person.residentAllYear and not spouse.person.residentAllYear and line.RES.days == spouse.line.RES.days, spouse.line.T1.23600, line.HH.spouseWorldIncome)",
+      "source": "Their net income for the part of 2025 you were resident: their line 23600 when you both lived in Canada the same days, else their world income for 2025"
     },
     "T1.10100": {"label":"Employment income","formula":"sum(T4.box14)"},
     "T1.10120": {"label":"Commissions included on line 10100","formula":"sum(T4.box42)"},
@@ -4051,8 +4187,8 @@
     },
     "RES.full": {
       "label": "Full personal amounts while not resident (1 for yes)",
-      "formula": "if(person.residentAllYear, 1, if(answer.nonResidentIncome == 0 or answer.nonResidentCanadianIncome >= round(answer.nonResidentIncome * param.nonResidentCanadaShare, 2), 1, 0))",
-      "source": "canada.ca, newcomers and emigrants: the full amounts when Canadian income was 90% or more of world income for the part of the year not resident"
+      "formula": "if(person.residentAllYear, 1, if(answer.nonResidentIncome > 0 and answer.nonResidentCanadianIncome >= round(answer.nonResidentIncome * param.nonResidentCanadaShare, 2), 1, 0))",
+      "source": "canada.ca, newcomers and emigrants: the full amounts when Canadian income was 90% or more of world income for the part of the year not resident. RC4018, Appendix K: for 2024 and later years, a part-year resident with no world income in that part of the year hasn't met the 90% rule"
     },
     "RES.factor": {
       "label": "Share of the personal amounts you can claim",
@@ -4071,31 +4207,32 @@
     },
     "T1.30100": {
       "label": "Age amount",
-      "formula": "round((if(person.age >= 65, max(0, param.ageAmountMax - round(max(0, line.T1.23600 - param.ageAmountThreshold) * param.ageAmountRate, 2)), 0)) * line.RES.factor, 2)",
-      "source": "Federal Worksheet, line 30100: for people born in 1960 or earlier"
+      "formula": "if(person.age >= 65, max(0, round(param.ageAmountMax * line.RES.factor, 2) - round(max(0, line.T1.23600 - round(param.ageAmountThreshold * line.RES.factor, 2)) * param.ageAmountRate, 2)), 0)",
+      "source": "Federal Worksheet, line 30100: for people born in 1960 or earlier, $9,028 less 15% of net income over $45,522 (both amounts prorated for a part-year resident: canada.ca, Completing your return for newcomers, Example 2)"
     },
-    "FULL.30300": {
-      "label": "Spouse or common-law partner amount for a full year",
-      "formula": "if(line.HH.partner == 1, max(0, line.FULL.30000 + if(answer.spouseInfirm, param.caregiverChildAmount, 0) - line.HH.spouseNetIncome), 0)"
+    "S5.3": {
+      "label": "Spouse or common-law partner amount before their net income",
+      "formula": "if(line.HH.partner == 1, line.T1.30000 + if(answer.spouseInfirm, round(param.caregiverChildAmount * line.RES.factor, 2), 0), 0)",
+      "source": "Schedule 5, line 30300, lines 1 to 3: your basic personal amount (line 30000), plus $2,687 for a spouse with an infirmity, prorated as line 30000 is"
     },
     "T1.30300": {
       "label": "Spouse or common-law partner amount",
-      "formula": "round(line.FULL.30300 * line.RES.factor, 2)",
-      "source": "Schedule 5 line 30300: your basic personal amount (plus $2,687 for a spouse with an infirmity) minus their net income"
+      "formula": "if(line.HH.partner == 1, max(0, line.S5.3 - line.HH.spouseNetIncome), 0)",
+      "source": "Schedule 5, line 30300, lines 4 and 5: line 3 minus their net income"
     },
     "T1.30400": {
       "label": "Amount for an eligible dependant",
-      "formula": "round((if(line.HH.partner == 0 and family.childrenUnder18 > 0, max(0, line.FULL.30000 - answer.dependantNetIncome), 0)) * line.RES.factor, 2)",
-      "source": "Schedule 5 line 30400: for a single parent, one child under 18 who lived with you: your basic personal amount minus their net income"
+      "formula": "if(line.HH.partner == 0 and family.childrenUnder18 > 0, max(0, line.T1.30000 - answer.dependantNetIncome), 0)",
+      "source": "Schedule 5 line 30400: for a single parent, one child under 18 who lived with you: your basic personal amount (line 30000) minus their net income"
     },
     "T1.30425": {
       "label": "Canada caregiver amount for spouse or common-law partner",
-      "formula": "round((if(line.HH.partner == 1 and answer.spouseInfirm, max(0, min(param.caregiverMax, max(0, param.caregiverBase - line.HH.spouseNetIncome)) - line.FULL.30300), 0)) * line.RES.factor, 2)",
-      "source": "Schedule 5 line 30425: $28,798 less their net income (up to $8,601), less the spouse amount"
+      "formula": "if(line.HH.partner == 1 and answer.spouseInfirm, max(0, min(round(param.caregiverMax * line.RES.factor, 2), max(0, round(param.caregiverBase * line.RES.factor, 2) - line.HH.spouseNetIncome)) - line.T1.30300), 0)",
+      "source": "Schedule 5 line 30425: $28,798 less their net income (up to $8,601), less the spouse amount on line 30300"
     },
     "T1.30450": {
       "label": "Canada caregiver amount for other infirm dependants age 18 or older",
-      "formula": "round((if(answer.hasInfirmDependant, if(answer.infirmDependants > 1, unsupported(\"The Canada caregiver amount for more than one adult dependant isn't handled by this app yet\"), if(answer.infirmDependants == 0, 0, min(param.caregiverMax, max(0, param.caregiverBase - answer.infirmDependantIncome)))), 0)) * line.RES.factor, 2)",
+      "formula": "if(answer.hasInfirmDependant, if(answer.infirmDependants > 1, unsupported(\"The Canada caregiver amount for more than one adult dependant isn't handled by this app yet\"), if(answer.infirmDependants == 0, 0, min(round(param.caregiverMax * line.RES.factor, 2), max(0, round(param.caregiverBase * line.RES.factor, 2) - answer.infirmDependantIncome)))), 0)",
       "source": "Schedule 5 line 30450: $28,798 less the dependant's net income, up to $8,601"
     },
     "T1.30500": {
@@ -4209,7 +4346,11 @@
     },
     "T1.31900": {"label":"Interest paid on your student loans","formula":"answer.studentLoanInterest"},
     "T1.32300": {"label":"Federal tuition amount","formula":"line.S11.17"},
-    "T1.32400": {"label":"Tuition amount transferred from a child or grandchild","formula":"answer.childTuitionTransfer"},
+    "T1.32400": {
+      "label": "Tuition amount transferred from a child or grandchild",
+      "formula": "round(answer.childTuitionTransfer * line.RES.factor, 2)",
+      "source": "The amount the student designates to you on their T2202"
+    },
     "CHILD.provincialTuition": {
       "label": "Provincial or territorial tuition transferred from a child or grandchild",
       "formula": "if(answer.childTuitionTransfer == 0, 0, answer.childProvincialTuitionTransfer)",
@@ -4217,8 +4358,8 @@
     },
     "T1.32600": {
       "label": "Amounts transferred from your spouse or common-law partner",
-      "formula": "if(line.HH.partner == 1 and family.partnerInYear, line.S2.13, 0)",
-      "source": "Schedule 2: their unused age amount and the tuition they designate to you"
+      "formula": "if(line.HH.partner == 1 and family.partnerInYear, round(line.S2.13 * line.RES.factor, 2), 0)",
+      "source": "Schedule 2, line 13: their unused age amount and the tuition they designate to you"
     },
     "T1.33099": {
       "label": "Medical expenses for you, your spouse and your children",
@@ -4367,12 +4508,13 @@
     },
     "CWB.spouse": {
       "label": "An eligible spouse (1 for yes)",
-      "formula": "if(line.HH.partner == 1, if(family.partnerInYear, if(spouse.line.CWB.student == 1, 0, 1), 1), 0)"
+      "formula": "if(line.HH.partner == 1, if(family.partnerInYear, if(spouse.line.CWB.student == 1 or not spouse.person.residentAllYear, 0, 1), 1), 0)",
+      "source": "Schedule 6 and Income Tax Act 122.7(1), eligible spouse: resident in Canada throughout the year, and not a full-time student for more than 13 weeks. Without one, you claim as a person with no spouse"
     },
     "CWB.eligible": {
       "label": "Eligible for the Canada workers benefit (1 for yes)",
-      "formula": "if(person.residentAllYear and line.CWB.student == 0 and (person.age >= 19 or line.CWB.spouse == 1 or line.CWB.dependant == 1), 1, 0)",
-      "source": "Schedule 6: resident in Canada all year, 19 or older (or with a spouse or a child) and not a full-time student for more than 13 weeks"
+      "formula": "if(person.residentAllYear and line.CWB.student == 0 and (person.age >= 19 or line.HH.partner == 1 or line.CWB.dependant == 1), 1, 0)",
+      "source": "Schedule 6: resident in Canada all year, 19 or older (or living with a spouse or partner, or a child) and not a full-time student for more than 13 weeks"
     },
     "CWB.familyWorking": {
       "label": "Family working income",
@@ -4386,58 +4528,58 @@
     },
     "CWB.familyLimit": {
       "label": "Adjusted family net income from which a family gets no Canada workers benefit",
-      "formula": "if(person.province == \"QC\", param.cwbQcFamilyLimit, param.cwbFamilyLimit)",
-      "source": "Schedule 6 (5005-S6 in Quebec), the chart of limits: the highest limit"
+      "formula": "if(answer.hasDisability, if(person.province == \"QC\", param.cwbQcFamilyLimit, if(person.province == \"AB\", param.cwbAbFamilyLimit, if(person.province == \"NU\", param.cwbNuFamilyLimit, param.cwbFamilyLimit))), if(person.province == \"QC\", param.cwbQcFamilyLimitBasic, if(person.province == \"AB\", param.cwbAbFamilyLimitBasic, if(person.province == \"NU\", param.cwbNuFamilyLimitBasic, param.cwbFamilyLimitBasic))))",
+      "source": "Schedule 6 (5005-S6 in Quebec, 5009-S6 in Alberta, 5014-S6 in Nunavut), the chart of limits with an eligible spouse: the basic CWB's, or for a person eligible for the disability tax credit the highest, both spouses eligible for it (the spouse's isn't known without their return)"
     },
     "CWB.workingBase": {
       "label": "Working income where the basic benefit starts",
-      "formula": "if(person.province == \"QC\", if(line.CWB.spouse == 1, param.cwbQcWorkingIncomeBaseSpouse, param.cwbQcWorkingIncomeBase), param.cwbWorkingIncomeBase)",
-      "source": "Schedule 6, line 17: $3,000. In Quebec, 5005-S6 line 17: $3,600 with an eligible spouse, else $2,400"
+      "formula": "if(person.province == \"QC\", if(line.CWB.spouse == 1, param.cwbQcWorkingIncomeBaseSpouse, param.cwbQcWorkingIncomeBase), if(person.province == \"AB\", param.cwbAbWorkingIncomeBase, if(person.province == \"NU\", param.cwbNuWorkingIncomeBase, param.cwbWorkingIncomeBase)))",
+      "source": "Schedule 6, line 17: $3,000. In Quebec, 5005-S6 line 17: $3,600 with an eligible spouse, else $2,400. In Alberta, 5009-S6: $2,760; in Nunavut, 5014-S6: $6,000"
     },
     "CWB.rate": {
       "label": "Basic benefit rate on working income",
-      "formula": "if(person.province == \"QC\", if(line.CWB.dependant == 1, if(line.CWB.spouse == 1, param.cwbQcRateSpouseDependant, param.cwbQcRateDependant), param.cwbQcRate), param.cwbRate)",
-      "source": "Schedule 6, line 19: 27%. In Quebec, 5005-S6 line 19: 20% with an eligible dependant and no eligible spouse, 23.9% with both, else 37.3%"
+      "formula": "if(person.province == \"QC\", if(line.CWB.dependant == 1, if(line.CWB.spouse == 1, param.cwbQcRateSpouseDependant, param.cwbQcRateDependant), param.cwbQcRate), if(person.province == \"AB\", param.cwbAbRate, if(person.province == \"NU\", param.cwbNuRate, param.cwbRate)))",
+      "source": "Schedule 6, line 19: 27%. In Quebec, 5005-S6 line 19: 20% with an eligible dependant and no eligible spouse, 23.9% with both, else 37.3%. In Alberta, 5009-S6: 21%; in Nunavut, 5014-S6: 14%"
     },
     "CWB.max": {
       "label": "Most basic Canada workers benefit",
-      "formula": "if(person.province == \"QC\", if(line.CWB.spouse == 1, if(line.CWB.dependant == 1, param.cwbQcMaxSpouseDependant, param.cwbQcMaxSpouse), if(line.CWB.dependant == 1, param.cwbQcMaxDependant, param.cwbQcMaxSingle)), if(line.CWB.spouse == 1 or line.CWB.dependant == 1, param.cwbMaxFamily, param.cwbMaxSingle))",
-      "source": "Schedule 6, line 21 (5005-S6 line 21 in Quebec, by family type)"
+      "formula": "if(person.province == \"QC\", if(line.CWB.spouse == 1, if(line.CWB.dependant == 1, param.cwbQcMaxSpouseDependant, param.cwbQcMaxSpouse), if(line.CWB.dependant == 1, param.cwbQcMaxDependant, param.cwbQcMaxSingle)), if(line.CWB.spouse == 1 or line.CWB.dependant == 1, if(person.province == \"AB\", param.cwbAbMaxFamily, if(person.province == \"NU\", param.cwbNuMaxFamily, param.cwbMaxFamily)), if(person.province == \"AB\", param.cwbAbMaxSingle, if(person.province == \"NU\", param.cwbNuMaxSingle, param.cwbMaxSingle))))",
+      "source": "Schedule 6, line 21 (5005-S6 line 21 in Quebec, by family type; 5009-S6 in Alberta; 5014-S6 in Nunavut)"
     },
     "CWB.incomeBase": {
       "label": "Adjusted family net income where the basic benefit starts to go down",
-      "formula": "if(person.province == \"QC\", if(line.CWB.spouse == 1, if(line.CWB.dependant == 1, param.cwbQcIncomeBaseSpouseDependant, param.cwbQcIncomeBaseSpouse), if(line.CWB.dependant == 1, param.cwbQcIncomeBaseDependant, param.cwbQcIncomeBaseSingle)), if(line.CWB.spouse == 1 or line.CWB.dependant == 1, param.cwbIncomeBaseFamily, param.cwbIncomeBaseSingle))",
-      "source": "Schedule 6, line 24 (5005-S6 line 24 in Quebec, by family type)"
+      "formula": "if(person.province == \"QC\", if(line.CWB.spouse == 1, if(line.CWB.dependant == 1, param.cwbQcIncomeBaseSpouseDependant, param.cwbQcIncomeBaseSpouse), if(line.CWB.dependant == 1, param.cwbQcIncomeBaseDependant, param.cwbQcIncomeBaseSingle)), if(line.CWB.spouse == 1 or line.CWB.dependant == 1, if(person.province == \"AB\", param.cwbAbIncomeBaseFamily, if(person.province == \"NU\", param.cwbNuIncomeBaseFamily, param.cwbIncomeBaseFamily)), if(person.province == \"AB\", param.cwbAbIncomeBaseSingle, if(person.province == \"NU\", param.cwbNuIncomeBaseSingle, param.cwbIncomeBaseSingle))))",
+      "source": "Schedule 6, line 24 (5005-S6 line 24 in Quebec, by family type; 5009-S6 in Alberta; 5014-S6 in Nunavut)"
     },
     "CWB.reductionRate": {
       "label": "Basic benefit reduction rate",
-      "formula": "if(person.province == \"QC\", param.cwbQcReductionRate, param.cwbReductionRate)",
-      "source": "Schedule 6, line 26: 15%. In Quebec, 5005-S6 line 26: 20%"
+      "formula": "if(person.province == \"QC\", param.cwbQcReductionRate, if(person.province == \"NU\", if(line.CWB.spouse == 1 or line.CWB.dependant == 1, param.cwbNuReductionRateFamily, param.cwbNuReductionRateSingle), param.cwbReductionRate))",
+      "source": "Schedule 6, line 26: 15% (also in Alberta). In Quebec, 5005-S6 line 26: 20%. In Nunavut, 5014-S6 line 26: 8% with an eligible spouse or dependant, else 4%"
     },
     "CWB.disabilityWorkingBase": {
       "label": "Working income where the disability supplement starts",
-      "formula": "if(person.province == \"QC\", param.cwbQcDisabilityWorkingBase, param.cwbDisabilityWorkingBase)",
-      "source": "Schedule 6, line 30: $1,150. In Quebec, 5005-S6 line 30: $1,200"
+      "formula": "if(person.province == \"QC\", param.cwbQcDisabilityWorkingBase, if(person.province == \"AB\", param.cwbAbDisabilityWorkingBase, if(person.province == \"NU\", param.cwbNuDisabilityWorkingBase, param.cwbDisabilityWorkingBase)))",
+      "source": "Schedule 6, line 30: $1,150. In Quebec, 5005-S6 line 30: $1,200. In Alberta, 5009-S6: $910; in Nunavut, 5014-S6: $4,800"
     },
     "CWB.disabilityRate": {
       "label": "Disability supplement rate on working income",
-      "formula": "if(person.province == \"QC\", if(line.CWB.spouse == 1, param.cwbQcDisabilityRateSpouse, param.cwbQcDisabilityRate), param.cwbRate)",
-      "source": "Schedule 6, line 32: 27%. In Quebec, 5005-S6 line 32: 20% with an eligible spouse, else 40%"
+      "formula": "if(person.province == \"QC\", if(line.CWB.spouse == 1, param.cwbQcDisabilityRateSpouse, param.cwbQcDisabilityRate), if(person.province == \"AB\", param.cwbAbDisabilityRate, if(person.province == \"NU\", param.cwbNuDisabilityRate, param.cwbRate)))",
+      "source": "Schedule 6, line 32: 27%. In Quebec, 5005-S6 line 32: 20% with an eligible spouse, else 40%. In Alberta (5009-S6) and Nunavut (5014-S6): 26%"
     },
     "CWB.disabilityMax": {
       "label": "Most Canada workers benefit disability supplement",
-      "formula": "if(person.province == \"QC\", param.cwbQcDisabilityMax, param.cwbDisabilityMax)",
-      "source": "Schedule 6, line 34: $843. In Quebec, 5005-S6 line 34: $851.31"
+      "formula": "if(person.province == \"QC\", param.cwbQcDisabilityMax, if(person.province == \"NU\", param.cwbNuDisabilityMax, param.cwbDisabilityMax))",
+      "source": "Schedule 6, line 34: $843 (also in Alberta). In Quebec, 5005-S6 line 34: $851.31. In Nunavut, 5014-S6: $936"
     },
     "CWB.disabilityIncomeBase": {
       "label": "Adjusted family net income where the disability supplement starts to go down",
-      "formula": "if(person.province == \"QC\", if(line.CWB.spouse == 1, if(line.CWB.dependant == 1, param.cwbQcDisabilityIncomeBaseSpouseDependant, param.cwbQcDisabilityIncomeBaseSpouse), if(line.CWB.dependant == 1, param.cwbQcDisabilityIncomeBaseDependant, param.cwbQcDisabilityIncomeBaseSingle)), if(line.CWB.spouse == 1 or line.CWB.dependant == 1, param.cwbDisabilityIncomeBaseFamily, param.cwbDisabilityIncomeBaseSingle))",
-      "source": "Schedule 6, line 36 (5005-S6 line 36 in Quebec, by family type)"
+      "formula": "if(person.province == \"QC\", if(line.CWB.spouse == 1, if(line.CWB.dependant == 1, param.cwbQcDisabilityIncomeBaseSpouseDependant, param.cwbQcDisabilityIncomeBaseSpouse), if(line.CWB.dependant == 1, param.cwbQcDisabilityIncomeBaseDependant, param.cwbQcDisabilityIncomeBaseSingle)), if(line.CWB.spouse == 1 or line.CWB.dependant == 1, if(person.province == \"AB\", param.cwbAbDisabilityIncomeBaseFamily, if(person.province == \"NU\", param.cwbNuDisabilityIncomeBaseFamily, param.cwbDisabilityIncomeBaseFamily)), if(person.province == \"AB\", param.cwbAbDisabilityIncomeBaseSingle, if(person.province == \"NU\", param.cwbNuDisabilityIncomeBaseSingle, param.cwbDisabilityIncomeBaseSingle))))",
+      "source": "Schedule 6, line 36 (5005-S6 line 36 in Quebec, by family type; 5009-S6 in Alberta; 5014-S6 in Nunavut)"
     },
     "CWB.disabilityReductionRate": {
       "label": "Disability supplement reduction rate",
-      "formula": "if(line.CWB.spouse == 1 and family.partnerInYear and spouse.answer.hasDisability, if(person.province == \"QC\", param.cwbQcReductionRateBothDisabled, param.cwbReductionRateBothDisabled), if(person.province == \"QC\", param.cwbQcReductionRate, param.cwbReductionRate))",
-      "source": "Schedule 6, line 38: 15% (7.5% when both spouses have the disability tax credit). In Quebec, 5005-S6 line 38: 20% (10%)"
+      "formula": "if(line.CWB.spouse == 1 and family.partnerInYear and spouse.answer.hasDisability, if(person.province == \"QC\", param.cwbQcReductionRateBothDisabled, if(person.province == \"NU\", param.cwbNuReductionRateBothDisabled, param.cwbReductionRateBothDisabled)), if(person.province == \"QC\", param.cwbQcReductionRate, if(person.province == \"NU\", param.cwbNuDisabilityReductionRate, param.cwbReductionRate)))",
+      "source": "Schedule 6, line 38: 15% (7.5% when both spouses have the disability tax credit), also in Alberta. In Quebec, 5005-S6 line 38: 20% (10%). In Nunavut, 5014-S6: 12% (6%)"
     },
     "CWB.claimsBasic": {
       "label": "This return claims the couple's basic benefit (1 for yes)",
@@ -4446,18 +4588,28 @@
     "CWB.basic": {
       "label": "Basic Canada workers benefit",
       "formula": "if(line.CWB.claimsBasic == 1, max(0, min(round(max(0, line.CWB.familyWorking - line.CWB.workingBase) * line.CWB.rate, 2), line.CWB.max) - round(max(0, line.CWB.familyIncome - line.CWB.incomeBase) * line.CWB.reductionRate, 2)), 0)",
-      "source": "Schedule 6, Step 2, lines 16 to 28: 27% of family working income over $3,000, up to the maximum, less 15% of adjusted family net income over the base (in Quebec, 5005-S6 Step 2 with its own amounts and rates)"
+      "source": "Schedule 6, Step 2, lines 16 to 28: 27% of family working income over $3,000, up to the maximum, less 15% of adjusted family net income over the base (in Quebec, Alberta and Nunavut, Step 2 of 5005-S6, 5009-S6 or 5014-S6 with their own amounts and rates)"
     },
     "CWB.disability": {
       "label": "Canada workers benefit disability supplement",
       "formula": "if(line.CWB.eligible == 1 and answer.hasDisability, max(0, min(round(max(0, line.CWB.working - line.CWB.disabilityWorkingBase) * line.CWB.disabilityRate, 2), line.CWB.disabilityMax) - round(max(0, line.CWB.familyIncome - line.CWB.disabilityIncomeBase) * line.CWB.disabilityReductionRate, 2)), 0)",
-      "source": "Schedule 6, Step 3, lines 29 to 40: 27% of working income over $1,150, up to $843, less 15% (7.5% when both spouses have the disability tax credit) of adjusted family net income over the base (in Quebec, 5005-S6 Step 3 with its own amounts and rates)"
+      "source": "Schedule 6, Step 3, lines 29 to 40: 27% of working income over $1,150, up to $843, less 15% (7.5% when both spouses have the disability tax credit) of adjusted family net income over the base (in Quebec, Alberta and Nunavut, Step 3 of 5005-S6, 5009-S6 or 5014-S6 with their own amounts and rates)"
     },
     "T1.45300": {"label":"Canada workers benefit","formula":"line.CWB.basic + line.CWB.disability","source":"Schedule 6, line 42"},
     "T1.41500": {
       "label": "Advanced Canada workers benefit",
-      "formula": "min(max(line.CWB.basic, line.T1.45300), if(line.CWB.claimsBasic == 1, sum(RC210.box10) + if(family.partnerInYear and line.HH.partner == 1, sum(spouse.RC210.box10), 0), 0) + sum(RC210.box11))",
-      "source": "Schedule 6, Step 4: the advance payments (RC210 box 10 of both spouses, on the return claiming the basic benefit, and box 11), up to the benefit"
+      "formula": "min(max(line.CWB.basic, line.T1.45300), if(line.CWB.reportsAdvance == 1, sum(RC210.box10) + if(family.partnerInYear and line.HH.partner == 1, sum(spouse.RC210.box10), 0), 0) + sum(RC210.box11))",
+      "source": "Schedule 6, Step 4: the advance payments (RC210 box 10 of both spouses, on the return that reports them, and box 11), up to the benefit"
+    },
+    "CWB.reportsAdvance": {
+      "label": "This return reports the basic advance payments of RC210 box 10 (1 for yes)",
+      "formula": "if(line.CWB.claimsBasic == 1 or line.HH.partner == 0 or not family.partnerInYear, 1, if(spouse.line.CWB.claimsBasic == 1, 0, if(person.role == \"self\", 1, 0)))",
+      "source": "Schedule 6, Step 4: with a spouse, only the person claiming the basic CWB reports box 10 of both spouses' RC210 slips; when neither claims it, one of them does as if claiming it (here the person preparing)"
+    },
+    "CWB.schedule": {
+      "label": "Schedule 6 goes with the return (1 for yes)",
+      "formula": "if(line.T1.45300 > 0 or sum(RC210.box10) + sum(RC210.box11) > 0 or (line.CWB.reportsAdvance == 1 and line.HH.partner == 1 and family.partnerInYear and sum(spouse.RC210.box10) > 0), 1, 0)",
+      "source": "Schedule 6, page 1: for the benefit on line 45300, and for an RC210 slip (yours, or your spouse's that you report): Step 4 is completed even when no benefit is claimed"
     },
     "T1.45350": {
       "label": "Canada training credit",
@@ -4633,22 +4785,22 @@
     },
     "MB428.10": {
       "label": "Manitoba age amount",
-      "formula": "round((if(person.age >= 65, max(0, param.mbAgeAmountMax - round(max(0, line.T1.23600 - param.mbAgeAmountThreshold) * param.mbAgeAmountRate, 2)), 0)) * line.RES.factor, 2)",
-      "source": "Worksheet MB428, line 58080: for people born in 1960 or earlier"
+      "formula": "if(person.age >= 65, max(0, round(param.mbAgeAmountMax * line.RES.factor, 2) - round(max(0, line.T1.23600 - round(param.mbAgeAmountThreshold * line.RES.factor, 2)) * param.mbAgeAmountRate, 2)), 0)",
+      "source": "Worksheet MB428, line 58080: for people born in 1960 or earlier, $3,728 less 15% of net income over $27,749 (both amounts prorated for a part-year resident: canada.ca, Completing your return for newcomers, Example 2)"
     },
     "MB428.13": {
       "label": "Manitoba spouse or common-law partner amount",
-      "formula": "round((if(line.HH.partner == 1, max(0, param.mbSpouseBase - line.HH.spouseNetIncome), 0)) * line.RES.factor, 2)"
+      "formula": "round(if(line.HH.partner == 1, max(0, round(param.mbSpouseBase * line.RES.factor, 2) - line.HH.spouseNetIncome), 0), 2)"
     },
     "MB428.16": {
       "label": "Manitoba amount for an eligible dependant",
-      "formula": "round((if(line.HH.partner == 0 and family.childrenUnder18 > 0, max(0, param.mbSpouseBase - answer.dependantNetIncome), 0)) * line.RES.factor, 2)",
+      "formula": "round(if(line.HH.partner == 0 and family.childrenUnder18 > 0, max(0, round(param.mbSpouseBase * line.RES.factor, 2) - answer.dependantNetIncome), 0), 2)",
       "source": "MB428 lines 14 to 16: the base minus their net income"
     },
     "MB428.17": {
       "label": "Manitoba amount for infirm dependants age 18 or older",
-      "formula": "round((if(answer.hasInfirmDependant, if(answer.infirmDependants > 1, unsupported(\"The Manitoba amount for more than one infirm dependant isn't handled by this app yet\"), if(answer.infirmDependants == 0, 0, min(param.mbInfirmMax, max(0, param.mbInfirmBase - answer.infirmDependantIncome)))), 0)) * line.RES.factor, 2)",
-      "source": "Worksheet MB428, line 58200: $8,720 less the dependant's net income, up to $3,605. The app claims this line, not the caregiver amount (58400), which needs the dependant to have lived with you"
+      "formula": "if(answer.hasInfirmDependant, if(answer.infirmDependants > 1, unsupported(\"The Manitoba amount for more than one infirm dependant isn't handled by this app yet\"), if(answer.infirmDependants == 0, 0, min(round(param.mbInfirmMax * line.RES.factor, 2), max(0, round(param.mbInfirmBase * line.RES.factor, 2) - answer.infirmDependantIncome)))), 0)",
+      "source": "Worksheet MB428, line 58200: $8,720 less the dependant's net income, up to $3,605 (both prorated for a part-year resident before the income comes off). The app claims this line, not the caregiver amount (58400), which needs the dependant to have lived with you"
     },
     "MB428.23": {
       "label": "Volunteer firefighters' amount",
@@ -4667,12 +4819,12 @@
     },
     "MB428.25": {
       "label": "Fitness amount",
-      "formula": "if(line.MB.fitnessPeople == 0, 0, if(line.HH.partner == 1 and family.partnerInYear and spouse.person.province == \"MB\" and answer.physicalActivityFees + spouse.answer.physicalActivityFees > param.mbFitnessMax * line.MB.fitnessPeople, unsupported(\"Only one of you can claim the Manitoba fitness amount for a person, up to $500 each. Together you claim more: enter each person's fees on one return\"), min(answer.physicalActivityFees, param.mbFitnessMax * line.MB.fitnessPeople)))",
+      "formula": "if(person.province != \"MB\" or line.MB.fitnessPeople == 0, 0, if(line.HH.partner == 1 and family.partnerInYear and spouse.person.province == \"MB\" and answer.physicalActivityFees + spouse.answer.physicalActivityFees > param.mbFitnessMax * line.MB.fitnessPeople, unsupported(\"Only one of you can claim the Manitoba fitness amount for a person, up to $500 each. Together you claim more: enter each person's fees on one return\"), min(answer.physicalActivityFees, param.mbFitnessMax * line.MB.fitnessPeople)))",
       "source": "Manitoba information guide, line 58325: fees for a program of physical activity, up to $500 a person. The extra $500 for a person with a disability isn't handled"
     },
     "MB428.26": {
       "label": "Children's arts amount",
-      "formula": "if(family.childrenUnder17 == 0, 0, if(line.HH.partner == 1 and family.partnerInYear and spouse.person.province == \"MB\" and answer.childArtsFees + spouse.answer.childArtsFees > param.mbArtsMax * family.childrenUnder17, unsupported(\"Only one of you can claim the Manitoba children's arts amount for a child, up to $500 each. Together you claim more: enter each child's fees on one return\"), min(answer.childArtsFees, param.mbArtsMax * family.childrenUnder17)))",
+      "formula": "if(person.province != \"MB\" or family.childrenUnder17 == 0, 0, if(line.HH.partner == 1 and family.partnerInYear and spouse.person.province == \"MB\" and answer.childArtsFees + spouse.answer.childArtsFees > param.mbArtsMax * family.childrenUnder17, unsupported(\"Only one of you can claim the Manitoba children's arts amount for a child, up to $500 each. Together you claim more: enter each child's fees on one return\"), min(answer.childArtsFees, param.mbArtsMax * family.childrenUnder17)))",
       "source": "Manitoba information guide, line 58326: up to $500 for each child under 16 at the start of the year (born in 2009 or later). The extra $500 for a child with a disability isn't handled"
     },
     "MB428.27": {
@@ -4713,13 +4865,13 @@
     "MB428.38": {"label":"Manitoba tuition and education amounts","formula":"line.MBS11.13","source":"Schedule MB(S11) line 13"},
     "MB428.39": {
       "label": "Tuition and education amounts transferred from a child or grandchild",
-      "formula": "line.CHILD.provincialTuition",
-      "source": "MB428 line 39 (58600): the app uses the amount the student designated to you federally (line 32400)"
+      "formula": "round(line.CHILD.provincialTuition * line.RES.factor, 2)",
+      "source": "MB428 line 39 (58600): the app uses the amount the student designated to you federally (line 32400). Prorated for a part-year resident (RC4018, Appendix K)"
     },
     "MB428.40": {
       "label": "Manitoba amounts transferred from your spouse or common-law partner",
-      "formula": "if(line.HH.partner == 1 and family.partnerInYear, line.MBS2.12, 0)",
-      "source": "Schedule MB(S2): their unused Manitoba age, pension, and tuition and education amounts"
+      "formula": "if(line.HH.partner == 1 and family.partnerInYear, round(line.MBS2.12 * line.RES.factor, 2), 0)",
+      "source": "Schedule MB(S2): their unused Manitoba age, pension, and tuition and education amounts. Prorated for a part-year resident (RC4018, Appendix K: line 58640); the schedule shows the whole transfer"
     },
     "MB428.41": {
       "label": "Family tax benefit",
@@ -4872,8 +5024,8 @@
     },
     "MBS11.10": {
       "label": "Unused tuition and education amounts claimed for 2025",
-      "formula": "min(answer.unusedProvincialTuition, line.MBS11.9)",
-      "source": "MB(S11) lines 1 and 10: the unused amounts on your 2024 notice of assessment"
+      "formula": "min(if(person.province == \"AB\", 0, answer.unusedProvincialTuition), line.MBS11.9)",
+      "source": "MB(S11) lines 1 and 10: the unused amounts on your 2024 notice of assessment. None for a spouse in Alberta, whose own return doesn't carry unused provincial tuition forward (Schedule MB(S2) reads this schedule for them)"
     },
     "MBS11.12": {
       "label": "2025 tuition and education amounts claimed",
@@ -5020,31 +5172,31 @@
     },
     "NB428.10": {
       "label": "New Brunswick age amount",
-      "formula": "round((if(person.age >= 65, max(0, param.nbAgeAmountMax - round(max(0, line.T1.23600 - param.nbAgeAmountThreshold) * param.nbAgeAmountRate, 2)), 0)) * line.RES.factor, 2)",
-      "source": "Worksheet NB428, line 58080: for people born in 1960 or earlier"
+      "formula": "if(person.age >= 65, max(0, round(param.nbAgeAmountMax * line.RES.factor, 2) - round(max(0, line.T1.23600 - round(param.nbAgeAmountThreshold * line.RES.factor, 2)) * param.nbAgeAmountRate, 2)), 0)",
+      "source": "Worksheet NB428, line 58080: for people born in 1960 or earlier, $6,037 less 15% of net income over $44,945 (both amounts prorated for a part-year resident: canada.ca, Completing your return for newcomers, Example 2)"
     },
     "NB428.13": {
       "label": "New Brunswick spouse or common-law partner amount",
-      "formula": "round((if(line.HH.partner == 1, min(param.nbSpouseMax, max(0, param.nbSpouseBase - line.HH.spouseNetIncome)), 0)) * line.RES.factor, 2)"
+      "formula": "round(if(line.HH.partner == 1, min(round(param.nbSpouseMax * line.RES.factor, 2), max(0, round(param.nbSpouseBase * line.RES.factor, 2) - line.HH.spouseNetIncome)), 0), 2)"
     },
     "NB428.16": {
       "label": "New Brunswick amount for an eligible dependant",
-      "formula": "round((if(line.HH.partner == 0 and family.childrenUnder18 > 0, min(param.nbSpouseMax, max(0, param.nbSpouseBase - answer.dependantNetIncome)), 0)) * line.RES.factor, 2)",
+      "formula": "round(if(line.HH.partner == 0 and family.childrenUnder18 > 0, min(round(param.nbSpouseMax * line.RES.factor, 2), max(0, round(param.nbSpouseBase * line.RES.factor, 2) - answer.dependantNetIncome)), 0), 2)",
       "source": "NB428 lines 14 to 16: the base minus their net income, up to the maximum"
     },
     "NB.infirmAmount": {
       "label": "New Brunswick amount for an infirm dependant, before choosing",
-      "formula": "if(answer.hasInfirmDependant, if(answer.infirmDependants > 1, unsupported(\"The New Brunswick amounts for more than one adult dependant aren't handled by this app yet\"), if(answer.infirmDependants == 1, min(param.nbInfirmMax, max(0, param.nbInfirmBase - answer.infirmDependantIncome)), 0)), 0)",
+      "formula": "if(answer.hasInfirmDependant, if(answer.infirmDependants > 1, unsupported(\"The New Brunswick amounts for more than one adult dependant aren't handled by this app yet\"), if(answer.infirmDependants == 1, min(round(param.nbInfirmMax * line.RES.factor, 2), max(0, round(param.nbInfirmBase * line.RES.factor, 2) - answer.infirmDependantIncome)), 0)), 0)",
       "source": "Worksheet NB428, line 58200: $14,124 less the dependant's net income, up to $5,839"
     },
     "NB.caregiverAmount": {
       "label": "New Brunswick caregiver amount, before choosing",
-      "formula": "if(answer.hasInfirmDependant, if(answer.infirmDependants == 1, if(answer.infirmDependantHome == \"with_you\", min(param.nbCaregiverMax, max(0, param.nbCaregiverBase - answer.infirmDependantIncome)), 0), 0), 0)",
-      "source": "Worksheet NB428, line 58400: $25,781 less the dependant's net income, up to $5,839, for a dependant who lived with you"
+      "formula": "if(answer.hasInfirmDependant, if(answer.infirmDependants == 1, if(person.province == \"NB\" and answer.infirmDependantHome == \"with_you\", min(round(param.nbCaregiverMax * line.RES.factor, 2), max(0, round(param.nbCaregiverBase * line.RES.factor, 2) - answer.infirmDependantIncome)), 0), 0), 0)",
+      "source": "Worksheet NB428, line 58400: $25,781 less the dependant's net income, up to $5,839, for a dependant who lived with you. A spouse living elsewhere, whose NB428 Schedule NB(S2) reads, isn't asked where the dependant lived: theirs is the amount for infirm dependants, which needs no shared home"
     },
     "NB428.17": {
       "label": "New Brunswick amount for infirm dependants age 18 or older",
-      "formula": "round((if(line.NB428.29 > 0, 0, line.NB.infirmAmount)) * line.RES.factor, 2)",
+      "formula": "if(line.NB428.29 > 0, 0, line.NB.infirmAmount)",
       "source": "NB428 line 58200"
     },
     "NB428.23": {
@@ -5069,7 +5221,7 @@
     },
     "NB428.29": {
       "label": "New Brunswick caregiver amount",
-      "formula": "round((if(line.NB.caregiverAmount > 0 and line.NB.caregiverAmount >= line.NB.infirmAmount, line.NB.caregiverAmount, 0)) * line.RES.factor, 2)",
+      "formula": "if(line.NB.caregiverAmount > 0 and line.NB.caregiverAmount >= line.NB.infirmAmount, line.NB.caregiverAmount, 0)",
       "source": "NB428 line 58400: claimed instead of line 58200 when it is at least as much"
     },
     "NB428.31": {
@@ -5099,13 +5251,13 @@
     },
     "NB428.36": {
       "label": "Tuition amounts transferred from a child or grandchild",
-      "formula": "line.CHILD.provincialTuition",
-      "source": "NB428 line 58600: the provincial amount they designate on their T2202, taken as the same as federally"
+      "formula": "round(line.CHILD.provincialTuition * line.RES.factor, 2)",
+      "source": "NB428 line 58600: the provincial amount they designate on their T2202, taken as the same as federally. Prorated for a part-year resident (RC4018, Appendix K)"
     },
     "NB428.37": {
       "label": "New Brunswick amounts transferred from your spouse or common-law partner",
-      "formula": "if(line.HH.partner == 1 and family.partnerInYear, line.NBS2.12, 0)",
-      "source": "NB428 line 58640, from Schedule NB(S2)"
+      "formula": "if(line.HH.partner == 1 and family.partnerInYear, round(line.NBS2.12 * line.RES.factor, 2), 0)",
+      "source": "NB428 line 58640, from Schedule NB(S2). Prorated for a part-year resident (RC4018, Appendix K); the schedule shows the whole transfer"
     },
     "NB428.38": {
       "label": "New Brunswick credit amounts before medical expenses",
@@ -5210,7 +5362,8 @@
     },
     "NBS11.1": {
       "label": "Unused New Brunswick tuition from your 2024 notice of assessment",
-      "formula": "answer.unusedProvincialTuition"
+      "formula": "if(person.province == \"AB\", 0, answer.unusedProvincialTuition)",
+      "source": "None for a spouse in Alberta, whose own return doesn't carry unused provincial tuition forward (Schedule NB(S2) reads this schedule for them)"
     },
     "NBS11.2": {
       "label": "Tuition fees for 2025",
@@ -5283,31 +5436,31 @@
     },
     "NL428.17": {
       "label": "Newfoundland and Labrador age amount",
-      "formula": "round((if(person.age >= 65, max(0, param.nlAgeAmountMax - round(max(0, line.T1.23600 - param.nlAgeAmountThreshold) * param.nlAgeAmountRate, 2)), 0)) * line.RES.factor, 2)",
-      "source": "Worksheet NL428, line 58080: for people born in 1960 or earlier"
+      "formula": "if(person.age >= 65, max(0, round(param.nlAgeAmountMax * line.RES.factor, 2) - round(max(0, line.T1.23600 - round(param.nlAgeAmountThreshold * line.RES.factor, 2)) * param.nlAgeAmountRate, 2)), 0)",
+      "source": "Worksheet NL428, line 58080: for people born in 1960 or earlier, $7,064 less 15% of net income over $38,712 (both amounts prorated for a part-year resident: canada.ca, Completing your return for newcomers, Example 2)"
     },
     "NL428.20": {
       "label": "Newfoundland and Labrador spouse or common-law partner amount",
-      "formula": "round((if(line.HH.partner == 1, min(param.nlSpouseMax, max(0, param.nlSpouseBase - line.HH.spouseNetIncome)), 0)) * line.RES.factor, 2)"
+      "formula": "round(if(line.HH.partner == 1, min(round(param.nlSpouseMax * line.RES.factor, 2), max(0, round(param.nlSpouseBase * line.RES.factor, 2) - line.HH.spouseNetIncome)), 0), 2)"
     },
     "NL428.23": {
       "label": "Newfoundland and Labrador amount for an eligible dependant",
-      "formula": "round((if(line.HH.partner == 0 and family.childrenUnder18 > 0, min(param.nlSpouseMax, max(0, param.nlSpouseBase - answer.dependantNetIncome)), 0)) * line.RES.factor, 2)",
+      "formula": "round(if(line.HH.partner == 0 and family.childrenUnder18 > 0, min(round(param.nlSpouseMax * line.RES.factor, 2), max(0, round(param.nlSpouseBase * line.RES.factor, 2) - answer.dependantNetIncome)), 0), 2)",
       "source": "NL428 lines 21 to 23: the base minus their net income, up to the maximum"
     },
     "NL.infirmAmount": {
       "label": "Newfoundland and Labrador amount for an infirm dependant, before choosing",
-      "formula": "if(answer.hasInfirmDependant, if(answer.infirmDependants > 1, unsupported(\"The Newfoundland and Labrador amounts for more than one adult dependant aren't handled by this app yet\"), if(answer.infirmDependants == 1, min(param.nlInfirmMax, max(0, param.nlInfirmBase - answer.infirmDependantIncome)), 0)), 0)",
+      "formula": "if(answer.hasInfirmDependant, if(answer.infirmDependants > 1, unsupported(\"The Newfoundland and Labrador amounts for more than one adult dependant aren't handled by this app yet\"), if(answer.infirmDependants == 1, min(round(param.nlInfirmMax * line.RES.factor, 2), max(0, round(param.nlInfirmBase * line.RES.factor, 2) - answer.infirmDependantIncome)), 0)), 0)",
       "source": "Worksheet NL428, line 58200: $11,067 less the dependant's net income, up to $3,515"
     },
     "NL.caregiverAmount": {
       "label": "Newfoundland and Labrador caregiver amount, before choosing",
-      "formula": "if(answer.hasInfirmDependant, if(answer.infirmDependants == 1, if(answer.infirmDependantHome == \"with_you\", min(param.nlCaregiverMax, max(0, param.nlCaregiverBase - answer.infirmDependantIncome)), 0), 0), 0)",
-      "source": "Worksheet NL428, line 58400: $20,689 less the dependant's net income, up to $3,514, for a dependant who lived with you"
+      "formula": "if(answer.hasInfirmDependant, if(answer.infirmDependants == 1, if(person.province == \"NL\" and answer.infirmDependantHome == \"with_you\", min(round(param.nlCaregiverMax * line.RES.factor, 2), max(0, round(param.nlCaregiverBase * line.RES.factor, 2) - answer.infirmDependantIncome)), 0), 0), 0)",
+      "source": "Worksheet NL428, line 58400: $20,689 less the dependant's net income, up to $3,514, for a dependant who lived with you. A spouse living elsewhere, whose NL428 Schedule NL(S2) reads, isn't asked where the dependant lived: theirs is the amount for infirm dependants, which needs no shared home"
     },
     "NL428.24": {
       "label": "Newfoundland and Labrador amount for infirm dependants age 18 or older",
-      "formula": "round((if(line.NL428.38 > 0, 0, line.NL.infirmAmount)) * line.RES.factor, 2)",
+      "formula": "if(line.NL428.38 > 0, 0, line.NL.infirmAmount)",
       "source": "NL428 line 58200"
     },
     "NL428.31": {
@@ -5342,7 +5495,7 @@
     },
     "NL428.38": {
       "label": "Newfoundland and Labrador caregiver amount",
-      "formula": "round((if(line.NL.caregiverAmount > 0 and line.NL.caregiverAmount >= line.NL.infirmAmount, line.NL.caregiverAmount, 0)) * line.RES.factor, 2)",
+      "formula": "if(line.NL.caregiverAmount > 0 and line.NL.caregiverAmount >= line.NL.infirmAmount, line.NL.caregiverAmount, 0)",
       "source": "NL428 line 58400: claimed instead of line 58200 when it is at least as much"
     },
     "NL428.40": {
@@ -5372,13 +5525,13 @@
     },
     "NL428.45": {
       "label": "Tuition and education amounts transferred from a child or grandchild",
-      "formula": "line.CHILD.provincialTuition",
-      "source": "NL428 line 58600: the provincial amount they designate on their T2202, taken as the same as federally"
+      "formula": "round(line.CHILD.provincialTuition * line.RES.factor, 2)",
+      "source": "NL428 line 58600: the provincial amount they designate on their T2202, taken as the same as federally. Prorated for a part-year resident (RC4018, Appendix K)"
     },
     "NL428.46": {
       "label": "Newfoundland and Labrador amounts transferred from your spouse or common-law partner",
-      "formula": "if(line.HH.partner == 1 and family.partnerInYear, line.NLS2.12, 0)",
-      "source": "NL428 line 58640, from Schedule NL(S2)"
+      "formula": "if(line.HH.partner == 1 and family.partnerInYear, round(line.NLS2.12 * line.RES.factor, 2), 0)",
+      "source": "NL428 line 58640, from Schedule NL(S2). Prorated for a part-year resident (RC4018, Appendix K); the schedule shows the whole transfer"
     },
     "NL428.47": {
       "label": "Newfoundland and Labrador credit amounts before medical expenses",
@@ -5492,7 +5645,8 @@
     },
     "NLS11.1": {
       "label": "Unused Newfoundland and Labrador tuition and education amounts from your 2024 notice of assessment",
-      "formula": "answer.unusedProvincialTuition"
+      "formula": "if(person.province == \"AB\", 0, answer.unusedProvincialTuition)",
+      "source": "None for a spouse in Alberta, whose own return doesn't carry unused provincial tuition forward (Schedule NL(S2) reads this schedule for them)"
     },
     "NLS11.2": {
       "label": "Tuition fees for 2025",
@@ -5575,23 +5729,23 @@
     "NS428.9": {"label":"Nova Scotia basic personal amount","formula":"round((param.nsBasicPersonalAmount) * line.RES.factor, 2)"},
     "NS428.10": {
       "label": "Nova Scotia age amount",
-      "formula": "round((if(person.age >= 65, max(0, param.nsAgeAmountMax - round(max(0, line.T1.23600 - param.nsAgeAmountThreshold) * param.nsAgeAmountRate, 2)), 0)) * line.RES.factor, 2)",
-      "source": "Worksheet NS428, line 58080: for people born in 1960 or earlier"
+      "formula": "if(person.age >= 65, max(0, round(param.nsAgeAmountMax * line.RES.factor, 2) - round(max(0, line.T1.23600 - round(param.nsAgeAmountThreshold * line.RES.factor, 2)) * param.nsAgeAmountRate, 2)), 0)",
+      "source": "Worksheet NS428, line 58080: for people born in 1960 or earlier, $5,734 less 15% of net income over $30,828 (both amounts prorated for a part-year resident: canada.ca, Completing your return for newcomers, Example 2)"
     },
     "NS428.13": {
       "label": "Nova Scotia spouse or common-law partner amount",
-      "formula": "round((if(line.HH.partner == 1, min(param.nsSpouseMax, max(0, param.nsSpouseBase - max(param.nsSpouseIncomeFloor, line.HH.spouseNetIncome))), 0)) * line.RES.factor, 2)",
+      "formula": "round(if(line.HH.partner == 1, min(round(param.nsSpouseMax * line.RES.factor, 2), max(0, round(param.nsSpouseBase * line.RES.factor, 2) - max(round(param.nsSpouseIncomeFloor * line.RES.factor, 2), line.HH.spouseNetIncome))), 0), 2)",
       "source": "NS428 lines 11 to 13: $12,618 less whichever is more, $874 or their net income"
     },
     "NS428.16": {
       "label": "Nova Scotia amount for an eligible dependant",
-      "formula": "round((if(line.HH.partner == 0 and family.childrenUnder18 > 0, min(param.nsSpouseMax, max(0, param.nsSpouseBase - max(param.nsSpouseIncomeFloor, answer.dependantNetIncome))), 0)) * line.RES.factor, 2)",
+      "formula": "round(if(line.HH.partner == 0 and family.childrenUnder18 > 0, min(round(param.nsSpouseMax * line.RES.factor, 2), max(0, round(param.nsSpouseBase * line.RES.factor, 2) - max(round(param.nsSpouseIncomeFloor * line.RES.factor, 2), answer.dependantNetIncome))), 0), 2)",
       "source": "NS428 lines 14 to 16: $12,618 less whichever is more, $874 or their net income"
     },
     "NS428.17": {
       "label": "Nova Scotia amount for infirm dependants age 18 or older",
-      "formula": "round((if(answer.hasInfirmDependant, if(answer.infirmDependants > 1, unsupported(\"The Canada caregiver amount for more than one adult dependant isn't handled by this app yet\"), answer.infirmDependants * min(param.nsInfirmMax, max(0, param.nsInfirmBase - answer.infirmDependantIncome))), 0)) * line.RES.factor, 2)",
-      "source": "Worksheet NS428, line 58200: $8,744 less the dependant's net income, up to $2,885"
+      "formula": "if(answer.hasInfirmDependant, if(answer.infirmDependants > 1, unsupported(\"The Canada caregiver amount for more than one adult dependant isn't handled by this app yet\"), answer.infirmDependants * min(round(param.nsInfirmMax * line.RES.factor, 2), max(0, round(param.nsInfirmBase * line.RES.factor, 2) - answer.infirmDependantIncome))), 0)",
+      "source": "Worksheet NS428, line 58200: $8,744 less the dependant's net income, up to $2,885 (both prorated for a part-year resident before the income comes off)"
     },
     "NS428.58229": {
       "label": "Months claimed for the amount for young children",
@@ -5632,13 +5786,13 @@
     "NS428.34": {"label":"Nova Scotia tuition and education amounts","formula":"line.NSS11.13","source":"Schedule NS(S11) line 13"},
     "NS428.35": {
       "label": "Tuition and education amounts transferred from a child or grandchild",
-      "formula": "line.CHILD.provincialTuition",
-      "source": "NS428 line 35 (58600): the provincial amount they designate on their T2202, taken as the federal one"
+      "formula": "round(line.CHILD.provincialTuition * line.RES.factor, 2)",
+      "source": "NS428 line 35 (58600): the provincial amount they designate on their T2202, taken as the federal one. Prorated for a part-year resident (RC4018, Appendix K)"
     },
     "NS428.36": {
       "label": "Nova Scotia amounts transferred from your spouse or common-law partner",
-      "formula": "if(line.HH.partner == 1 and family.partnerInYear and line.NSS2.5 > 0, line.NSS2.12, 0)",
-      "source": "Schedule NS(S2): their unused Nova Scotia age, pension, disability and tuition amounts"
+      "formula": "if(line.HH.partner == 1 and family.partnerInYear and line.NSS2.5 > 0, round(line.NSS2.12 * line.RES.factor, 2), 0)",
+      "source": "Schedule NS(S2): their unused Nova Scotia age, pension, disability and tuition amounts. Prorated for a part-year resident (RC4018, Appendix K: line 58640); the schedule shows the whole transfer"
     },
     "NS428.43": {
       "label": "Allowable medical expenses",
@@ -5722,7 +5876,8 @@
     "NS428.99": {"label":"Nova Scotia tax","formula":"max(0, line.NS428.87 - line.NS428.98)"},
     "NSS11.1": {
       "label": "Unused Nova Scotia tuition and education amounts from your 2024 notice of assessment",
-      "formula": "answer.unusedProvincialTuition"
+      "formula": "if(person.province == \"AB\", 0, answer.unusedProvincialTuition)",
+      "source": "None for a spouse in Alberta, whose own return doesn't carry unused provincial tuition forward (Schedule NS(S2) reads this schedule for them)"
     },
     "NSS11.5": {
       "label": "2025 Nova Scotia tuition and education amounts",
@@ -5789,22 +5944,22 @@
     },
     "NT428.10": {
       "label": "Northwest Territories age amount",
-      "formula": "round((if(person.age >= 65, max(0, param.ntAgeAmountMax - round(max(0, line.T1.23600 - param.ntAgeAmountThreshold) * param.ntAgeAmountRate, 2)), 0)) * line.RES.factor, 2)",
-      "source": "Worksheet NT428, line 58080: for people born in 1960 or earlier"
+      "formula": "if(person.age >= 65, max(0, round(param.ntAgeAmountMax * line.RES.factor, 2) - round(max(0, line.T1.23600 - round(param.ntAgeAmountThreshold * line.RES.factor, 2)) * param.ntAgeAmountRate, 2)), 0)",
+      "source": "Worksheet NT428, line 58080: for people born in 1960 or earlier, $8,727 less 15% of net income over $45,522 (both amounts prorated for a part-year resident: canada.ca, Completing your return for newcomers, Example 2)"
     },
     "NT428.13": {
       "label": "Northwest Territories spouse or common-law partner amount",
-      "formula": "round((if(line.HH.partner == 1, max(0, param.ntSpouseBase - line.HH.spouseNetIncome), 0)) * line.RES.factor, 2)"
+      "formula": "round(if(line.HH.partner == 1, max(0, round(param.ntSpouseBase * line.RES.factor, 2) - line.HH.spouseNetIncome), 0), 2)"
     },
     "NT428.16": {
       "label": "Northwest Territories amount for an eligible dependant",
-      "formula": "round((if(line.HH.partner == 0 and family.childrenUnder18 > 0, max(0, param.ntSpouseBase - answer.dependantNetIncome), 0)) * line.RES.factor, 2)",
+      "formula": "round(if(line.HH.partner == 0 and family.childrenUnder18 > 0, max(0, round(param.ntSpouseBase * line.RES.factor, 2) - answer.dependantNetIncome), 0), 2)",
       "source": "NT428 lines 14 to 16: the base minus their net income"
     },
     "NT428.17": {
       "label": "Northwest Territories amount for infirm dependants age 18 or older",
-      "formula": "round((if(line.T1.30450 > 0, min(param.ntInfirmDependantMax, max(0, param.ntInfirmDependantBase - answer.infirmDependantIncome)), 0)) * line.RES.factor, 2)",
-      "source": "Worksheet NT428, line 58200: $14,305 less the dependant's net income, up to $5,914"
+      "formula": "if(line.T1.30450 > 0, min(round(param.ntInfirmDependantMax * line.RES.factor, 2), max(0, round(param.ntInfirmDependantBase * line.RES.factor, 2) - answer.infirmDependantIncome)), 0)",
+      "source": "Worksheet NT428, line 58200: $14,305 less the dependant's net income, up to $5,914 (both prorated for a part-year resident before the income comes off)"
     },
     "NT428.23": {
       "label": "CPP and EI credit amounts",
@@ -5843,13 +5998,13 @@
     },
     "NT428.35": {
       "label": "Amounts transferred from your spouse or common-law partner",
-      "formula": "if(line.HH.partner == 1 and family.partnerInYear, line.NTS2.12, 0)",
-      "source": "NT428 line 35 (58640): Schedule NT(S2)"
+      "formula": "if(line.HH.partner == 1 and family.partnerInYear, round(line.NTS2.12 * line.RES.factor, 2), 0)",
+      "source": "NT428 line 35 (58640): Schedule NT(S2). Prorated for a part-year resident (RC4018, Appendix K); the schedule shows the whole transfer"
     },
     "NT428.34": {
       "label": "Northwest Territories tuition and education amounts transferred from a child or grandchild",
-      "formula": "line.CHILD.provincialTuition",
-      "source": "NT428 line 34 (58600): the territorial amount designated to you on their T2202 (the app takes the federal one, line 32400)"
+      "formula": "round(line.CHILD.provincialTuition * line.RES.factor, 2)",
+      "source": "NT428 line 34 (58600): the territorial amount designated to you on their T2202 (the app takes the federal one, line 32400). Prorated for a part-year resident (RC4018, Appendix K)"
     },
     "NT428.42": {
       "label": "Allowable medical expenses",
@@ -5903,7 +6058,8 @@
     },
     "NTS11.1": {
       "label": "Unused Northwest Territories tuition and education from your 2024 notice of assessment",
-      "formula": "answer.unusedProvincialTuition"
+      "formula": "if(person.province == \"AB\", 0, answer.unusedProvincialTuition)",
+      "source": "None for a spouse in Alberta, whose own return doesn't carry unused provincial tuition forward (Schedule NT(S2) reads this schedule for them)"
     },
     "NTS11.5": {
       "label": "Tuition and education amounts for 2025",
@@ -5995,22 +6151,22 @@
     "NU428.9": {"label":"Nunavut basic personal amount","formula":"round((param.nuBasicPersonalAmount) * line.RES.factor, 2)"},
     "NU428.10": {
       "label": "Nunavut age amount",
-      "formula": "round((if(person.age >= 65, max(0, param.nuAgeAmountMax - round(max(0, line.T1.23600 - param.nuAgeAmountThreshold) * param.nuAgeAmountRate, 2)), 0)) * line.RES.factor, 2)",
-      "source": "Worksheet NU428, line 58080: for people born in 1960 or earlier"
+      "formula": "if(person.age >= 65, max(0, round(param.nuAgeAmountMax * line.RES.factor, 2) - round(max(0, line.T1.23600 - round(param.nuAgeAmountThreshold * line.RES.factor, 2)) * param.nuAgeAmountRate, 2)), 0)",
+      "source": "Worksheet NU428, line 58080: for people born in 1960 or earlier, $12,303 less 15% of net income over $45,522 (both amounts prorated for a part-year resident: canada.ca, Completing your return for newcomers, Example 2)"
     },
     "NU428.13": {
       "label": "Nunavut spouse or common-law partner amount",
-      "formula": "round((if(line.HH.partner == 1, max(0, param.nuSpouseBase - line.HH.spouseNetIncome), 0)) * line.RES.factor, 2)"
+      "formula": "round(if(line.HH.partner == 1, max(0, round(param.nuSpouseBase * line.RES.factor, 2) - line.HH.spouseNetIncome), 0), 2)"
     },
     "NU428.16": {
       "label": "Nunavut amount for an eligible dependant",
-      "formula": "round((if(line.HH.partner == 0 and family.childrenUnder18 > 0, max(0, param.nuSpouseBase - answer.dependantNetIncome), 0)) * line.RES.factor, 2)",
+      "formula": "round(if(line.HH.partner == 0 and family.childrenUnder18 > 0, max(0, round(param.nuSpouseBase * line.RES.factor, 2) - answer.dependantNetIncome), 0), 2)",
       "source": "NU428 lines 14 to 16: the base minus their net income"
     },
     "NU428.17": {
       "label": "Nunavut amount for infirm dependants age 18 or older",
-      "formula": "round((if(line.T1.30450 > 0, min(param.nuInfirmDependantMax, max(0, param.nuInfirmDependantBase - answer.infirmDependantIncome)), 0)) * line.RES.factor, 2)",
-      "source": "Worksheet NU428, line 58200: $14,305 less the dependant's net income, up to $5,914"
+      "formula": "if(line.T1.30450 > 0, min(round(param.nuInfirmDependantMax * line.RES.factor, 2), max(0, round(param.nuInfirmDependantBase * line.RES.factor, 2) - answer.infirmDependantIncome)), 0)",
+      "source": "Worksheet NU428, line 58200: $14,305 less the dependant's net income, up to $5,914 (both prorated for a part-year resident before the income comes off)"
     },
     "NUYC.claimant": {
       "label": "This return claims the amount for young children (1 for yes)",
@@ -6059,13 +6215,13 @@
     },
     "NU428.35": {
       "label": "Nunavut tuition, education and textbook amounts transferred from a child or grandchild",
-      "formula": "line.CHILD.provincialTuition",
-      "source": "NU428 line 35 (58600): the territorial amount designated to you on their T2202 (the app takes the federal one, line 32400)"
+      "formula": "round(line.CHILD.provincialTuition * line.RES.factor, 2)",
+      "source": "NU428 line 35 (58600): the territorial amount designated to you on their T2202 (the app takes the federal one, line 32400). Prorated for a part-year resident (RC4018, Appendix K)"
     },
     "NU428.36": {
       "label": "Amounts transferred from your spouse or common-law partner",
-      "formula": "if(line.HH.partner == 1 and family.partnerInYear, line.NUS2.13, 0)",
-      "source": "NU428 line 36 (58640): Schedule NU(S2)"
+      "formula": "if(line.HH.partner == 1 and family.partnerInYear, round(line.NUS2.13 * line.RES.factor, 2), 0)",
+      "source": "NU428 line 36 (58640): Schedule NU(S2). Prorated for a part-year resident (RC4018, Appendix K); the schedule shows the whole transfer"
     },
     "NU428.43": {
       "label": "Allowable medical expenses",
@@ -6109,7 +6265,8 @@
     "NU428.66": {"label":"Nunavut tax","formula":"max(0, line.NU428.64 - line.NU428.65)","source":"NU428 lines 65 and 66"},
     "NUS11.1": {
       "label": "Unused Nunavut tuition, education and textbook amounts from your 2024 notice of assessment",
-      "formula": "answer.unusedProvincialTuition"
+      "formula": "if(person.province == \"AB\", 0, answer.unusedProvincialTuition)",
+      "source": "None for a spouse in Alberta, whose own return doesn't carry unused provincial tuition forward (Schedule NU(S2) reads this schedule for them)"
     },
     "NUS11.9": {
       "label": "Tuition, education and textbook amounts for 2025",
@@ -6200,22 +6357,22 @@
     "ON428.9": {"label":"Ontario basic personal amount","formula":"round((param.onBasicPersonalAmount) * line.RES.factor, 2)"},
     "ON428.10": {
       "label": "Ontario age amount",
-      "formula": "round((if(person.age >= 65, max(0, param.onAgeAmountMax - round(max(0, line.T1.23600 - param.onAgeAmountThreshold) * param.onAgeAmountRate, 2)), 0)) * line.RES.factor, 2)",
-      "source": "Worksheet ON428, line 58080: for people born in 1960 or earlier"
+      "formula": "if(person.age >= 65, max(0, round(param.onAgeAmountMax * line.RES.factor, 2) - round(max(0, line.T1.23600 - round(param.onAgeAmountThreshold * line.RES.factor, 2)) * param.onAgeAmountRate, 2)), 0)",
+      "source": "Worksheet ON428, line 58080: for people born in 1960 or earlier, $6,223 less 15% of net income over $46,330 (both amounts prorated for a part-year resident: canada.ca, Completing your return for newcomers, Example 2)"
     },
     "ON428.13": {
       "label": "Ontario spouse or common-law partner amount",
-      "formula": "round((if(line.HH.partner == 1, min(param.onSpouseMax, max(0, param.onSpouseBase - line.HH.spouseNetIncome)), 0)) * line.RES.factor, 2)"
+      "formula": "round(if(line.HH.partner == 1, min(round(param.onSpouseMax * line.RES.factor, 2), max(0, round(param.onSpouseBase * line.RES.factor, 2) - line.HH.spouseNetIncome)), 0), 2)"
     },
     "ON428.16": {
       "label": "Ontario amount for an eligible dependant",
-      "formula": "round((if(line.HH.partner == 0 and family.childrenUnder18 > 0, min(param.onSpouseMax, max(0, param.onSpouseBase - answer.dependantNetIncome)), 0)) * line.RES.factor, 2)",
+      "formula": "round(if(line.HH.partner == 0 and family.childrenUnder18 > 0, min(round(param.onSpouseMax * line.RES.factor, 2), max(0, round(param.onSpouseBase * line.RES.factor, 2) - answer.dependantNetIncome)), 0), 2)",
       "source": "ON428 lines 14 to 16: the base minus their net income, up to the maximum"
     },
     "ON428.17": {
       "label": "Ontario caregiver amount",
-      "formula": "round((if(answer.hasInfirmDependant, if(answer.infirmDependants > 1, unsupported(\"The Ontario caregiver amount for more than one adult dependant isn't handled by this app yet\"), if(answer.infirmDependants == 0, 0, min(param.onCaregiverMax, max(0, param.onCaregiverBase - answer.infirmDependantIncome)))), 0)) * line.RES.factor, 2)",
-      "source": "Worksheet ON428, line 58185: $26,562 less the dependant's net income, up to $6,008. Only for a dependant 18 or older with an impairment, not a spouse or a child under 18; line 4 (an eligible dependant amount for the same person) is zero, as the app's eligible dependant is a child under 18"
+      "formula": "if(answer.hasInfirmDependant, if(answer.infirmDependants > 1, unsupported(\"The Ontario caregiver amount for more than one adult dependant isn't handled by this app yet\"), if(answer.infirmDependants == 0, 0, min(round(param.onCaregiverMax * line.RES.factor, 2), max(0, round(param.onCaregiverBase * line.RES.factor, 2) - answer.infirmDependantIncome)))), 0)",
+      "source": "Worksheet ON428, line 58185: $26,562 less the dependant's net income, up to $6,008 (both prorated for a part-year resident before the income comes off). Only for a dependant 18 or older with an impairment, not a spouse or a child under 18; line 4 (an eligible dependant amount for the same person) is zero, as the app's eligible dependant is a child under 18"
     },
     "ON428.18": {
       "label": "Ontario amounts for you and your dependants",
@@ -6264,13 +6421,13 @@
     },
     "ON428.33": {
       "label": "Your unused Ontario tuition and education amounts",
-      "formula": "min(answer.unusedProvincialTuition, line.ONS11.4)",
-      "source": "Schedule ON(S11), line 5: the unused amounts from your notice of assessment, up to line 4"
+      "formula": "min(if(person.province == \"AB\", 0, answer.unusedProvincialTuition), line.ONS11.4)",
+      "source": "Schedule ON(S11), line 5: the unused amounts from your notice of assessment, up to line 4. None for a spouse in Alberta, whose own return doesn't carry unused provincial tuition forward (Schedule ON(S2) reads this line for them)"
     },
     "ON428.34": {
       "label": "Ontario amounts transferred from your spouse or common-law partner",
-      "formula": "if(line.HH.partner == 1 and family.partnerInYear, if(line.ONS2.4 == 0, 0, line.ONS2.11), 0)",
-      "source": "Schedule ON(S2): their unused Ontario age, pension income and disability amounts. A spouse living in another province is read as if they lived in Ontario, as the schedule asks: the engine works out Ontario's lines for anyone"
+      "formula": "if(line.HH.partner == 1 and family.partnerInYear, if(line.ONS2.4 == 0, 0, round(line.ONS2.11 * line.RES.factor, 2)), 0)",
+      "source": "Schedule ON(S2): their unused Ontario age, pension income and disability amounts. A spouse living in another province is read as if they lived in Ontario, as the schedule asks: the engine works out Ontario's lines for anyone. Prorated for a part-year resident (RC4018, Appendix K: line 58640); the schedule shows the whole transfer"
     },
     "ON428.35": {
       "label": "Ontario amounts before medical expenses",
@@ -6452,8 +6609,8 @@
     },
     "ON479.1": {
       "label": "Ontario fertility treatment tax credit",
-      "formula": "if(line.ON479.61268 == 0, 0, if(line.HH.partner == 1 and family.partnerInYear and spouse.answer.fertilityExpenses > 0, unsupported(\"Only one spouse can claim the Ontario fertility treatment tax credit. Enter the fertility treatment expenses on one return only\"), min(param.onFertilityMax, round(line.ON479.61268 * param.onFertilityRate, 2))))",
-      "source": "ON479 line 1: 25% of the expenses, up to $5,000. Only one spouse may claim it, and the claim can't be split"
+      "formula": "if(line.ON479.61268 == 0, 0, if(line.HH.partner == 1 and family.partnerInYear and spouse.person.province == \"ON\" and spouse.answer.fertilityExpenses > 0, unsupported(\"Only one spouse can claim the Ontario fertility treatment tax credit. Enter the fertility treatment expenses on one return only\"), min(param.onFertilityMax, round(line.ON479.61268 * param.onFertilityRate, 2))))",
+      "source": "ON479 line 1: 25% of the expenses, up to $5,000. Only one spouse may claim it, and the claim can't be split. A spouse living in another province claims that province's credit, if any, not this one"
     },
     "ON479.5": {
       "label": "Medical expenses at the seniors care at home rate",
@@ -6517,27 +6674,27 @@
     },
     "PE428.10": {
       "label": "Prince Edward Island age amount",
-      "formula": "round((if(person.age >= 65, max(0, param.peAgeAmountMax - round(max(0, line.T1.23600 - param.peAgeAmountThreshold) * param.peAgeAmountRate, 2)), 0)) * line.RES.factor, 2)",
-      "source": "Worksheet PE428, line 58080: for people born in 1960 or earlier"
+      "formula": "if(person.age >= 65, max(0, round(param.peAgeAmountMax * line.RES.factor, 2) - round(max(0, line.T1.23600 - round(param.peAgeAmountThreshold * line.RES.factor, 2)) * param.peAgeAmountRate, 2)), 0)",
+      "source": "Worksheet PE428, line 58080: for people born in 1960 or earlier, $6,510 less 15% of net income over $36,600 (both amounts prorated for a part-year resident: canada.ca, Completing your return for newcomers, Example 2)"
     },
     "PE428.13": {
       "label": "Prince Edward Island spouse or common-law partner amount",
-      "formula": "round((if(line.HH.partner == 1, min(param.peSpouseMax, max(0, param.peSpouseBase - line.HH.spouseNetIncome)), 0)) * line.RES.factor, 2)"
+      "formula": "round(if(line.HH.partner == 1, min(round(param.peSpouseMax * line.RES.factor, 2), max(0, round(param.peSpouseBase * line.RES.factor, 2) - line.HH.spouseNetIncome)), 0), 2)"
     },
     "PE428.16": {
       "label": "Prince Edward Island amount for an eligible dependant",
-      "formula": "round((if(line.HH.partner == 0 and family.childrenUnder18 > 0, min(param.peSpouseMax, max(0, param.peSpouseBase - answer.dependantNetIncome)), 0)) * line.RES.factor, 2)",
+      "formula": "round(if(line.HH.partner == 0 and family.childrenUnder18 > 0, min(round(param.peSpouseMax * line.RES.factor, 2), max(0, round(param.peSpouseBase * line.RES.factor, 2) - answer.dependantNetIncome)), 0), 2)",
       "source": "PE428 lines 14 to 16: the base minus their net income, up to the maximum"
     },
     "PE428.17": {
       "label": "Prince Edward Island amount for infirm dependants age 18 or older",
-      "formula": "round((if(answer.hasInfirmDependant, if(answer.infirmDependants > 1, unsupported(\"The Canada caregiver amount for more than one adult dependant isn't handled by this app yet\"), answer.infirmDependants * min(param.peInfirmMax, max(0, param.peInfirmBase - answer.infirmDependantIncome))), 0)) * line.RES.factor, 2)",
-      "source": "Worksheet PE428, line 58200: $7,412 less the dependant's net income, up to $2,446"
+      "formula": "if(answer.hasInfirmDependant, if(answer.infirmDependants > 1, unsupported(\"The Canada caregiver amount for more than one adult dependant isn't handled by this app yet\"), answer.infirmDependants * min(round(param.peInfirmMax * line.RES.factor, 2), max(0, round(param.peInfirmBase * line.RES.factor, 2) - answer.infirmDependantIncome))), 0)",
+      "source": "Worksheet PE428, line 58200: $7,412 less the dependant's net income, up to $2,446 (both prorated for a part-year resident before the income comes off)"
     },
     "PE428.58229": {
       "label": "Months claimed for the amount for young children",
-      "formula": "if(line.HH.partner == 1 and (line.T1.23600 > line.HH.spouseNetIncome or (line.T1.23600 == line.HH.spouseNetIncome and person.role == \"spouse\")), 0, sum(family.childMonthsUnder6) - if(line.PE428.16 > 0, min(family.childMonthsUnder6), 0))",
-      "source": "PE428 line 58229: each month a child was under 6 on its first day; with a spouse or partner, only the one with the lower net income claims (with equal incomes, the person preparing)"
+      "formula": "if(line.HH.partner == 1 and (line.T1.23600 > line.HH.spouseNetIncome or (line.T1.23600 == line.HH.spouseNetIncome and person.role == \"spouse\")), 0, sum(family.childMonthsUnder6))",
+      "source": "PE428 line 58229 (5002-PC, line 58230): each month a child was under 6 on its first day, the child claimed as an eligible dependant too; with a spouse or partner, only the one with the lower net income claims (with equal incomes, the person preparing)"
     },
     "PE428.18": {"label":"Prince Edward Island amount for young children","formula":"line.PE428.58229 * param.peYoungChildAmount"},
     "PE428.24": {
@@ -6552,8 +6709,8 @@
     },
     "PE428.28": {
       "label": "Children's wellness tax credit",
-      "formula": "if(family.childrenUnder19 > 0, min(answer.childActivityFees, param.peWellnessMaxPerChild * family.childrenUnder19), 0)",
-      "source": "PE428 line 28 (58365): program fees for children under 18 at the start of the year, up to $1,000 per child"
+      "formula": "if(person.province == \"PE\" and family.childrenUnder19 > 0, min(answer.childActivityFees, param.peWellnessMaxPerChild * family.childrenUnder19), 0)",
+      "source": "PE428 line 28 (58365): program fees for children under 18 at the start of the year, up to $1,000 per child. Only for residents of Prince Edward Island: none for a spouse elsewhere, whose PE428 the S2 and S11 schedules read"
     },
     "PE428.31": {
       "label": "Prince Edward Island disability amount for self",
@@ -6587,13 +6744,13 @@
     },
     "PE428.37": {
       "label": "Tuition and education amounts transferred from a child or grandchild",
-      "formula": "line.CHILD.provincialTuition",
-      "source": "PE428 line 37 (58600): the provincial amount they designate on their T2202, taken as the federal one"
+      "formula": "round(line.CHILD.provincialTuition * line.RES.factor, 2)",
+      "source": "PE428 line 37 (58600): the provincial amount they designate on their T2202, taken as the federal one. Prorated for a part-year resident (RC4018, Appendix K)"
     },
     "PE428.38": {
       "label": "Prince Edward Island amounts transferred from your spouse or common-law partner",
-      "formula": "if(line.HH.partner == 1 and family.partnerInYear and line.PES2.5 > 0, line.PES2.12, 0)",
-      "source": "Schedule PE(S2): their unused Prince Edward Island age, pension, disability and tuition amounts"
+      "formula": "if(line.HH.partner == 1 and family.partnerInYear and line.PES2.5 > 0, round(line.PES2.12 * line.RES.factor, 2), 0)",
+      "source": "Schedule PE(S2): their unused Prince Edward Island age, pension, disability and tuition amounts. Prorated for a part-year resident (RC4018, Appendix K: line 58640); the schedule shows the whole transfer"
     },
     "PE428.45": {
       "label": "Allowable medical expenses",
@@ -6700,7 +6857,8 @@
     },
     "PES11.1": {
       "label": "Unused Prince Edward Island tuition and education amounts from your 2024 notice of assessment",
-      "formula": "answer.unusedProvincialTuition"
+      "formula": "if(person.province == \"AB\", 0, answer.unusedProvincialTuition)",
+      "source": "None for a spouse in Alberta, whose own return doesn't carry unused provincial tuition forward (Schedule PE(S2) reads this schedule for them)"
     },
     "PES11.5": {
       "label": "2025 Prince Edward Island tuition and education amounts",
@@ -6891,8 +7049,8 @@
     "QCF.36": {"label":"Income","formula":"max(0, line.QCF.18 - line.QCF.34)","source":"Schedule F, line 36"},
     "QCF.68": {
       "label": "Deductions",
-      "formula": "line.QCR.26 + line.QCU.101 + line.QCU.103 + if(line.QCU.33 > 0, min(line.QCU.94 - line.QCU.48, line.QCU.99), 0) + line.TP1.245 + line.TP1.225 + line.TP1.231",
-      "source": "Schedule F, lines 41 to 68: Schedule R line 26, Schedule U lines 101, 103 and 115, and lines 245, 225 and 231"
+      "formula": "line.QCR.26 + line.QCU.101 + line.QCU.103 + if(line.QCU.33 > 0, min(line.QCU.94 - line.QCU.48, line.QCU.99), 0) + line.TP1.246 + line.EI.repayment + line.TP1.245 + line.TP1.225 + line.TP1.231",
+      "source": "Schedule F, lines 41 to 68: line 246 (EI benefits repaid, line 41), Schedule R line 26, Schedule U lines 101, 103 and 115, the EI benefits to repay on the federal return (line 44: the EI part of line 250, point 3; the OAS part is left out with line 114), and lines 245, 225 and 231"
     },
     "QCF.70": {
       "label": "Income subject to the contribution",
@@ -7204,7 +7362,7 @@
     },
     "QC.scope": {
       "label": "Quebec return cases this app doesn't handle",
-      "formula": "if(not person.residentAllYear, unsupported(\"A Quebec return for a year you moved to or from Canada isn't handled by this app yet\"), if(count(T4.box14) > count(RL1.boxA), unsupported(\"A Quebec resident's employer in Quebec issues an RL-1 with each T4: upload it. Employment outside Quebec (a T4 without an RL-1, Schedule R Part B) isn't handled by this app yet\"), if(answer.hasRentalIncome, unsupported(\"Rental income on the Quebec return (form TP-128-V) isn't handled by this app yet\"), if(answer.hasForeignIncome, unsupported(\"Foreign income on the Quebec return (the foreign tax credit, Schedule E) isn't handled by this app yet\"), if(sum(T4AOAS.box21) > 0, unsupported(\"Net federal supplements on the Quebec return (lines 148 and 295) aren't handled by this app yet\"), if(sum(T4AOAS.box20) > 0, unsupported(\"An Old Age Security overpayment recovered (box 20 of the T4A(OAS)) on the Quebec return isn't handled by this app yet\"), if(answer.hasMovingExpenses, unsupported(\"Moving expenses on the Quebec return (form TP-348-V) aren't handled by this app yet\"), 0)))))))"
+      "formula": "if(not person.residentAllYear, unsupported(\"A Quebec return for a year you moved to or from Canada isn't handled by this app yet\"), if(count(T4.box14) > count(RL1.boxA) and sum(T4.box14) > sum(RL1.boxA), unsupported(\"A Quebec resident's employer in Quebec issues an RL-1 with each T4: upload it. Employment outside Quebec (a T4 without an RL-1, Schedule R Part B) isn't handled by this app yet\"), if(sum(T5.box13) > sum(RL3.boxD), unsupported(\"The interest on your T5 slips (box 13) is more than box D of your RL-3 slips: upload the RL-3 issued with each T5, with its box D. A T5 without its RL-3 isn't handled on the Quebec return by this app yet\"), if(sum(T5.box11) + sum(T5.box25) > sum(RL3.boxB) + 0.01 * count(RL3.boxB), unsupported(\"The taxable dividends on your T5 slips (boxes 11 and 25) are more than box B of your RL-3 slips: upload the RL-3 issued with each T5, with its box B. A T5 without its RL-3 isn't handled on the Quebec return by this app yet\"), if(sum(T5.box18) > sum(RL3.boxI), unsupported(\"The capital gains dividends on your T5 slips (box 18) are more than box I of your RL-3 slips: upload the RL-3 issued with each T5, with its box I. A T5 without its RL-3 isn't handled on the Quebec return by this app yet\"), if(sum(T3.box21) > sum(RL16.boxA), unsupported(\"The capital gains on your T3 slips (box 21) are more than box A of your RL-16 slips: upload the RL-16 issued with each T3, with its box A. A T3 without its RL-16 isn't handled on the Quebec return by this app yet\"), if(sum(T3.box32) + sum(T3.box50) > sum(RL16.boxI) + 0.01 * count(RL16.boxI), unsupported(\"The taxable dividends on your T3 slips (boxes 32 and 50) are more than box I of your RL-16 slips: upload the RL-16 issued with each T3, with its box I. A T3 without its RL-16 isn't handled on the Quebec return by this app yet\"), if(sum(T3.box26) > sum(RL16.boxG), unsupported(\"The other income on your T3 slips (box 26) is more than box G of your RL-16 slips: upload the RL-16 issued with each T3, with its box G. A T3 without its RL-16, or an RL-16 that reports this income in a box this app doesn't read, isn't handled on the Quebec return yet\"), if(sum(T3.box25) > 0 and sum(RL16.boxE) + sum(RL16.boxF) == 0, unsupported(\"Your T3 slips show foreign non-business income (box 25) and your RL-16 slips none (box E or F): upload the RL-16 issued with each T3. A T3 without its RL-16 isn't handled on the Quebec return by this app yet\"), if(sum(T4RSP.box18) + sum(T4RSP.box20) + sum(T4RSP.box26) + sum(T4RSP.box28) + sum(T4RSP.box34) > 0, unsupported(\"RRSP amounts other than annuity payments and withdrawals (boxes 18, 20, 26, 28 and 34 of the T4RSP) go on the Quebec return from boxes of the RL-2 this app doesn't read (line 154, points 4 and 7): they aren't handled by this app yet\"), if(sum(T4A.box016) + sum(T4A.box018) + sum(T4A.box024) + sum(T4RIF.box16) + sum(T4RSP.box16) + sum(T4RSP.box22) > sum(RL2.boxA) + sum(RL2.boxB) + sum(RL2.boxC), unsupported(\"Your T4A, T4RSP and T4RIF slips show more pension, annuity, RRSP and RRIF payments (T4A boxes 016, 018 and 024, T4RSP boxes 16 and 22, T4RIF box 16) than boxes A, B and C of your RL-2 slips: upload the RL-2 issued with each of them. A payment without its RL-2 isn't handled on the Quebec return by this app yet\"), if(sum(T2202.box26) > 0 and count(RL8.boxA) + count(RL8.boxB) + count(RL8.boxC) == 0, unsupported(\"A college or university in Quebec issues an RL-8 with each T2202: upload it. Tuition paid to a school outside Quebec (a T2202 without an RL-8, Schedule T) isn't handled on the Quebec return by this app yet\"), if(count(RL5.boxA) + count(RL5.boxB) > 0 and sum(T5007.box11) > sum(RL5.boxA) + sum(RL5.boxB), unsupported(\"The social assistance on your T5007 slips (box 11) is more than boxes A and B of your RL-5 slips: upload the RL-5 issued with each T5007. The Quebec return takes the T5007 only when there is no RL-5 at all\"), if(sum(T4.box39) + sum(T4.box41) > 0, unsupported(\"The security option deduction (boxes 39 and 41 of the T4) on the Quebec return (line 297, point 2, from boxes L-9 to L-13 of the RL-1) isn't handled by this app yet\"), if(sum(T4.box43) > 0, unsupported(\"The Canadian Forces personnel and police deduction (box 43 of the T4) on the Quebec return (line 297, point 23) isn't handled by this app yet\"), if(sum(T4A.box028) > 0, unsupported(\"Other income on a T4A (box 028) on the Quebec return (line 154, point 3, from box O of the RL-1) isn't handled by this app yet\"), if(sum(T4A.box105) > 0, unsupported(\"Scholarships and bursaries (box 105 of the T4A) on the Quebec return (line 154, point 1, from box O of the RL-1, and their deduction on line 295) aren't handled by this app yet\"), if(sum(T4A.box131) > 0, unsupported(\"Income from an RDSP (box 131 of the T4A) on the Quebec return (line 278, from box O of the RL-1) isn't handled by this app yet\"), if(sum(T4FHSA.box22) + sum(T4FHSA.box24) + sum(T4FHSA.box26) > 0, unsupported(\"Taxable FHSA amounts (boxes 22, 24 and 26 of the T4FHSA) on the Quebec return (line 154, point 19, from the RL-32) aren't handled by this app yet\"), if(sum(T5007.box10) > 0, unsupported(\"Workers' compensation (box 10 of the T5007) on the Quebec return (line 148, and its deduction on line 295) isn't handled by this app yet\"), if(answer.hasRentalIncome, unsupported(\"Rental income on the Quebec return (form TP-128-V) isn't handled by this app yet\"), if(answer.hasForeignIncome, unsupported(\"Foreign income on the Quebec return (the foreign tax credit, Schedule E) isn't handled by this app yet\"), if(sum(T4AOAS.box21) > 0, unsupported(\"Net federal supplements on the Quebec return (lines 148 and 295) aren't handled by this app yet\"), if(sum(T4AOAS.box20) > 0, unsupported(\"An Old Age Security overpayment recovered (box 20 of the T4A(OAS)) on the Quebec return isn't handled by this app yet\"), if(answer.hasMovingExpenses, unsupported(\"Moving expenses on the Quebec return (form TP-348-V) aren't handled by this app yet\"), 0)))))))))))))))))))))))))"
     },
     "TP1.97": {"label":"QPIP premium","formula":"sum(RL1.boxH)","source":"TP-1 line 97: box H of your RL-1 slips"},
     "TP1.98": {"label":"QPP contribution","formula":"sum(RL1.boxB_A)","source":"TP-1 line 98: box B.A of your RL-1 slips"},
@@ -7278,8 +7436,8 @@
     },
     "TP1.147": {
       "label": "Social assistance payments",
-      "formula": "sum(RL5.boxA) + sum(RL5.boxB)",
-      "source": "TP-1 line 147: boxes A and B of the RL-5 slip"
+      "formula": "if(count(RL5.boxA) + count(RL5.boxB) > 0, sum(RL5.boxA) + sum(RL5.boxB), sum(T5007.box11))",
+      "source": "Guide, line 147: boxes A and B of the RL-5 slip, or the amount on the T5007 slip (box 11) if you did not receive an RL-5"
     },
     "TP1.154": {
       "label": "Other income",
@@ -7336,14 +7494,24 @@
       "formula": "if(line.QC.couple == 1 and person.age >= 65, min(line.T1.21000, round(line.QCQ.20 * 50%, 2)), 0)",
       "source": "Schedule Q, line 22: up to 50% of line 20, for a person born before 1961. The app transfers what the federal T1032 splits (line 21000)"
     },
+    "TP1.246": {
+      "label": "Deduction for a repayment of amounts overpaid to you",
+      "formula": "sum(T4E.box30)",
+      "source": "Guide, line 246: Employment Insurance benefits repaid (box 30 of the T4E), other than the repayment of line 250, point 3. Revenu Québec can instead give the credit of line 462, point 8, for benefits of an earlier year, on request; no other repayment of line 246 is handled"
+    },
     "TP1.248": {
       "label": "Deduction for QPP and CPP contributions and QPIP premiums",
       "formula": "if((line.TP1.98 > 0 and (person.age <= 18 or person.age >= 73)) or (line.QCU.33 > 0 and person.age == 18), unsupported(\"QPP in the year you turned 18 is prorated by month, and none is due before 18 or from the year you turn 73 (Schedule U): this app doesn't handle QPP contributions at those ages yet\"), if(line.QCU.33 > 0, line.QCU.124, line.QCU.23) + line.QCR.26)",
       "source": "TP-1 line 248: Schedule U, Part B line 23 (employees) or Part C line 124 (self-employed), plus Schedule R line 26"
     },
+    "TP1.250": {
+      "label": "Other deductions",
+      "formula": "line.T1.23500",
+      "source": "Guide, line 250, point 3 (code 03): the EI benefits, OAS pension and net federal supplements to repay, the amount on line 23500 of the federal return. No other deduction of line 250 is handled"
+    },
     "TP1.254": {
       "label": "Total deductions",
-      "formula": "line.TP1.201 + line.TP1.205 + line.TP1.207 + line.TP1.214 + line.TP1.215 + line.TP1.225 + line.TP1.231 + line.TP1.245 + line.TP1.248",
+      "formula": "line.TP1.201 + line.TP1.205 + line.TP1.207 + line.TP1.214 + line.TP1.215 + line.TP1.225 + line.TP1.231 + line.TP1.245 + line.TP1.246 + line.TP1.248 + line.TP1.250",
       "source": "TP-1 line 254: lines 201 through 207, 214 through 231 and 234 through 252"
     },
     "TP1.256": {
@@ -7434,8 +7602,8 @@
     },
     "TP1.393": {
       "label": "Donations and gifts",
-      "formula": "if(family.partnerInYear and spouse.answer.claimSpouseDonations and line.HH.partner == 1, 0, line.QC.ownDonations) + if(family.partnerInYear and answer.claimSpouseDonations and line.HH.partner == 1, spouse.line.QC.ownDonations, 0)",
-      "source": "Work Chart 395, line 1: monetary donations made in 2025. Whoever claims both spouses' donations on the federal return claims them here too"
+      "formula": "if(line.QC.couple == 1 and spouse.answer.claimSpouseDonations, 0, line.QC.ownDonations) + if(family.partnerInYear and answer.claimSpouseDonations and line.HH.partner == 1, if(line.QC.couple == 1, spouse.line.QC.ownDonations, spouse.line.OWN.donations), 0)",
+      "source": "Work Chart 395, line 1: monetary donations made in 2025. Whoever claims both spouses' donations on the federal return claims them here too. A spouse outside Quebec has no TP-1 to claim on: their receipts are the ones on their federal return, and yours stay on yours"
     },
     "TP1.395": {
       "label": "Tax credits for donations and gifts",
@@ -7614,22 +7782,22 @@
     "SK428.9": {"label":"Saskatchewan basic personal amount","formula":"round((param.skBasicPersonalAmount) * line.RES.factor, 2)"},
     "SK428.10": {
       "label": "Saskatchewan age amount",
-      "formula": "round((if(person.age >= 65, max(0, param.skAgeAmountMax - round(max(0, line.T1.23600 - param.skAgeAmountThreshold) * param.skAgeAmountRate, 2)), 0)) * line.RES.factor, 2)",
-      "source": "Worksheet SK428, line 58080: for people born in 1960 or earlier"
+      "formula": "if(person.age >= 65, max(0, round(param.skAgeAmountMax * line.RES.factor, 2) - round(max(0, line.T1.23600 - round(param.skAgeAmountThreshold * line.RES.factor, 2)) * param.skAgeAmountRate, 2)), 0)",
+      "source": "Worksheet SK428, line 58080: for people born in 1960 or earlier, $5,785 less 15% of net income over $43,066 (both amounts prorated for a part-year resident: canada.ca, Completing your return for newcomers, Example 2)"
     },
     "SK428.13": {
       "label": "Saskatchewan spouse or common-law partner amount",
-      "formula": "round((if(line.HH.partner == 1, min(param.skSpouseMax, max(0, param.skSpouseBase - line.HH.spouseNetIncome)), 0)) * line.RES.factor, 2)"
+      "formula": "round(if(line.HH.partner == 1, min(round(param.skSpouseMax * line.RES.factor, 2), max(0, round(param.skSpouseBase * line.RES.factor, 2) - line.HH.spouseNetIncome)), 0), 2)"
     },
     "SK428.16": {
       "label": "Saskatchewan amount for an eligible dependant",
-      "formula": "round((if(line.HH.partner == 0 and family.childrenUnder18 > 0, min(param.skSpouseMax, max(0, param.skSpouseBase - answer.dependantNetIncome)), 0)) * line.RES.factor, 2)",
+      "formula": "round(if(line.HH.partner == 0 and family.childrenUnder18 > 0, min(round(param.skSpouseMax * line.RES.factor, 2), max(0, round(param.skSpouseBase * line.RES.factor, 2) - answer.dependantNetIncome)), 0), 2)",
       "source": "SK428 lines 14 to 16: the base minus their net income, up to the maximum"
     },
     "SK428.17": {
       "label": "Saskatchewan amount for infirm dependants age 18 or older",
-      "formula": "round((if(answer.hasInfirmDependant, if(answer.infirmDependants > 1, unsupported(\"The Saskatchewan amount for more than one infirm dependant isn't handled by this app yet\"), if(answer.infirmDependants == 0, 0, if(answer.infirmDependantHome == \"with_you\", 0, min(param.skDependantAmountMax, max(0, param.skInfirmDependantBase - answer.infirmDependantIncome))))), 0)) * line.RES.factor, 2)",
-      "source": "Worksheet SK428, line 58200: $21,924 less the dependant's net income, up to $13,986"
+      "formula": "if(answer.hasInfirmDependant, if(answer.infirmDependants > 1, unsupported(\"The Saskatchewan amount for more than one infirm dependant isn't handled by this app yet\"), if(answer.infirmDependants == 0, 0, if(person.province == \"SK\" and answer.infirmDependantHome == \"with_you\", 0, min(round(param.skDependantAmountMax * line.RES.factor, 2), max(0, round(param.skInfirmDependantBase * line.RES.factor, 2) - answer.infirmDependantIncome))))), 0)",
+      "source": "Worksheet SK428, line 58200: $21,924 less the dependant's net income, up to $13,986 (both prorated for a part-year resident before the income comes off)"
     },
     "SK.childClaimant": {
       "label": "This return claims the amount for dependent children (1 for yes)",
@@ -7663,7 +7831,7 @@
     },
     "SK428.29": {
       "label": "Saskatchewan home renovation expenses",
-      "formula": "if(answer.homeRenovationExpenses == 0, 0, if(line.HH.partner == 1 and family.partnerInYear and spouse.answer.homeRenovationExpenses > 0, unsupported(\"The Saskatchewan home renovation tax credit is for the family: claim your renovation expenses on one of your returns\"), max(0, min(answer.homeRenovationExpenses, if(person.age >= 65 and family.childrenUnder18 == 0 and (line.HH.partner == 0 or (family.partnerInYear and spouse.person.age >= 65)), param.skHomeRenovationSeniorMax, param.skHomeRenovationMax)) - param.skHomeRenovationBase)))",
+      "formula": "if(person.province != \"SK\", 0, if(answer.homeRenovationExpenses == 0, 0, if(line.HH.partner == 1 and family.partnerInYear and spouse.person.province == \"SK\" and spouse.answer.homeRenovationExpenses > 0, unsupported(\"The Saskatchewan home renovation tax credit is for the family: claim your renovation expenses on one of your returns\"), max(0, min(answer.homeRenovationExpenses, if(person.age >= 65 and family.childrenUnder18 == 0 and (line.HH.partner == 0 or (family.partnerInYear and spouse.person.age >= 65)), param.skHomeRenovationSeniorMax, param.skHomeRenovationMax)) - param.skHomeRenovationBase))))",
       "source": "SK(S12) lines 1 to 5: expenses up to $5,000 ($6,000 when the whole family is 65 or older), less $1,000"
     },
     "SK428.30": {
@@ -7683,8 +7851,8 @@
     },
     "SK428.34": {
       "label": "Saskatchewan caregiver amount",
-      "formula": "round((if(answer.hasInfirmDependant, if(answer.infirmDependants > 1, unsupported(\"The Saskatchewan amount for more than one infirm dependant isn't handled by this app yet\"), if(answer.infirmDependants == 0, 0, if(answer.infirmDependantHome == \"with_you\", min(param.skDependantAmountMax, max(0, param.skCaregiverBase - answer.infirmDependantIncome)), 0))), 0)) * line.RES.factor, 2)",
-      "source": "Worksheet SK428, line 58400: for a dependant with an impairment who lived with you, $33,094 less their net income, up to $13,986"
+      "formula": "if(answer.hasInfirmDependant, if(answer.infirmDependants > 1, unsupported(\"The Saskatchewan amount for more than one infirm dependant isn't handled by this app yet\"), if(answer.infirmDependants == 0, 0, if(person.province == \"SK\" and answer.infirmDependantHome == \"with_you\", min(round(param.skDependantAmountMax * line.RES.factor, 2), max(0, round(param.skCaregiverBase * line.RES.factor, 2) - answer.infirmDependantIncome)), 0))), 0)",
+      "source": "Worksheet SK428, line 58400: for a dependant with an impairment who lived with you, $33,094 less their net income, up to $13,986 (both prorated for a part-year resident before the income comes off)"
     },
     "SK428.36": {
       "label": "Saskatchewan disability amount for self",
@@ -7713,8 +7881,8 @@
     },
     "SK428.41": {
       "label": "Amounts transferred from your spouse or common-law partner",
-      "formula": "if(line.HH.partner == 1 and family.partnerInYear, line.SKS2.13, 0)",
-      "source": "Schedule SK(S2): their unused Saskatchewan child, age, senior supplementary, pension income and disability amounts"
+      "formula": "if(line.HH.partner == 1 and family.partnerInYear, round(line.SKS2.13 * line.RES.factor, 2), 0)",
+      "source": "Schedule SK(S2): their unused Saskatchewan child, age, senior supplementary, pension income and disability amounts. Prorated for a part-year resident (RC4018, Appendix K: line 58640); the schedule shows the whole transfer"
     },
     "SK428.48": {
       "label": "Allowable medical expenses",
@@ -7781,8 +7949,8 @@
     },
     "SKS11.5": {
       "label": "Unused Saskatchewan tuition and education amounts claimed for 2025",
-      "formula": "min(answer.unusedProvincialTuition, line.SKS11.4)",
-      "source": "SK(S11) lines 1 and 5: the unused amounts on your 2024 notice of assessment"
+      "formula": "min(if(person.province == \"AB\", 0, answer.unusedProvincialTuition), line.SKS11.4)",
+      "source": "SK(S11) lines 1 and 5: the unused amounts on your 2024 notice of assessment. None for a spouse in Alberta, whose own return doesn't carry unused provincial tuition forward (Schedule SK(S2) reads this line for them)"
     },
     "SKS2.6": {
       "label": "Their child, age, senior supplementary, pension income and disability amounts",
@@ -7813,7 +7981,7 @@
     },
     "SK479.7": {
       "label": "Children's activity fees claimed",
-      "formula": "if(family.childrenUnder19 == 0, 0, if(line.HH.partner == 1 and family.partnerInYear and answer.childActivityFees + spouse.answer.childActivityFees > line.SK.activeFamiliesLimit, unsupported(\"Only one of you can claim the active families benefit for a child, up to $300 a child ($400 for a child with the disability tax credit). Together you claim more: enter each child's fees on one return\"), min(answer.childActivityFees, line.SK.activeFamiliesLimit)))",
+      "formula": "if(family.childrenUnder19 == 0, 0, if(line.HH.partner == 1 and family.partnerInYear and spouse.person.province == \"SK\" and answer.childActivityFees + spouse.answer.childActivityFees > line.SK.activeFamiliesLimit, unsupported(\"Only one of you can claim the active families benefit for a child, up to $300 a child ($400 for a child with the disability tax credit). Together you claim more: enter each child's fees on one return\"), min(answer.childActivityFees, line.SK.activeFamiliesLimit)))",
       "source": "SK479 active families benefit worksheet: fees for children born in 2007 or later, less reimbursements"
     },
     "SK479.8": {
@@ -7823,7 +7991,7 @@
     },
     "SK479.9": {
       "label": "Fertility treatment tax credit",
-      "formula": "if(answer.fertilityExpenses == 0, 0, if(line.HH.partner == 1 and family.partnerInYear and spouse.answer.fertilityExpenses > 0, unsupported(\"You or your spouse or partner can claim the Saskatchewan fertility treatment tax credit, but not both: enter the expenses on one return\"), min(param.skFertilityMax, round(answer.fertilityExpenses * param.skFertilityRate, 2))))",
+      "formula": "if(answer.fertilityExpenses == 0, 0, if(line.HH.partner == 1 and family.partnerInYear and spouse.person.province == \"SK\" and spouse.answer.fertilityExpenses > 0, unsupported(\"You or your spouse or partner can claim the Saskatchewan fertility treatment tax credit, but not both: enter the expenses on one return\"), min(param.skFertilityMax, round(answer.fertilityExpenses * param.skFertilityRate, 2))))",
       "source": "SK479 line 9 (61268): 50% of the expenses, up to $10,000"
     },
     "SK479.10": {
@@ -7865,7 +8033,7 @@
     },
     "YT428.22": {
       "label": "Children's arts amount",
-      "formula": "if(family.childrenUnder17 > 0, if(family.partnerInYear and line.HH.partner == 1 and answer.childArtsFees + spouse.answer.childArtsFees > param.ytArtsMaxPerChild * family.childrenUnder17, round(answer.childArtsFees * param.ytArtsMaxPerChild * family.childrenUnder17 / (answer.childArtsFees + spouse.answer.childArtsFees), 2), min(answer.childArtsFees, param.ytArtsMaxPerChild * family.childrenUnder17)), 0)",
+      "formula": "if(person.province == \"YT\" and family.childrenUnder17 > 0, if(family.partnerInYear and line.HH.partner == 1 and spouse.person.province == \"YT\" and answer.childArtsFees + spouse.answer.childArtsFees > param.ytArtsMaxPerChild * family.childrenUnder17, round(answer.childArtsFees * param.ytArtsMaxPerChild * family.childrenUnder17 / (answer.childArtsFees + spouse.answer.childArtsFees), 2), min(answer.childArtsFees, param.ytArtsMaxPerChild * family.childrenUnder17)), 0)",
       "source": "YT428 line 22 (58326): fees for an artistic, cultural, recreational or developmental program for a child under 16, up to $500 each"
     },
     "YT428.23": {
@@ -7906,13 +8074,13 @@
     "YT428.31": {"label":"Yukon tuition amount","formula":"line.YTS11.12","source":"YT428 line 31 (58560): Schedule YT(S11)"},
     "YT428.32": {
       "label": "Yukon tuition amount transferred from a child or grandchild",
-      "formula": "line.CHILD.provincialTuition",
-      "source": "YT428 line 32 (58600): the territorial amount designated to you on their T2202 (the app takes the federal one, line 32400)"
+      "formula": "round(line.CHILD.provincialTuition * line.RES.factor, 2)",
+      "source": "YT428 line 32 (58600): the territorial amount designated to you on their T2202 (the app takes the federal one, line 32400). Prorated for a part-year resident (RC4018, Appendix K)"
     },
     "YT428.33": {
       "label": "Amounts transferred from your spouse or common-law partner",
-      "formula": "if(line.HH.partner == 1 and family.partnerInYear, line.YTS2.13, 0)",
-      "source": "YT428 line 33 (58640): Schedule YT(S2)"
+      "formula": "if(line.HH.partner == 1 and family.partnerInYear, round(line.YTS2.13 * line.RES.factor, 2), 0)",
+      "source": "YT428 line 33 (58640): Schedule YT(S2). Prorated for a part-year resident (RC4018, Appendix K); the schedule shows the whole transfer"
     },
     "YT428.40": {
       "label": "Allowable medical expenses",
@@ -7959,7 +8127,11 @@
       "formula": "max(0, line.YT428.62 - line.YT428.78)",
       "source": "YT428 lines 74 to 79: the business investment and First Nations credits aren't claimed"
     },
-    "YTS11.1": {"label":"Unused Yukon tuition from your 2024 notice of assessment","formula":"answer.unusedProvincialTuition"},
+    "YTS11.1": {
+      "label": "Unused Yukon tuition from your 2024 notice of assessment",
+      "formula": "if(person.province == \"AB\", 0, answer.unusedProvincialTuition)",
+      "source": "None for a spouse in Alberta, whose own return doesn't carry unused provincial tuition forward (Schedule YT(S2) reads this schedule for them)"
+    },
     "YTS11.4": {
       "label": "Tuition fees for 2025",
       "formula": "line.S11.8",
@@ -8005,8 +8177,8 @@
     },
     "YT479.63800": {
       "label": "Eligible children's fitness fees",
-      "formula": "if(family.childrenUnder17 > 0, if(family.partnerInYear and line.HH.partner == 1 and answer.childFitnessFees + spouse.answer.childFitnessFees > param.ytFitnessMaxPerChild * family.childrenUnder17, round(answer.childFitnessFees * param.ytFitnessMaxPerChild * family.childrenUnder17 / (answer.childFitnessFees + spouse.answer.childFitnessFees), 2), min(answer.childFitnessFees, param.ytFitnessMaxPerChild * family.childrenUnder17)), 0)",
-      "source": "YT479 line 63800: fees for children under 16 at the start of the year, up to $1,000 each. When both spouses claim more than that together, each claims a share of it"
+      "formula": "if(family.childrenUnder17 > 0, if(family.partnerInYear and line.HH.partner == 1 and spouse.person.province == \"YT\" and answer.childFitnessFees + spouse.answer.childFitnessFees > param.ytFitnessMaxPerChild * family.childrenUnder17, round(answer.childFitnessFees * param.ytFitnessMaxPerChild * family.childrenUnder17 / (answer.childFitnessFees + spouse.answer.childFitnessFees), 2), min(answer.childFitnessFees, param.ytFitnessMaxPerChild * family.childrenUnder17)), 0)",
+      "source": "YT479 line 63800: fees for children under 16 at the start of the year, up to $1,000 each. When both spouses claim more than that together, each claims a share of it. A spouse living outside Yukon doesn't share the limit"
     },
     "YT479.1": {"label":"Children's fitness tax credit","formula":"round(line.YT479.63800 * param.ytFitnessRate, 2)"},
     "YT479.61268": {
@@ -8500,6 +8672,7 @@
       "module": "deductions",
       "help": "Form T778, Part C, situation a). Don't count a month with one of the weeks above.",
       "parent": "childCareSpouseUnable",
+      "max": 12,
       "default": "0"
     },
     "hasMovingExpenses": {
@@ -8580,7 +8753,13 @@
       "help": "You lived in Yukon, the Northwest Territories or Nunavut for at least six months in a row, starting or ending in 2025. All three are a prescribed northern zone (Form T2222, northern residents deductions).",
       "default": false
     },
-    "northernDays": {"type":"count","ask":"Days you lived there in 2025","module":"deductions","parent":"hasNorthernResidence"},
+    "northernDays": {
+      "type": "count",
+      "ask": "Days you lived there in 2025",
+      "module": "deductions",
+      "parent": "hasNorthernResidence",
+      "max": 365
+    },
     "northernHome": {
       "type": "choice",
       "ask": "Others in your home claiming it",
@@ -8768,7 +8947,8 @@
       "ask": "Months you paid rent",
       "module": "credits",
       "help": "Months of 2025 you rented and lived in it. Don't count months you paid rent to a relative, or for a campsite or a mobile home pad.",
-      "parent": "hasRentedHome"
+      "parent": "hasRentedHome",
+      "max": 12
     },
     "propertyTaxPaid": {
       "type": "money",
@@ -8803,7 +8983,8 @@
       "ask": "Days in 2025 you owned it and lived in it",
       "module": "credits",
       "help": "365 for the whole year.",
-      "parent": "paidSchoolTaxes"
+      "parent": "paidSchoolTaxes",
+      "max": 365
     },
     "publicTransitPaid": {
       "type": "money",
@@ -8920,7 +9101,7 @@
       "type": "money",
       "ask": "Your eligible dependant's 2025 net income",
       "module": "credits",
-      "help": "The net income (line 23600 of their return, if they file one) of the child you claim the amount for an eligible dependant for. The amount goes down by it. Enter 0 if they had no income."
+      "help": "The net world income for 2025 of the child you claim the amount for an eligible dependant for (line 23600 of their return, if they file one, plus any income while they didn't live in Canada). The amount goes down by it. Enter 0 if they had no income."
     },
     "childActivityFees": {
       "type": "money",
@@ -8999,6 +9180,7 @@
       "module": "credits",
       "help": "Count a month if the plan covered you for at least one day of it. 6 for all of them.",
       "parent": "qcGroupDrugPlan",
+      "max": 6,
       "default": "6"
     },
     "qcDrugMonthsJulDec": {
@@ -9007,6 +9189,7 @@
       "module": "credits",
       "help": "6 for all of them.",
       "parent": "qcGroupDrugPlan",
+      "max": 6,
       "default": "6"
     },
     "hasRl24": {
@@ -9037,7 +9220,7 @@
       "help": "0 if you lived in your own house or in a private seniors' residence. A seniors' residence (form TP-1029.61.MD-V) isn't handled.",
       "parent": "hasHomeSupport"
     },
-    "homeSupportRentMonths": {"type":"count","ask":"Months you paid this rent in 2025","module":"credits","parent":"hasHomeSupport"},
+    "homeSupportRentMonths": {"type":"count","ask":"Months you paid this rent in 2025","module":"credits","parent":"hasHomeSupport","max":12},
     "homeSupportServices": {
       "type": "money",
       "ask": "Home-support services you paid, not in your rent",
@@ -9070,25 +9253,26 @@
       "type": "money",
       "ask": "Your spouse's or partner's 2025 net income",
       "module": "about",
-      "help": "Line 23600 of their return. Their return isn't prepared here, but some of your credits depend on it."
+      "help": "Their net world income for 2025, whether or not they lived in Canada all year (line 23600 of their return, plus any income while they didn't live in Canada). Their return isn't prepared here, but some of your credits depend on it."
     },
     "daysResident": {
       "type": "count",
       "ask": "Days you lived in Canada in 2025",
       "module": "about",
-      "help": "From the day you arrived, or up to the day you left, counting that day. 365 if you lived here all year."
+      "help": "From the day you arrived, or up to the day you left, counting that day. 365 if you lived here all year.",
+      "max": 365
     },
     "nonResidentIncome": {
       "type": "money",
       "ask": "Your world income for the part of 2025 you didn't live in Canada",
       "module": "about",
-      "help": "All the income you had while you weren't a resident, from anywhere, in Canadian dollars. 0 if none."
+      "help": "All the income you had while you weren't a resident, from anywhere, in Canadian dollars. 0 if none (your personal amounts are then reduced by the days in Canada)."
     },
     "nonResidentCanadianIncome": {
       "type": "money",
       "ask": "The part of it from Canada",
       "module": "about",
-      "help": "Employment or business income from Canada in that period. If it is 90% or more of that world income, you can claim your full personal amounts."
+      "help": "Employment or business income from Canada in that period. If it is 90% or more of that world income (and that income isn't 0), you can claim your full personal amounts."
     },
     "departureProperty": {
       "type": "boolean",
@@ -9829,7 +10013,7 @@
           "page": 1,
           "x": 552,
           "y": 153.7,
-          "value": "line.HH.spouseNetIncome",
+          "value": "line.HH.spouseWorldIncome",
           "when": "line.HH.partner == 1",
           "zero": true
         },
@@ -10067,7 +10251,7 @@
           "page": 1,
           "x": 552,
           "y": 153.7,
-          "value": "line.HH.spouseNetIncome",
+          "value": "line.HH.spouseWorldIncome",
           "when": "line.HH.partner == 1",
           "zero": true
         },
@@ -10190,7 +10374,7 @@
           "page": 2,
           "x": 552,
           "y": 509.3,
-          "value": "param.caregiverChildAmount",
+          "value": "round(param.caregiverChildAmount * line.RES.factor, 2)",
           "when": "line.T1.30300 + line.T1.30425 > 0 and answer.spouseInfirm"
         },
         {
@@ -10199,7 +10383,7 @@
           "page": 2,
           "x": 552,
           "y": 494.3,
-          "value": "line.T1.30000 + if(answer.spouseInfirm, param.caregiverChildAmount, 0)",
+          "value": "line.S5.3",
           "when": "line.T1.30300 + line.T1.30425 > 0"
         },
         {
@@ -10248,7 +10432,7 @@
           "page": 4,
           "x": 552,
           "y": 287.3,
-          "value": "min(param.caregiverMax, max(0, param.caregiverBase - line.HH.spouseNetIncome))",
+          "value": "min(round(param.caregiverMax * line.RES.factor, 2), max(0, round(param.caregiverBase * line.RES.factor, 2) - line.HH.spouseNetIncome))",
           "when": "line.T1.30425 > 0"
         },
         {"key":"p4:4.2","kind":"amount","page":4,"x":552,"y":272.3,"value":"line.T1.30300","when":"line.T1.30425 > 0"},
@@ -10271,7 +10455,7 @@
       "url": "https://www.canada.ca/content/dam/cra-arc/formspubs/pbg/5000-s6/5000-s6-25e.pdf",
       "sha256": "e5fa17bfc36174cd72fe6303051e14f412f6c6a08b2ce9d7d111176b9f94fc33",
       "pages": 5,
-      "applies": "line.T1.45300 > 0",
+      "applies": "line.CWB.schedule == 1 and person.province != \"QC\" and person.province != \"AB\" and person.province != \"NU\"",
       "fields": [
         {"key":"6","kind":"amount","page":2,"x":552,"y":356.3,"value":"line.CWB.familyWorking"},
         {
@@ -10491,7 +10675,7 @@
           "x": 444,
           "y": 581.3,
           "value": "sum(RC210.box10)",
-          "when": "line.CWB.claimsBasic == 1"
+          "when": "line.CWB.reportsAdvance == 1"
         },
         {
           "key": "45",
@@ -10500,7 +10684,7 @@
           "x": 444,
           "y": 554.3,
           "value": "sum(spouse.RC210.box10)",
-          "when": "line.CWB.claimsBasic == 1 and family.partnerInYear and line.HH.partner == 1"
+          "when": "line.CWB.reportsAdvance == 1 and family.partnerInYear and line.HH.partner == 1"
         },
         {
           "key": "46",
@@ -10508,7 +10692,7 @@
           "page": 5,
           "x": 444,
           "y": 539.3,
-          "value": "if(line.CWB.claimsBasic == 1, sum(RC210.box10) + if(family.partnerInYear and line.HH.partner == 1, sum(spouse.RC210.box10), 0), 0)"
+          "value": "if(line.CWB.reportsAdvance == 1, sum(RC210.box10) + if(family.partnerInYear and line.HH.partner == 1, sum(spouse.RC210.box10), 0), 0)"
         },
         {"key":"47","kind":"amount","page":5,"x":444,"y":512.3,"value":"sum(RC210.box11)"},
         {
@@ -10517,7 +10701,7 @@
           "page": 5,
           "x": 444,
           "y": 497.3,
-          "value": "if(line.CWB.claimsBasic == 1, sum(RC210.box10) + if(family.partnerInYear and line.HH.partner == 1, sum(spouse.RC210.box10), 0), 0) + sum(RC210.box11)"
+          "value": "if(line.CWB.reportsAdvance == 1, sum(RC210.box10) + if(family.partnerInYear and line.HH.partner == 1, sum(spouse.RC210.box10), 0), 0) + sum(RC210.box11)"
         },
         {"key":"49","kind":"amount","page":5,"x":552,"y":464.3,"value":"line.T1.41500"},
         {"key":"1@1","kind":"amount","page":2,"x":443.8,"y":509.3,"value":"line.T1.10100 + line.T1.10400"},
@@ -12127,11 +12311,20 @@
       "fields": [
         {"key":"1","kind":"amount","page":1,"x":552,"y":566.3,"value":"spouse.line.ON428.10"},
         {"key":"2","kind":"amount","page":1,"x":552,"y":539.3,"value":"spouse.line.ON428.27"},
-        {"key":"4","kind":"amount","page":1,"x":552,"y":497.3,"value":"spouse.line.ON428.10 + spouse.line.ON428.27"},
+        {"key":"3","kind":"amount","page":1,"x":552,"y":512.3,"value":"line.ONS2.3"},
+        {"key":"4","kind":"amount","page":1,"x":552,"y":497.3,"value":"line.ONS2.4"},
         {"key":"5","kind":"amount","page":1,"x":444,"y":428.3,"value":"line.ONS2.5"},
         {"key":"6","kind":"amount","page":1,"x":336,"y":413.3,"value":"spouse.line.ON428.9"},
         {"key":"7","kind":"amount","page":1,"x":336,"y":398.3,"value":"spouse.line.ON428.24"},
-        {"key":"9","kind":"amount","page":1,"x":444,"y":368.3,"value":"spouse.line.ON428.9 + spouse.line.ON428.24"},
+        {"key":"8","kind":"amount","page":1,"x":336,"y":383.3,"value":"spouse.line.ON428.33"},
+        {
+          "key": "9",
+          "kind": "amount",
+          "page": 1,
+          "x": 444,
+          "y": 368.3,
+          "value": "spouse.line.ON428.9 + spouse.line.ON428.24 + spouse.line.ON428.33"
+        },
         {"key":"10","kind":"amount","page":1,"x":552,"y":341.3,"value":"line.ONS2.10"},
         {"key":"11","kind":"amount","page":1,"x":552,"y":314.3,"value":"line.ONS2.11"},
         {"key":"59120","kind":"amount","page":1,"x":444,"y":341.3,"value":"line.ONS2.10"},
@@ -12144,7 +12337,14 @@
           "value": "spouse.line.ON428.8",
           "when": "spouse.line.T1.26000 > param.onFirstBracketTop"
         },
-        {"key":"9@1","kind":"amount","page":1,"x":336,"y":368.3,"value":"spouse.line.ON428.9 + spouse.line.ON428.24"}
+        {
+          "key": "9@1",
+          "kind": "amount",
+          "page": 1,
+          "x": 336,
+          "y": 368.3,
+          "value": "spouse.line.ON428.9 + spouse.line.ON428.24 + spouse.line.ON428.33"
+        }
       ],
       "tables": []
     },
@@ -12313,11 +12513,21 @@
       "fields": [
         {"key":"1","kind":"amount","page":1,"x":552,"y":563.3,"value":"spouse.line.BC428.17"},
         {"key":"2","kind":"amount","page":1,"x":552,"y":536.3,"value":"spouse.line.BC428.36"},
-        {"key":"5","kind":"amount","page":1,"x":552,"y":467.3,"value":"spouse.line.BC428.17 + spouse.line.BC428.36"},
+        {"key":"3","kind":"amount","page":1,"x":552,"y":509.3,"value":"spouse.line.BC428.38"},
+        {"key":"4","kind":"amount","page":1,"x":552,"y":482.3,"value":"spouse.line.BCS11.17"},
+        {"key":"5","kind":"amount","page":1,"x":552,"y":467.3,"value":"line.BCS2.5"},
         {"key":"6","kind":"amount","page":1,"x":444,"y":404.3,"value":"line.BCS2.6"},
         {"key":"7","kind":"amount","page":1,"x":336,"y":389.3,"value":"spouse.line.BC428.16"},
         {"key":"8","kind":"amount","page":1,"x":336,"y":374.3,"value":"spouse.line.BC428.33"},
-        {"key":"10","kind":"amount","page":1,"x":444,"y":344.3,"value":"spouse.line.BC428.16 + spouse.line.BC428.33"},
+        {"key":"9","kind":"amount","page":1,"x":336,"y":359.3,"value":"spouse.line.BC428.42"},
+        {
+          "key": "10",
+          "kind": "amount",
+          "page": 1,
+          "x": 444,
+          "y": 344.3,
+          "value": "spouse.line.BC428.16 + spouse.line.BC428.33 + spouse.line.BC428.42"
+        },
         {"key":"11","kind":"amount","page":1,"x":552,"y":317.1,"value":"line.BCS2.11"},
         {"key":"12","kind":"amount","page":1,"x":552,"y":278.3,"value":"line.BCS2.12"},
         {"key":"59120","kind":"amount","page":1,"x":444,"y":317.3,"value":"line.BCS2.11"},
@@ -12330,7 +12540,14 @@
           "value": "spouse.line.BC428.8",
           "when": "spouse.line.T1.26000 > param.bcFirstBracketTop"
         },
-        {"key":"10@1","kind":"amount","page":1,"x":336,"y":344.3,"value":"spouse.line.BC428.16 + spouse.line.BC428.33"}
+        {
+          "key": "10@1",
+          "kind": "amount",
+          "page": 1,
+          "x": 336,
+          "y": 344.3,
+          "value": "spouse.line.BC428.16 + spouse.line.BC428.33 + spouse.line.BC428.42"
+        }
       ],
       "tables": []
     },
@@ -12469,7 +12686,8 @@
       "fields": [
         {"key":"1","kind":"amount","page":1,"x":552,"y":563.3,"value":"spouse.line.AB428.17"},
         {"key":"2","kind":"amount","page":1,"x":552,"y":536.3,"value":"spouse.line.AB428.34"},
-        {"key":"4","kind":"amount","page":1,"x":552,"y":494.3,"value":"spouse.line.AB428.17 + spouse.line.AB428.34"},
+        {"key":"3","kind":"amount","page":1,"x":552,"y":509.3,"value":"spouse.line.AB428.37"},
+        {"key":"4","kind":"amount","page":1,"x":552,"y":494.3,"value":"line.ABS2.4"},
         {"key":"5","kind":"amount","page":1,"x":444,"y":425.3,"value":"line.ABS2.5"},
         {"key":"6","kind":"amount","page":1,"x":336,"y":407.3,"value":"spouse.line.AB428.16"},
         {"key":"7","kind":"amount","page":1,"x":336,"y":392.3,"value":"spouse.line.AB428.32"},
@@ -12660,6 +12878,7 @@
       "fields": [
         {"key":"1","kind":"amount","page":1,"x":552,"y":566.3,"value":"spouse.line.MB428.10"},
         {"key":"2","kind":"amount","page":1,"x":552,"y":539.3,"value":"spouse.line.MB428.31"},
+        {"key":"3","kind":"amount","page":1,"x":552,"y":512.3,"value":"spouse.line.MB428.34"},
         {"key":"4","kind":"amount","page":1,"x":552,"y":485.3,"value":"spouse.line.MBS11.20"},
         {"key":"5","kind":"amount","page":1,"x":552,"y":470.3,"value":"line.MBS2.5"},
         {"key":"6","kind":"amount","page":1,"x":444,"y":413.3,"value":"line.MBS2.6"},
@@ -13110,10 +13329,12 @@
         {"key":"2","kind":"amount","page":1,"x":552,"y":539.3,"value":"spouse.line.SK428.10"},
         {"key":"3","kind":"amount","page":1,"x":552,"y":512.3,"value":"spouse.line.SK428.19"},
         {"key":"4","kind":"amount","page":1,"x":552,"y":485.3,"value":"spouse.line.SK428.33"},
+        {"key":"5","kind":"amount","page":1,"x":552,"y":458.3,"value":"spouse.line.SK428.36"},
         {"key":"6","kind":"amount","page":1,"x":552,"y":443.3,"value":"line.SKS2.6"},
         {"key":"7","kind":"amount","page":1,"x":444,"y":389.3,"value":"line.SKS2.7"},
         {"key":"8","kind":"amount","page":1,"x":336,"y":374.3,"value":"spouse.line.SK428.9"},
         {"key":"9","kind":"amount","page":1,"x":336,"y":359.3,"value":"spouse.line.SK428.31"},
+        {"key":"10","kind":"amount","page":1,"x":336,"y":344.3,"value":"spouse.line.SK428.40"},
         {"key":"11","kind":"amount","page":1,"x":444,"y":329.3,"value":"line.SKS2.11"},
         {"key":"12","kind":"amount","page":1,"x":552,"y":302.3,"value":"line.SKS2.12"},
         {"key":"13","kind":"amount","page":1,"x":552,"y":275.3,"value":"line.SKS2.13"},
@@ -13373,6 +13594,7 @@
       "fields": [
         {"key":"1","kind":"amount","page":1,"x":552,"y":563.3,"value":"spouse.line.NB428.10"},
         {"key":"2","kind":"amount","page":1,"x":552,"y":536.3,"value":"spouse.line.NB428.28"},
+        {"key":"3","kind":"amount","page":1,"x":552,"y":509.3,"value":"spouse.line.NB428.31"},
         {"key":"4","kind":"amount","page":1,"x":552,"y":482.3,"value":"spouse.line.NBS11.17"},
         {"key":"5","kind":"amount","page":1,"x":552,"y":467.3,"value":"line.NBS2.5"},
         {"key":"6","kind":"amount","page":1,"x":444,"y":413.3,"value":"line.NBS2.6"},
@@ -13676,6 +13898,7 @@
       "fields": [
         {"key":"1","kind":"amount","page":1,"x":552,"y":566.3,"value":"spouse.line.NL428.17"},
         {"key":"2","kind":"amount","page":1,"x":552,"y":539.3,"value":"spouse.line.NL428.37"},
+        {"key":"3","kind":"amount","page":1,"x":552,"y":512.3,"value":"spouse.line.NL428.40"},
         {"key":"4","kind":"amount","page":1,"x":552,"y":485.3,"value":"spouse.line.NLS11.20"},
         {"key":"5","kind":"amount","page":1,"x":552,"y":470.3,"value":"line.NLS2.5"},
         {"key":"6","kind":"amount","page":1,"x":444,"y":401.3,"value":"line.NLS2.6"},
@@ -13803,7 +14026,7 @@
           "page": 1,
           "x": 444,
           "y": 347.3,
-          "value": "if(line.HH.partner == 1, max(param.nsSpouseIncomeFloor, line.HH.spouseNetIncome), 0)"
+          "value": "if(line.HH.partner == 1, max(round(param.nsSpouseIncomeFloor * line.RES.factor, 2), line.HH.spouseNetIncome), 0)"
         },
         {"key":"13","kind":"amount","page":1,"x":552,"y":332.3,"value":"line.NS428.13"},
         {
@@ -13812,7 +14035,7 @@
           "page": 1,
           "x": 444,
           "y": 278.3,
-          "value": "if(line.HH.partner == 0 and family.childrenUnder18 > 0, max(param.nsSpouseIncomeFloor, answer.dependantNetIncome), 0)"
+          "value": "if(line.HH.partner == 0 and family.childrenUnder18 > 0, max(round(param.nsSpouseIncomeFloor * line.RES.factor, 2), answer.dependantNetIncome), 0)"
         },
         {"key":"16","kind":"amount","page":1,"x":552,"y":263.3,"value":"line.NS428.16"},
         {"key":"17","kind":"amount","page":1,"x":552,"y":248.3,"value":"line.NS428.17"},
@@ -13988,6 +14211,7 @@
       "fields": [
         {"key":"1","kind":"amount","page":1,"x":552,"y":563.3,"value":"spouse.line.NS428.10"},
         {"key":"2","kind":"amount","page":1,"x":552,"y":536.3,"value":"spouse.line.NS428.27"},
+        {"key":"3","kind":"amount","page":1,"x":552,"y":509.3,"value":"spouse.line.NS428.30"},
         {"key":"4","kind":"amount","page":1,"x":552,"y":482.3,"value":"spouse.line.NSS11.20"},
         {"key":"5","kind":"amount","page":1,"x":552,"y":467.3,"value":"line.NSS2.5"},
         {"key":"6","kind":"amount","page":1,"x":444,"y":419.3,"value":"line.NSS2.6"},
@@ -14360,6 +14584,7 @@
       "fields": [
         {"key":"1","kind":"amount","page":1,"x":552,"y":566.3,"value":"spouse.line.PE428.10"},
         {"key":"2","kind":"amount","page":1,"x":552,"y":539.3,"value":"spouse.line.PE428.27"},
+        {"key":"3","kind":"amount","page":1,"x":552,"y":512.3,"value":"spouse.line.PE428.31"},
         {"key":"4","kind":"amount","page":1,"x":552,"y":485.3,"value":"spouse.line.PES11.20"},
         {"key":"5","kind":"amount","page":1,"x":552,"y":470.3,"value":"line.PES2.5"},
         {"key":"6","kind":"amount","page":1,"x":444,"y":419.3,"value":"line.PES2.6"},
@@ -14600,7 +14825,9 @@
       "applies": "person.province == \"YT\" and line.YT428.33 > 0",
       "fields": [
         {"key":"1","kind":"amount","page":1,"x":552,"y":563.3,"value":"spouse.line.YT428.10"},
+        {"key":"2","kind":"amount","page":1,"x":552,"y":536.3,"value":"spouse.line.YT428.15"},
         {"key":"3","kind":"amount","page":1,"x":552,"y":509.3,"value":"spouse.line.YT428.25"},
+        {"key":"4","kind":"amount","page":1,"x":552,"y":482.3,"value":"spouse.line.YT428.26"},
         {"key":"5","kind":"amount","page":1,"x":552,"y":455.3,"value":"spouse.line.YTS11.19"},
         {"key":"6","kind":"amount","page":1,"x":552,"y":440.3,"value":"line.YTS2.6"},
         {"key":"7","kind":"amount","page":1,"x":444,"y":383.3,"value":"line.YTS2.7"},
@@ -14856,6 +15083,7 @@
       "fields": [
         {"key":"1","kind":"amount","page":1,"x":552,"y":564.3,"value":"spouse.line.NT428.10"},
         {"key":"2","kind":"amount","page":1,"x":552,"y":537.3,"value":"spouse.line.NT428.26"},
+        {"key":"3","kind":"amount","page":1,"x":552,"y":510.3,"value":"spouse.line.NT428.29"},
         {"key":"4","kind":"amount","page":1,"x":552,"y":483.3,"value":"spouse.line.NTS11.20"},
         {"key":"5","kind":"amount","page":1,"x":552,"y":468.3,"value":"line.NTS2.5"},
         {"key":"6","kind":"amount","page":1,"x":444,"y":413.3,"value":"line.NTS2.6"},
@@ -15207,6 +15435,7 @@
         },
         {"key":"2","kind":"amount","page":1,"x":552,"y":527.3,"value":"spouse.line.NU428.10"},
         {"key":"3","kind":"amount","page":1,"x":552,"y":500.3,"value":"spouse.line.NU428.27"},
+        {"key":"4","kind":"amount","page":1,"x":552,"y":473.3,"value":"spouse.line.NU428.30"},
         {"key":"5","kind":"amount","page":1,"x":552,"y":446.3,"value":"spouse.line.NUS11.24"},
         {"key":"6","kind":"amount","page":1,"x":552,"y":431.3,"value":"line.NUS2.6"},
         {"key":"7","kind":"amount","page":1,"x":444,"y":377.3,"value":"line.NUS2.7"},
@@ -15664,7 +15893,10 @@
         {"key":"225","kind":"amount","page":3,"x":441,"y":585.6,"value":"line.TP1.225"},
         {"key":"231","kind":"amount","page":3,"x":441,"y":561.3,"value":"line.TP1.231"},
         {"key":"245","kind":"amount","page":3,"x":441,"y":464.1,"value":"line.TP1.245"},
+        {"key":"246","kind":"amount","page":3,"x":441,"y":451.9,"value":"line.TP1.246"},
         {"key":"248","kind":"amount","page":3,"x":441,"y":435.9,"value":"line.TP1.248"},
+        {"key":"249","kind":"count","page":3,"x":344,"y":422,"value":"if(line.TP1.250 > 0, 3, 0)"},
+        {"key":"250","kind":"amount","page":3,"x":441,"y":419.9,"value":"line.TP1.250"},
         {"key":"254","kind":"amount","page":3,"x":555,"y":395.4,"value":"line.TP1.254"},
         {"key":"256","kind":"amount","page":3,"x":555,"y":383.3,"value":"line.TP1.256"},
         {"key":"275","kind":"amount","page":3,"x":555,"y":348.8,"value":"line.TP1.275"},
@@ -15824,7 +16056,10 @@
           {"page":3,"x":441,"y":585.5},
           {"page":3,"x":441,"y":561.3},
           {"page":3,"x":441,"y":464},
+          {"page":3,"x":441,"y":451.9},
           {"page":3,"x":441,"y":435.8},
+          {"page":3,"x":344,"y":422},
+          {"page":3,"x":441,"y":419.9},
           {"page":3,"x":555,"y":395.4},
           {"page":3,"x":555,"y":383.2},
           {"page":3,"x":555,"y":348.7},
@@ -16143,7 +16378,9 @@
         {"key":"28","kind":"amount","page":1,"x":447,"y":521,"value":"line.TP1.147"},
         {"key":"34","kind":"amount","page":1,"x":555,"y":451.6,"value":"line.QCF.34"},
         {"key":"36","kind":"amount","page":1,"x":555,"y":430.2,"value":"line.QCF.36"},
+        {"key":"41","kind":"amount","page":1,"x":447,"y":391.9,"value":"line.TP1.246"},
         {"key":"43","kind":"amount","page":1,"x":447,"y":367.9,"value":"line.QCR.26"},
+        {"key":"44","kind":"amount","page":1,"x":447,"y":324.4,"value":"line.EI.repayment"},
         {"key":"46","kind":"amount","page":1,"x":447,"y":300.4,"value":"line.TP1.245"},
         {"key":"54","kind":"amount","page":1,"x":447,"y":288.4,"value":"line.TP1.225"},
         {"key":"56","kind":"amount","page":1,"x":447,"y":276.4,"value":"line.TP1.231"},
@@ -16249,7 +16486,9 @@
           {"page":1,"x":447,"y":521},
           {"page":1,"x":555,"y":451.6},
           {"page":1,"x":555,"y":430.2},
+          {"page":1,"x":447,"y":391.9},
           {"page":1,"x":447,"y":367.9},
+          {"page":1,"x":447,"y":324.4},
           {"page":1,"x":447,"y":300.4},
           {"page":1,"x":447,"y":288.4},
           {"page":1,"x":447,"y":276.4},
@@ -17866,5 +18105,5 @@
     }
   },
   "outcome": "RESULT.net",
-  "version": "548f2e82cab88f12"
+  "version": "3f6b4e1676534f27"
 }

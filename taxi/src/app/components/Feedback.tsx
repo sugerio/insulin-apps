@@ -4,7 +4,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert.tsx";
 import { Button } from "@/components/ui/button.tsx";
 import { Spinner } from "@/components/ui/spinner.tsx";
 import { cn } from "@/lib/utils.ts";
-import { describeError } from "../api/client.ts";
+import { describeError, type FieldIssue } from "../api/client.ts";
 import type { Resource } from "../lib/useResource.ts";
 
 // Messages on a page: banners, the loading state, and a failed load with its retry.
@@ -31,6 +31,22 @@ export function Banner({ kind, title, children, action }: { kind: BannerKind; ti
         </AlertDescription>
       ) : null}
     </Alert>
+  );
+}
+
+/** A refused save: why, with the issues no field of the form shows (fieldIssues). */
+export function RefusedBanner({ title, error, unshown }: { title: string; error: unknown; unshown: FieldIssue[] }) {
+  return (
+    <Banner kind="error" title={title}>
+      {describeError(error)}
+      {unshown.length > 0 ? (
+        <ul className="mt-1 list-disc pl-5">
+          {unshown.map((issue) => (
+            <li key={issue.path}>{issue.message}</li>
+          ))}
+        </ul>
+      ) : null}
+    </Banner>
   );
 }
 

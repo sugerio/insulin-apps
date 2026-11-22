@@ -169,25 +169,31 @@ lines:
   NS428.10:
     label: Nova Scotia age amount
     formula: >-
-      round((if(person.age >= 65, max(0, param.nsAgeAmountMax - round(max(0, line.T1.23600 - param.nsAgeAmountThreshold) * param.nsAgeAmountRate, 2)), 0)) * line.RES.factor, 2)
-    source: "Worksheet NS428, line 58080: for people born in 1960 or earlier"
+      if(person.age >= 65, max(0, round(param.nsAgeAmountMax * line.RES.factor, 2)
+      - round(max(0, line.T1.23600 - round(param.nsAgeAmountThreshold * line.RES.factor, 2)) * param.nsAgeAmountRate, 2)), 0)
+    source: "Worksheet NS428, line 58080: for people born in 1960 or earlier, $5,734 less 15% of net income over $30,828 (both amounts prorated for a part-year resident: canada.ca, Completing your return for newcomers, Example 2)"
+  # For a part-year resident, the base, the $874 and the maximum are prorated, and then the net income is subtracted,
+  # not prorated (canada.ca, completing a return for newcomers, Example 3 for line 30300).
   NS428.13:
     label: Nova Scotia spouse or common-law partner amount
     formula: >-
-      round((if(line.HH.partner == 1, min(param.nsSpouseMax, max(0, param.nsSpouseBase - max(param.nsSpouseIncomeFloor, line.HH.spouseNetIncome))), 0)) * line.RES.factor, 2)
+      round(if(line.HH.partner == 1, min(round(param.nsSpouseMax * line.RES.factor, 2), max(0, round(param.nsSpouseBase * line.RES.factor, 2)
+      - max(round(param.nsSpouseIncomeFloor * line.RES.factor, 2), line.HH.spouseNetIncome))), 0), 2)
     source: "NS428 lines 11 to 13: $12,618 less whichever is more, $874 or their net income"
   NS428.16:
     label: Nova Scotia amount for an eligible dependant
     formula: >-
-      round((if(line.HH.partner == 0 and family.childrenUnder18 > 0, min(param.nsSpouseMax, max(0, param.nsSpouseBase - max(param.nsSpouseIncomeFloor, answer.dependantNetIncome))), 0)) * line.RES.factor, 2)
+      round(if(line.HH.partner == 0 and family.childrenUnder18 > 0, min(round(param.nsSpouseMax * line.RES.factor, 2), max(0, round(param.nsSpouseBase * line.RES.factor, 2)
+      - max(round(param.nsSpouseIncomeFloor * line.RES.factor, 2), answer.dependantNetIncome))), 0), 2)
     source: "NS428 lines 14 to 16: $12,618 less whichever is more, $874 or their net income"
   # The amount for infirm dependants needs no shared home, unlike the caregiver amount (line 28), which the app can't
   # tell; so the infirm amount is claimed for an adult relative with an impairment.
   NS428.17:
     label: Nova Scotia amount for infirm dependants age 18 or older
     formula: >-
-      round((if(answer.hasInfirmDependant, if(answer.infirmDependants > 1, unsupported("The Canada caregiver amount for more than one adult dependant isn't handled by this app yet"), answer.infirmDependants * min(param.nsInfirmMax, max(0, param.nsInfirmBase - answer.infirmDependantIncome))), 0)) * line.RES.factor, 2)
-    source: "Worksheet NS428, line 58200: $8,744 less the dependant's net income, up to $2,885"
+      if(answer.hasInfirmDependant, if(answer.infirmDependants > 1, unsupported("The Canada caregiver amount for more than one adult dependant isn't handled by this app yet"),
+      answer.infirmDependants * min(round(param.nsInfirmMax * line.RES.factor, 2), max(0, round(param.nsInfirmBase * line.RES.factor, 2) - answer.infirmDependantIncome))), 0)
+    source: "Worksheet NS428, line 58200: $8,744 less the dependant's net income, up to $2,885 (both prorated for a part-year resident before the income comes off)"
   # The child claimed as an eligible dependant gets no amount for young children; the app claims the eligible dependant
   # for the child with the fewest months under 6, which leaves the most months here.
   NS428.58229:
@@ -234,12 +240,14 @@ lines:
     source: "Schedule NS(S11) line 13"
   NS428.35:
     label: Tuition and education amounts transferred from a child or grandchild
-    formula: "line.CHILD.provincialTuition"
-    source: "NS428 line 35 (58600): the provincial amount they designate on their T2202, taken as the federal one"
+    formula: "round(line.CHILD.provincialTuition * line.RES.factor, 2)"
+    source: "NS428 line 35 (58600): the provincial amount they designate on their T2202, taken as the federal one. Prorated for a part-year resident (RC4018, Appendix K)"
   NS428.36:
     label: Nova Scotia amounts transferred from your spouse or common-law partner
-    formula: "if(line.HH.partner == 1 and family.partnerInYear and line.NSS2.5 > 0, line.NSS2.12, 0)"
-    source: "Schedule NS(S2): their unused Nova Scotia age, pension, disability and tuition amounts"
+    formula: "if(line.HH.partner == 1 and family.partnerInYear and line.NSS2.5 > 0, round(line.NSS2.12 * line.RES.factor, 2), 0)"
+    source: >-
+      Schedule NS(S2): their unused Nova Scotia age, pension, disability and tuition amounts. Prorated for a part-year
+      resident (RC4018, Appendix K: line 58640); the schedule shows the whole transfer
   NS428.43:
     label: Allowable medical expenses
     formula: "max(0, line.T1.33099 - min(param.nsMedicalThresholdMax, round(line.T1.23600 * param.medicalThresholdRate, 2)))"
@@ -340,7 +348,8 @@ lines:
   # Schedule NS(S11) – Nova Scotia tuition and education amounts (the student's own)
   NSS11.1:
     label: Unused Nova Scotia tuition and education amounts from your 2024 notice of assessment
-    formula: "answer.unusedProvincialTuition"
+    formula: 'if(person.province == "AB", 0, answer.unusedProvincialTuition)'
+    source: "None for a spouse in Alberta, whose own return doesn't carry unused provincial tuition forward (Schedule NS(S2) reads this schedule for them)"
   NSS11.5:
     label: 2025 Nova Scotia tuition and education amounts
     formula: >-

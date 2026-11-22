@@ -3,7 +3,7 @@ import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import type { Person, TaxYear } from "#shared";
 import { OWNER, VIEWER, type TestServer } from "../support/server.ts";
-import { renderApp } from "./support.tsx";
+import { holdRequests, renderApp } from "./support.tsx";
 
 async function add(server: TestServer, name: string, relationship: string, birthDate: string): Promise<Person> {
   return (await (await server.call("POST", "/api/people", { as: OWNER, body: { name, relationship, birthDate } })).json()) as Person;
@@ -37,6 +37,24 @@ describe("the Profile page", () => {
     expect((within(next).getByLabelText("Relationship") as HTMLSelectElement).value).toBe("spouse");
     const { people } = (await (await server.call("GET", "/api/people")).json()) as { people: Person[] };
     expect(people.map((person) => person.relationship)).toEqual(["self"]);
+  });
+
+  it("locks a person's form while it is saved, so nothing typed meanwhile is lost", async () => {
+    const { server } = await renderApp("/profile", { seed: async (s) => void (await seedPeople(s)) });
+    fireEvent.click(await screen.findByRole("button", { name: "Edit Alex Martin" }));
+    const form = screen.getByRole("form", { name: "Edit Alex Martin" });
+    const name = within(form).getByLabelText("Name") as HTMLInputElement;
+    fireEvent.change(name, { target: { value: "Alex Before" } });
+    const held = holdRequests((method, path) => method === "PATCH" && path.startsWith("/api/people/"));
+    fireEvent.click(within(form).getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(held.held()).toBe(1));
+    expect(name.disabled).toBe(true);
+    expect((within(form).getByLabelText("Birth date") as HTMLInputElement).disabled).toBe(true);
+    expect((within(form).getByRole("button", { name: "Cancel" }) as HTMLButtonElement).disabled).toBe(true);
+    held.release();
+    expect(await screen.findByRole("button", { name: "Edit Alex Before" })).toBeTruthy();
+    const { people } = (await (await server.call("GET", "/api/people")).json()) as { people: Person[] };
+    expect(people.map((person) => person.name)).toContain("Alex Before");
   });
 
   it("offers the way back to the page that sent you", async () => {
@@ -184,7 +202,7 @@ describe("step 1 of a year", () => {
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() => expect(screen.getByRole("button", { name: "Save" }).hasAttribute("disabled")).toBe(false));
     expect(screen.queryByText(/Someone else changed/)).toBeNull();
-    fireEvent.change(screen.getByLabelText(/Days you lived in Canada/), { target: { value: "200" } });
+    fireEvent.change(await screen.findByLabelText(/Days you lived in Canada/), { target: { value: "200" } });
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(async () => {
       const stored = (await (await server.call("GET", "/api/years/2025/estimate")).json()) as { input: { answers: Record<string, Record<string, unknown>> } };

@@ -1,5 +1,5 @@
 {
-  "about": "A low-income single parent in Alberta with the disability tax credit: part-time work, social assistance and workers' compensation (line 25000), a CPP disability benefit, search and rescue volunteering, a bursary without a T2202, RDSP income, disability supports, the Canada workers benefit with its disability supplement and advance payments, the refundable medical expense supplement, and the Canada training credit. Synthetic data.",
+  "about": "A low-income single parent in Alberta with the disability tax credit: part-time work, social assistance and workers' compensation (line 25000), a CPP disability benefit, search and rescue volunteering, a bursary without a T2202, RDSP income, disability supports, the Canada workers benefit with its disability supplement and advance payments (on Alberta's Schedule 6, 5009-S6: 21% of working income over $2,760 up to $2,619 with a dependant, and 26% over $910 up to $843), the refundable medical expense supplement, and the Canada training credit. Synthetic data.",
   "input": {
     "year": 2025,
     "people": [
@@ -269,13 +269,13 @@
       "CWB.familyWorking": "16500",
       "CWB.familyIncome": "22670",
       "CWB.claimsBasic": "1",
-      "CWB.basic": "2813",
+      "CWB.basic": "2619",
       "CWB.disability": "843",
-      "T1.45300": "3656",
+      "T1.45300": "3462",
       "T1.41500": "500",
       "T1.45350": "550",
-      "T1.48200": "5203.48",
-      "T1.48400": "4703.48",
+      "T1.48200": "5009.48",
+      "T1.48400": "4509.48",
       "T1.48500": "0",
       "S11.8": "550",
       "S11.11": "17670"

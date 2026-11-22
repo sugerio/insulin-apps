@@ -9,7 +9,7 @@ export const cleanAmount = normalizeAmount;
 
 /**
  * An amount to enter, in dollars, as a percent, or a count (no unit). `labelHidden` keeps the label for screen readers only, where the card
- * around it names it.
+ * around it names it. A count over its `max` says so as it is typed, in the words the server refuses it with.
  */
 export function AmountField({
   label,
@@ -18,8 +18,9 @@ export function AmountField({
   value,
   onChange,
   disabled,
-  issue,
+  issue: refused,
   unit = "$",
+  max,
 }: {
   label: string;
   labelHidden?: boolean;
@@ -29,8 +30,11 @@ export function AmountField({
   disabled: boolean;
   issue?: string;
   unit?: "$" | "%" | "";
+  max?: number;
 }) {
   const id = useId();
+  const typed = cleanAmount(value);
+  const issue = refused ?? (max !== undefined && /^\d+$/.test(typed) && Number(typed) > max ? `Enter a whole number from 0 to ${max}` : undefined);
   return (
     <div className="flex flex-col gap-1">
       <Label htmlFor={id} className={labelHidden ? "sr-only" : undefined}>

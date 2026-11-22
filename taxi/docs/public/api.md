@@ -36,7 +36,7 @@ The base URL is `https://taxi.insulinapps.com`, and every endpoint is under `/ap
 | `DELETE /api/years/{year}/documents/{id}` | Prepare returns | Delete a file and every slip read from it, in whichever return it is. Body: `{"revision": …}`, the revision you read; a stale one is refused with 409. |
 | `GET /api/years/{year}/documents/{id}/file` | View returns | The stored file, as uploaded: the PDF, PNG or JPEG itself. |
 | `GET /api/years/{year}/returns/{personId}/forms` | View returns | A finished return as a PDF to save: the CRA's T1 and provincial form with the amounts filled in, then a worksheet. For a resident of Quebec, Revenu Québec's TP-1 and its schedules come after the federal forms. Add `language=fr` to print Revenu Québec's forms in French; the CRA's forms and the worksheet stay in English. Add `download=1` to save the file instead of opening it. Refused with 400 for another language, with 409 while anything is left before filing (the message says what), and with 503 when canada.ca or revenuquebec.ca doesn't answer or its form changed. |
-| `PUT /api/years/{year}/answers` | Prepare returns | Save an adult's answers: `{"revision", "personId", "answers": {"rrspDeduction": "5000", "hasRentalIncome": false}}`. `null` clears an answer. |
+| `PUT /api/years/{year}/answers` | Prepare returns | Save an adult's answers: `{"revision", "personId", "answers": {"rrspDeduction": "5000", "hasRentalIncome": false}}`. `null` clears an answer. A count is a whole number from 0 to 999, or up to the most its question allows (such as 12 for the months of a year, 365 for its days); any other answer is refused with 400, naming the range. |
 | `GET /api/years/{year}/slips` | View returns | Every slip of the year's adults, with its boxes and whether it is confirmed. |
 | `POST /api/years/{year}/slips` | Prepare returns | Add a slip: `{"revision", "personId", "type": "T4", "issuer", "boxes": {"14": "60000.00"}}`. It starts unconfirmed. |
 | `PATCH /api/years/{year}/slips/{id}` | Prepare returns | Change whose slip it is, its issuer or its boxes: `{"revision", "personId"?, "issuer"?, "boxes"?}`. It goes back to unconfirmed. `boxes` replaces them all; a box in `unsure` is no longer marked once it is among them, and one left out stays marked. |
@@ -108,5 +108,5 @@ and `false` on the other. These answers are ordinary answers: the estimate expla
 
 Every error is JSON: `{"error": {"code", "message", "issues"?}}`. The codes are `validation_failed` (400, with each
 field's issue), `unauthenticated` (401), `forbidden` (403), `not_found` (404, also for another organization's records),
-`conflict` (409), `payload_too_large` (413), `internal` (500) and `unavailable` (503, when canada.ca doesn't answer
-or a CRA form changed).
+`conflict` (409), `payload_too_large` (413), `internal` (500) and `unavailable` (503, when canada.ca or
+revenuquebec.ca doesn't answer or a form changed).

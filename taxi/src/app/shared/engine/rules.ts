@@ -98,6 +98,8 @@ export interface Question {
   /** The default is the app's choice, not a guess: the result is complete without an answer (a hint may change it). */
   decision?: boolean;
   options?: string[];
+  /** For a count: the most it can be, where the year sets one (12 months, 365 days). */
+  max?: number;
 }
 export interface SlipType {
   id: string;
@@ -288,6 +290,7 @@ export const compiledRulesSchema = z.strictObject({
       askedWhen: z.strictObject({ question: z.string(), options: z.array(z.string()) }).optional(),
       note: z.string().optional(),
       optionLabels: z.record(z.string(), z.string()).optional(),
+      max: z.number().int().min(1).optional(),
     }),
   ),
   hints: z.record(
@@ -611,6 +614,10 @@ function checkRuleSet(ruleSet: RuleSet, fail: (entry: string, message: string, c
       if (!ok) fail(entry, `The default doesn't fit a ${question.type} question`);
     }
     if (question.decision && question.default === undefined) fail(entry, "A decision needs a default");
+    if (question.max !== undefined) {
+      if (question.type !== "count") fail(entry, "Only a count has a max");
+      if (question.default !== undefined && Number(question.default) > question.max) fail(entry, `The default is more than the max, ${question.max}`);
+    }
     if (question.parent !== undefined) {
       const parent = ruleSet.questions.get(question.parent);
       if (!parent || parent.type !== "boolean" || parent.slip || parent.parent) fail(entry, "A question's parent must be a yes/no question without a slip, not itself a part");

@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { Person, SlipList, TaxYear } from "#shared";
 import type { SlipReader } from "../../src/app/server/lib/reader.ts";
 import { OWNER, type TestServer } from "../support/server.ts";
-import { renderApp } from "./support.tsx";
+import { catchDownloads, renderApp } from "./support.tsx";
 
 const reader: SlipReader = {
   read: async () => ({
@@ -113,7 +113,7 @@ describe("Upload documents", () => {
     const upload = await screen.findByRole("list", { name: "This upload" });
     expect(await within(upload).findByText("The same file is already here, as T4.pdf.")).toBeTruthy();
     expect(within(upload).getByText("Already here")).toBeTruthy();
-    expect(screen.getAllByRole("link", { name: /^T4/ }).map((link) => link.textContent)).toEqual(["T4.pdf"]);
+    expect(screen.getAllByRole("button", { name: /^Download T4/ }).map((button) => button.textContent)).toEqual(["T4.pdf"]);
   });
 
   it("says when a file replaced an earlier version of the same name", async () => {
@@ -130,7 +130,7 @@ describe("Upload documents", () => {
     const upload = await screen.findByRole("list", { name: "This upload" });
     expect(await within(upload).findByText("Replaced the earlier T4.pdf and its slip. T4 from Maple Corp")).toBeTruthy();
     expect(within(upload).getByText("Replaced")).toBeTruthy();
-    await waitFor(() => expect(screen.getAllByRole("link", { name: "T4.pdf" })).toHaveLength(1));
+    await waitFor(() => expect(screen.getAllByRole("button", { name: "Download T4.pdf" })).toHaveLength(1));
   });
 
   it("deletes a file with its slips, after saying which slips go", async () => {
@@ -364,6 +364,58 @@ describe("Upload documents", () => {
       },
     });
     expect(await screen.findByText(/Box 22 Income tax deducted: \$9,000\.00 \(check\)/)).toBeTruthy();
-    expect(screen.getByRole("link", { name: "Open the original file" }).getAttribute("href")).toMatch(/^\/api\/years\/2025\/documents\/[0-9a-f-]+\/file$/);
+    const saved = catchDownloads();
+    fireEvent.click(screen.getByRole("button", { name: "Download the original file" }));
+    await waitFor(() => expect(saved.map((file) => file.name)).toEqual(["t4.pdf"]));
+    expect(await saved[0]!.blob.text()).toBe("%PDF-1.4 x");
+  });
+
+  it("says at Confirm why an original file couldn't be downloaded", async () => {
+    const { server } = await renderApp("/returns/2025/confirm", {
+      server: { reader: () => reader },
+      seed: async (server) => {
+        await seed(server);
+        await server.call("POST", "/api/years/2025/documents", {
+          as: OWNER,
+          raw: new TextEncoder().encode("%PDF-1.4 x") as Uint8Array<ArrayBuffer>,
+          headers: { "Content-Type": "application/pdf", "X-File-Name": "t4.pdf" },
+        });
+      },
+    });
+    const saved = catchDownloads();
+    await screen.findByRole("button", { name: "Download the original file" });
+    await deleteFileElsewhere(server);
+    fireEvent.click(screen.getByRole("button", { name: "Download the original file" }));
+    expect(await screen.findByText("No such file in this year")).toBeTruthy();
+    expect(saved).toEqual([]);
+  });
+
+  it("downloads an uploaded file from its name, and says why when it can't", async () => {
+    const { server } = await renderApp("/returns/2025/upload", {
+      server: { reader: () => reader },
+      seed: async (server) => {
+        await seed(server);
+        await server.call("POST", "/api/years/2025/documents", {
+          as: OWNER,
+          raw: new TextEncoder().encode("%PDF-1.4 x") as Uint8Array<ArrayBuffer>,
+          headers: { "Content-Type": "application/pdf", "X-File-Name": "t4.pdf" },
+        });
+      },
+    });
+    const saved = catchDownloads();
+    fireEvent.click(await screen.findByRole("button", { name: "Download t4.pdf" }));
+    await waitFor(() => expect(saved.map((file) => file.name)).toEqual(["t4.pdf"]));
+    expect(await saved[0]!.blob.text()).toBe("%PDF-1.4 x");
+    await deleteFileElsewhere(server);
+    fireEvent.click(screen.getByRole("button", { name: "Download t4.pdf" }));
+    expect(await screen.findByText("No such file in this year")).toBeTruthy();
+    expect(saved).toHaveLength(1);
   });
 });
+
+/** Deletes the year's only uploaded file as another tab would, while the page still shows it. */
+async function deleteFileElsewhere(server: TestServer) {
+  const { documents } = (await (await server.call("GET", "/api/years/2025/documents")).json()) as { documents: { id: string }[] };
+  const { revision } = (await (await server.call("GET", "/api/years/2025")).json()) as TaxYear;
+  expect((await server.call("DELETE", `/api/years/2025/documents/${documents[0]!.id}`, { as: OWNER, body: { revision } })).status).toBe(200);
+}

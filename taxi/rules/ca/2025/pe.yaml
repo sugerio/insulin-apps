@@ -158,34 +158,39 @@ lines:
   PE428.10:
     label: Prince Edward Island age amount
     formula: >-
-      round((if(person.age >= 65, max(0, param.peAgeAmountMax - round(max(0, line.T1.23600 - param.peAgeAmountThreshold) * param.peAgeAmountRate, 2)), 0)) * line.RES.factor, 2)
-    source: "Worksheet PE428, line 58080: for people born in 1960 or earlier"
+      if(person.age >= 65, max(0, round(param.peAgeAmountMax * line.RES.factor, 2)
+      - round(max(0, line.T1.23600 - round(param.peAgeAmountThreshold * line.RES.factor, 2)) * param.peAgeAmountRate, 2)), 0)
+    source: "Worksheet PE428, line 58080: for people born in 1960 or earlier, $6,510 less 15% of net income over $36,600 (both amounts prorated for a part-year resident: canada.ca, Completing your return for newcomers, Example 2)"
+  # For a part-year resident, the base and the maximum are prorated, and then the net income is subtracted, not
+  # prorated (canada.ca, completing a return for newcomers, Example 3 for line 30300).
   PE428.13:
     label: Prince Edward Island spouse or common-law partner amount
     formula: >-
-      round((if(line.HH.partner == 1, min(param.peSpouseMax, max(0, param.peSpouseBase - line.HH.spouseNetIncome)), 0)) * line.RES.factor, 2)
+      round(if(line.HH.partner == 1, min(round(param.peSpouseMax * line.RES.factor, 2), max(0, round(param.peSpouseBase * line.RES.factor, 2) - line.HH.spouseNetIncome)), 0), 2)
 
   PE428.16:
     label: Prince Edward Island amount for an eligible dependant
     formula: >-
-      round((if(line.HH.partner == 0 and family.childrenUnder18 > 0, min(param.peSpouseMax, max(0, param.peSpouseBase - answer.dependantNetIncome)), 0)) * line.RES.factor, 2)
+      round(if(line.HH.partner == 0 and family.childrenUnder18 > 0, min(round(param.peSpouseMax * line.RES.factor, 2), max(0, round(param.peSpouseBase * line.RES.factor, 2) - answer.dependantNetIncome)), 0), 2)
     source: "PE428 lines 14 to 16: the base minus their net income, up to the maximum"
   # The amount for infirm dependants needs no shared home, unlike the caregiver amount (line 29), which the app can't
   # tell; so the infirm amount is claimed for an adult relative with an impairment.
   PE428.17:
     label: Prince Edward Island amount for infirm dependants age 18 or older
     formula: >-
-      round((if(answer.hasInfirmDependant, if(answer.infirmDependants > 1, unsupported("The Canada caregiver amount for more than one adult dependant isn't handled by this app yet"), answer.infirmDependants * min(param.peInfirmMax, max(0, param.peInfirmBase - answer.infirmDependantIncome))), 0)) * line.RES.factor, 2)
-    source: "Worksheet PE428, line 58200: $7,412 less the dependant's net income, up to $2,446"
-  # The child claimed as an eligible dependant gets no amount for young children; the app claims the eligible dependant
-  # for the child with the fewest months under 6, which leaves the most months here.
+      if(answer.hasInfirmDependant, if(answer.infirmDependants > 1, unsupported("The Canada caregiver amount for more than one adult dependant isn't handled by this app yet"),
+      answer.infirmDependants * min(round(param.peInfirmMax * line.RES.factor, 2), max(0, round(param.peInfirmBase * line.RES.factor, 2) - answer.infirmDependantIncome))), 0)
+    source: "Worksheet PE428, line 58200: $7,412 less the dependant's net income, up to $2,446 (both prorated for a part-year resident before the income comes off)"
   PE428.58229:
     label: Months claimed for the amount for young children
     formula: >-
       if(line.HH.partner == 1 and (line.T1.23600 > line.HH.spouseNetIncome
       or (line.T1.23600 == line.HH.spouseNetIncome and person.role == "spouse")), 0,
-      sum(family.childMonthsUnder6) - if(line.PE428.16 > 0, min(family.childMonthsUnder6), 0))
-    source: "PE428 line 58229: each month a child was under 6 on its first day; with a spouse or partner, only the one with the lower net income claims (with equal incomes, the person preparing)"
+      sum(family.childMonthsUnder6))
+    source: >-
+      PE428 line 58229 (5002-PC, line 58230): each month a child was under 6 on its first day, the child claimed as an
+      eligible dependant too; with a spouse or partner, only the one with the lower net income claims (with equal
+      incomes, the person preparing)
   PE428.18:
     label: Prince Edward Island amount for young children
     formula: "line.PE428.58229 * param.peYoungChildAmount"
@@ -199,8 +204,10 @@ lines:
     source: "PE428 line 27 (58360): line 31400 of your return, up to $1,000"
   PE428.28:
     label: Children's wellness tax credit
-    formula: "if(family.childrenUnder19 > 0, min(answer.childActivityFees, param.peWellnessMaxPerChild * family.childrenUnder19), 0)"
-    source: "PE428 line 28 (58365): program fees for children under 18 at the start of the year, up to $1,000 per child"
+    formula: 'if(person.province == "PE" and family.childrenUnder19 > 0, min(answer.childActivityFees, param.peWellnessMaxPerChild * family.childrenUnder19), 0)'
+    source: >-
+      PE428 line 28 (58365): program fees for children under 18 at the start of the year, up to $1,000 per child. Only
+      for residents of Prince Edward Island: none for a spouse elsewhere, whose PE428 the S2 and S11 schedules read
   PE428.31:
     label: Prince Edward Island disability amount for self
     formula: >-
@@ -231,12 +238,14 @@ lines:
     source: "Schedule PE(S11) line 13"
   PE428.37:
     label: Tuition and education amounts transferred from a child or grandchild
-    formula: "line.CHILD.provincialTuition"
-    source: "PE428 line 37 (58600): the provincial amount they designate on their T2202, taken as the federal one"
+    formula: "round(line.CHILD.provincialTuition * line.RES.factor, 2)"
+    source: "PE428 line 37 (58600): the provincial amount they designate on their T2202, taken as the federal one. Prorated for a part-year resident (RC4018, Appendix K)"
   PE428.38:
     label: Prince Edward Island amounts transferred from your spouse or common-law partner
-    formula: "if(line.HH.partner == 1 and family.partnerInYear and line.PES2.5 > 0, line.PES2.12, 0)"
-    source: "Schedule PE(S2): their unused Prince Edward Island age, pension, disability and tuition amounts"
+    formula: "if(line.HH.partner == 1 and family.partnerInYear and line.PES2.5 > 0, round(line.PES2.12 * line.RES.factor, 2), 0)"
+    source: >-
+      Schedule PE(S2): their unused Prince Edward Island age, pension, disability and tuition amounts. Prorated for a
+      part-year resident (RC4018, Appendix K: line 58640); the schedule shows the whole transfer
   PE428.45:
     label: Allowable medical expenses
     formula: "max(0, line.T1.33099 - min(param.peMedicalThresholdMax, round(line.T1.23600 * param.medicalThresholdRate, 2)))"
@@ -355,7 +364,8 @@ lines:
   # Schedule PE(S11) – Prince Edward Island tuition and education amounts (the student's own)
   PES11.1:
     label: Unused Prince Edward Island tuition and education amounts from your 2024 notice of assessment
-    formula: "answer.unusedProvincialTuition"
+    formula: 'if(person.province == "AB", 0, answer.unusedProvincialTuition)'
+    source: "None for a spouse in Alberta, whose own return doesn't carry unused provincial tuition forward (Schedule PE(S2) reads this schedule for them)"
   PES11.5:
     label: 2025 Prince Edward Island tuition and education amounts
     formula: >-

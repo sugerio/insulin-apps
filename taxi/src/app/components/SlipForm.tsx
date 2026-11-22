@@ -7,12 +7,12 @@ import { Label } from "@/components/ui/label.tsx";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select.tsx";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table.tsx";
 import { cn } from "@/lib/utils.ts";
-import { ApiError, apiRequest, describeError } from "../api/client.ts";
+import { apiRequest, describeError, fieldIssues, saveFile } from "../api/client.ts";
 import { byBox, formatBox } from "../lib/format.ts";
 import { normalizeAmount } from "../shared/amount.ts";
 import { rulesFor } from "../shared/rules/index.ts";
 import type { SlipType } from "../shared/engine/rules.ts";
-import { Banner } from "./Feedback.tsx";
+import { RefusedBanner } from "./Feedback.tsx";
 import { useYear } from "./YearFrame.tsx";
 
 // A slip's boxes as a table, built from its type in the year's rules (slips.yaml): each box as printed, what it is, and
@@ -87,12 +87,31 @@ export function SlipBoxTable({
   );
 }
 
-/** A link to the file a slip came from, to check its amounts against. */
+/** Saves the file a slip came from, to check its amounts against; says why when it can't (deleted meanwhile, say). */
 export function OriginalFile({ year, documentId }: { year: number; documentId: string }) {
+  const [state, setState] = useState<{ status: "idle" | "working" } | { status: "error"; error: unknown }>({ status: "idle" });
+  async function download() {
+    setState({ status: "working" });
+    try {
+      await saveFile(`/api/years/${year}/documents/${documentId}/file`, "original file");
+      setState({ status: "idle" });
+    } catch (error) {
+      setState({ status: "error", error });
+    }
+  }
   return (
-    <a className="self-start text-xs underline underline-offset-2" href={`/api/years/${year}/documents/${documentId}/file`} target="_blank" rel="noreferrer">
-      Open the original file
-    </a>
+    <span className="inline-flex flex-col items-start gap-0.5 self-start text-xs">
+      <button
+        type="button"
+        className="underline underline-offset-2 disabled:opacity-50"
+        disabled={state.status === "working"}
+        aria-label="Download the original file"
+        onClick={() => void download()}
+      >
+        {state.status === "working" ? "Downloading the original file…" : "Download the original file"}
+      </button>
+      {state.status === "error" ? <span className="text-destructive">{describeError(state.error)}</span> : null}
+    </span>
   );
 }
 
@@ -168,7 +187,9 @@ export function SlipForm({
   const [state, setState] = useState<{ status: "idle" | "saving" } | { status: "error"; error: unknown }>({ status: "idle" });
   const slipType: SlipType = types.find((each) => each.id === type)!;
   const changed = !slip || issuer !== slip.issuer || !sameBoxes(boxes, slip.boxes);
-  const disabled = host?.busy ?? false;
+  // Locked while it is saved, by the page's request or by this form's own: the form closes once saved, and a change
+  // typed meanwhile would be lost.
+  const disabled = (host?.busy ?? false) || state.status === "saving";
   const keep = (change: Partial<SlipValues>) => host?.onValues({ type, issuer, boxes, basis, ...change });
 
   async function submit(event: FormEvent) {
@@ -203,10 +224,11 @@ export function SlipForm({
   }
 
   const error = host ? (host.error ?? null) : state.status === "error" ? state.error : null;
-  const issues = error instanceof ApiError ? (error.body?.error.issues ?? []) : [];
-  const issueFor = (path: string) => issues.find((issue) => issue.path === path)?.message;
   // The issues shown beside a field (the issuer, the type's boxes); the banner says the others.
-  const unshown = issues.filter((issue) => issue.path !== "issuer" && !(issue.path.startsWith("boxes.") && issue.path.slice("boxes.".length) in slipType.boxes));
+  const { issueFor, unshown, inBanner } = fieldIssues(
+    error,
+    (path) => path === "issuer" || (path.startsWith("boxes.") && path.slice("boxes.".length) in slipType.boxes),
+  );
   const showActions = !inline || changed || error !== null;
 
   return (
@@ -261,21 +283,10 @@ export function SlipForm({
         disabled={disabled}
         issueFor={issueFor}
       />
-      {error !== null && (issues.length === 0 || unshown.length > 0) ? (
-        <Banner kind="error" title="The slip wasn't saved">
-          {describeError(error)}
-          {unshown.length > 0 ? (
-            <ul className="mt-1 list-disc pl-5">
-              {unshown.map((issue) => (
-                <li key={issue.path}>{issue.message}</li>
-              ))}
-            </ul>
-          ) : null}
-        </Banner>
-      ) : null}
+      {inBanner ? <RefusedBanner title="The slip wasn't saved" error={error} unshown={unshown} /> : null}
       {showActions ? (
         <div className="flex gap-2">
-          <Button type="submit" size="sm" disabled={disabled || state.status === "saving" || !changed}>
+          <Button type="submit" size="sm" disabled={disabled || !changed}>
             {state.status === "saving" ? "Saving…" : slip ? "Save" : "Add"}
           </Button>
           <Button

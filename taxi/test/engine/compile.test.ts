@@ -108,6 +108,16 @@ describe("compiling rule files", () => {
     expect(compileError(withQuestions(acres({ question: "hasBusiness", options: ["farm"] })))).toContain("askedWhen names a choice of the same group");
   });
 
+  it("keeps a count's max, only on a count and not below its default", () => {
+    const withQuestions = (questions: object) => [year(2025, null, { "a.yaml": { ...base, questions: { ...base.questions, ...questions } } })];
+    const group = { rented: { type: "boolean", module: "credits", ask: "Rented", default: false } };
+    const months = (fields: object) => ({ ...group, months: { type: "count", module: "credits", parent: "rented", ask: "Months", ...fields } });
+    expect(loadRuleSet(compileRules(withQuestions(months({ max: 12, default: "12" })), hash)).questions.get("months")!.max).toBe(12);
+    expect(compileError(withQuestions(months({ max: 12, default: "13" })))).toContain("The default is more than the max, 12");
+    expect(compileError(withQuestions(months({ max: 0 })))).toContain("max");
+    expect(compileError(withQuestions({ amount: { type: "money", ask: "Amount", max: 12 } }))).toContain("Only a count has a max");
+  });
+
   it("checks a bracket base printed on a form against the brackets below it", () => {
     const brackets = (base2: number) => ({
       label: "Brackets",

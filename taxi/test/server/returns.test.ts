@@ -90,6 +90,17 @@ describe("an adult's answers", () => {
     await json<TaxYear>(server.call("PUT", "/api/years/2025/answers", { body: { revision: saved.revision, personId: alex.id, answers: { homeOfficeShare: "12.5" } } }));
   });
 
+  it("take a count up to its question's max, such as the months of a year", async () => {
+    const { alex, revision } = await year();
+    const refused = await json<{ error: { code: string; issues: { path: string; message: string }[] } }>(
+      server.call("PUT", "/api/years/2025/answers", { body: { revision, personId: alex.id, answers: { homeSupportRentMonths: "13", infirmChildren: "13" } } }),
+      400,
+    );
+    expect(refused.error.code).toBe("validation_failed");
+    expect(refused.error.issues).toEqual([{ path: "answers.homeSupportRentMonths", message: "Enter a whole number from 0 to 12" }]);
+    await json<TaxYear>(server.call("PUT", "/api/years/2025/answers", { body: { revision, personId: alex.id, answers: { homeSupportRentMonths: "12" } } }));
+  });
+
   it("refuse a stale revision, someone outside the year, and a viewer", async () => {
     const { alex, sam, revision } = await year();
     const body = (overrides: object) => ({ body: { revision, personId: alex.id, answers: { donations: "100" }, ...overrides } });

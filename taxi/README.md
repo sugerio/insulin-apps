@@ -50,7 +50,9 @@ uploaded slips read by AI (or typed in), income, deductions, credits, the result
   answers, the applied hints and how each line was worked out. The CRA's print PDFs come from canada.ca on first use
   and are kept in the database; they are never in the repository. Where each amount goes is measured from the PDFs by
   `npm run form-layout` (`rules/ca/2025/form-layout.yaml`); what goes there is in `rules/ca/2025/forms.yaml`. Revenu
-  Québec's forms also print in French, on their French versions, each measured on its own.
+  Québec's forms also print in French, on their French versions, each measured on its own. A form the return needs that
+  isn't printed (such as Revenu Québec's Schedule D) is named on Finish and the worksheet (`formsToAdd`,
+  `src/app/shared/print.ts`).
 - **Roles.** Owners, admins and editors prepare returns; viewers see everything and change nothing. Custom roles pick
   from two permissions: Prepare returns and View returns.
 - **Built-in Docs.** **Docs**, in everyone's navigation, explains the app and covers Canadian tax basics in plain words,
@@ -59,12 +61,15 @@ uploaded slips read by AI (or typed in), income, deductions, credits, the result
 ## Who it's for
 
 Residents of every Canadian province and territory, for the 2025 tax year, including people who moved to or from Canada
-during the year. A resident of Quebec gets both returns: the federal return (5005-R) and Revenu Québec's TP-1, from
-the RL slips. The returns cover employment, pension, benefit, investment, self-employment (with farming and fishing),
-rental and foreign income, the sale of real estate, the usual deductions (RRSP, FHSA, pension splitting, child care,
-moving, home office, support) and the federal, provincial and territorial credits a family claims. Not handled, and
-said so when it applies: property treated as sold when you leave Canada, business and investment tax credits, and a
-few Quebec cases (employment outside Quebec, rental and foreign income on the TP-1).
+during the year, except in Quebec. A resident of Quebec gets both returns: the federal return (5005-R) and Revenu
+Québec's TP-1, from the RL slips. The returns cover employment, pension, benefit, investment, self-employment (with
+farming and fishing), rental and foreign income, the sale of real estate, the usual deductions (RRSP, FHSA, pension
+splitting, child care, moving, home office, support) and the federal, provincial and territorial credits a family
+claims. Not handled, and said so when it applies: property treated as sold when you leave Canada, business and
+investment tax credits, and a few Quebec cases (a Quebec return for the year of a move to or from Canada; a T-slip
+without the RL slip issued with it, such as a T4 for work outside Quebec or a T2202 from a school outside Quebec;
+on the TP-1, rental and foreign income, scholarships, RDSP income, taxable FHSA withdrawals and workers'
+compensation).
 
 ## Good to know
 

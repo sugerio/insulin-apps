@@ -1,4 +1,4 @@
-import { useId, useRef, useState } from "react";
+import { useId, useState, type ReactNode } from "react";
 import { Link, useNavigate } from "react-router";
 import {
   PROVINCES,
@@ -9,16 +9,17 @@ import {
   routes,
   type MaritalStatus,
   type Province,
+  type TaxYear,
 } from "#shared";
 import { Button } from "@/components/ui/button.tsx";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card.tsx";
 import { Label } from "@/components/ui/label.tsx";
 import { NativeSelect, NativeSelectOptGroup, NativeSelectOption } from "@/components/ui/native-select.tsx";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group.tsx";
-import { ApiError, apiRequest, describeError } from "../api/client.ts";
+import { ApiError, apiRequest, describeError, fieldIssues } from "../api/client.ts";
 import { useMe } from "../auth/AuthProvider.tsx";
 import { AmountField, cleanAmount } from "../components/AmountField.tsx";
-import { Banner } from "../components/Feedback.tsx";
+import { Banner, RefusedBanner } from "../components/Feedback.tsx";
 import { StepLayout } from "../components/StepLayout.tsx";
 import { stepPath, stepsOf, useReturn, useYear } from "../components/YearFrame.tsx";
 import { MARITAL_STATUS_LABELS, PROVINCE_LABELS } from "../lib/format.ts";
@@ -33,15 +34,66 @@ import { rulesFor } from "../shared/rules/index.ts";
 // together, under the year's revision.
 
 export function PersonalInfoStep() {
-  const { year } = useYear();
-  // Set once "Save and continue" stops on something missing; kept here because a save remounts the facts below.
+  const { year, replace, reload } = useYear();
+  const { person } = useReturn();
+  const navigate = useNavigate();
+  // Kept here, as the facts below start again whenever the year changes (a save, or an upload finishing on another
+  // step): what was typed and not saved yet, the save running or how the last one ended, and whether "Save and
+  // continue" stopped on something missing. This step is mounted once per return, so each has its own.
+  const [draft, setDraft] = useState<FactsDraft>({});
+  const [request, setRequest] = useState<RequestState>({ status: "idle" });
   const [showMissing, setShowMissing] = useState(false);
+  const requests: Requests = {
+    state: request,
+    async run(calls, thenContinue) {
+      const last: { year: TaxYear | null } = { year: null };
+      setRequest({ status: "saving" });
+      try {
+        await calls((answered) => (last.year = answered));
+        setRequest({ status: "idle" });
+        if (!last.year) return;
+        replace(last.year);
+        if (!thenContinue) return;
+        if (stepsOf(last.year, person.id)?.personal === "done") navigate(stepPath(year.year, person.id, "upload"));
+        else setShowMissing(true);
+      } catch (error) {
+        setRequest({ status: "error", error });
+        if (last.year) replace(last.year);
+      }
+    },
+    reload() {
+      setRequest({ status: "idle" });
+      reload();
+    },
+  };
   return (
     <StepLayout step="personal" title="Personal info" aside={<TaxNotes year={year.year} />}>
       {/* A new revision (a save, or someone else's) starts the form again from what is stored. */}
-      <YearFacts key={year.revision} showMissing={showMissing} onMissing={() => setShowMissing(true)} />
+      <YearFacts key={year.revision} draft={draft} onDraft={setDraft} requests={requests} showMissing={showMissing} />
     </StepLayout>
   );
+}
+
+/**
+ * What was typed and not saved yet, by field (`maritalStatus`, `province`, `residentAllYear`, `answers.<question>`):
+ * the value, and the stored value it was typed over. Once that stored value changes (saved, or someone else's change),
+ * the stored one shows instead.
+ */
+type FactsDraft = Record<string, { basis: string; to: string | boolean | null }>;
+
+type RequestState = { status: "idle" | "saving" } | { status: "error"; error: unknown };
+
+/** The step's save, held by PersonalInfoStep: the facts below start again whenever the year changes, the save goes on. */
+interface Requests {
+  state: RequestState;
+  /**
+   * Runs the save's calls; the facts are locked until they end. `answered` keeps the year each call answered with: the
+   * last one is applied when they end, even if a later call failed, so the next save isn't refused as stale. With
+   * `thenContinue`, a save that leaves nothing missing goes on to the next step, and one that does lists what is left.
+   */
+  run: (calls: (answered: (year: TaxYear) => TaxYear) => Promise<void>, thenContinue: boolean) => Promise<void>;
+  /** Loads the year again, and clears what the last save said. */
+  reload: () => void;
 }
 
 /** What each answer means for the tax. */
@@ -66,8 +118,10 @@ function TaxNotes({ year }: { year: number }) {
           <b className="text-foreground">Province.</b> The province on December 31 sets the provincial tax for all of {year}.
         </p>
         <p>
-          <b className="text-foreground">Lived in Canada all year.</b> Moving to or from Canada in {year} changes how income is taxed. This app
-          doesn't handle it yet.
+          <b className="text-foreground">Lived in Canada all year.</b> If you moved to or from Canada in {year}, answer No: the app then asks
+          for the days you lived here and your income for the rest of the year, and reduces the personal amounts (such as the basic personal
+          amount) by the days in Canada, unless at least 90% of that income came from Canada. A Quebec return for the year of a move isn't
+          handled yet.
         </p>
       </CardContent>
     </Card>
@@ -82,53 +136,78 @@ interface AdultDraft {
   residentAllYear: boolean | null;
 }
 
-function YearFacts({ showMissing, onMissing }: { showMissing: boolean; onMissing: () => void }) {
+function YearFacts({
+  draft,
+  onDraft,
+  requests,
+  showMissing,
+}: {
+  draft: FactsDraft;
+  onDraft: (change: (current: FactsDraft) => FactsDraft) => void;
+  requests: Requests;
+  showMissing: boolean;
+}) {
   const me = useMe();
-  const navigate = useNavigate();
-  const { year, replace, reload } = useYear();
-  // The year as this step last saved it: if the facts save and the answers after them are refused, the revision has
-  // still moved on, and replacing the year would start the form again and lose what was typed.
-  const latest = useRef(year);
+  const { year } = useYear();
   const { person: owner, adult } = useReturn();
   const editable = canPrepare(me);
+  // Locked while it is saved, as a save starts the form again from what it saved.
+  const locked = !editable || requests.state.status === "saving";
+  const error = requests.state.status === "error" ? requests.state.error : null;
+  /** A field's value: what was typed on it while the stored value it was typed over still holds, else the stored one. */
+  const valueOf = <T extends string | boolean | null>(key: string, stored: T): T => {
+    const change = draft[key];
+    return change !== undefined && change.basis === JSON.stringify(stored) ? (change.to as T) : stored;
+  };
+  const type = (key: string, stored: string | boolean | null, to: string | boolean | null) =>
+    onDraft((current) => ({ ...current, [key]: { basis: JSON.stringify(stored), to } }));
   // The spouse or partner in the Profile, in this year or not: it decides which statuses there are to choose from.
   const partner = year.people.find((person) => person.relationship === "spouse");
   const statuses = maritalStatusesFor(partner !== undefined);
   // A status saved before the people in the Profile changed no longer fits: start from none, so a save can't send it back.
-  const [maritalStatus, setMaritalStatus] = useState<MaritalStatus | null>(() =>
-    year.maritalStatus !== null && statuses.includes(year.maritalStatus) ? year.maritalStatus : null,
-  );
-  const [draft, setDraft] = useState<AdultDraft>({ province: adult.province, residentAllYear: adult.residentAllYear });
-  const [state, setState] = useState<{ status: "idle" | "saving" } | { status: "error"; error: unknown }>({ status: "idle" });
+  const storedStatus = year.maritalStatus !== null && statuses.includes(year.maritalStatus) ? year.maritalStatus : null;
+  const maritalStatus = valueOf<MaritalStatus | null>("maritalStatus", storedStatus);
+  const facts: AdultDraft = { province: valueOf("province", adult.province), residentAllYear: valueOf("residentAllYear", adult.residentAllYear) };
   // The questions about this person that the return reads, once the estimate says which.
   const estimate = useEstimate();
   const given = estimate.status === "ready" ? (estimate.data.input.answers[owner.id] ?? {}) : {};
   const reached = new Set(estimate.status === "ready" ? (estimate.data.result.people.find((each) => each.personId === owner.id)?.questions ?? []) : []);
   const about = [...rulesFor(year.year)!.questions.values()].filter((question) => question.module === "about" && (reached.has(question.id) || question.id in given));
-  const [amounts, setAmounts] = useState<Record<string, string>>({});
-  const amountOf = (id: string) => amounts[id] ?? (typeof given[id] === "string" ? (given[id] as string) : "");
+  const storedAmount = (id: string) => (typeof given[id] === "string" ? (given[id] as string) : "");
+  const amountOf = (id: string) => valueOf(`answers.${id}`, storedAmount(id));
   const unanswered = about.filter((question) => cleanAmount(amountOf(question.id)) === "");
+  // The spouse's questions (spouseNetIncome) are asked under the spouse; the others are about where this person lived.
+  const spouseQuestions = about.filter((question) => question.id.startsWith("spouse"));
+  const fields = new Set(about.map((question) => `answers.${question.id}`));
+  const { issueFor, unshown, inBanner } = fieldIssues(error, (path) => fields.has(path));
+  const field = (question: (typeof about)[number]) => (
+    <AmountField
+      key={question.id}
+      label={question.ask}
+      help={question.help}
+      unit={question.type === "count" ? "" : "$"}
+      max={question.max}
+      value={amountOf(question.id)}
+      disabled={locked}
+      issue={issueFor(`answers.${question.id}`)}
+      onChange={(value) => type(`answers.${question.id}`, storedAmount(question.id), value)}
+    />
+  );
 
   async function save(thenContinue: boolean) {
-    setState({ status: "saving" });
-    try {
-      let saved = await apiRequest(routes.savePersonalInfo, {
-        params: { year: year.year },
-        body: { revision: latest.current.revision, maritalStatus, adults: [{ personId: owner.id, ...draft }] },
-      });
-      latest.current = saved;
-      const answers = Object.fromEntries(about.map((question) => [question.id, cleanAmount(amountOf(question.id))] as const).filter(([, value]) => value !== ""));
-      saved = await saveAnswersFor(saved, { [owner.id]: answers });
-      const done = stepsOf(saved, owner.id)?.personal === "done";
-      if (thenContinue && !done) onMissing();
-      replace(saved);
-      if (thenContinue && done) navigate(stepPath(year.year, owner.id, "upload"));
-    } catch (error) {
-      setState({ status: "error", error });
-    }
+    const sent = draft;
+    const answers = Object.fromEntries(about.map((question) => [question.id, cleanAmount(amountOf(question.id))] as const).filter(([, value]) => value !== ""));
+    await requests.run(async (answered) => {
+      const saved = answered(
+        await apiRequest(routes.savePersonalInfo, { params: { year: year.year }, body: { revision: year.revision, maritalStatus, adults: [{ personId: owner.id, ...facts }] } }),
+      );
+      answered(await saveAnswersFor(saved, { [owner.id]: answers }));
+      // What this save sent is stored now, so it is no longer a change.
+      onDraft((current) => Object.fromEntries(Object.entries(current).filter(([key, entry]) => sent[key] !== entry)));
+    }, thenContinue);
   }
 
-  const stale = state.status === "error" && state.error instanceof ApiError && state.error.status === 409;
+  const stale = error instanceof ApiError && error.status === 409;
   // This return's issues: its adult's, and those of the facts the year's returns share.
   const issues = year.issues.filter((issue) => isIssueOf(issue, owner.id));
   const blocking = issues.filter((issue) => issue.kind === "blocking");
@@ -148,8 +227,8 @@ function YearFacts({ showMissing, onMissing }: { showMissing: boolean; onMissing
           <RadioGroup
             aria-labelledby="marital-status"
             value={maritalStatus ?? ""}
-            onValueChange={(value) => setMaritalStatus(value as MaritalStatus)}
-            disabled={!editable}
+            onValueChange={(value) => type("maritalStatus", storedStatus, value)}
+            disabled={locked}
             className={partner ? "grid gap-2 sm:grid-cols-2" : "grid gap-2 sm:grid-cols-4"}
           >
             {statuses.map((status) => (
@@ -164,28 +243,25 @@ function YearFacts({ showMissing, onMissing }: { showMissing: boolean; onMissing
         </CardContent>
       </Card>
 
-      <AdultCard draft={draft} editable={editable} onChange={(change) => setDraft((current) => ({ ...current, ...change }))} />
+      <AdultCard
+        draft={facts}
+        editable={!locked}
+        onChange={(change) => {
+          if (change.province !== undefined) type("province", adult.province, change.province);
+          if (change.residentAllYear !== undefined) type("residentAllYear", adult.residentAllYear, change.residentAllYear);
+        }}
+      >
+        {about.filter((question) => !spouseQuestions.includes(question)).map(field)}
+      </AdultCard>
 
-      {about.length > 0 ? (
+      {spouseQuestions.length > 0 ? (
         <Card>
           <CardHeader>
             <CardTitle>
               <h2 className="text-base font-semibold">Your spouse or partner</h2>
             </CardTitle>
           </CardHeader>
-          <CardContent className="flex flex-col gap-4">
-            {about.map((question) => (
-              <AmountField
-                key={question.id}
-                label={question.ask}
-                help={question.help}
-                unit={question.type === "count" ? "" : "$"}
-                value={amountOf(question.id)}
-                disabled={!editable}
-                onChange={(value) => setAmounts((current) => ({ ...current, [question.id]: value }))}
-              />
-            ))}
-          </CardContent>
+          <CardContent className="flex flex-col gap-4">{spouseQuestions.map(field)}</CardContent>
         </Card>
       ) : null}
 
@@ -195,11 +271,11 @@ function YearFacts({ showMissing, onMissing }: { showMissing: boolean; onMissing
         </Banner>
       ))}
       {stale ? (
-        <Banner kind="error" title="Someone else changed this year" action={<Button variant="outline" size="sm" onClick={reload}>Reload</Button>}>
-          {describeError(state.error)}
+        <Banner kind="error" title="Someone else changed this year" action={<Button variant="outline" size="sm" onClick={requests.reload}>Reload</Button>}>
+          {describeError(error)}
         </Banner>
-      ) : state.status === "error" ? (
-        <Banner kind="error" title="Your personal info wasn't saved">{describeError(state.error)}</Banner>
+      ) : inBanner ? (
+        <RefusedBanner title="Your personal info wasn't saved" error={error} unshown={unshown} />
       ) : null}
 
       {showMissing && blocking.length + unanswered.length > 0 ? (
@@ -218,11 +294,11 @@ function YearFacts({ showMissing, onMissing }: { showMissing: boolean; onMissing
       <div className="flex justify-end">
         {editable ? (
           <div className="flex gap-2">
-            <Button variant="outline" onClick={() => void save(false)} disabled={state.status === "saving"}>
+            <Button variant="outline" onClick={() => void save(false)} disabled={locked}>
               Save
             </Button>
-            <Button onClick={() => void save(true)} disabled={state.status === "saving"}>
-              {state.status === "saving" ? "Saving…" : "Save and continue"}
+            <Button onClick={() => void save(true)} disabled={locked}>
+              {requests.state.status === "saving" ? "Saving…" : "Save and continue"}
             </Button>
           </div>
         ) : (
@@ -235,7 +311,18 @@ function YearFacts({ showMissing, onMissing }: { showMissing: boolean; onMissing
   );
 }
 
-function AdultCard({ draft, editable, onChange }: { draft: AdultDraft; editable: boolean; onChange: (change: Partial<AdultDraft>) => void }) {
+/** The province and residency, then `children`: the questions for someone who didn't live in Canada all year. */
+function AdultCard({
+  draft,
+  editable,
+  onChange,
+  children,
+}: {
+  draft: AdultDraft;
+  editable: boolean;
+  onChange: (change: Partial<AdultDraft>) => void;
+  children: ReactNode;
+}) {
   const id = useId();
   const others = PROVINCES.filter((province) => !SUPPORTED_PROVINCES.includes(province));
   return (
@@ -260,13 +347,15 @@ function AdultCard({ draft, editable, onChange }: { draft: AdultDraft; editable:
                 {PROVINCE_LABELS[province]}
               </NativeSelectOption>
             ))}
-            <NativeSelectOptGroup label="Not handled by this app yet">
-              {others.map((province) => (
-                <NativeSelectOption key={province} value={province}>
-                  {PROVINCE_LABELS[province]}
-                </NativeSelectOption>
-              ))}
-            </NativeSelectOptGroup>
+            {others.length > 0 ? (
+              <NativeSelectOptGroup label="Not handled by this app yet">
+                {others.map((province) => (
+                  <NativeSelectOption key={province} value={province}>
+                    {PROVINCE_LABELS[province]}
+                  </NativeSelectOption>
+                ))}
+              </NativeSelectOptGroup>
+            ) : null}
           </NativeSelect>
         </div>
         <div className="flex flex-col gap-2">
@@ -284,6 +373,7 @@ function AdultCard({ draft, editable, onChange }: { draft: AdultDraft; editable:
             <Choice value="no" label="No" />
           </RadioGroup>
         </div>
+        {children}
       </CardContent>
     </Card>
   );

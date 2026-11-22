@@ -22,10 +22,14 @@ export const gettingStarted: DocTopic = {
             copy the numbers into certified tax software.
           </p>
           <p>
-            <b>Who it is for:</b> residents of every province and territory, also in the year they moved to or from Canada, with income from
-            work, pensions, EI, investments, self-employment (a business, a profession, farming or fishing), rent or abroad. For a Quebec resident
-            it also prepares the Quebec return (TP-1) from the RL slips, and prints it on Revenu Québec's forms, in English or French, after the
-            federal ones: the two returns are mailed apart, the federal one to the CRA and the TP-1 to Revenu Québec, each signed.
+            <b>Who it is for:</b> residents of every province and territory, also in the year they moved to or from Canada (except in Quebec),
+            with income from work, pensions, EI, investments, self-employment (a business, a profession, farming or fishing), rent or abroad. For
+            a Quebec resident it also prepares the Quebec return (TP-1) from the RL slips, and prints it on Revenu Québec's forms, in English or
+            French, after the federal ones: the two returns are mailed apart, the federal one to the CRA and the TP-1 to Revenu Québec, each
+            signed. It doesn't yet prepare a Quebec return for the year of a move to or from Canada, with a T-slip that comes without its RL slip
+            (such as a T4 for work outside Quebec, or a T2202 from a school outside Quebec), or with a few kinds of income the Quebec return
+            treats on lines of its own (such as scholarships, RDSP income, taxable FHSA withdrawals or workers' compensation): it says so on the
+            return.
           </p>
         </>
       ),
@@ -57,7 +61,7 @@ export const gettingStarted: DocTopic = {
               year stays in this return, marked to check whose it is. A file with the same name as one in this return replaces it and the slips read from it, and is read again. A file
               with the same content as one under another name isn't saved again, nor is a slip that adds nothing to one already here. A reading with anything more
               (a clearer scan, say) is added as a slip of its own: when it may be the same slip as one already here, the message says so, to check at Confirm. A file uploaded by mistake can be deleted,
-              with the slips read from it. You can also type slips in at Confirm.
+              with the slips read from it. Choosing a file's name downloads it as it was uploaded. You can also type slips in at Confirm.
             </li>
             <li>
               <b>Income.</b> What is on your return: the slips found (employment, pensions and benefits, EI, interest and dividends, mutual
@@ -81,7 +85,8 @@ export const gettingStarted: DocTopic = {
             </li>
             <li>
               <b>Confirm.</b> The slips (T4, T5, T3, T5008, T2202), receipts and notices of assessment, read by AI or entered. Check each one against the paper slip (a
-              box AI wasn't sure of is marked), then confirm them. A box AI couldn't read at all shows as <i>couldn't be read</i>: enter it with
+              box AI wasn't sure of is marked; <b>Download the original file</b> saves the file a slip was read from, to look at beside it), then
+              confirm them. While a slip is being changed, save or cancel it first. A box AI couldn't read at all shows as <i>couldn't be read</i>: enter it with
               Edit (0 if it is blank on the paper slip) before the slip can be confirmed. A T5008 often has no cost (box 20): type it in from your records, or the gain
               can't be worked out. Changing a slip makes it unconfirmed again. A slip that may be the same as one above it (the same kind, from the same issuer,
               with no box holding a different amount) says so: if it is, remove one; if they're different slips, keep both. A slip that is the other
@@ -94,10 +99,13 @@ export const gettingStarted: DocTopic = {
               <b>Before you file</b> lists, with a link to each, what keeps the return from its forms: something on Personal info (such as your
               province on December 31), a slip not confirmed, a kind of income added without its slip, a question not answered, and for a couple,
               what is left on the other person's Personal info or slips, as each return reads the other. When nothing is left before filing,{" "}
-              <b>Download the forms</b> gives one PDF: the CRA's T1, the schedules and forms your return uses and the provincial forms, filled in
-              with your name, date of birth, marital status, province and amounts, and a worksheet that shows how each amount was worked out. Add
+              <b>Download the forms</b> saves one PDF: the CRA's T1, the schedules and forms your return uses and the provincial forms, filled in
+              with your name, date of birth, marital status, province and amounts, and a worksheet that shows how each amount was worked out. The
+              first time, Taxi downloads each official form, so it says it is preparing them; if they can't be printed (canada.ca doesn't answer,
+              say), it says why, and you can try again. Add
               your social insurance number, address and the other Step 1 answers by hand, sign the T1 and mail it, or copy the amounts into
-              NETFILE-certified software.
+              NETFILE-certified software. <b>Forms to fill in yourself</b> names any form your return needs that Taxi doesn't print, such as
+              Revenu Québec's Schedule D for the solidarity tax credit, or Manitoba's Schedule MB428-A; the worksheet names them too.
             </li>
           </ol>
         </>

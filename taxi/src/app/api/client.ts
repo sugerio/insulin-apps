@@ -58,20 +58,76 @@ export async function apiRequest<R extends AnyRoute>(route: R, request: RequestO
     if (error instanceof DOMException && error.name === "AbortError") throw error;
     throw new ApiError(0, "network_error", "Couldn't reach the server. Check your connection and try again.");
   }
-  if (response.status === 401) for (const listener of [...unauthorizedListeners]) listener();
-  if (!response.ok) {
-    const parsed = apiErrorBodySchema.safeParse(await response.json().catch(() => null));
-    if (parsed.success) throw new ApiError(response.status, parsed.data.error.code, parsed.data.error.message, parsed.data);
-    throw new ApiError(response.status, "internal", "Something went wrong. Try again in a moment.");
-  }
+  if (!response.ok) throw await refusal(response);
   if (route.response === null) return undefined as ResultOf<R>;
   const result = (route.response as z.ZodType).safeParse(await response.json().catch(() => null));
   if (!result.success) throw new ApiError(response.status, "contract_mismatch", "The server's answer didn't match the API contract.");
   return result.data as ResultOf<R>;
 }
 
+/** The error a refused call answers with: the server's code, message and issues when it gave them. */
+async function refusal(response: Response): Promise<ApiError> {
+  if (response.status === 401) for (const listener of [...unauthorizedListeners]) listener();
+  const parsed = apiErrorBodySchema.safeParse(await response.json().catch(() => null));
+  if (parsed.success) return new ApiError(response.status, parsed.data.error.code, parsed.data.error.message, parsed.data);
+  return new ApiError(response.status, "internal", "Something went wrong. Try again in a moment.");
+}
+
+/** The name a download asks to be saved as (`filename*=UTF-8''…`). */
+function attachmentName(disposition: string | null): string | null {
+  const match = disposition ? /filename\*=UTF-8''([^;\s]+)/i.exec(disposition) : null;
+  if (!match) return null;
+  try {
+    return decodeURIComponent(match[1]!);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Fetches a file (a file route's path, with its query) and hands its bytes to the browser's download, under the name
+ * the server gives it, or `fallbackName`. The app may run in a sandboxed iframe, which opens no new tab: a file is
+ * saved, not opened. A refusal rejects with the server's ApiError, as apiRequest does.
+ */
+export async function saveFile(path: string, fallbackName: string): Promise<void> {
+  let response: Response;
+  try {
+    response = await fetch(path, { credentials: "same-origin" });
+  } catch {
+    throw new ApiError(0, "network_error", "Couldn't reach the server. Check your connection and try again.");
+  }
+  if (!response.ok) throw await refusal(response);
+  const name = attachmentName(response.headers.get("Content-Disposition")) ?? fallbackName;
+  const url = URL.createObjectURL(await response.blob());
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = name;
+  link.rel = "noopener";
+  document.body.append(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1_000);
+}
+
 /** The message to show for a failed call, with each field's issue when the server named them. */
 export function describeError(error: unknown): string {
   if (error instanceof ApiError) return error.message;
   return "Something went wrong. Try again in a moment.";
+}
+
+export type FieldIssue = NonNullable<ApiErrorBody["error"]["issues"]>[number];
+
+/**
+ * What a refused request said about a form's fields: `issueFor` a field's path, and `unshown`, the issues no field of
+ * the form shows (`shown` names the paths it does). `inBanner` says whether the form's banner has something to say:
+ * the error itself when it named no field, or the issues no field shows.
+ */
+export function fieldIssues(error: unknown, shown: (path: string) => boolean): { issueFor: (path: string) => string | undefined; unshown: FieldIssue[]; inBanner: boolean } {
+  const issues = error instanceof ApiError ? (error.body?.error.issues ?? []) : [];
+  const unshown = issues.filter((issue) => !shown(issue.path));
+  return {
+    issueFor: (path) => issues.find((issue) => issue.path === path)?.message,
+    unshown,
+    inBanner: error !== null && error !== undefined && (issues.length === 0 || unshown.length > 0),
+  };
 }

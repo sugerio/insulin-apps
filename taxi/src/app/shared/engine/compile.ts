@@ -51,6 +51,7 @@ const sourceQuestion = z.strictObject({
   note: z.string().min(1).optional(),
   optionLabels: z.record(z.string(), z.string().min(1)).optional(),
   options: z.array(z.string()).optional(),
+  max: z.number().int().min(1).optional(),
 });
 const sourceSlip = z.strictObject({
   title: z.string().min(1),

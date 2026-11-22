@@ -1,10 +1,10 @@
 import "./setup.ts";
-import { fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import type { Estimate, Person, TaxYear } from "#shared";
 import { OWNER, VIEWER, type TestServer } from "../support/server.ts";
 import type { SlipReader } from "../../src/app/server/lib/reader.ts";
-import { renderApp } from "./support.tsx";
+import { holdRequests, renderApp } from "./support.tsx";
 
 /** Every yes/no question of the income, deductions and credits modules. */
 const APPLIES = [
@@ -28,14 +28,14 @@ const APPLIES = [
   "hasTuition",
 ];
 
-/** Alex alone, single, in Ontario, step 1 saved; optionally with What applies answered and a T4. */
-async function seed(server: TestServer, { applies = false, slip = false } = {}) {
+/** Alex alone, single, in Ontario (or the province given), step 1 saved; optionally with What applies answered and a T4. */
+async function seed(server: TestServer, { applies = false, slip = false, province = "ON" } = {}) {
   const alex = (await (await server.call("POST", "/api/people", { as: OWNER, body: { name: "Alex Martin", relationship: "self", birthDate: "1985-04-02" } })).json()) as Person;
   await server.call("POST", "/api/years", { as: OWNER, body: { year: 2025, people: [alex.id] } });
   let year = (await (
     await server.call("PUT", "/api/years/2025/personal-info", {
       as: OWNER,
-      body: { revision: 1, maritalStatus: "single", adults: [{ personId: alex.id, province: "ON", residentAllYear: true }] },
+      body: { revision: 1, maritalStatus: "single", adults: [{ personId: alex.id, province, residentAllYear: true }] },
     })
   ).json()) as TaxYear;
   if (applies) {
@@ -99,9 +99,11 @@ describe("Personal info", () => {
         });
       },
     });
-    // A count of days, not dollars.
+    // A count of days, not dollars, up to the days of the year.
     const days = await screen.findByLabelText("Days you lived in Canada in 2025");
     expect(days.getAttribute("inputmode")).toBe("numeric");
+    fireEvent.change(days, { target: { value: "400" } });
+    expect(screen.getByText("Enter a whole number from 0 to 365")).toBeTruthy();
     fireEvent.change(days, { target: { value: "183" } });
     fireEvent.change(screen.getByLabelText("Your world income for the part of 2025 you didn't live in Canada"), { target: { value: "28,000" } });
     fireEvent.change(screen.getByLabelText("The part of it from Canada"), { target: { value: "0" } });
@@ -109,6 +111,126 @@ describe("Personal info", () => {
     await waitFor(async () =>
       expect(Object.values((await estimate(server)).input.answers)[0]).toMatchObject({ daysResident: "183", nonResidentIncome: "28000", nonResidentCanadianIncome: "0" }),
     );
+  });
+
+  it("shows a refused answer's reason at its field", async () => {
+    await renderApp("/returns/2025/personal", {
+      seed: async (s) => {
+        const alex = (await (await s.call("POST", "/api/people", { as: OWNER, body: { name: "Alex Martin", relationship: "self", birthDate: "1985-04-02" } })).json()) as Person;
+        await s.call("POST", "/api/years", { as: OWNER, body: { year: 2025, people: [alex.id] } });
+        await s.call("PUT", "/api/years/2025/personal-info", {
+          as: OWNER,
+          body: { revision: 1, maritalStatus: "single", adults: [{ personId: alex.id, province: "ON", residentAllYear: false }] },
+        });
+      },
+    });
+    fireEvent.change(await screen.findByLabelText("Days you lived in Canada in 2025"), { target: { value: "183.5" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    // The facts were saved, so the form starts again from the year they answered with, keeping what was typed.
+    await waitFor(() => expect(screen.getByLabelText("Days you lived in Canada in 2025").getAttribute("aria-invalid")).toBe("true"));
+    const days = screen.getByLabelText("Days you lived in Canada in 2025") as HTMLInputElement;
+    expect(days.value).toBe("183.5");
+    expect(within(days.closest("div.flex-col")!).getByText("Enter a whole number from 0 to 365")).toBeTruthy();
+    // Every issue is at its field, so no banner repeats it.
+    expect(screen.queryByText("Some answers don't fit their questions")).toBeNull();
+  });
+
+  it("locks the facts while they are saved, so nothing typed meanwhile is lost", async () => {
+    await renderApp("/returns/2025/personal", {
+      seed: async (s) => {
+        const alex = (await (await s.call("POST", "/api/people", { as: OWNER, body: { name: "Alex Martin", relationship: "self", birthDate: "1985-04-02" } })).json()) as Person;
+        await s.call("POST", "/api/years", { as: OWNER, body: { year: 2025, people: [alex.id] } });
+        await s.call("PUT", "/api/years/2025/personal-info", {
+          as: OWNER,
+          body: { revision: 1, maritalStatus: "single", adults: [{ personId: alex.id, province: "ON", residentAllYear: false }] },
+        });
+      },
+    });
+    const province = (await screen.findByLabelText("Province on December 31")) as HTMLSelectElement;
+    const days = (await screen.findByLabelText("Days you lived in Canada in 2025")) as HTMLInputElement;
+    fireEvent.change(province, { target: { value: "BC" } });
+    fireEvent.change(days, { target: { value: "183" } });
+    const held = holdRequests((method, path) => method === "PUT" && path.startsWith("/api/years/2025/"));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(held.held()).toBe(1));
+    expect(province.disabled).toBe(true);
+    expect(days.disabled).toBe(true);
+    for (const radio of screen.getAllByRole("radio")) expect((radio as HTMLButtonElement).disabled).toBe(true);
+    held.release();
+    const after = async () => (await screen.findByLabelText("Province on December 31")) as HTMLSelectElement;
+    await waitFor(async () => expect((await after()).disabled).toBe(false));
+    expect((await after()).value).toBe("BC");
+    expect((screen.getByLabelText("Days you lived in Canada in 2025") as HTMLInputElement).value).toBe("183");
+  });
+
+  it("keeps what was typed, the lock and the save's answer when an upload on another step changes the year meanwhile", async () => {
+    let read!: () => void;
+    const reading = new Promise<void>((resolve) => (read = resolve));
+    const late: SlipReader = {
+      read: async () => {
+        await reading;
+        return { kind: "read", taxYear: 2025, model: "test-model", slips: [{ type: "T5", person: "Alex Martin", issuer: "Lakeview Credit Union", boxes: { 13: "1250" }, unsure: [] }] };
+      },
+    };
+    const { router } = await renderApp("/returns/2025/upload", {
+      server: { reader: () => late },
+      seed: async (s) => {
+        const alex = (await (await s.call("POST", "/api/people", { as: OWNER, body: { name: "Alex Martin", relationship: "self", birthDate: "1985-04-02" } })).json()) as Person;
+        await s.call("POST", "/api/years", { as: OWNER, body: { year: 2025, people: [alex.id] } });
+        await s.call("PUT", "/api/years/2025/personal-info", {
+          as: OWNER,
+          body: { revision: 1, maritalStatus: "single", adults: [{ personId: alex.id, province: "ON", residentAllYear: false }] },
+        });
+      },
+    });
+    fireEvent.change(await screen.findByLabelText("Choose files"), { target: { files: [new File(["%PDF-1.4 late"], "T5.pdf", { type: "application/pdf" })] } });
+    await act(() => router.navigate(router.state.location.pathname.replace(/upload$/, "personal")));
+    const province = async () => (await screen.findByLabelText("Province on December 31")) as HTMLSelectElement;
+    const days = async () => (await screen.findByLabelText("Days you lived in Canada in 2025")) as HTMLInputElement;
+    fireEvent.change(await province(), { target: { value: "BC" } });
+    fireEvent.change(await days(), { target: { value: "183" } });
+    const held = holdRequests((method, path) => method === "PUT" && path === "/api/years/2025/personal-info");
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(held.held()).toBe(1));
+
+    // The upload finishes: the year changes, and the facts start again from it, still locked, with what was typed.
+    read();
+    expect(await screen.findByRole("link", { name: /Upload documents\s*\(done\)/ })).toBeTruthy();
+    await waitFor(async () => expect((await days()).value).toBe("183"));
+    expect((await province()).value).toBe("BC");
+    expect((await province()).disabled).toBe(true);
+
+    // The save was sent before the upload changed the year: it is refused, and the page says so.
+    held.release();
+    expect(await screen.findByText("Someone else changed this year")).toBeTruthy();
+    expect((await province()).disabled).toBe(false);
+    expect((await province()).value).toBe("BC");
+    expect((await days()).value).toBe("183");
+  });
+
+  it("asks where you lived under its own heading and your spouse's income under theirs, and says what a move to or from Canada does", async () => {
+    await renderApp("/returns/2025/personal", {
+      seed: async (s) => {
+        const alex = (await (await s.call("POST", "/api/people", { as: OWNER, body: { name: "Alex Martin", relationship: "self", birthDate: "1985-04-02" } })).json()) as Person;
+        await s.call("POST", "/api/people", { as: OWNER, body: { name: "Sam Martin", relationship: "spouse", birthDate: "1987-09-15" } });
+        await s.call("POST", "/api/years", { as: OWNER, body: { year: 2025, people: [alex.id] } });
+        await s.call("PUT", "/api/years/2025/personal-info", {
+          as: OWNER,
+          body: { revision: 1, maritalStatus: "married", adults: [{ personId: alex.id, province: "ON", residentAllYear: false }] },
+        });
+      },
+    });
+    const headingOver = (element: HTMLElement) => within(element.closest<HTMLElement>('[data-slot="card"]')!).getByRole("heading").textContent;
+    expect(headingOver(await screen.findByLabelText("Days you lived in Canada in 2025"))).toBe("Where you lived");
+    expect(headingOver(screen.getByLabelText("The part of it from Canada"))).toBe("Where you lived");
+    expect(headingOver(screen.getByLabelText("Your spouse's or partner's 2025 net income"))).toBe("Your spouse or partner");
+
+    const notes = screen.getByRole("heading", { name: "How these answers affect the tax" }).closest<HTMLElement>('[data-slot="card"]')!.textContent;
+    expect(notes).not.toMatch(/doesn't handle it yet/);
+    expect(notes).toMatch(/reduces the personal amounts .* by the days in Canada/);
+    expect(notes).toMatch(/A Quebec return for the year of a move isn't handled yet\./);
+    // Every province and territory is handled: no empty group of those that aren't.
+    for (const group of document.querySelectorAll("optgroup")) expect(group.querySelectorAll("option").length).toBeGreaterThan(0);
   });
 });
 
@@ -128,8 +250,8 @@ describe("Income", () => {
     fireEvent.click(row);
     expect((within(onReturn).getByLabelText(/^Box 14/) as HTMLInputElement).value).toBe("60000");
     expect((within(onReturn).getByLabelText(/^Box 24/) as HTMLInputElement).value).toBe("");
-    // Typed in, not read from a file: nothing to open.
-    expect(within(onReturn).queryByRole("link", { name: "Open the original file" })).toBeNull();
+    // Typed in, not read from a file: nothing to download.
+    expect(within(onReturn).queryByRole("button", { name: "Download the original file" })).toBeNull();
     expect(within(onReturn).queryByRole("button", { name: "Save" })).toBeNull();
     fireEvent.click(row);
     expect(within(onReturn).queryByRole("table")).toBeNull();
@@ -259,7 +381,7 @@ describe("Income", () => {
     await waitFor(() => expect(within(screen.getByRole("region", { name: "On your return" })).getByRole("button", { name: /T5 from Lakeview Credit Union/ })).toBeTruthy(), { timeout: 5000 });
     const onReturn = screen.getByRole("region", { name: "On your return" });
     fireEvent.click(within(onReturn).getByRole("button", { name: /T5 from Lakeview Credit Union/ }));
-    expect(within(onReturn).getByRole("link", { name: "Open the original file" })).toBeTruthy();
+    expect(within(onReturn).getByRole("button", { name: "Download the original file" })).toBeTruthy();
   });
 });
 
@@ -287,6 +409,48 @@ describe("Confirm", () => {
     fireEvent.click(screen.getByRole("button", { name: "Confirm 1 slip" }));
     expect(await screen.findByText("Confirmed")).toBeTruthy();
     expect((await estimate(server)).input.slips).toEqual([expect.objectContaining({ type: "T4", boxes: { 14: "60000", 22: "9000" } })]);
+  });
+
+  it("locks a slip's form while it is saved, so nothing typed meanwhile is lost", async () => {
+    const { server } = await renderApp("/returns/2025/confirm", { seed: (s) => seed(s, { applies: true, slip: true }).then(() => undefined) });
+    fireEvent.click(await screen.findByRole("button", { name: "Edit T4 from Maple Corp" }));
+    const form = screen.getByRole("form", { name: "Edit T4 from Maple Corp" });
+    const box22 = within(form).getByLabelText(/Box 22/) as HTMLInputElement;
+    fireEvent.change(box22, { target: { value: "9500" } });
+    const held = holdRequests((method, path) => method === "PATCH" && path.startsWith("/api/years/2025/slips/"));
+    fireEvent.click(within(form).getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(held.held()).toBe(1));
+    expect(box22.disabled).toBe(true);
+    expect((within(form).getByRole("button", { name: "Cancel" }) as HTMLButtonElement).disabled).toBe(true);
+    held.release();
+    expect(await screen.findByText(/Box 22 Income tax deducted: \$9,500\.00/)).toBeTruthy();
+    expect((await estimate(server)).input.slips).toEqual([expect.objectContaining({ boxes: expect.objectContaining({ 22: "9500" }) })]);
+  });
+
+  it("waits for a slip being changed before confirming", async () => {
+    await renderApp("/returns/2025/confirm", { seed: (s) => seed(s, { applies: true, slip: true }).then(() => undefined) });
+    fireEvent.click(await screen.findByRole("button", { name: "Edit T4 from Maple Corp" }));
+    const form = screen.getByRole("form", { name: "Edit T4 from Maple Corp" });
+    fireEvent.change(within(form).getByLabelText(/Box 22/), { target: { value: "9500" } });
+    const confirm = () => screen.getByRole("button", { name: "Confirm 1 slip" }) as HTMLButtonElement;
+    expect(confirm().disabled).toBe(true);
+    expect(screen.getByText("Save or cancel the slip you're changing before confirming.")).toBeTruthy();
+    fireEvent.click(within(form).getByRole("button", { name: "Cancel" }));
+    expect(confirm().disabled).toBe(false);
+  });
+
+  it("locks the slips while they are confirmed", async () => {
+    await renderApp("/returns/2025/confirm", { seed: (s) => seed(s, { applies: true, slip: true }).then(() => undefined) });
+    const held = holdRequests((method, path) => method === "POST" && path === "/api/years/2025/slips/confirm");
+    fireEvent.click(await screen.findByRole("button", { name: "Confirm 1 slip" }));
+    await waitFor(() => expect(held.held()).toBe(1));
+    const button = (name: string) => screen.getByRole("button", { name }) as HTMLButtonElement;
+    expect(button("Edit T4 from Maple Corp").disabled).toBe(true);
+    expect(button("Remove T4 from Maple Corp").disabled).toBe(true);
+    expect(button("Add a slip").disabled).toBe(true);
+    held.release();
+    expect(await screen.findByText("Confirmed")).toBeTruthy();
+    expect(button("Edit T4 from Maple Corp").disabled).toBe(false);
   });
 
   it("goes on to Finish, and shows months of study as months, not dollars", async () => {
@@ -383,6 +547,17 @@ describe("Groups and notes", () => {
     const share = screen.getByLabelText("Share used for work");
     expect(share.parentElement!.textContent).toContain("%");
     expect(screen.getByLabelText("Home expenses for 2025").parentElement!.textContent).toContain("$");
+  });
+
+  it("says a count is above its question's max as it is typed", async () => {
+    await renderApp("/returns/2025/deductions", { seed: (s) => seed(s, { applies: true, province: "NU" }).then(() => undefined) });
+    fireEvent.click(await screen.findByRole("button", { name: "Add Lived in the North" }));
+    const days = screen.getByLabelText("Days you lived there in 2025");
+    fireEvent.change(days, { target: { value: "366" } });
+    expect(days.getAttribute("aria-invalid")).toBe("true");
+    expect(screen.getByText("Enter a whole number from 0 to 365")).toBeTruthy();
+    fireEvent.change(days, { target: { value: "365" } });
+    expect(screen.queryByText("Enter a whole number from 0 to 365")).toBeNull();
   });
 
   it("shows a note once a yes/no fact is added", async () => {

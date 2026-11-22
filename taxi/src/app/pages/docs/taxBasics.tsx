@@ -93,8 +93,9 @@ export const taxBasics: DocTopic = {
         <p>
           Your provincial tax is the tax of the province you lived in on December 31, even if you lived somewhere else for part of the year. Quebec
           residents also file a separate Quebec return (TP-1) with Revenu Québec, from the RL slips their employers and payers send with the
-          T-slips. The app works it out with the federal return; Revenu Québec works out the solidarity tax credit (Schedule D) and can work
-          out the senior assistance credit itself.
+          T-slips. The app works it out with the federal return. Revenu Québec works out the solidarity tax credit, but only for someone who
+          files Schedule D with the TP-1: the app doesn't print it, and names it on Finish and on the worksheet to fill in yourself. Revenu
+          Québec can work out the senior assistance credit itself.
         </p>
       ),
     },

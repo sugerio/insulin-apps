@@ -50,7 +50,8 @@ assessment, say) is best uploaded one document at a time. Each slip goes to the 
 naming someone else in the year, such as a child's T4, isn't added, since they have no return here, and the message
 says whose it is; a receipt for them, such as a child's medical receipt, stays in the return it was uploaded in. A
 slip whose name matches no one in the year stays there too, marked to check whose it is. Every slip read this way
-starts unconfirmed: someone checks it against the paper slip at Confirm. A box AI wasn't sure of is marked; one it
+starts unconfirmed: someone checks it against the paper slip at Confirm, where **Download the original file** saves the
+file it was read from (on Upload documents, a file's name downloads it). A box AI wasn't sure of is marked; one it
 couldn't read at all shows as couldn't be read, and the slip can't be confirmed until that box is entered (0 when it
 is blank on the paper slip). Saving the slip's other boxes leaves it marked.
 
@@ -122,7 +123,10 @@ left under Before you file, and the download is refused.
 
 - The forms are the CRA's print versions. The first time an organization prints a return, Taxi downloads them from
   canada.ca and keeps them in its database. It checks each file against the one it was measured on, and refuses to fill
-  a form the CRA has changed, rather than write amounts in the wrong places.
+  a form the CRA has changed, rather than write amounts in the wrong places. When canada.ca (or revenuquebec.ca)
+  doesn't send a form within 15 seconds, the print is refused with a message to try again later. Finish says the forms
+  are being prepared while they are, and shows that message if they can't be. The PDF is saved as a file, not opened in
+  a new tab: the app can run in a frame inside Insulin Apps, which opens none.
 - Each amount is written in its box, by row number, from the same lines as the estimate. A box that is zero is left
   blank. The tax bracket tables are filled in the column of your bracket. A number of children or months is written as
   a whole number.
@@ -135,6 +139,11 @@ left under Before you file, and the download is refused.
   under the other person, with a link to it.
 - A row Taxi doesn't know (a dependant's details, each expense category, a property's address) is left blank. The
   worksheet lists the slips, the answers, the hints applied and every line with its formula.
+- A form the return needs that Taxi doesn't print is named under "Forms to fill in yourself", on Finish and on the
+  worksheet: Revenu Québec's Schedule D (the solidarity tax credit) for a resident of Quebec; Schedule 6 for residents
+  of Quebec, Alberta or Nunavut (5005-S6, 5009-S6, 5014-S6) when the return gets the Canada workers benefit or reports
+  its advance payments from an RC210 slip, even with no benefit; Schedule MB428-A for Manitoba's family tax benefit;
+  and Schedule ON(S11), BC(S11) or SK(S11) for provincial tuition amounts.
 
 ## How saves stay consistent
 
@@ -152,19 +161,25 @@ a name, a birth date, an amount or a document.
 ## Limits today
 
 - The forms leave the social insurance number, address, signature and the other Step 1 answers to fill in by hand.
-  Taxi doesn't print Schedule 7 (RRSP contributions), Form T1135 and a few worksheets (such as ON428-A).
+  Taxi doesn't print Schedule 7 (RRSP contributions), Form T1135, a few worksheets (such as ON428-A), or the forms
+  it names under "Forms to fill in yourself" (above).
 - The 2025 rules cover one or two adults in every province and territory:
   - the T1, or the 5005-R for a resident of Quebec, with Schedules 2, 3, 5, 6, 8, 9, 11 and 12 and Forms T2125, T2042,
     T2121, T776, T777, T778, T1-M, T1032, T2091(IND), T2204, T2209, T2036 and T2222;
   - the Form 428 of each province and territory, with its S2 and S11 schedules and its Form 479 credits;
   - for a resident of Quebec, Revenu Québec's TP-1 with Schedules B, C, D, F, J, K, P, Q, R, T and U, from the RL
     slips. You can print Revenu Québec's forms in English or in French;
-  - people who moved to or from Canada during the year: the personal amounts are reduced by the days in Canada, unless
-    at least 90% of their income for the rest of the year came from Canada.
+  - people who moved to or from Canada during the year, outside Quebec: the personal amounts are reduced by the days in
+    Canada, unless they had income for the rest of the year and at least 90% of it came from Canada.
 - Not handled, and said so when it applies: property treated as sold when you leave Canada (Forms T1243 and T1161), a
   T4 with both CPP and QPP (Form RC381), capital cost allowance for more than one class, a farming loss, an amount in a
   slip box the app doesn't read (such as a T5's foreign income, box 15, or a T4A's fees for services, box 048), and on
-  the TP-1 employment outside Quebec, rental and foreign income, moving expenses and an OAS overpayment recovered.
+  the TP-1 the year of a move to or from Canada, a T-slip without the RL slip issued with it (a T4, T5, T3 or T2202,
+  or a pension, annuity, RRSP or RRIF slip; so employment outside Quebec, or tuition at a school outside Quebec,
+  which issues no RL-8), scholarships, RDSP income and other income on a T4A, RRSP amounts other than withdrawals and
+  annuity payments (such as a refund of excess contributions), taxable FHSA withdrawals, workers' compensation, the
+  security option and Canadian Forces deductions on a T4, rental and foreign income, moving expenses and an OAS
+  overpayment recovered.
 - A T5008 without its cost (box 20), which brokers often leave blank, can't be counted until the cost is typed in at
   Confirm.
 - Not handled and not asked: electing to stop CPP contributions (Form CPT30), a CPP disability pension (which changes

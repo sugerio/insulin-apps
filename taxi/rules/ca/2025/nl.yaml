@@ -184,37 +184,44 @@ lines:
   NL428.17:
     label: Newfoundland and Labrador age amount
     formula: >-
-      round((if(person.age >= 65, max(0, param.nlAgeAmountMax - round(max(0, line.T1.23600 - param.nlAgeAmountThreshold) * param.nlAgeAmountRate, 2)), 0)) * line.RES.factor, 2)
-    source: "Worksheet NL428, line 58080: for people born in 1960 or earlier"
+      if(person.age >= 65, max(0, round(param.nlAgeAmountMax * line.RES.factor, 2)
+      - round(max(0, line.T1.23600 - round(param.nlAgeAmountThreshold * line.RES.factor, 2)) * param.nlAgeAmountRate, 2)), 0)
+    source: "Worksheet NL428, line 58080: for people born in 1960 or earlier, $7,064 less 15% of net income over $38,712 (both amounts prorated for a part-year resident: canada.ca, Completing your return for newcomers, Example 2)"
+  # For a part-year resident, the base and the maximum are prorated, and then the net income is subtracted, not
+  # prorated (canada.ca, completing a return for newcomers, Example 3 for line 30300).
   NL428.20:
     label: Newfoundland and Labrador spouse or common-law partner amount
     formula: >-
-      round((if(line.HH.partner == 1, min(param.nlSpouseMax, max(0, param.nlSpouseBase - line.HH.spouseNetIncome)), 0)) * line.RES.factor, 2)
+      round(if(line.HH.partner == 1, min(round(param.nlSpouseMax * line.RES.factor, 2), max(0, round(param.nlSpouseBase * line.RES.factor, 2) - line.HH.spouseNetIncome)), 0), 2)
 
   NL428.23:
     label: Newfoundland and Labrador amount for an eligible dependant
     formula: >-
-      round((if(line.HH.partner == 0 and family.childrenUnder18 > 0, min(param.nlSpouseMax, max(0, param.nlSpouseBase - answer.dependantNetIncome)), 0)) * line.RES.factor, 2)
+      round(if(line.HH.partner == 0 and family.childrenUnder18 > 0, min(round(param.nlSpouseMax * line.RES.factor, 2), max(0, round(param.nlSpouseBase * line.RES.factor, 2) - answer.dependantNetIncome)), 0), 2)
     source: "NL428 lines 21 to 23: the base minus their net income, up to the maximum"
   # An adult dependant with an impairment gets the infirm dependant amount, or the caregiver amount when they lived in
-  # your home, never both (5001-PC, line 58400): whichever is more. The app knows one such dependant.
+  # your home, never both (5001-PC, line 58400): whichever is more. The app knows one such dependant. For a part-year
+  # resident, both are worked out from the prorated base and maximum before choosing, as on line 30450.
   NL.infirmAmount:
     label: Newfoundland and Labrador amount for an infirm dependant, before choosing
     formula: >-
       if(answer.hasInfirmDependant, if(answer.infirmDependants > 1,
       unsupported("The Newfoundland and Labrador amounts for more than one adult dependant aren't handled by this app yet"),
-      if(answer.infirmDependants == 1, min(param.nlInfirmMax, max(0, param.nlInfirmBase - answer.infirmDependantIncome)), 0)), 0)
+      if(answer.infirmDependants == 1, min(round(param.nlInfirmMax * line.RES.factor, 2), max(0, round(param.nlInfirmBase * line.RES.factor, 2) - answer.infirmDependantIncome)), 0)), 0)
     source: "Worksheet NL428, line 58200: $11,067 less the dependant's net income, up to $3,515"
   NL.caregiverAmount:
     label: Newfoundland and Labrador caregiver amount, before choosing
     formula: >-
-      if(answer.hasInfirmDependant, if(answer.infirmDependants == 1, if(answer.infirmDependantHome == "with_you",
-      min(param.nlCaregiverMax, max(0, param.nlCaregiverBase - answer.infirmDependantIncome)), 0), 0), 0)
-    source: "Worksheet NL428, line 58400: $20,689 less the dependant's net income, up to $3,514, for a dependant who lived with you"
+      if(answer.hasInfirmDependant, if(answer.infirmDependants == 1, if(person.province == "NL" and answer.infirmDependantHome == "with_you",
+      min(round(param.nlCaregiverMax * line.RES.factor, 2), max(0, round(param.nlCaregiverBase * line.RES.factor, 2) - answer.infirmDependantIncome)), 0), 0), 0)
+    source: >-
+      Worksheet NL428, line 58400: $20,689 less the dependant's net income, up to $3,514, for a dependant who lived with
+      you. A spouse living elsewhere, whose NL428 Schedule NL(S2) reads, isn't asked where the dependant lived: theirs
+      is the amount for infirm dependants, which needs no shared home
   NL428.24:
     label: Newfoundland and Labrador amount for infirm dependants age 18 or older
     formula: >-
-      round((if(line.NL428.38 > 0, 0, line.NL.infirmAmount)) * line.RES.factor, 2)
+      if(line.NL428.38 > 0, 0, line.NL.infirmAmount)
     source: "NL428 line 58200"
   NL428.31:
     label: Newfoundland and Labrador volunteer firefighters' amount
@@ -246,7 +253,7 @@ lines:
   NL428.38:
     label: Newfoundland and Labrador caregiver amount
     formula: >-
-      round((if(line.NL.caregiverAmount > 0 and line.NL.caregiverAmount >= line.NL.infirmAmount, line.NL.caregiverAmount, 0)) * line.RES.factor, 2)
+      if(line.NL.caregiverAmount > 0 and line.NL.caregiverAmount >= line.NL.infirmAmount, line.NL.caregiverAmount, 0)
     source: "NL428 line 58400: claimed instead of line 58200 when it is at least as much"
   NL428.40:
     label: Newfoundland and Labrador disability amount for self
@@ -274,12 +281,12 @@ lines:
     source: "NL428 line 58560, from Schedule NL(S11)"
   NL428.45:
     label: Tuition and education amounts transferred from a child or grandchild
-    formula: "line.CHILD.provincialTuition"
-    source: "NL428 line 58600: the provincial amount they designate on their T2202, taken as the same as federally"
+    formula: "round(line.CHILD.provincialTuition * line.RES.factor, 2)"
+    source: "NL428 line 58600: the provincial amount they designate on their T2202, taken as the same as federally. Prorated for a part-year resident (RC4018, Appendix K)"
   NL428.46:
     label: Newfoundland and Labrador amounts transferred from your spouse or common-law partner
-    formula: "if(line.HH.partner == 1 and family.partnerInYear, line.NLS2.12, 0)"
-    source: "NL428 line 58640, from Schedule NL(S2)"
+    formula: "if(line.HH.partner == 1 and family.partnerInYear, round(line.NLS2.12 * line.RES.factor, 2), 0)"
+    source: "NL428 line 58640, from Schedule NL(S2). Prorated for a part-year resident (RC4018, Appendix K); the schedule shows the whole transfer"
   NL428.47:
     label: Newfoundland and Labrador credit amounts before medical expenses
     formula: "line.NL428.42 + line.NL428.43 + line.NL428.44 + line.NL428.45 + line.NL428.46"
@@ -401,7 +408,8 @@ lines:
   # Schedule NL(S11) – Newfoundland and Labrador tuition and education amounts (the student's own)
   NLS11.1:
     label: Unused Newfoundland and Labrador tuition and education amounts from your 2024 notice of assessment
-    formula: "answer.unusedProvincialTuition"
+    formula: 'if(person.province == "AB", 0, answer.unusedProvincialTuition)'
+    source: "None for a spouse in Alberta, whose own return doesn't carry unused provincial tuition forward (Schedule NL(S2) reads this schedule for them)"
   NLS11.2:
     label: Tuition fees for 2025
     formula: "line.S11.8"

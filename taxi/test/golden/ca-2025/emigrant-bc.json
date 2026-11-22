@@ -1,5 +1,5 @@
 {
-  "about": "A person who left British Columbia on September 30, 2025 with no income outside Canada for the rest of the year: the full personal amounts stay (all of that period's income was from Canada), and leaving with only registered plans needs no deemed disposition. Synthetic data.",
+  "about": "A person who left British Columbia on September 30, 2025 whose only income for the rest of the year, $4,000, was from Canada: the full personal amounts stay (90% or more of that period's world income was from Canada), and leaving with only registered plans needs no deemed disposition. Synthetic data.",
   "input": {
     "year": 2025,
     "people": [
@@ -19,8 +19,8 @@
     "answers": {
       "p1": {
         "daysResident": "273",
-        "nonResidentIncome": "0",
-        "nonResidentCanadianIncome": "0",
+        "nonResidentIncome": "4000",
+        "nonResidentCanadianIncome": "4000",
         "departureProperty": false,
         "hasSelfEmployment": false,
         "hasRentalIncome": false,

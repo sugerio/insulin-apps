@@ -1,6 +1,6 @@
 import { render } from "@testing-library/react";
 import { createMemoryRouter, RouterProvider } from "react-router";
-import { afterEach, vi } from "vitest";
+import { afterEach, onTestFinished, vi } from "vitest";
 import { AuthProvider } from "../../src/app/auth/AuthProvider.tsx";
 import { routes } from "../../src/app/router.tsx";
 import type { AppOptions } from "../../src/app/server/app.ts";
@@ -36,4 +36,47 @@ export async function renderApp(path: string, options: { as?: Identity; seed?: (
     </AuthProvider>,
   );
   return { router, server: app };
+}
+
+/**
+ * Holds the page's requests that `match` before they reach the server, until released: what the page does meanwhile is
+ * what a slow network shows. Call it after `renderApp`, which answers the page's requests.
+ */
+export function holdRequests(match: (method: string, path: string) => boolean) {
+  const send = globalThis.fetch;
+  let release!: () => void;
+  const released = new Promise<void>((resolve) => (release = resolve));
+  let held = 0;
+  vi.stubGlobal("fetch", async (input: RequestInfo | URL, init: RequestInit = {}) => {
+    const url = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url, ORIGIN);
+    if (match(init.method ?? "GET", url.pathname)) {
+      held += 1;
+      await released;
+    }
+    return send(input, init);
+  });
+  return { release, held: () => held };
+}
+
+/** The files the page hands to the browser's download (a Blob URL and an `<a download>` click): each one's name and bytes. */
+export function catchDownloads() {
+  const saved: { name: string; blob: Blob }[] = [];
+  const blobs = new Map<string, Blob>();
+  const created = URL.createObjectURL;
+  const revoked = URL.revokeObjectURL;
+  URL.createObjectURL = (blob: Blob) => {
+    const url = `blob:taxi-test/${blobs.size}`;
+    blobs.set(url, blob);
+    return url;
+  };
+  URL.revokeObjectURL = () => {};
+  const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function (this: HTMLAnchorElement) {
+    if (this.download && blobs.has(this.href)) saved.push({ name: this.download, blob: blobs.get(this.href)! });
+  });
+  onTestFinished(() => {
+    URL.createObjectURL = created;
+    URL.revokeObjectURL = revoked;
+    click.mockRestore();
+  });
+  return saved;
 }

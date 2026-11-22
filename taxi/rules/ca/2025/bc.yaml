@@ -198,24 +198,29 @@ lines:
   BC428.17:
     label: British Columbia age amount
     formula: >-
-      round((if(person.age >= 65, max(0, param.bcAgeAmountMax - round(max(0, line.T1.23600 - param.bcAgeAmountThreshold) * param.bcAgeAmountRate, 2)), 0)) * line.RES.factor, 2)
-    source: "Worksheet BC428, line 58080: for people born in 1960 or earlier"
+      if(person.age >= 65, max(0, round(param.bcAgeAmountMax * line.RES.factor, 2)
+      - round(max(0, line.T1.23600 - round(param.bcAgeAmountThreshold * line.RES.factor, 2)) * param.bcAgeAmountRate, 2)), 0)
+    source: "Worksheet BC428, line 58080: for people born in 1960 or earlier, $5,799 less 15% of net income over $43,169 (both amounts prorated for a part-year resident: canada.ca, Completing your return for newcomers, Example 2)"
+  # For a part-year resident, the base and the maximum are prorated, and then the net income is subtracted, not
+  # prorated (canada.ca, completing a return for newcomers, Example 3 for line 30300).
   BC428.20:
     label: British Columbia spouse or common-law partner amount
     formula: >-
-      round((if(line.HH.partner == 1, min(param.bcSpouseMax, max(0, param.bcSpouseBase - line.HH.spouseNetIncome)), 0)) * line.RES.factor, 2)
+      round(if(line.HH.partner == 1, min(round(param.bcSpouseMax * line.RES.factor, 2), max(0, round(param.bcSpouseBase * line.RES.factor, 2) - line.HH.spouseNetIncome)), 0), 2)
 
   BC428.23:
     label: British Columbia amount for an eligible dependant
     formula: >-
-      round((if(line.HH.partner == 0 and family.childrenUnder18 > 0, min(param.bcSpouseMax, max(0, param.bcSpouseBase - answer.dependantNetIncome)), 0)) * line.RES.factor, 2)
+      round(if(line.HH.partner == 0 and family.childrenUnder18 > 0, min(round(param.bcSpouseMax * line.RES.factor, 2), max(0, round(param.bcSpouseBase * line.RES.factor, 2) - answer.dependantNetIncome)), 0), 2)
     source: "BC428 lines 21 to 23: the base minus their net income, up to the maximum"
   # The caregiver amount is for a dependant 18 or older: British Columbia has no amount for an infirm child under 18
-  # (federal line 30500). The adult dependant's column is worked out once: more than one is refused on line 30450.
+  # (federal line 30500). The adult dependant's column is worked out once: more than one is refused on line 30450. For
+  # a part-year resident, each column's base and maximum are prorated as on line 20, and line 4 is line 20 as claimed.
   BC428.24:
     label: British Columbia caregiver amount
     formula: >-
-      round((if(line.HH.partner == 1 and answer.spouseInfirm, max(0, min(param.bcCaregiverMax, max(0, param.bcCaregiverBase - line.HH.spouseNetIncome)) - line.BC428.20), 0) + if(answer.hasInfirmDependant, if(answer.infirmDependants > 0, min(param.bcCaregiverMax, max(0, param.bcCaregiverBase - answer.infirmDependantIncome)), 0), 0)) * line.RES.factor, 2)
+      round(if(line.HH.partner == 1 and answer.spouseInfirm, max(0, min(round(param.bcCaregiverMax * line.RES.factor, 2), max(0, round(param.bcCaregiverBase * line.RES.factor, 2) - line.HH.spouseNetIncome)) - line.BC428.20), 0)
+      + if(answer.hasInfirmDependant, if(answer.infirmDependants > 0, min(round(param.bcCaregiverMax * line.RES.factor, 2), max(0, round(param.bcCaregiverBase * line.RES.factor, 2) - answer.infirmDependantIncome)), 0), 0), 2)
     source: "Worksheet BC428, line 58175: for each dependant, $24,810 less their net income (up to $5,659), less what line 58120 claims for them"
   BC428.25:
     label: British Columbia amounts for you and your dependants
@@ -271,12 +276,15 @@ lines:
     source: "BC428 line 42 (58560): Schedule BC(S11) line 10"
   BC428.43:
     label: British Columbia tuition transferred from a child or grandchild
-    formula: "line.CHILD.provincialTuition"
-    source: "BC428 line 43 (58600): the provincial amount each student designated to you on their T2202"
+    formula: "round(line.CHILD.provincialTuition * line.RES.factor, 2)"
+    source: "BC428 line 43 (58600): the provincial amount each student designated to you on their T2202. Prorated for a part-year resident (RC4018, Appendix K)"
   BC428.44:
     label: Amounts transferred from your spouse or common-law partner
-    formula: "if(line.HH.partner == 1 and family.partnerInYear, if(line.BCS2.5 == 0, 0, line.BCS2.12), 0)"
-    source: "Schedule BC(S2): their unused British Columbia age, pension income and disability amounts, and the tuition they designate to you"
+    formula: "if(line.HH.partner == 1 and family.partnerInYear, if(line.BCS2.5 == 0, 0, round(line.BCS2.12 * line.RES.factor, 2)), 0)"
+    source: >-
+      Schedule BC(S2): their unused British Columbia age, pension income and disability amounts, and the tuition they
+      designate to you. Prorated for a part-year resident (RC4018, Appendix K: line 58640); the schedule shows the whole
+      transfer
   BC428.45:
     label: British Columbia credit amounts before medical expenses
     formula: "line.BC428.40 + line.BC428.41 + line.BC428.42 + line.BC428.43 + line.BC428.44"
@@ -398,8 +406,10 @@ lines:
     source: "BC(S11) lines 5 and 6: less line 40 of Form BC428"
   BCS11.7:
     label: Unused tuition and education amounts claimed for 2025
-    formula: "min(answer.unusedProvincialTuition, line.BCS11.6)"
-    source: "BC(S11) lines 1 and 7: the unused amounts on your 2024 notice of assessment"
+    formula: 'min(if(person.province == "AB", 0, answer.unusedProvincialTuition), line.BCS11.6)'
+    source: >-
+      BC(S11) lines 1 and 7: the unused amounts on your 2024 notice of assessment. None for a spouse in Alberta, whose
+      own return doesn't carry unused provincial tuition forward (Schedule BC(S2) reads this schedule for them)
   BCS11.9:
     label: 2025 tuition amount claimed
     formula: "min(line.BCS11.2, line.BCS11.6 - line.BCS11.7)"

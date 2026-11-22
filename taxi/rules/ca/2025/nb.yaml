@@ -156,37 +156,44 @@ lines:
   NB428.10:
     label: New Brunswick age amount
     formula: >-
-      round((if(person.age >= 65, max(0, param.nbAgeAmountMax - round(max(0, line.T1.23600 - param.nbAgeAmountThreshold) * param.nbAgeAmountRate, 2)), 0)) * line.RES.factor, 2)
-    source: "Worksheet NB428, line 58080: for people born in 1960 or earlier"
+      if(person.age >= 65, max(0, round(param.nbAgeAmountMax * line.RES.factor, 2)
+      - round(max(0, line.T1.23600 - round(param.nbAgeAmountThreshold * line.RES.factor, 2)) * param.nbAgeAmountRate, 2)), 0)
+    source: "Worksheet NB428, line 58080: for people born in 1960 or earlier, $6,037 less 15% of net income over $44,945 (both amounts prorated for a part-year resident: canada.ca, Completing your return for newcomers, Example 2)"
+  # For a part-year resident, the base and the maximum are prorated, and then the net income is subtracted, not
+  # prorated (canada.ca, completing a return for newcomers, Example 3 for line 30300).
   NB428.13:
     label: New Brunswick spouse or common-law partner amount
     formula: >-
-      round((if(line.HH.partner == 1, min(param.nbSpouseMax, max(0, param.nbSpouseBase - line.HH.spouseNetIncome)), 0)) * line.RES.factor, 2)
+      round(if(line.HH.partner == 1, min(round(param.nbSpouseMax * line.RES.factor, 2), max(0, round(param.nbSpouseBase * line.RES.factor, 2) - line.HH.spouseNetIncome)), 0), 2)
 
   NB428.16:
     label: New Brunswick amount for an eligible dependant
     formula: >-
-      round((if(line.HH.partner == 0 and family.childrenUnder18 > 0, min(param.nbSpouseMax, max(0, param.nbSpouseBase - answer.dependantNetIncome)), 0)) * line.RES.factor, 2)
+      round(if(line.HH.partner == 0 and family.childrenUnder18 > 0, min(round(param.nbSpouseMax * line.RES.factor, 2), max(0, round(param.nbSpouseBase * line.RES.factor, 2) - answer.dependantNetIncome)), 0), 2)
     source: "NB428 lines 14 to 16: the base minus their net income, up to the maximum"
   # An adult dependant with an impairment gets the infirm dependant amount, or the caregiver amount when they lived in
-  # your home, never both (5004-PC, line 58400). The app knows one such dependant.
+  # your home, never both (5004-PC, line 58400). The app knows one such dependant. For a part-year resident, both are
+  # worked out from the prorated base and maximum before choosing, as on line 30450.
   NB.infirmAmount:
     label: New Brunswick amount for an infirm dependant, before choosing
     formula: >-
       if(answer.hasInfirmDependant, if(answer.infirmDependants > 1,
       unsupported("The New Brunswick amounts for more than one adult dependant aren't handled by this app yet"),
-      if(answer.infirmDependants == 1, min(param.nbInfirmMax, max(0, param.nbInfirmBase - answer.infirmDependantIncome)), 0)), 0)
+      if(answer.infirmDependants == 1, min(round(param.nbInfirmMax * line.RES.factor, 2), max(0, round(param.nbInfirmBase * line.RES.factor, 2) - answer.infirmDependantIncome)), 0)), 0)
     source: "Worksheet NB428, line 58200: $14,124 less the dependant's net income, up to $5,839"
   NB.caregiverAmount:
     label: New Brunswick caregiver amount, before choosing
     formula: >-
-      if(answer.hasInfirmDependant, if(answer.infirmDependants == 1, if(answer.infirmDependantHome == "with_you",
-      min(param.nbCaregiverMax, max(0, param.nbCaregiverBase - answer.infirmDependantIncome)), 0), 0), 0)
-    source: "Worksheet NB428, line 58400: $25,781 less the dependant's net income, up to $5,839, for a dependant who lived with you"
+      if(answer.hasInfirmDependant, if(answer.infirmDependants == 1, if(person.province == "NB" and answer.infirmDependantHome == "with_you",
+      min(round(param.nbCaregiverMax * line.RES.factor, 2), max(0, round(param.nbCaregiverBase * line.RES.factor, 2) - answer.infirmDependantIncome)), 0), 0), 0)
+    source: >-
+      Worksheet NB428, line 58400: $25,781 less the dependant's net income, up to $5,839, for a dependant who lived with
+      you. A spouse living elsewhere, whose NB428 Schedule NB(S2) reads, isn't asked where the dependant lived: theirs
+      is the amount for infirm dependants, which needs no shared home
   NB428.17:
     label: New Brunswick amount for infirm dependants age 18 or older
     formula: >-
-      round((if(line.NB428.29 > 0, 0, line.NB.infirmAmount)) * line.RES.factor, 2)
+      if(line.NB428.29 > 0, 0, line.NB.infirmAmount)
     source: "NB428 line 58200"
   NB428.23:
     label: New Brunswick volunteer firefighters' amount
@@ -207,7 +214,7 @@ lines:
   NB428.29:
     label: New Brunswick caregiver amount
     formula: >-
-      round((if(line.NB.caregiverAmount > 0 and line.NB.caregiverAmount >= line.NB.infirmAmount, line.NB.caregiverAmount, 0)) * line.RES.factor, 2)
+      if(line.NB.caregiverAmount > 0 and line.NB.caregiverAmount >= line.NB.infirmAmount, line.NB.caregiverAmount, 0)
     source: "NB428 line 58400: claimed instead of line 58200 when it is at least as much"
   NB428.31:
     label: New Brunswick disability amount for self
@@ -235,12 +242,12 @@ lines:
     source: "NB428 line 58560, from Schedule NB(S11)"
   NB428.36:
     label: Tuition amounts transferred from a child or grandchild
-    formula: "line.CHILD.provincialTuition"
-    source: "NB428 line 58600: the provincial amount they designate on their T2202, taken as the same as federally"
+    formula: "round(line.CHILD.provincialTuition * line.RES.factor, 2)"
+    source: "NB428 line 58600: the provincial amount they designate on their T2202, taken as the same as federally. Prorated for a part-year resident (RC4018, Appendix K)"
   NB428.37:
     label: New Brunswick amounts transferred from your spouse or common-law partner
-    formula: "if(line.HH.partner == 1 and family.partnerInYear, line.NBS2.12, 0)"
-    source: "NB428 line 58640, from Schedule NB(S2)"
+    formula: "if(line.HH.partner == 1 and family.partnerInYear, round(line.NBS2.12 * line.RES.factor, 2), 0)"
+    source: "NB428 line 58640, from Schedule NB(S2). Prorated for a part-year resident (RC4018, Appendix K); the schedule shows the whole transfer"
   NB428.38:
     label: New Brunswick credit amounts before medical expenses
     formula: "line.NB428.33 + line.NB428.34 + line.NB428.35 + line.NB428.36 + line.NB428.37"
@@ -365,7 +372,8 @@ lines:
   # Schedule NB(S11) – New Brunswick tuition and education amounts (the student's own)
   NBS11.1:
     label: Unused New Brunswick tuition from your 2024 notice of assessment
-    formula: "answer.unusedProvincialTuition"
+    formula: 'if(person.province == "AB", 0, answer.unusedProvincialTuition)'
+    source: "None for a spouse in Alberta, whose own return doesn't carry unused provincial tuition forward (Schedule NB(S2) reads this schedule for them)"
   NBS11.2:
     label: Tuition fees for 2025
     formula: "line.S11.8"

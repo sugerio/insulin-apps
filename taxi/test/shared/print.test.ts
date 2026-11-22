@@ -1,6 +1,8 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { printBlockers, type Issue, type PrintYear, type Slip } from "#shared";
-import type { PersonResult } from "../../src/app/shared/engine/evaluate.ts";
+import { formsToAdd, printBlockers, type Issue, type PrintYear, type Slip } from "#shared";
+import { Evaluation, type EngineInput, type PersonResult } from "../../src/app/shared/engine/evaluate.ts";
 import { rulesFor } from "../../src/app/shared/rules/index.ts";
 
 // What keeps a return from its forms, its own and, for a couple, what is left on the other return it reads.
@@ -95,5 +97,43 @@ describe("printBlockers", () => {
       { text: "Sam's return: waiting for a slip: the T5 (Interest or dividends).", question: "hasInvestmentIncome", personId: "b" },
       { text: "Sam's return: T4 from Birch Ltd: box 40 isn't handled by this app", personId: "b" },
     ]);
+  });
+});
+
+describe("formsToAdd", () => {
+  const golden = (name: string): EngineInput => JSON.parse(readFileSync(resolve(import.meta.dirname, `../golden/ca-2025/${name}.json`), "utf8")).input;
+  const named = (input: EngineInput, personId = "p1") => formsToAdd(new Evaluation(rules, input), personId).map(({ form }) => form.split(",")[0]);
+
+  it.each([
+    ["single-employee-on", []],
+    ["single-employee-qc", ["Schedule D"]],
+    ["single-parent-low-income-qc", ["Schedule 6 (5005-S6)", "Schedule D"]],
+    ["low-income-worker-ab", ["Schedule 6 (5009-S6)"]],
+    ["mb-senior-renter", ["Schedule MB428-A (5007-A)"]],
+    ["on-caregiver-family", ["Schedule ON(S11) (5006-S11)"]],
+    ["bc-student-couple", ["Schedule BC(S11) (5010-S11)"]],
+    ["sk-couple-kids", ["Schedule SK(S11) (5008-S11)"]],
+  ])("names on %s's return the forms it needs that aren't printed", (name, forms) => {
+    expect(named(golden(name))).toEqual(forms);
+  });
+
+  it("names Nunavut's own Schedule 6 when the return gets the Canada workers benefit", () => {
+    const input = golden("low-income-worker-ab");
+    expect(named({ ...input, people: input.people.map((person) => ({ ...person, province: "NU" })) })).toEqual(["Schedule 6 (5014-S6)"]);
+  });
+
+  it("names the province's own Schedule 6 for advance payments on an RC210 slip, even with no benefit", () => {
+    // $59,435 of net income gets no Canada workers benefit; Step 4 still reports the $400 paid in advance.
+    const input = golden("single-employee-on");
+    const advanced = (province: string): EngineInput => ({
+      ...input,
+      people: input.people.map((person) => ({ ...person, province })),
+      slips: [...input.slips, { id: "rc", person: "p1", type: "RC210", issuer: "Canada Revenue Agency", boxes: { 10: "400" } }],
+    });
+    const evaluation = new Evaluation(rules, advanced("AB"));
+    expect(evaluation.line("p1", "T1.45300").value?.toString()).toBe("0");
+    expect(named(advanced("AB"))).toEqual(["Schedule 6 (5009-S6)"]);
+    expect(named(advanced("NU"))).toEqual(["Schedule 6 (5014-S6)"]);
+    expect(named(input)).toEqual([]);
   });
 });

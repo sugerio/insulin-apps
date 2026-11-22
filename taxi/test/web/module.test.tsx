@@ -1,10 +1,10 @@
 import "./setup.ts";
 import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import type { Estimate, Person, TaxYear } from "#shared";
 import type { SlipReader } from "../../src/app/server/lib/reader.ts";
-import { ORIGIN, OWNER, type TestServer } from "../support/server.ts";
-import { renderApp } from "./support.tsx";
+import { OWNER, type TestServer } from "../support/server.ts";
+import { holdRequests, renderApp } from "./support.tsx";
 
 // The requests of Income, Deductions and Credits: a save, an upload in a card, a slip saved in its card. The form starts
 // again whenever the year changes, so what a request does to the page mustn't depend on the form that sent it.
@@ -25,26 +25,6 @@ async function seed(server: TestServer, { slip = false } = {}) {
       body: { revision: year.revision, personId: alex.id, type: "T4", issuer: "Maple Corp", boxes: { 14: "60000", 22: "9000" } },
     });
   }
-}
-
-/**
- * Holds the page's requests that `match` before they reach the server, until released: what the page does meanwhile is
- * what a slow network shows. Call it after `renderApp`, which answers the page's requests.
- */
-function holdRequests(match: (method: string, path: string) => boolean) {
-  const send = globalThis.fetch;
-  let release!: () => void;
-  const released = new Promise<void>((resolve) => (release = resolve));
-  let held = 0;
-  vi.stubGlobal("fetch", async (input: RequestInfo | URL, init: RequestInit = {}) => {
-    const url = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url, ORIGIN);
-    if (match(init.method ?? "GET", url.pathname)) {
-      held += 1;
-      await released;
-    }
-    return send(input, init);
-  });
-  return { release, held: () => held };
 }
 
 const answersOf = async (server: TestServer) => Object.values(((await (await server.call("GET", "/api/years/2025/estimate")).json()) as Estimate).input.answers)[0] ?? {};

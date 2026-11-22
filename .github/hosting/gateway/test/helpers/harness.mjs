@@ -250,7 +250,8 @@ export class Harness {
     this.outbound = new Outbound(this)
     const base = {
       SITE_DOMAIN: this.domain,
-      SITE_APPS: JSON.stringify(apps),
+      // One variable per app, as the deploy writes them.
+      ...Object.fromEntries(apps.map((app) => [`SITE_APP_${app.name.toUpperCase().replaceAll('-', '_')}`, JSON.stringify(app)])),
       GOOGLE_CLIENT_ID,
       GOOGLE_CLIENT_SECRET,
       TURNSTILE_SITE_KEY: 'test-site-key',

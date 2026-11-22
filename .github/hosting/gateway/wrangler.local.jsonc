@@ -26,7 +26,7 @@
   // to the gateway first, so nothing in the directory is ever served on its own.
   "assets": { "directory": "../docs/assets", "binding": "DOCS_ASSETS", "run_worker_first": true },
   // The app Worker, from the second config: scripts/app-config.mjs writes it (the stub app as captable). With --app,
-  // scripts/app-config.mjs replaces this list and SITE_APPS with the apps asked for.
+  // scripts/app-config.mjs replaces this list and the SITE_APP_<NAME> variables with the apps asked for.
   "services": [
     { "binding": "APP_CAPTABLE", "service": "insulin-apps-captable" }
   ],
@@ -36,14 +36,13 @@
   "vars": {
     "SITE_ENV": "test",
     "SITE_DOMAIN": "insulinapps.localhost",
-    "SITE_APPS": [
-      {
-        "name": "captable",
-        "title": "Cap Table",
-        "summary": "Cap table and equity management: stakeholders, share classes, equity plans, grants, vesting and a holder view.",
-        "binding": "APP_CAPTABLE"
-      }
-    ],
+    // One variable per app (Cloudflare holds a variable to 5 KB): SITE_ plus the app's binding.
+    "SITE_APP_CAPTABLE": {
+      "name": "captable",
+      "title": "Cap Table",
+      "summary": "Cap table and equity management: stakeholders, share classes, equity plans, grants, vesting and a holder view.",
+      "binding": "APP_CAPTABLE"
+    },
     "GOOGLE_CLIENT_ID": "",
     "TURNSTILE_SITE_KEY": "1x00000000000000000000AA",
     "TURNSTILE_SECRET_KEY": "1x0000000000000000000000000000000AA",

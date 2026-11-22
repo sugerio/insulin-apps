@@ -403,7 +403,8 @@ test('dry-run writes private app configs, the complete gateway config, and a red
     { name: 'RL_APP', namespace_id: '730102', simple: { limit: 600, period: 60 } },
     { name: 'RL_PUBLIC', namespace_id: '730103', simple: { limit: 60, period: 60 } },
   ])
-  assert.equal(gateway.vars.SITE_APPS[0].source, 'https://github.com/sugerio/insulin-apps/tree/main/alpha-app')
+  assert.equal(gateway.vars.SITE_APP_ALPHA_APP.source, 'https://github.com/sugerio/insulin-apps/tree/main/alpha-app')
+  assert.equal('SITE_APPS' in gateway.vars, false, 'one variable per app, never one list of all of them (5 KB a variable)')
   assert.ok(!('SITE_ENV' in gateway.vars))
   assert.equal(gateway.vars.SUPPORT_EMAIL, '', 'optional settings left unset stay empty')
   assert.equal(gateway.vars.ORG_REQUEST_EMAIL, '')
@@ -650,15 +651,15 @@ test("an app's declared secrets come from the environment's secrets, then its va
   assert.equal(alpha.vars.SUGER_TRUST_ORG_ROLE, 'true', 'the gateway sends x-suger-org-role, so the app may honour it')
   assert.deepEqual(alpha.services, [{ binding: 'SUGER_GATEWAY', service: 'insulin-apps-gateway' }], 'the app calls the gateway over a service binding, not its public URL')
   const gatewayConfig = JSON.parse(readFileSync(join(result.outputDirectory, 'gateway.wrangler.json'), 'utf8'))
-  const site = gatewayConfig.vars.SITE_APPS.find((app) => app.name === 'alpha-app')
+  const site = gatewayConfig.vars.SITE_APP_ALPHA_APP
   assert.deepEqual(site.publicPaths, ['/sign', '/api/public/'])
   assert.equal(site.scheduled, '/api/scheduled', 'the path the gateway ticks')
-  assert.equal('scheduled' in gatewayConfig.vars.SITE_APPS.find((app) => app.name === 'beta'), false, 'an app without one has none (SITE_APPS leaves it out)')
+  assert.equal('scheduled' in gatewayConfig.vars.SITE_APP_BETA, false, 'an app without one has none (its variable leaves it out)')
   assert.equal('binding' in site, false, 'the gateway works the binding out from the name')
   assert.deepEqual(site.navigation, [{
     key: 'envelopes', label: 'Envelopes', icon: 'inbox', path: '/envelopes',
   }], "the gateway renders the app's level 1 on its settings pages (DESIGN.md §3.2), never its level 2, and fills in the defaults")
-  assert.equal('navigation' in gatewayConfig.vars.SITE_APPS.find((app) => app.name === 'beta'), false, 'an app without a manifest has none')
+  assert.equal('navigation' in gatewayConfig.vars.SITE_APP_BETA, false, 'an app without a manifest has none')
   assert.equal('secrets' in site, false, "the gateway never learns an app's secret names")
 
   const out = await tempDirectory('deploy-apps-app-secrets-plan-')
@@ -926,10 +927,10 @@ test("an app's platform variables and bindings: the gateway's URLs, the support 
   assert.equal(readSettings({ CLOUDFLARE_API_TOKEN: 'set', CLOUDFLARE_ACCOUNT_ID: 'set', SUPPORT_EMAIL: ' help@example.com ' }, { gateway: false }).supportEmail, 'help@example.com', 'app deploys read the support address')
 })
 
-test("an app's engine, API version and limit catalog stay out of SITE_APPS", async () => {
+test("an app's engine, API version and limit catalog stay out of its gateway variable", async () => {
   const root = await engineRepository()
   const gateway = buildGatewayConfig({ root, apps: await listApps(root), settings: readSettings(settings()), databaseId: null })
-  const alpha = gateway.vars.SITE_APPS.find(({ name }) => name === 'alpha')
+  const alpha = gateway.vars.SITE_APP_ALPHA
   for (const field of ['engine', 'engineApi', 'limits', 'secrets']) assert.equal(field in alpha, false, field)
   assert.deepEqual(gateway.services.map(({ service }) => service), ['insulin-apps-alpha', 'insulin-apps-alpha-app', 'insulin-apps-beta'], 'the gateway never binds an engine')
 })

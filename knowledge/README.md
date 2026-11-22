@@ -13,7 +13,8 @@ the `SUGER_ENGINE` service binding, with one Durable Object and container per co
 
 **Status: in development.** The API, the screens (Home, Collections, each collection's Overview, Ask, Sources, What it
 knows, Sharing and History, Needs attention, Rules and data, Health) and the in-app Docs are built; the real engine
-is described in `engine/`. Use synthetic data only.
+is described in `engine/`. Collections may hold real files, web pages and notes. The synthetic-data rule under "Public
+repository" in [`AGENTS.md`](AGENTS.md) is for this code, its tests and its docs, not for what a collection holds.
 
 ## Architecture
 

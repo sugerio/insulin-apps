@@ -289,13 +289,31 @@ describe('K7 GET /api/collections/{id}/gaps', () => {
     expect((await gaps(other, PEOPLE.maya)).body.gaps).toEqual([])
   })
 
+  it('keeps hidden values out of `next`, which says only where the page ended', async () => {
+    const id = await collection()
+    await search(id, 'What is the office parking policy?')
+    h.clock.advance(60_000)
+    await search(id, 'Can I email dana@example.test about the travel budget?')
+    h.clock.advance(60_000)
+    await search(id, 'Where is the nearest printer?')
+    // The page ends on the question with the hidden email: its `next` must not carry the question's words.
+    const first = await gaps(id, CLIENT, '?limit=2')
+    expect(first.body.gaps.map((gap) => gap.question)).toEqual(['Where is the nearest printer?', 'Can I email [hidden] about the travel budget?'])
+    const decoded = new TextDecoder().decode(Uint8Array.from(atob(first.body.next!.replace(/-/g, '+').replace(/_/g, '/')), (char) => char.charCodeAt(0)))
+    expect(decoded).not.toMatch(/dana|example|email|travel/i)
+    const rest = await gaps(id, CLIENT, `?limit=2&cursor=${first.body.next}`)
+    expect(rest.body.gaps.map((gap) => gap.question)).toEqual(['What is the office parking policy?'])
+    expect(rest.body.next).toBeUndefined()
+  })
+
   it('pages: 50 by default, at most 100, `next` while there are more, ties kept in order across pages', async () => {
     const id = await collection()
     const at = Date.UTC(2026, 10, 10)
-    // 55 open questions, the last 10 asked at the same moment, so a page ends inside a tie.
+    // 55 open questions, the last 10 asked at the same moment, so a page ends inside a tie. Tied ones keep the order they
+    // were first logged in, not their words' order: their keys run the other way.
     const statements = Array.from({ length: 55 }, (_, n) => h.db.prepare(
       `INSERT INTO gaps (collection_id, question_key, org_id, question, asked, first_asked_at, last_asked_at, status) VALUES (?, ?, ?, ?, 1, ?, ?, 'open')`,
-    ).bind(id, `question ${String(n).padStart(2, '0')}`, ORG, `Question ${n}?`, at, n < 10 ? at : at + n * 1000))
+    ).bind(id, n < 10 ? `question ${String(99 - n)}` : `question ${String(n).padStart(2, '0')}`, ORG, `Question ${n}?`, at, n < 10 ? at : at + n * 1000))
     await h.db.batch(statements)
     const first = await gaps(id)
     expect(first.body.gaps).toHaveLength(50)

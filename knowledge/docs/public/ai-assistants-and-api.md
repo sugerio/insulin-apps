@@ -119,8 +119,9 @@ OAuth client gets it from a share by name) and permission to change content.
 **The collection's version.** Every collection has a `version` (in `GET /api/collections` and
 `GET /api/collections/{id}`): the number of its latest restore point. It grows with every change to what the collection
 knows: files, web pages, notes and corrections learned, a file stopped or used again, removed for good, going back and
-undo. In `GET /api/collections` it can trail a change made elsewhere by a few seconds; `engine.version` in
-`GET /api/collections/{id}` is always current.
+undo. In `GET /api/collections` it can trail a change made elsewhere until Knowledge next reads the engine's changes,
+right after any request to a collection or within five minutes; `engine.version` in `GET /api/collections/{id}` is
+always current.
 
 **Write only if nothing changed meanwhile: `expectedVersion`.** A note (`POST /api/collections/{id}/notes`) or a
 correction (`POST /api/collections/{id}/corrections`) can carry `"expectedVersion": <version>`, the version the program

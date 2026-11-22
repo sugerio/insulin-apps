@@ -72,19 +72,22 @@ async function authorsOf(db: D1Database, org: string, collectionId: string, docu
 const GAPS_PAGE = 50
 const GAPS_MAX = 100
 
-/** A page's place in the open questions, newest asked first: after this one (its last time asked, then its key). */
-function gapCursor(lastAskedAt: number, key: string): string {
-  const bytes = new TextEncoder().encode(JSON.stringify([lastAskedAt, key]))
+/**
+ * A page's place in the open questions, newest asked first: after this one (its last time asked, then its row). Never
+ * its key, which is the question's own words, hidden values included.
+ */
+function gapCursor(lastAskedAt: number, position: number): string {
+  const bytes = new TextEncoder().encode(JSON.stringify([lastAskedAt, position]))
   return btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
 }
 
-function readGapCursor(raw: string): [number, string] {
+function readGapCursor(raw: string): [number, number] {
   const refused = () => badRequest('That cursor isn\'t valid. Send the `next` value of the previous page as it came, or leave it out to start again.')
   if (!/^[A-Za-z0-9_-]{1,2400}$/.test(raw)) throw refused()
   try {
     const binary = atob(raw.replace(/-/g, '+').replace(/_/g, '/'))
     const value = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(Uint8Array.from(binary, (char) => char.charCodeAt(0)))) as unknown
-    if (Array.isArray(value) && value.length === 2 && Number.isSafeInteger(value[0]) && typeof value[1] === 'string') return [value[0] as number, value[1]]
+    if (Array.isArray(value) && value.length === 2 && Number.isSafeInteger(value[0]) && Number.isSafeInteger(value[1])) return [value[0] as number, value[1] as number]
   } catch {
     // refused below
   }
@@ -112,17 +115,17 @@ export function knowledgeRoutes() {
     const db = c.env.DB
     const { collection } = await authorize(db, caller, param(c, 'id'), 'gaps')
     const { results } = await db.prepare(
-      `SELECT question_key, question, asked, first_asked_at, last_asked_at FROM gaps
+      `SELECT rowid AS position, question, asked, first_asked_at, last_asked_at FROM gaps
        WHERE org_id = ?1 AND collection_id = ?2 AND status = 'open'
-         AND (?3 IS NULL OR last_asked_at < ?3 OR (last_asked_at = ?3 AND question_key > ?4))
-       ORDER BY last_asked_at DESC, question_key ASC LIMIT ?5`,
-    ).bind(collection.org_id, collection.id, after?.[0] ?? null, after?.[1] ?? '', limit + 1).all<{ question_key: string; question: string; asked: number; first_asked_at: number; last_asked_at: number }>()
+         AND (?3 IS NULL OR last_asked_at < ?3 OR (last_asked_at = ?3 AND rowid > ?4))
+       ORDER BY last_asked_at DESC, rowid ASC LIMIT ?5`,
+    ).bind(collection.org_id, collection.id, after?.[0] ?? null, after?.[1] ?? 0, limit + 1).all<{ position: number; question: string; asked: number; first_asked_at: number; last_asked_at: number }>()
     const page = results.slice(0, limit)
     const { hiding } = await readOrgSettings(db, collection.org_id, now(c))
     const last = page.at(-1)
     return json(c, {
       gaps: page.map((row) => ({ question: hide(row.question, hiding), asked: row.asked, firstAskedAt: iso(row.first_asked_at), lastAskedAt: iso(row.last_asked_at) })),
-      ...(results.length > limit && last ? { next: gapCursor(last.last_asked_at, last.question_key) } : {}),
+      ...(results.length > limit && last ? { next: gapCursor(last.last_asked_at, last.position) } : {}),
     })
   })
 

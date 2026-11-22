@@ -71,7 +71,8 @@ export const aiAssistantsAndApi: DocTopic = {
             <li>
               <b>The collection's version.</b> Every collection has a <Code>version</Code>: the number of its latest restore point.
               It grows with every change to what it knows, including stopping a file and going back. The list of collections can
-              trail a change made elsewhere by a few seconds; one collection's <Code>engine.version</Code> is always current.
+              trail a change made elsewhere until Knowledge next reads the engine's changes, right after any request to a
+              collection or within five minutes; one collection's <Code>engine.version</Code> is always current.
             </li>
             <li>
               <b>Only if nothing changed meanwhile.</b> A note or a correction can carry <Code>expectedVersion</Code>, the version the

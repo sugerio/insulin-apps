@@ -120,13 +120,18 @@ export type FieldIssue = NonNullable<ApiErrorBody["error"]["issues"]>[number];
 /**
  * What a refused request said about a form's fields: `issueFor` a field's path, and `unshown`, the issues no field of
  * the form shows (`shown` names the paths it does). `inBanner` says whether the form's banner has something to say:
- * the error itself when it named no field, or the issues no field shows.
+ * the error itself when it named no field, or the issues no field shows. A field changed since (`edited`) no longer
+ * shows its issue: it was about the value it had then.
  */
-export function fieldIssues(error: unknown, shown: (path: string) => boolean): { issueFor: (path: string) => string | undefined; unshown: FieldIssue[]; inBanner: boolean } {
+export function fieldIssues(
+  error: unknown,
+  shown: (path: string) => boolean,
+  edited: ReadonlySet<string> = new Set(),
+): { issueFor: (path: string) => string | undefined; unshown: FieldIssue[]; inBanner: boolean } {
   const issues = error instanceof ApiError ? (error.body?.error.issues ?? []) : [];
   const unshown = issues.filter((issue) => !shown(issue.path));
   return {
-    issueFor: (path) => issues.find((issue) => issue.path === path)?.message,
+    issueFor: (path) => (edited.has(path) ? undefined : issues.find((issue) => issue.path === path)?.message),
     unshown,
     inBanner: error !== null && error !== undefined && (issues.length === 0 || unshown.length > 0),
   };

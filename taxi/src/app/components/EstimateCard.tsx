@@ -40,7 +40,7 @@ export function EstimateSummary() {
       <SheetContent side="right" className="w-full overflow-y-auto sm:max-w-md">
         <SheetHeader>
           <SheetTitle>Estimate</SheetTitle>
-          <SheetDescription>{person.name}'s return. Select a line to see why.</SheetDescription>
+          <SheetDescription className="wrap-anywhere">{person.name}'s return. Select a line to see why.</SheetDescription>
         </SheetHeader>
         <div className="px-4 pb-6">
           <ResourceView resource={resource}>{(estimate) => <EstimateBody estimate={estimate} />}</ResourceView>

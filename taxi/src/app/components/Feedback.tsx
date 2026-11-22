@@ -23,9 +23,10 @@ export function Banner({ kind, title, children, action }: { kind: BannerKind; ti
   return (
     <Alert variant={kind === "error" ? "destructive" : "default"} className={cn(BANNER_TONE[kind])} role={kind === "error" ? "alert" : "status"}>
       <Glyph aria-hidden="true" />
-      {title ? <AlertTitle>{title}</AlertTitle> : null}
+      {/* A banner can name a person or a file: a long one wraps rather than widening the alert's grid, and the page. */}
+      {title ? <AlertTitle className="min-w-0 wrap-anywhere">{title}</AlertTitle> : null}
       {children || action ? (
-        <AlertDescription>
+        <AlertDescription className="min-w-0 wrap-anywhere">
           {children}
           {action ? <div className="mt-2">{action}</div> : null}
         </AlertDescription>

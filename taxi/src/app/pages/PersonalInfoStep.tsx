@@ -42,12 +42,16 @@ export function PersonalInfoStep() {
   // continue" stopped on something missing. This step is mounted once per return, so each has its own.
   const [draft, setDraft] = useState<FactsDraft>({});
   const [request, setRequest] = useState<RequestState>({ status: "idle" });
+  const [edited, setEdited] = useState<ReadonlySet<string>>(new Set());
   const [showMissing, setShowMissing] = useState(false);
   const requests: Requests = {
     state: request,
+    edited,
+    edit: (path) => setEdited((current) => (current.has(path) ? current : new Set(current).add(path))),
     async run(calls, thenContinue) {
       const last: { year: TaxYear | null } = { year: null };
       setRequest({ status: "saving" });
+      setEdited(new Set());
       try {
         await calls((answered) => (last.year = answered));
         setRequest({ status: "idle" });
@@ -86,6 +90,9 @@ type RequestState = { status: "idle" | "saving" } | { status: "error"; error: un
 /** The step's save, held by PersonalInfoStep: the facts below start again whenever the year changes, the save goes on. */
 interface Requests {
   state: RequestState;
+  /** The fields changed since the last save started (`answers.<question>`): a refusal no longer shows at them. */
+  edited: ReadonlySet<string>;
+  edit: (path: string) => void;
   /**
    * Runs the save's calls; the facts are locked until they end. `answered` keeps the year each call answered with: the
    * last one is applied when they end, even if a later call failed, so the next save isn't refused as stale. With
@@ -159,8 +166,10 @@ function YearFacts({
     const change = draft[key];
     return change !== undefined && change.basis === JSON.stringify(stored) ? (change.to as T) : stored;
   };
-  const type = (key: string, stored: string | boolean | null, to: string | boolean | null) =>
+  const type = (key: string, stored: string | boolean | null, to: string | boolean | null) => {
     onDraft((current) => ({ ...current, [key]: { basis: JSON.stringify(stored), to } }));
+    requests.edit(key);
+  };
   // The spouse or partner in the Profile, in this year or not: it decides which statuses there are to choose from.
   const partner = year.people.find((person) => person.relationship === "spouse");
   const statuses = maritalStatusesFor(partner !== undefined);
@@ -206,7 +215,7 @@ function YearFacts({
   // person lived.
   const spouseQuestions = about.filter((question) => question.id.startsWith("spouse"));
   const fields = new Set(about.map((question) => `answers.${question.id}`));
-  const { issueFor, unshown, inBanner } = fieldIssues(error, (path) => fields.has(path));
+  const { issueFor, unshown, inBanner } = fieldIssues(error, (path) => fields.has(path), requests.edited);
   const field = (question: (typeof about)[number]) =>
     question.type === "boolean" ? (
       <YesNoField

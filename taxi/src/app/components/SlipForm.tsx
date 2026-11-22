@@ -1,4 +1,4 @@
-import { useId, useState, type FormEvent } from "react";
+import { useEffect, useId, useState, type FormEvent } from "react";
 import { routes, type Slip, type TaxYear } from "#shared";
 import { Badge } from "@/components/ui/badge.tsx";
 import { Button } from "@/components/ui/button.tsx";
@@ -12,7 +12,7 @@ import { byBox, formatBox } from "../lib/format.ts";
 import { normalizeAmount } from "../shared/amount.ts";
 import { rulesFor } from "../shared/rules/index.ts";
 import type { SlipType } from "../shared/engine/rules.ts";
-import { RefusedBanner } from "./Feedback.tsx";
+import { Banner, RefusedBanner } from "./Feedback.tsx";
 import { useYear } from "./YearFrame.tsx";
 
 // A slip's boxes as a table, built from its type in the year's rules (slips.yaml): each box as printed, what it is, and
@@ -137,6 +137,8 @@ export interface SlipValues {
   boxes: Record<string, string>;
   /** The slip's `updatedAt` (null for a new slip): values typed on an older version of the slip give way to it. */
   basis: number | null;
+  /** The fields changed since the last save started (`issuer`, `boxes.<box>`): a refusal no longer shows at them. */
+  edited?: string[];
 }
 
 /**
@@ -191,17 +193,40 @@ export function SlipForm({
   const [issuer, setIssuer] = useState(kept?.issuer ?? slip?.issuer ?? "");
   const [boxes, setBoxes] = useState<Record<string, string>>(kept?.boxes ?? slip?.boxes ?? {});
   const [state, setState] = useState<{ status: "idle" | "saving" } | { status: "error"; error: unknown }>({ status: "idle" });
+  // The fields changed since the last save started (`issuer`, `boxes.<box>`): a refusal no longer shows at them. Kept
+  // with the values, as the refusal is, so a form that starts again (or is opened again) doesn't show it there again.
+  const [edited, setEdited] = useState<ReadonlySet<string>>(() => new Set(kept?.edited ?? []));
   const slipType: SlipType = types.find((each) => each.id === type)!;
   const changed = !slip || issuer !== slip.issuer || !sameBoxes(boxes, slip.boxes);
   // Locked while it is saved, by the page's request or by this form's own: the form closes once saved, and a change
   // typed meanwhile would be lost.
   const disabled = (host?.busy ?? false) || state.status === "saving";
-  const keep = (change: Partial<SlipValues>) => host?.onValues({ type, issuer, boxes, basis, ...change });
+  const keep = (change: Partial<SlipValues>) => host?.onValues({ type, issuer, boxes, basis, edited: [...edited], ...change });
+  // A version of the slip newer than the one the kept values were typed on (someone else's save): what was typed, and
+  // why its save was refused, give way to it, and the form says so.
+  const [replaced, setReplaced] = useState(false);
+  useEffect(() => {
+    if (host?.values && host.values.basis !== basis) {
+      host.onValues(undefined);
+      setReplaced(true);
+    }
+  }, [basis]);
+  /** A field changed: what it holds now is kept, and a refusal no longer shows at it. */
+  const changeField = (path: string, change: Partial<SlipValues>) => {
+    const next = edited.has(path) ? edited : new Set(edited).add(path);
+    setEdited(next);
+    keep({ ...change, edited: [...next] });
+  };
 
   async function submit(event: FormEvent) {
     event.preventDefault();
     if (host?.waiting) return;
     setState({ status: "saving" });
+    setReplaced(false);
+    // What this save answers is about the values it sends: a refusal shows at every field it names, here and in the
+    // values the page keeps (whether or not it has any yet), so a form that starts again shows it too.
+    setEdited(new Set());
+    if (host) keep({ edited: [] });
     const change = { issuer, boxes: filled(boxes) };
     const send = (revision: number) =>
       slip
@@ -227,6 +252,8 @@ export function SlipForm({
     setIssuer(slip?.issuer ?? "");
     setBoxes(slip?.boxes ?? {});
     setState({ status: "idle" });
+    setEdited(new Set());
+    setReplaced(false);
     host?.onValues(undefined);
   }
 
@@ -235,6 +262,7 @@ export function SlipForm({
   const { issueFor, unshown, inBanner } = fieldIssues(
     error,
     (path) => path === "issuer" || (path.startsWith("boxes.") && path.slice("boxes.".length) in slipType.boxes),
+    edited,
   );
   const showActions = !inline || changed || error !== null;
 
@@ -268,7 +296,7 @@ export function SlipForm({
             value={issuer}
             onChange={(event) => {
               setIssuer(event.target.value);
-              keep({ issuer: event.target.value });
+              changeField("issuer", { issuer: event.target.value });
             }}
             required
             maxLength={100}
@@ -285,11 +313,12 @@ export function SlipForm({
         onChange={(box, amount) => {
           const next = { ...boxes, [box]: amount };
           setBoxes(next);
-          keep({ boxes: next });
+          changeField(`boxes.${box}`, { boxes: next });
         }}
         disabled={disabled}
         issueFor={issueFor}
       />
+      {replaced ? <Banner kind="warning" title="Someone else changed this slip while you were changing it. It shows what is stored now: make your change again." /> : null}
       {inBanner ? <RefusedBanner title="The slip wasn't saved" error={error} unshown={unshown} /> : null}
       {showActions ? (
         <div className="flex gap-2">

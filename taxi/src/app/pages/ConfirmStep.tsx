@@ -43,18 +43,14 @@ export function ConfirmStep() {
     setErrors(({ [key]: _forgotten, ...others }) => others);
   };
 
-  // Once the slips are loaded again, the slip being changed: gone, its form closes; changed meanwhile, its form starts
-  // again from what is stored (SlipForm keeps typed values only over the version of the slip they were typed on).
+  // Once the slips are loaded again, the slip being changed: gone, its form closes. Changed meanwhile, its form starts
+  // again from what is stored, dropping what was typed and why its save was refused, and says so (SlipForm).
   useEffect(() => {
     if (!fresh || editing === null || editing === "new") return;
-    const slip = fresh.slips.find((each) => each.id === editing && each.personId === person.id);
-    if (!slip) {
+    if (!fresh.slips.some((each) => each.id === editing && each.personId === person.id)) {
       forget(editing);
       setEditing(null);
       setNotice("The slip you were changing was removed or replaced.");
-    } else if (values.current[editing] && values.current[editing].basis !== slip.updatedAt) {
-      forget(editing);
-      setNotice("Someone else changed this slip while you were changing it. It shows what is stored now: make your change again.");
     }
   }, [fresh, editing, person.id]);
 
@@ -264,7 +260,7 @@ function PersonSlips({
               </li>
             ) : (
               <li key={slip.id} className="flex flex-wrap items-start gap-3 py-3">
-                <div className="min-w-0 flex-1">
+                <div className="min-w-0 flex-1 wrap-anywhere">
                   <p className="text-sm font-medium">
                     {documentName(types.get(slip.type), slip.type)} · {slip.issuer}
                   </p>

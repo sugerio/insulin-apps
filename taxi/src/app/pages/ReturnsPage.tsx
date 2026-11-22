@@ -75,7 +75,7 @@ function Years({ data, reload }: { data: YearList; reload: () => void }) {
               <ul className="flex flex-col gap-2 text-sm">
                 {data.people.map((person) => (
                   <li key={person.id} className="flex justify-between gap-3">
-                    <span className="font-medium">{person.name}</span>
+                    <span className="min-w-0 font-medium wrap-anywhere">{person.name}</span>
                     <span className="text-muted-foreground">{RELATIONSHIP_LABELS[person.relationship]}</span>
                   </li>
                 ))}
@@ -175,7 +175,7 @@ function YearPeople({ year, people, onChanged }: { year: YearList["years"][numbe
       ) : (
         <ul className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
           {members.map((person) => (
-            <li key={person.id}>
+            <li key={person.id} className="min-w-0 wrap-anywhere">
               <span className="font-medium">{person.name}</span> <span className="text-muted-foreground">· {RELATIONSHIP_LABELS[person.relationship]}</span>
             </li>
           ))}

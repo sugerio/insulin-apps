@@ -143,6 +143,116 @@ describe("a step's requests", () => {
     await waitFor(async () => expect(await answersOf(server)).toMatchObject({ hasRentalIncome: true, rentalGross: "1000" }));
   });
 
+  it("stops showing why an amount was refused once it is changed, and keeps the other amounts' reasons", async () => {
+    await renderApp("/returns/2025/income", { seed: (s) => seed(s) });
+    fireEvent.click(within(await screen.findByRole("region", { name: "Add to your return" })).getByRole("button", { name: "Add Rental income" }));
+    const expenses = () => screen.getByLabelText("Rental expenses") as HTMLInputElement;
+    fireEvent.change(rents(), { target: { value: "12.345" } });
+    fireEvent.change(expenses(), { target: { value: "1.234" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(rents().getAttribute("aria-invalid")).toBe("true"));
+    expect(expenses().getAttribute("aria-invalid")).toBe("true");
+    fireEvent.change(rents(), { target: { value: "1000" } });
+    expect(rents().getAttribute("aria-invalid")).toBeNull();
+    expect(within(rents().closest<HTMLElement>("div.flex-col")!).queryByText("Enter an amount like 1234.56")).toBeNull();
+    expect(expenses().getAttribute("aria-invalid")).toBe("true");
+    expect(within(expenses().closest<HTMLElement>("div.flex-col")!).getByText("Enter an amount like 1234.56")).toBeTruthy();
+  });
+
+  describe("a slip's box refused in its card", () => {
+    const onReturn = () => screen.getByRole("region", { name: "On your return" });
+    const box = (number: number) => within(onReturn()).getByLabelText(new RegExp(`^Box ${number} `)) as HTMLInputElement;
+    const openT4 = () => fireEvent.click(within(onReturn()).getByRole("button", { name: /T4 from Maple Corp/ }));
+    const saveSlip = () => fireEvent.click(within(onReturn()).getByRole("button", { name: "Save" }));
+    async function refused(boxes: Record<number, string>) {
+      const rendered = await renderApp("/returns/2025/income", { seed: (s) => seed(s, { slip: true }) });
+      await screen.findByRole("region", { name: "On your return" });
+      openT4();
+      for (const [number, amount] of Object.entries(boxes)) fireEvent.change(box(Number(number)), { target: { value: amount } });
+      saveSlip();
+      for (const number of Object.keys(boxes)) await waitFor(() => expect(box(Number(number)).getAttribute("aria-invalid")).toBe("true"));
+      return rendered;
+    }
+
+    it("stays corrected when the step is saved and its form starts again", async () => {
+      await refused({ 14: "2.345" });
+      fireEvent.change(box(14), { target: { value: "2345" } });
+      expect(box(14).getAttribute("aria-invalid")).toBeNull();
+      // Saving the step moves the year on: the form starts again from what the page kept.
+      fireEvent.click(within(await screen.findByRole("region", { name: "Add to your return" })).getByRole("button", { name: "Add Rental income" }));
+      fireEvent.change(rents(), { target: { value: "1000" } });
+      const before = box(14);
+      fireEvent.click(screen.getAllByRole("button", { name: "Save" }).find((button) => !onReturn().contains(button))!);
+      await waitFor(() => expect(box(14)).not.toBe(before));
+      expect(box(14).value).toBe("2345");
+      expect(box(14).getAttribute("aria-invalid")).toBeNull();
+    });
+
+    it("stays corrected when the slip is closed and opened again, and the other box still says why", async () => {
+      await refused({ 14: "2.345", 22: "1.234" });
+      fireEvent.change(box(22), { target: { value: "9500" } });
+      openT4();
+      openT4();
+      expect(box(22).value).toBe("9500");
+      expect(box(22).getAttribute("aria-invalid")).toBeNull();
+      expect(box(14).getAttribute("aria-invalid")).toBe("true");
+    });
+
+    it("still says why when the slip is closed and opened again without a change", async () => {
+      await refused({ 14: "2.345", 22: "1.234" });
+      openT4();
+      openT4();
+      for (const number of [14, 22]) {
+        expect(box(number).getAttribute("aria-invalid")).toBe("true");
+        expect(within(box(number).closest("tr")!).getByText("Enter an amount like 1234.56")).toBeTruthy();
+      }
+    });
+
+    it("still says why on a slip being added when the step is saved and its form starts again", async () => {
+      await renderApp("/returns/2025/income", { seed: (s) => seed(s) });
+      fireEvent.click(within(await screen.findByRole("region", { name: "Add to your return" })).getByRole("button", { name: "Add Employment income" }));
+      fireEvent.click(screen.getByRole("button", { name: "Enter the T4" }));
+      const form = () => screen.getByRole("form", { name: "Add a slip" });
+      const newBox = (number: number) => within(form()).getByLabelText(new RegExp(`^Box ${number} `)) as HTMLInputElement;
+      fireEvent.change(within(form()).getByLabelText("Issued by"), { target: { value: "Maple Corp" } });
+      fireEvent.change(newBox(14), { target: { value: "2.345" } });
+      fireEvent.change(newBox(22), { target: { value: "1.234" } });
+      fireEvent.click(within(form()).getByRole("button", { name: "Add" }));
+      await waitFor(() => expect(newBox(22).getAttribute("aria-invalid")).toBe("true"));
+      const before = newBox(14);
+      await clickWhenEnabled(() => screen.getAllByRole("button", { name: "Save" }).find((button) => !form().contains(button))!);
+      await waitFor(() => expect(newBox(14)).not.toBe(before));
+      for (const number of [14, 22]) expect(newBox(number).getAttribute("aria-invalid")).toBe("true");
+    });
+
+    it("drops its refusal when someone else saves the slip meanwhile, and says so", async () => {
+      const { server } = await refused({ 14: "2.345" });
+      const { slips } = (await (await server.call("GET", "/api/years/2025/slips")).json()) as { slips: { id: string; boxes: Record<string, string> }[] };
+      const year = (await (await server.call("GET", "/api/years/2025")).json()) as TaxYear;
+      const elsewhere = await server.call("PATCH", `/api/years/2025/slips/${slips[0]!.id}`, { as: OWNER, body: { revision: year.revision, boxes: { ...slips[0]!.boxes, 14: "70000" } } });
+      expect(elsewhere.status).toBe(200);
+      // This page learns of it from a 409 and Reload.
+      fireEvent.click(screen.getAllByRole("button", { name: "Save" }).find((button) => !onReturn().contains(button))!);
+      const banner = (await screen.findByText("Someone else changed this year")).closest<HTMLElement>("[role=alert]")!;
+      fireEvent.click(within(banner).getByRole("button", { name: "Reload" }));
+      // The form starts again from the stored slip; the refusal of what was typed over the old one goes with it.
+      // (The region is looked up again each time: the reload replaces it.)
+      await waitFor(() => expect(within(onReturn()).getByText(/Someone else changed this slip while you were changing it/)).toBeTruthy());
+      expect(box(14).value).toBe("70000");
+      expect(box(14).getAttribute("aria-invalid")).toBeNull();
+      expect(within(box(14).closest("tr")!).queryByText("Enter an amount like 1234.56")).toBeNull();
+    });
+
+    it("says why again when a corrected box is refused on the next save", async () => {
+      await refused({ 14: "2.345" });
+      fireEvent.change(box(14), { target: { value: "3.456" } });
+      expect(box(14).getAttribute("aria-invalid")).toBeNull();
+      await clickWhenEnabled(() => within(onReturn()).getByRole("button", { name: "Save" }));
+      await waitFor(() => expect(box(14).getAttribute("aria-invalid")).toBe("true"));
+      expect(within(box(14).closest("tr")!).getByText("Enter an amount like 1234.56")).toBeTruthy();
+    });
+  });
+
   it("says why an upload in a card was refused", async () => {
     await renderApp("/returns/2025/income", { seed: (s) => seed(s) });
     await refusedUpload();

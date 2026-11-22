@@ -163,6 +163,33 @@ describe("Personal info", () => {
     expect((await days()).value).toBe("");
   });
 
+  it("stops showing why an answer was refused once it is changed, and keeps the other answers' reasons", async () => {
+    await renderApp("/returns/2025/personal", {
+      seed: async (s) => {
+        const alex = (await (await s.call("POST", "/api/people", { as: OWNER, body: { name: "Alex Martin", relationship: "self", birthDate: "1985-04-02" } })).json()) as Person;
+        await s.call("POST", "/api/years", { as: OWNER, body: { year: 2025, people: [alex.id] } });
+        await s.call("PUT", "/api/years/2025/personal-info", {
+          as: OWNER,
+          body: { revision: 1, maritalStatus: "single", adults: [{ personId: alex.id, province: "ON", residentAllYear: false }] },
+        });
+      },
+    });
+    const DAYS = "Days you lived in Canada in 2025";
+    const WORLD = "Your world income for the part of 2025 you didn't live in Canada";
+    const field = (label: string) => screen.getByLabelText(label) as HTMLInputElement;
+    const reasonAt = (label: string, reason: string) => within(field(label).closest<HTMLElement>("div.flex-col")!).queryByText(reason);
+    fireEvent.change(await screen.findByLabelText(DAYS), { target: { value: "366" } });
+    fireEvent.change(field(WORLD), { target: { value: "12.345" } });
+    await clickWhenEnabled(() => screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(field(WORLD).getAttribute("aria-invalid")).toBe("true"));
+    expect(reasonAt(DAYS, "Enter a whole number from 0 to 365")).toBeTruthy();
+    fireEvent.change(field(DAYS), { target: { value: "183" } });
+    expect(field(DAYS).getAttribute("aria-invalid")).toBeNull();
+    expect(reasonAt(DAYS, "Enter a whole number from 0 to 365")).toBeNull();
+    expect(field(WORLD).getAttribute("aria-invalid")).toBe("true");
+    expect(reasonAt(WORLD, "Enter an amount like 1234.56")).toBeTruthy();
+  });
+
   it("shows a refused answer's reason at its field", async () => {
     await renderApp("/returns/2025/personal", {
       seed: async (s) => {
@@ -643,6 +670,23 @@ describe("Confirm", () => {
     held.release();
     expect(await screen.findByText(/Box 22 Income tax deducted: \$9,500\.00/)).toBeTruthy();
     expect((await estimate(server)).input.slips).toEqual([expect.objectContaining({ boxes: expect.objectContaining({ 22: "9500" }) })]);
+  });
+
+  it("stops showing why a box was refused once it is changed, and keeps the other boxes' reasons", async () => {
+    await renderApp("/returns/2025/confirm", { seed: (s) => seed(s, { applies: true, slip: true }).then(() => undefined) });
+    fireEvent.click(await screen.findByRole("button", { name: "Edit T4 from Maple Corp" }));
+    const form = screen.getByRole("form", { name: "Edit T4 from Maple Corp" });
+    const box = (number: number) => within(form).getByLabelText(new RegExp(`^Box ${number} `)) as HTMLInputElement;
+    fireEvent.change(box(14), { target: { value: "2.345" } });
+    fireEvent.change(box(22), { target: { value: "1.234" } });
+    fireEvent.click(within(form).getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(box(22).getAttribute("aria-invalid")).toBe("true"));
+    expect(box(14).getAttribute("aria-invalid")).toBe("true");
+    fireEvent.change(box(22), { target: { value: "9500" } });
+    expect(box(22).getAttribute("aria-invalid")).toBeNull();
+    expect(within(box(22).closest("tr")!).queryByText("Enter an amount like 1234.56")).toBeNull();
+    expect(box(14).getAttribute("aria-invalid")).toBe("true");
+    expect(within(box(14).closest("tr")!).getByText("Enter an amount like 1234.56")).toBeTruthy();
   });
 
   it("waits for a slip being changed before confirming", async () => {

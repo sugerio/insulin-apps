@@ -88,6 +88,9 @@ type RequestState = { status: "idle" | "working" } | { status: "error"; error: u
 /** The module's request, held by ModuleStep: the form below starts again whenever the year changes, the request goes on. */
 interface Requests {
   state: RequestState;
+  /** The fields changed since the last request started (`answers.<question>`): a refusal no longer shows at them. */
+  edited: ReadonlySet<string>;
+  edit: (path: string) => void;
   /**
    * Runs one request, which may make several calls; the form is locked until it ends. `answered` keeps the year each
    * call answered with: the last one is applied when the request ends, even if a later call failed, so the next save
@@ -125,6 +128,7 @@ export function ModuleStep({ module }: { module: ReturnModule }) {
   const draft = useRef<Draft>({ added: {}, amounts: {} });
   const [note, setNote] = useState<string | null>(null);
   const [request, setRequest] = useState<RequestState>({ status: "idle" });
+  const [edited, setEdited] = useState<ReadonlySet<string>>(new Set());
   const slipValues = useRef<Record<string, SlipValues>>({});
   const [slipErrors, setSlipErrors] = useState<Record<string, unknown>>({});
   const [entering, setEntering] = useState<ReadonlySet<string>>(new Set());
@@ -151,9 +155,12 @@ export function ModuleStep({ module }: { module: ReturnModule }) {
   };
   const requests: Requests = {
     state: request,
+    edited,
+    edit: (path) => setEdited((current) => (current.has(path) ? current : new Set(current).add(path))),
     async run(calls, { thenNext = false } = {}) {
       const last: { year: TaxYear | null } = { year: null };
       setRequest({ status: "working" });
+      setEdited(new Set());
       setNote(null);
       try {
         await calls((answered) => (last.year = answered));
@@ -296,10 +303,12 @@ function ModuleForm({
   const setAddedOf = (id: string, value: boolean) => {
     setAdded((current) => ({ ...current, [id]: value }));
     draft.added[id] = { basis: addedBasis(id), to: value };
+    requests.edit(`answers.${id}`);
   };
   const setAmountOf = (id: string, value: string) => {
     setAmounts((current) => ({ ...current, [id]: value }));
     draft.amounts[id] = { basis: amountBasis(id), to: value };
+    requests.edit(`answers.${id}`);
   };
   /** A group's parts that apply: one asked only for some options of a choice waits for that choice. */
   const shownPartsOf = (question: Question) =>
@@ -402,7 +411,7 @@ function ModuleForm({
   const fields = new Set(
     onReturn.flatMap(({ question, kind }) => (kind === "amount" ? [question.id] : kind === "group" ? partsOf(question).map((part) => part.id) : [])).map((id) => `answers.${id}`),
   );
-  const { issueFor, unshown, inBanner } = fieldIssues(error, (path) => fields.has(path));
+  const { issueFor, unshown, inBanner } = fieldIssues(error, (path) => fields.has(path), requests.edited);
   // What keeps this step from done, as saved (the step's state in the row of steps says the same).
   const left = leftInModule(rules, module, given, slips.slips.filter((slip) => slip.personId === person.id), result?.questions ?? []);
   const unanswered = left.filter((item) => item.reason === "unanswered");
@@ -693,7 +702,7 @@ function FoundSlip({ slip, open, onToggle, editable, hostOf }: { slip: Slip; ope
     <li className="py-1 text-sm">
       <button type="button" className="flex w-full items-center gap-2 rounded-md py-1.5 text-left hover:bg-muted/50" aria-expanded={open} aria-controls={panel} onClick={onToggle}>
         <ChevronRight className={cn("size-4 shrink-0 text-muted-foreground transition-transform", open && "rotate-90")} aria-hidden="true" />
-        <span className="min-w-0 flex-1">
+        <span className="min-w-0 flex-1 wrap-anywhere">
           {documentName(slipType, slip.type)} from {slip.issuer}
         </span>
         <Badge variant={confirmed ? "secondary" : "outline"}>{confirmed ? "Confirmed" : "To confirm"}</Badge>

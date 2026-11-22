@@ -32,7 +32,8 @@ export function Breadcrumbs({ items }: { items: readonly Crumb[] }) {
           return (
             <Fragment key={`${label}-${index}`}>
               {index > 0 ? <BreadcrumbSeparator /> : null}
-              <BreadcrumbItem>
+              {/* A crumb can be a long name: it wraps rather than widening the page. */}
+              <BreadcrumbItem className="min-w-0 wrap-anywhere">
                 {to && !last ? (
                   <BreadcrumbLink asChild>
                     <Link to={to}>{label}</Link>

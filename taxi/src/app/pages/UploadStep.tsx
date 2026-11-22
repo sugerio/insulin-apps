@@ -131,7 +131,7 @@ function Uploader({ onUploading }: { onUploading: (uploading: boolean) => void }
             onDragLeave={() => setDragging(false)}
             onDrop={onDrop}
           >
-            <p className="text-sm font-medium">{person.name}'s slips and receipts for {year.year}, and last year's notice of assessment</p>
+            <p className="text-sm font-medium wrap-anywhere">{person.name}'s slips and receipts for {year.year}, and last year's notice of assessment</p>
             <p className="text-xs text-muted-foreground">PDF, PNG or JPEG, up to 10 MiB each. Drop them here, or choose:</p>
             <div className="flex flex-wrap justify-center gap-2">
               <Button variant="outline" onClick={() => folderInput.current?.click()} disabled={reading}>
@@ -196,7 +196,7 @@ function RowStatus({ row }: { row: Row }) {
   return (
     <span className="flex min-w-0 basis-full flex-wrap items-baseline gap-2 sm:basis-auto">
       <Badge variant={row.badge === "Not saved" ? "destructive" : "outline"}>{row.badge}</Badge>
-      <span className="text-muted-foreground">{row.message}</span>
+      <span className="min-w-0 text-muted-foreground wrap-anywhere">{row.message}</span>
     </span>
   );
 }
@@ -215,7 +215,7 @@ export function DocumentStatus({ document }: { document: DocumentRecord }) {
   return (
     <span className="flex min-w-0 basis-full flex-wrap items-baseline gap-2 sm:basis-auto">
       <Badge variant={document.status === "read" ? "secondary" : UNREAD.includes(document.status) ? "destructive" : "outline"}>{STATUS_LABELS[document.status]}</Badge>
-      <span className="text-muted-foreground">{document.message}</span>
+      <span className="min-w-0 text-muted-foreground wrap-anywhere">{document.message}</span>
     </span>
   );
 }
@@ -340,7 +340,7 @@ function UploadedFile({ document, uploading, onNotice }: { document: DocumentRec
           ) : (
             <>
               The slips read from it are deleted too:
-              <ul className="mt-1 list-disc pl-5">
+              <ul className="mt-1 list-disc pl-5 wrap-anywhere">
                 {document.slips.map((slip) => (
                   <li key={slip.id}>
                     {documentName(rulesFor(year.year)!.slips.get(slip.type), slip.type)} from {slip.issuer}, on {nameOf(slip.personId)}'s return{slip.status === "confirmed" ? " (confirmed)" : ""}

@@ -189,11 +189,12 @@ export function ReturnSwitcher() {
       <span className="max-w-full truncate font-semibold">{person.name}</span>
     </span>
   );
-  if (returns.length < 2) return <div className="flex px-1 text-sm">{trigger}</div>;
+  if (returns.length < 2) return <div className="flex min-w-0 max-w-full px-1 text-sm">{trigger}</div>;
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" className="h-auto justify-between gap-3 px-2 py-1.5" aria-label={`Return of ${person.name}: switch return`}>
+        {/* It shrinks to the page, cutting a long name short, rather than widening it. */}
+        <Button variant="ghost" className="h-auto min-w-0 max-w-full shrink justify-between gap-3 px-2 py-1.5" aria-label={`Return of ${person.name}: switch return`}>
           {trigger}
           <ChevronsUpDown className="text-muted-foreground" aria-hidden="true" />
         </Button>

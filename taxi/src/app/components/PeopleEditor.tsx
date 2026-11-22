@@ -61,7 +61,7 @@ export function PeopleEditor({ people, editable, onChanged }: { people: Person[]
             ) : (
               <li key={person.id} className="flex flex-wrap items-center gap-3 py-3">
                 <div className="min-w-0 flex-1">
-                  <p className="font-medium">{person.name}</p>
+                  <p className="font-medium wrap-anywhere">{person.name}</p>
                   <p className="text-sm text-muted-foreground">
                     {RELATIONSHIP_LABELS[person.relationship]} · Born {formatDate(person.birthDate)}
                   </p>
@@ -238,8 +238,8 @@ export function MemberPicker({ people, selected, onChange, disabled = false, foo
                 onChange(next);
               }}
             />
-            <span className="flex flex-col gap-0.5">
-              <span className="font-medium" id={`${id}-${person.id}-name`}>
+            <span className="flex min-w-0 flex-col gap-0.5">
+              <span className="font-medium wrap-anywhere" id={`${id}-${person.id}-name`}>
                 {person.name}
               </span>
               <span className="text-xs text-muted-foreground" id={`${id}-${person.id}-note`}>

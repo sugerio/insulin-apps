@@ -89,7 +89,7 @@ function Results({ estimate, slips }: { estimate: Estimate; slips: SlipList }) {
             <ul className="flex flex-col gap-1 text-sm">
               {checks.map((check) => (
                 <li key={check.text} className="flex flex-wrap items-baseline justify-between gap-x-3">
-                  <span className="text-muted-foreground">{check.text}</span>
+                  <span className="min-w-0 text-muted-foreground wrap-anywhere">{check.text}</span>
                   {check.step ? (
                     <Link className="text-xs underline underline-offset-2" to={stepPath(year.year, check.personId, check.step)}>
                       Go to the step

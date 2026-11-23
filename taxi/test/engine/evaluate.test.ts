@@ -463,7 +463,7 @@ describe("the 2025 rules", () => {
   // donations, or Saskatchewan's home renovation question on a Quebec return.
   it("ask a province's own questions only on a return in that province, whatever the spouse's province", () => {
     const couple = JSON.parse(readFileSync(resolve(import.meta.dirname, "../golden/ca-2025/ab-couple.json"), "utf8")).input as EngineInput;
-    const ca2025 = rulesFor(2025)!;
+    const ca2025 = rulesFor("ca", 2025)!;
     const quebecSlipQuestions = [...ca2025.questions.values()].filter((question) => question.slip?.startsWith("RL")).map((question) => question.id);
     expect(quebecSlipQuestions).toEqual(expect.arrayContaining(["hasRl1", "hasRl2", "hasRl8"]));
     const asked: string[] = [];

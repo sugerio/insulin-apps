@@ -11,6 +11,7 @@ result:
   - F1040.9
   - F1040.11a
   - F1040.12e
+  - F1040.13b
   - F1040.15
   - F1040.16
   - F1040.19
@@ -27,6 +28,7 @@ resultWhen:
   F1040.9: &ownReturn 'person.role == "self" or line.US.joint == 0'
   F1040.11a: *ownReturn
   F1040.12e: *ownReturn
+  F1040.13b: *ownReturn
   F1040.15: *ownReturn
   F1040.16: *ownReturn
   F1040.19: *ownReturn

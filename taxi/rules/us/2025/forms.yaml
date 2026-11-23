@@ -105,22 +105,54 @@ forms:
   S1A:
     title: Schedule 1-A (Form 1040), Additional Deductions
     url: https://www.irs.gov/pub/irs-prior/f1040s1a--2025.pdf
-    applies: "line.S1A.37 > 0"
+    applies: "line.S1A.38 > 0"
     fields:
       names: { text: returnNames }
       # Part I: modified AGI (no income from Puerto Rico or abroad)
       "1": line.F1040.11a
       "3": line.S1A.3
+      # Part II: qualified tips as an employee (line 4c: the total, from one employer or several; none from a business,
+      # line 5). Each part's rows are written only when it has something.
+      4c: line.S1A.4c
+      "6": line.S1A.4c
+      "7": line.S1A.7
+      "8": { value: line.S1A.3, when: &tips "line.S1A.4c > 0" }
+      "9": { value: line.S1A.9, when: *tips }
+      "10": { value: line.S1A.10, when: *tips }
+      "11": { count: "floor(line.S1A.10, 1000) / 1000", when: *tips }
+      "12": { value: line.S1A.12, when: *tips }
+      "13": line.S1A.13
+      # Part III: qualified overtime compensation on Forms W-2 (none on Form 1099, line 14b)
+      14a: line.S1A.14c
+      14c: line.S1A.14c
+      "15": line.S1A.15
+      "16": { value: line.S1A.3, when: &overtime "line.S1A.14c > 0" }
+      "17": { value: line.S1A.9, when: *overtime }
+      "18": { value: line.S1A.10, when: *overtime }
+      "19": { count: "floor(line.S1A.10, 1000) / 1000", when: *overtime }
+      "20": { value: line.S1A.12, when: *overtime }
+      "21": line.S1A.21
+      # Part IV: car loan interest, one row of line 22 for each spouse's car; the VIN is for the person to write.
+      22a: line.US.ownCarLoan
+      22b: "if(line.US.joint == 1, spouse.line.US.ownCarLoan, 0)"
+      "23": line.S1A.23
+      "24": line.S1A.24
+      "25": { value: line.S1A.3, when: &car "line.S1A.23 > 0" }
+      "26": { value: line.S1A.26, when: *car }
+      "27": { value: line.S1A.27, when: *car }
+      "28": { count: "(0 - floor(0 - line.S1A.27, 1000)) / 1000", when: *car }
+      "29": { value: line.S1A.29, when: *car }
+      "30": line.S1A.30
       # Part V: the enhanced deduction for seniors
-      "31": line.S1A.3
-      "32": line.S1A.32
-      "33": "max(0, line.S1A.3 - line.S1A.32)"
-      "34": "round(max(0, line.S1A.3 - line.S1A.32) * param.seniorPhaseOutRate, 2)"
-      "35": line.S1A.35
+      "31": { value: line.S1A.3, when: &senior "line.S1A.37 > 0" }
+      "32": { value: line.S1A.32, when: *senior }
+      "33": { value: "max(0, line.S1A.3 - line.S1A.32)", when: *senior }
+      "34": { value: "round(max(0, line.S1A.3 - line.S1A.32) * param.seniorPhaseOutRate, 2)", when: *senior }
+      "35": { value: line.S1A.35, when: *senior }
       36a: "if(person.age >= 65, line.S1A.35, 0)"
       36b: "if(line.US.joint == 1, if(spouse.person.age >= 65, line.S1A.35, 0), 0)"
       "37": line.S1A.37
-      "38": line.S1A.37
+      "38": line.S1A.38
 
   S2:
     title: Schedule 2 (Form 1040), Additional Taxes

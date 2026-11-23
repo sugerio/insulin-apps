@@ -314,9 +314,11 @@ function ModuleForm({
           if (answer === undefined) return [question.id, suggestionOf(question) ?? ""];
           return [question.id, typeof answer === "string" && Number(answer) !== 0 ? answer : ""];
         }),
-      // A group's parts: an amount or percent as entered (0 shown empty), a choice as chosen.
+      // A group's parts: an amount or percent as entered (0 shown empty), a choice as chosen; not answered yet, an
+      // amount starts from what the documents show (the qualified tips from box 7 of the W-2).
       ...parts.map((part) => {
         const answer = given[part.id];
+        if (answer === undefined) return [part.id, suggestionOf(part) ?? ""];
         if (typeof answer !== "string") return [part.id, ""];
         return [part.id, part.type === "choice" || Number(answer) !== 0 ? answer : ""];
       }),
@@ -547,17 +549,25 @@ function ModuleForm({
                       />
                     </div>
                   ) : (
-                    <AmountField
-                      key={part.id}
-                      label={part.ask}
-                      help={part.help}
-                      unit={part.type === "percent" ? "%" : part.type === "count" ? "" : "$"}
-                      max={part.max}
-                      value={amounts[part.id] ?? ""}
-                      disabled={!editable || busy}
-                      issue={issueFor(`answers.${part.id}`)}
-                      onChange={(value) => setAmountOf(part.id, value)}
-                    />
+                    <div key={part.id} className="flex flex-col gap-1">
+                      <AmountField
+                        label={part.ask}
+                        help={part.help}
+                        unit={part.type === "percent" ? "%" : part.type === "count" ? "" : "$"}
+                        max={part.max}
+                        value={amounts[part.id] ?? ""}
+                        disabled={!editable || busy}
+                        issue={issueFor(`answers.${part.id}`)}
+                        onChange={(value) => setAmountOf(part.id, value)}
+                      />
+                      <SuggestionNote
+                        suggestion={suggestionOf(part)}
+                        value={amounts[part.id] ?? ""}
+                        editable={editable}
+                        busy={busy}
+                        onChange={(value) => setAmountOf(part.id, value)}
+                      />
+                    </div>
                   ),
                 )}
               </div>
@@ -826,17 +836,35 @@ function AmountItem({
         issue={issue}
         onChange={onChange}
       />
-      {suggestion !== null ? (
-        <p className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-          From your documents: {formatMoney(suggestion)}.
-          {editable && cleanAmount(value) !== suggestion ? (
-            <Button variant="link" size="sm" className="h-auto p-0 text-xs" onClick={() => onChange(suggestion)} disabled={busy}>
-              Use {formatMoney(suggestion)}
-            </Button>
-          ) : null}
-        </p>
-      ) : null}
+      <SuggestionNote suggestion={suggestion} value={value} editable={editable} busy={busy} onChange={onChange} />
     </div>
+  );
+}
+
+/** The amount the documents show, under an amount, with a button to use it when the amount is something else. */
+function SuggestionNote({
+  suggestion,
+  value,
+  editable,
+  busy,
+  onChange,
+}: {
+  suggestion: string | null;
+  value: string;
+  editable: boolean;
+  busy: boolean;
+  onChange: (value: string) => void;
+}) {
+  if (suggestion === null) return null;
+  return (
+    <p className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+      From your documents: {formatMoney(suggestion)}.
+      {editable && cleanAmount(value) !== suggestion ? (
+        <Button variant="link" size="sm" className="h-auto p-0 text-xs" onClick={() => onChange(suggestion)} disabled={busy}>
+          Use {formatMoney(suggestion)}
+        </Button>
+      ) : null}
+    </p>
   );
 }
 

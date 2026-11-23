@@ -20,6 +20,7 @@ function oneW2(options: {
   hoh?: boolean;
   birthDate?: string;
   answers?: Record<string, string | boolean>;
+  spouseAnswers?: Record<string, string | boolean>;
   interest?: string;
   dependants?: number;
   resident?: boolean;
@@ -27,6 +28,8 @@ function oneW2(options: {
   maritalStatus?: string;
   /** Dependent care benefits in box 10 of the W-2. */
   box10?: string;
+  /** Social security tips in box 7 of the W-2. */
+  box7?: string;
 }): EngineInput {
   const married = options.married || options.joint;
   const wages = options.wages ?? (Number(options.taxable ?? "0") + (options.joint ? 31500 : options.hoh ? 23625 : 15750)).toFixed(2);
@@ -50,8 +53,8 @@ function oneW2(options: {
       })),
     },
     answers: {
-      p1: { hasTipsOrOvertime: false, spouseItemizes: false, hasValidSSN: true, paidHalfOfHome: true, paidForCare: false, ...options.answers },
-      ...(options.joint ? { p2: { hasTipsOrOvertime: false, hasValidSSN: true } } : {}),
+      p1: { hasTipsOrOvertime: false, hasCarLoan: false, spouseItemizes: false, hasValidSSN: true, paidHalfOfHome: true, paidForCare: false, ...options.answers },
+      ...(options.joint ? { p2: { hasTipsOrOvertime: false, hasCarLoan: false, hasValidSSN: true, ...options.spouseAnswers } } : {}),
     },
     slips: [
       {
@@ -59,7 +62,7 @@ function oneW2(options: {
         person: "p1",
         type: "W2",
         issuer: "Acme",
-        boxes: { 1: wages, 2: "0", 5: wages, 6: (Number(wages) * 0.0145).toFixed(2), ...(options.box10 ? { 10: options.box10 } : {}) },
+        boxes: { 1: wages, 2: "0", 5: wages, 6: (Number(wages) * 0.0145).toFixed(2), ...(options.box10 ? { 10: options.box10 } : {}), ...(options.box7 ? { 7: options.box7 } : {}) },
       },
       ...(options.interest ? [{ id: "i", person: "p1", type: "INT", issuer: "Bank", boxes: { 1: options.interest } }] : []),
     ],
@@ -119,7 +122,6 @@ describe("the 2025 US rules", () => {
     const cases: [string, EngineInput, RegExp][] = [
       ["a dual-status alien", oneW2({ taxable: "30000", resident: false }), /Form 1040-NR/],
       ["a spouse who died in 2025", oneW2({ taxable: "30000", maritalStatus: "widowed", answers: { spouseDiedIn2025: true } }), /file jointly for 2025/],
-      ["tips or overtime", oneW2({ taxable: "30000", answers: { hasTipsOrOvertime: true } }), /tips and overtime/],
       ["a child's interest over $2,700", oneW2({ wages: "1000", birthDate: "2010-01-01", interest: "3000", answers: { canBeClaimed: true } }), /Form 8615/],
       ["a spouse who itemizes", oneW2({ taxable: "30000", married: true, answers: { spouseItemizes: true } }), /itemize/],
     ];
@@ -355,5 +357,59 @@ describe("the 2025 US rules", () => {
   it("show one federal refund or amount owed, and print on the IRS forms in their attachment order", () => {
     expect(rules.balances).toEqual([{ name: "Federal", refund: "F1040.34", owing: "F1040.37" }]);
     expect([...rules.forms.keys()]).toEqual(["F1040", "S1A", "S2", "S3", "F2441", "SEIC", "S8812", "F8959", "F8960"]);
+  });
+});
+
+describe("Schedule 1-A: tips, overtime and car loan interest", () => {
+  const line = (input: EngineInput, id: string) => new Evaluation(rules, input).line("p1", id).value?.toString() ?? null;
+  const tips = (amount: string, extra: Record<string, string | boolean> = {}) => ({ hasTipsOrOvertime: true, qualifiedTips: amount, qualifiedOvertime: "0", ...extra });
+  const car = (interest: string, qualifies = "yes") => ({ hasCarLoan: true, carLoanInterest: interest, carLoanQualifies: qualifies });
+
+  it("deducts qualified tips up to $25,000, after the AGI, starting from box 7 of the W-2", () => {
+    const server = oneW2({ wages: "38000", box7: "9000", answers: tips("9000") });
+    expect([line(server, "US.boxTips"), line(server, "S1A.13"), line(server, "F1040.13b"), line(server, "F1040.15")]).toEqual(["9000", "9000", "9000", "13250"]);
+    // Deducted after AGI: the earned income credit's income isn't changed.
+    expect(line(server, "F1040.11a")).toBe("38000");
+    expect(line(oneW2({ wages: "60000", answers: tips("30000") }), "S1A.13")).toBe("25000");
+    // Without a social security number valid for employment, none.
+    expect(line(oneW2({ wages: "38000", answers: tips("9000", { hasValidSSN: false }) }), "S1A.13")).toBe("0");
+  });
+
+  it("deducts the overtime premium up to $12,500, or $25,000 for a couple filing jointly together", () => {
+    const overtime = (amount: string) => ({ hasTipsOrOvertime: true, qualifiedTips: "0", qualifiedOvertime: amount });
+    expect(line(oneW2({ wages: "90000", answers: overtime("15000") }), "S1A.21")).toBe("12500");
+    // Jointly the limit is for the couple: $15,000 and $15,000 make $25,000.
+    const couple = oneW2({ wages: "120000", joint: true, answers: overtime("15000"), spouseAnswers: overtime("15000") });
+    expect([line(couple, "S1A.14c"), line(couple, "S1A.21")]).toEqual(["30000", "25000"]);
+  });
+
+  it("cuts tips and overtime by $100 for each whole $1,000 of modified AGI over $150,000", () => {
+    const cut = (wages: string) => line(oneW2({ wages, answers: tips("10000") }), "S1A.13");
+    expect([cut("150000"), cut("150999.99"), cut("151000"), cut("249000"), cut("260000")]).toEqual(["10000", "10000", "9900", "100", "0"]);
+  });
+
+  it("cuts car loan interest by $200 for each $1,000 or part over $100,000, and takes it at most $10,000", () => {
+    const deduction = (wages: string, interest = "4000") => line(oneW2({ wages, answers: car(interest) }), "S1A.30");
+    expect([deduction("100000"), deduction("100000.01"), deduction("101000"), deduction("101000.01"), deduction("120000")]).toEqual(["4000", "3800", "3800", "3600", "0"]);
+    expect(deduction("60000", "12000")).toBe("10000");
+    // A car that doesn't qualify: none.
+    expect(line(oneW2({ wages: "60000", answers: car("4000", "no") }), "S1A.30")).toBe("0");
+  });
+
+  it("gives no tips or overtime deduction to a married person filing separately, but the car loan interest one", () => {
+    const separate = oneW2({ wages: "60000", married: true, answers: { ...tips("5000"), ...car("3000") } });
+    expect([line(separate, "S1A.13"), line(separate, "S1A.30"), line(separate, "S1A.38")]).toEqual(["0", "3000", "3000"]);
+  });
+
+  it("asks the amounts only after the yes, and the car's questions on Deductions", () => {
+    const questions = (answers: Record<string, string | boolean>) => new Evaluation(rules, oneW2({ wages: "40000", answers })).result().people[0]!.questions;
+    expect(questions({})).toEqual(expect.arrayContaining(["hasTipsOrOvertime", "hasCarLoan"]));
+    expect(questions({})).not.toContain("qualifiedTips");
+    expect(questions({ hasTipsOrOvertime: true })).toEqual(expect.arrayContaining(["qualifiedTips", "qualifiedOvertime"]));
+    // The interest first; whether the car qualifies once there is some.
+    expect(questions({ hasCarLoan: true })).toContain("carLoanInterest");
+    expect(questions({ hasCarLoan: true })).not.toContain("carLoanQualifies");
+    expect(questions({ hasCarLoan: true, carLoanInterest: "900" })).toContain("carLoanQualifies");
+    expect(rules.questions.get("hasCarLoan")!.module).toBe("deductions");
   });
 });

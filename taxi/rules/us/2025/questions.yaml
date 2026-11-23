@@ -43,7 +43,10 @@ questions:
     type: boolean
     module: income
     ask: Tips or overtime pay
-    help: Tips you received, or overtime pay above your regular rate. For 2025 part of them can be deducted on Schedule 1-A.
+    help: >-
+      Tips you received in a tipped job, or overtime pay for hours over 40 a week. For 2025 you can deduct qualified
+      tips and the "half" of time-and-a-half overtime on Schedule 1-A; filing separately, you can't.
+    default: false
 
   # Payments
   estimatedPayments:

@@ -70,6 +70,11 @@ describe("2025 US forms", () => {
     ["senior-phase-out", "F1040,S1A"],
     ["single-high-earner", "F1040,S2,S3,F8959,F8960"],
     ["single-wages-interest", "F1040"],
+    ["tips-server", "F1040,S1A"],
+    ["tips-without-ssn", "F1040"],
+    ["tips-overtime-joint-phase-out", "F1040,S1A,S2,F8959"],
+    ["overtime-and-car-loan-separate", "F1040,S1A"],
+    ["car-loan-single", "F1040,S1A"],
   ] as const) {
     it(`${name}: its forms hold the case's expected lines`, () => {
       const example = golden(name);
@@ -162,6 +167,41 @@ describe("2025 US forms", () => {
       "6000",
       "12000",
       "12000",
+    ]);
+  });
+
+  it("fills Schedule 1-A's tips, overtime and car loan parts, each only when it has something", () => {
+    const s1a = formOf(print(golden("tips-overtime-joint-phase-out").input), "S1A");
+    // $320,500 of modified AGI: $20,500 over $300,000, so 20 whole thousands and $2,000 off each deduction.
+    expect(["4c", "7", "9", "10", "11", "12", "13", "14c", "15", "19", "20", "21"].map((key) => at(s1a, key))).toEqual([
+      "28000",
+      "25000",
+      "300000",
+      "20500",
+      "20",
+      "2000",
+      "23000",
+      "30000",
+      "25000",
+      "20",
+      "2000",
+      "23000",
+    ]);
+    // Lu's car doesn't qualify: Part IV is blank; so is Part V, with no one 65 or older.
+    expect(["22b", "23", "25", "30", "31", "32", "38"].map((key) => at(s1a, key))).toEqual([undefined, undefined, undefined, undefined, undefined, undefined, "46000"]);
+    const car = formOf(print(golden("overtime-and-car-loan-separate").input), "S1A");
+    // Filing separately: no overtime; the car loan interest cut by $200 for each $1,000 or part over $100,000.
+    expect(["14c", "21", "22a", "24", "26", "27", "28", "29", "30", "38"].map((key) => at(car, key))).toEqual([
+      undefined,
+      undefined,
+      "4000",
+      "4000",
+      "100000",
+      "4500",
+      "5",
+      "1000",
+      "3000",
+      "3000",
     ]);
   });
 

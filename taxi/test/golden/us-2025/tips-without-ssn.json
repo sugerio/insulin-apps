@@ -1,0 +1,79 @@
+{
+  "about": "Single, $9,000 of tips but no social security number valid for employment: no tips deduction",
+  "input": {
+    "country": "us",
+    "year": 2025,
+    "people": [
+      {
+        "id": "p1",
+        "name": "Ari Bell",
+        "role": "self",
+        "birthDate": "1993-03-03",
+        "province": null,
+        "residentAllYear": true
+      }
+    ],
+    "family": {
+      "maritalStatus": "single",
+      "dependants": []
+    },
+    "answers": {
+      "p1": {
+        "hasWages": true,
+        "hasInterest": false,
+        "hasTipsOrOvertime": true,
+        "canBeClaimed": false,
+        "isBlind": false,
+        "estimatedPayments": "0",
+        "hasCarLoan": false,
+        "qualifiedTips": "9000",
+        "qualifiedOvertime": "0",
+        "hasValidSSN": false,
+        "paidForCare": false
+      }
+    },
+    "slips": [
+      {
+        "id": "p1-w2-0",
+        "person": "p1",
+        "type": "W2",
+        "issuer": "Harbor Grill",
+        "boxes": {
+          "1": "38000",
+          "2": "2100",
+          "4": "2356",
+          "5": "38000",
+          "6": "551",
+          "7": "9000"
+        }
+      }
+    ]
+  },
+  "expected": {
+    "p1": {
+      "F1040.19": "0",
+      "F1040.27a": "0",
+      "F1040.28": "0",
+      "S8812.12": "0",
+      "F1040.1a": "38000",
+      "F1040.1e": "0",
+      "S3.2": "0",
+      "F1040.2a": "0",
+      "F1040.2b": "0",
+      "F1040.9": "38000",
+      "F1040.11a": "38000",
+      "F1040.12e": "15750",
+      "F1040.13b": "0",
+      "F1040.15": "22250",
+      "F1040.16": "2435",
+      "F8959.7": "0",
+      "F8960.17": "0",
+      "F1040.24": "2435",
+      "F1040.25c": "0",
+      "S3.11": "0",
+      "F1040.33": "2100",
+      "F1040.34": "0",
+      "F1040.37": "335"
+    }
+  }
+}

@@ -48,6 +48,7 @@
         "canBeClaimed": false,
         "isBlind": false,
         "estimatedPayments": "0",
+        "hasCarLoan": false,
         "paidForCare": false,
         "hasValidSSN": true,
         "livedApartLastSixMonths": true,
@@ -60,6 +61,7 @@
         "canBeClaimed": false,
         "isBlind": false,
         "estimatedPayments": "0",
+        "hasCarLoan": false,
         "spouseItemizes": false
       }
     },

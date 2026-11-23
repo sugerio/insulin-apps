@@ -1,0 +1,83 @@
+{
+  "about": "Single, a restaurant server with $38,000 of wages including $9,000 of tips in box 7: the whole $9,000 is deducted on Schedule 1-A",
+  "input": {
+    "country": "us",
+    "year": 2025,
+    "people": [
+      {
+        "id": "p1",
+        "name": "Rio Cruz",
+        "role": "self",
+        "birthDate": "1995-04-04",
+        "province": null,
+        "residentAllYear": true
+      }
+    ],
+    "family": {
+      "maritalStatus": "single",
+      "dependants": []
+    },
+    "answers": {
+      "p1": {
+        "hasWages": true,
+        "hasInterest": false,
+        "hasTipsOrOvertime": true,
+        "canBeClaimed": false,
+        "isBlind": false,
+        "estimatedPayments": "0",
+        "hasCarLoan": false,
+        "qualifiedTips": "9000",
+        "qualifiedOvertime": "0",
+        "hasValidSSN": true,
+        "paidForCare": false
+      }
+    },
+    "slips": [
+      {
+        "id": "p1-w2-0",
+        "person": "p1",
+        "type": "W2",
+        "issuer": "Harbor Grill",
+        "boxes": {
+          "1": "38000",
+          "2": "2100",
+          "4": "2356",
+          "5": "38000",
+          "6": "551",
+          "7": "9000"
+        }
+      }
+    ]
+  },
+  "expected": {
+    "p1": {
+      "F1040.19": "0",
+      "F1040.27a": "0",
+      "F1040.28": "0",
+      "S8812.12": "0",
+      "F1040.1a": "38000",
+      "F1040.1e": "0",
+      "S3.2": "0",
+      "F1040.2a": "0",
+      "F1040.2b": "0",
+      "F1040.9": "38000",
+      "F1040.11a": "38000",
+      "F1040.12e": "15750",
+      "F1040.13b": "9000",
+      "F1040.15": "13250",
+      "F1040.16": "1355",
+      "F8959.7": "0",
+      "F8960.17": "0",
+      "F1040.24": "1355",
+      "F1040.25c": "0",
+      "S3.11": "0",
+      "F1040.33": "2100",
+      "F1040.34": "745",
+      "F1040.37": "0",
+      "S1A.13": "9000",
+      "S1A.21": "0",
+      "S1A.30": "0",
+      "S1A.38": "9000"
+    }
+  }
+}

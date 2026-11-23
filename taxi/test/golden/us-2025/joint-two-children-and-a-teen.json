@@ -74,6 +74,7 @@
         "canBeClaimed": false,
         "isBlind": false,
         "estimatedPayments": "0",
+        "hasCarLoan": false,
         "paidForCare": false,
         "hasValidSSN": true
       },
@@ -84,6 +85,7 @@
         "canBeClaimed": false,
         "isBlind": false,
         "estimatedPayments": "0",
+        "hasCarLoan": false,
         "hasValidSSN": true
       }
     },

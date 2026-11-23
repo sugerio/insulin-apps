@@ -121,7 +121,12 @@ const IRS_PLACES: Record<string, Record<string, IrsPlace>> = {
     spouseSenior: { field: "c2_7[0]", label: "Spouse: Was born before January 2, 1961" },
     spouseBlind: { field: "c2_8[0]", label: "Is blind" },
   },
-  S1A: names("f1_01[0]"),
+  // Line 22's table: each car's interest deducted here, column (iii), one row for each spouse's car.
+  S1A: {
+    ...names("f1_01[0]"),
+    "22a": { field: "Table_Line22[0].Line22a[0].f2_03[0]", label: "Row: 22a. Column: Interest for this loan: (i i i) Schedule 1-A" },
+    "22b": { field: "Table_Line22[0].Line22b[0].f2_06[0]", label: "Row: 22b. Column: Interest for this loan: (i i i) Schedule 1-A" },
+  },
   S2: names("f1_01[0]"),
   S3: names("f1_01[0]"),
   S8812: {

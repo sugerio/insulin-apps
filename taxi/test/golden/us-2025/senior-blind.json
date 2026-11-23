@@ -25,6 +25,7 @@
         "canBeClaimed": false,
         "isBlind": true,
         "estimatedPayments": "0",
+        "hasCarLoan": false,
         "paidForCare": false
       }
     },

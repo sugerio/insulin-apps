@@ -1,0 +1,81 @@
+{
+  "about": "Single, $60,000 of wages and $12,000 of interest on a new U.S.-built car's loan: $10,000 deducted",
+  "input": {
+    "country": "us",
+    "year": 2025,
+    "people": [
+      {
+        "id": "p1",
+        "name": "Sky Moon",
+        "role": "self",
+        "birthDate": "1990-10-10",
+        "province": null,
+        "residentAllYear": true
+      }
+    ],
+    "family": {
+      "maritalStatus": "single",
+      "dependants": []
+    },
+    "answers": {
+      "p1": {
+        "hasWages": true,
+        "hasInterest": false,
+        "hasTipsOrOvertime": false,
+        "canBeClaimed": false,
+        "isBlind": false,
+        "estimatedPayments": "0",
+        "hasCarLoan": true,
+        "carLoanInterest": "12000",
+        "carLoanQualifies": "yes",
+        "paidForCare": false
+      }
+    },
+    "slips": [
+      {
+        "id": "p1-w2-0",
+        "person": "p1",
+        "type": "W2",
+        "issuer": "Acme",
+        "boxes": {
+          "1": "60000",
+          "2": "5500",
+          "4": "3720",
+          "5": "60000",
+          "6": "870"
+        }
+      }
+    ]
+  },
+  "expected": {
+    "p1": {
+      "F1040.19": "0",
+      "F1040.27a": "0",
+      "F1040.28": "0",
+      "S8812.12": "0",
+      "F1040.1a": "60000",
+      "F1040.1e": "0",
+      "S3.2": "0",
+      "F1040.2a": "0",
+      "F1040.2b": "0",
+      "F1040.9": "60000",
+      "F1040.11a": "60000",
+      "F1040.12e": "15750",
+      "F1040.13b": "10000",
+      "F1040.15": "34250",
+      "F1040.16": "3875",
+      "F8959.7": "0",
+      "F8960.17": "0",
+      "F1040.24": "3875",
+      "F1040.25c": "0",
+      "S3.11": "0",
+      "F1040.33": "5500",
+      "F1040.34": "1625",
+      "F1040.37": "0",
+      "S1A.13": "0",
+      "S1A.21": "0",
+      "S1A.30": "10000",
+      "S1A.38": "10000"
+    }
+  }
+}

@@ -25,8 +25,8 @@ export const gettingStarted: DocTopic = {
             <b>United States:</b> when you start a year, choose Canada or the United States. A US year prepares the federal Form 1040 of a U.S.
             citizen or resident alien for the whole year, in every filing status (single, married filing jointly or separately, head of
             household, qualifying surviving spouse), with wages (W-2) and interest (1099-INT), the standard deduction, the 2025 deduction for
-            seniors, dependants with the child tax credit and the credit for other dependents, the earned income credit, and the credit for
-            child and dependent care. A finished return downloads on the IRS's own forms: Form 1040 and the schedules it uses, filled in. Add
+            seniors, tips, overtime pay and car loan interest, dependants with the child tax credit and the credit for other dependents, the
+            earned income credit, and the credit for child and dependent care. A finished return downloads on the IRS's own forms: Form 1040 and the schedules it uses, filled in. Add
             the social security numbers and your address by hand, attach Copy B of each W-2, sign and mail it to the IRS. It prepares no state
             return, doesn't read US forms by AI yet, and says on the return when something it doesn't handle yet applies, such as itemized
             deductions.

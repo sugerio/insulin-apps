@@ -291,8 +291,8 @@ lines:
     source: "Schedule 1-A, lines 36a and 36b: you, and your spouse on a joint return, born before January 2, 1961, with a valid social security number"
   F1040.13b:
     label: Additional deductions from Schedule 1-A
-    formula: "line.S1A.37"
-    source: "Schedule 1-A, line 38; the deductions for tips, overtime and car loan interest aren't worked out yet (SCOPE.tips)"
+    formula: "line.S1A.38"
+    source: "Schedule 1-A, line 38: the deductions for qualified tips, overtime and car loan interest (schedule1a.yaml) and for seniors"
   F1040.14:
     label: Total deductions
     formula: "line.F1040.12e + line.F1040.13b"
@@ -437,7 +437,7 @@ lines:
   SCOPE.return:
     label: Situations this app doesn't handle yet
     formula: >-
-      line.SCOPE.residency + line.SCOPE.widowed + line.SCOPE.tips + line.SCOPE.kiddie + line.SCOPE.care
+      line.SCOPE.residency + line.SCOPE.widowed + line.SCOPE.kiddie + line.SCOPE.care
   SCOPE.residency:
     label: A nonresident or dual-status alien
     formula: >-
@@ -447,12 +447,6 @@ lines:
   SCOPE.widowed:
     label: A spouse who died in 2025
     formula: 'if(family.maritalStatus == "widowed", if(answer.spouseDiedIn2025, unsupported("Your spouse died in 2025, so you can file jointly for 2025; this app doesn''t prepare that return yet"), 0), 0)'
-  SCOPE.tips:
-    label: Tips and overtime pay
-    formula: >-
-      if(answer.hasTipsOrOvertime, unsupported("The 2025 deductions for tips and overtime pay (Schedule 1-A) aren't worked out by this app yet"), 0)
-      + if(line.US.joint == 1, if(spouse.answer.hasTipsOrOvertime,
-      unsupported("Your spouse's tips or overtime pay: the 2025 deductions for them (Schedule 1-A) aren't worked out by this app yet"), 0), 0)
   SCOPE.kiddie:
     label: A child's interest taxed at the parent's rate
     formula: 'if(line.US.joint == 1, 0, if(person.age < 24 and line.F1040.2b > param.kiddieThreshold, unsupported("Interest over $2,700 for someone under 24 may be taxed on Form 8615 (the kiddie tax), which this app doesn''t prepare"), 0))'

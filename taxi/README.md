@@ -83,8 +83,9 @@ surviving spouse; dependants with the child tax credit, the credit for other dep
 credit (Part II-B too); the earned income credit; the credit for child and dependent care expenses and dependent
 care benefits (Form 2441); wages (W-2) and interest (1099-INT), the standard deduction (with the 2025 deduction
 for seniors), the Tax Table and Tax Computation Worksheet, the Additional Medicare Tax, the net investment income tax
-and excess social security tax; printed on the IRS's forms. No state return and no AI reading yet; itemized
-deductions, tips or overtime and a household employee say so when they apply.
+and excess social security tax; the 2025 deductions for qualified tips, overtime pay and car loan interest
+(Schedule 1-A); printed on the IRS's forms. No state return and no AI reading yet; itemized deductions, allocated
+tips and a household employee say so when they apply.
 
 ## Good to know
 

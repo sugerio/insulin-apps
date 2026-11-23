@@ -52,6 +52,7 @@
         "canBeClaimed": false,
         "isBlind": false,
         "estimatedPayments": "0",
+        "hasCarLoan": false,
         "paidForCare": false,
         "paidHalfOfHome": true,
         "hasValidSSN": true

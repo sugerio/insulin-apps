@@ -129,7 +129,10 @@ questions:
     type: boolean
     module: about
     ask: You have a social security number valid for employment
-    help: Issued by the due date of the return. The child tax credit needs one (filing jointly, one spouse's is enough); the earned income credit needs one for you and, filing jointly, for your spouse.
+    help: >-
+      Issued by the due date of the return. The child tax credit needs one (filing jointly, one spouse's is enough); the
+      earned income credit needs one for you and, filing jointly, for your spouse; the deductions for tips and overtime
+      need one for the person who received them.
   paidHalfOfHome:
     type: boolean
     module: about

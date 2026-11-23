@@ -81,13 +81,14 @@ describe("a United States year", () => {
     const estimate = await json<Estimate>(server.call("GET", "/api/years/2025/estimate"));
     expect(estimate.input.country).toBe("us");
     const line = (from: Estimate, id: string) => from.result.people[0]!.lines.find((each) => each.id === id)?.value;
-    // $40,000 less $15,750 is $24,250: the Tax Table's $24,250-$24,300 row, $2,675. The total waits for the answer
-    // about tips and overtime pay, which the 2025 return can deduct.
-    expect([line(estimate, "F1040.15"), line(estimate, "F1040.16"), line(estimate, "F1040.24")]).toEqual(["24250", "2675", null]);
+    // $40,000 less $15,750 is $24,250: the Tax Table's $24,250-$24,300 row, $2,675. Until tips, overtime and a car loan
+    // are answered, none is assumed: an estimate.
+    expect([line(estimate, "F1040.15"), line(estimate, "F1040.16"), line(estimate, "F1040.24")]).toEqual(["24250", "2675", "2675"]);
+    expect(estimate.result.people[0]!.estimates.map((item) => item.question)).toEqual(expect.arrayContaining(["hasTipsOrOvertime", "hasCarLoan"]));
 
     year = await json<TaxYear>(
       server.call("PUT", "/api/years/2025/answers", {
-        body: { revision: year.revision, personId: alex.id, answers: { hasWages: true, hasInterest: false, hasTipsOrOvertime: false, canBeClaimed: false, isBlind: false, estimatedPayments: "0" } },
+        body: { revision: year.revision, personId: alex.id, answers: { hasWages: true, hasInterest: false, hasTipsOrOvertime: false, hasCarLoan: false, canBeClaimed: false, isBlind: false, estimatedPayments: "0" } },
       }),
     );
     const answered = await json<Estimate>(server.call("GET", "/api/years/2025/estimate"));
@@ -126,7 +127,7 @@ describe("printing a US return", () => {
     return pages;
   }
   const W2 = (personId: string, issuer: string, wages: string) => ({ personId, type: "W2", issuer, boxes: { 1: wages, 2: "3500", 4: "0", 5: wages, 6: (Number(wages) * 0.0145).toFixed(2) } });
-  const ANSWERS = { hasWages: true, hasInterest: false, hasTipsOrOvertime: false, canBeClaimed: false, isBlind: false, estimatedPayments: "0" };
+  const ANSWERS = { hasWages: true, hasInterest: false, hasTipsOrOvertime: false, hasCarLoan: false, canBeClaimed: false, isBlind: false, estimatedPayments: "0" };
 
   /** A finished US year: Alex alone, or Alex and Sam filing jointly; each with a W-2 and every answer given. */
   async function finished(joint: boolean) {
@@ -282,7 +283,7 @@ describe("a joint return", () => {
     current = await w2(sam.id, "Initech", "50000", "4200");
     const answers = (personId: string) =>
       server.call("PUT", "/api/years/2025/answers", {
-        body: { revision: current.revision, personId, answers: { hasWages: true, hasInterest: false, hasTipsOrOvertime: false, canBeClaimed: false, isBlind: false, estimatedPayments: "0" } },
+        body: { revision: current.revision, personId, answers: { hasWages: true, hasInterest: false, hasTipsOrOvertime: false, hasCarLoan: false, canBeClaimed: false, isBlind: false, estimatedPayments: "0" } },
       });
     current = await json<TaxYear>(answers(alex.id));
     // Sam's answers are still missing: the joint return isn't done.
@@ -344,7 +345,7 @@ describe("dependants on a US return", () => {
       }),
       201,
     );
-    current = await json<TaxYear>(save(current.revision, alex.id, { hasWages: true, hasInterest: false, hasTipsOrOvertime: false, canBeClaimed: false, isBlind: false, estimatedPayments: "0", paidHalfOfHome: true, hasValidSSN: true, paidForCare: false }));
+    current = await json<TaxYear>(save(current.revision, alex.id, { hasWages: true, hasInterest: false, hasTipsOrOvertime: false, hasCarLoan: false, canBeClaimed: false, isBlind: false, estimatedPayments: "0", paidHalfOfHome: true, hasValidSSN: true, paidForCare: false }));
     // The child's questions are still to answer: Personal info isn't done.
     expect(current.returns[0]!.steps.personal).toBe("todo");
     current = await json<TaxYear>(save(current.revision, ava.id, childAnswers));
@@ -379,7 +380,7 @@ describe("the earned income credit", () => {
       }),
       201,
     );
-    const answers = { hasWages: true, hasInterest: false, hasTipsOrOvertime: false, canBeClaimed: false, isBlind: false, estimatedPayments: "0" };
+    const answers = { hasWages: true, hasInterest: false, hasTipsOrOvertime: false, hasCarLoan: false, canBeClaimed: false, isBlind: false, estimatedPayments: "0" };
     year = await json<TaxYear>(server.call("PUT", "/api/years/2025/answers", { body: { revision: year.revision, personId: rae.id, answers } }));
     let estimate = await json<Estimate>(server.call("GET", "/api/years/2025/estimate"));
     // The credit needs a valid SSN: asked before the credit is worked out.

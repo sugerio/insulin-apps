@@ -26,7 +26,6 @@ const ALWAYS_ZERO: Record<string, string> = {
   "SCOPE.return": "situations the US return doesn't handle yet: zero, or says so",
   "SCOPE.residency": "a nonresident or dual-status alien: zero, or says so",
   "SCOPE.widowed": "a spouse who died in 2025: zero, or says so",
-  "SCOPE.tips": "tips and overtime: zero, or says so",
   "SCOPE.kiddie": "the kiddie tax: zero, or says so",
   "SCOPE.care": "a household employee (Schedule H), or 2024 care paid in 2025: zero, or says so",
 };

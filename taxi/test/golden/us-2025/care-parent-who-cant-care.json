@@ -42,6 +42,7 @@
         "canBeClaimed": false,
         "isBlind": false,
         "estimatedPayments": "0",
+        "hasCarLoan": false,
         "paidForCare": true,
         "householdEmployer": false,
         "priorYearCare": false,

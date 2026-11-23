@@ -34,6 +34,7 @@
         "canBeClaimed": false,
         "isBlind": false,
         "estimatedPayments": "2000",
+        "hasCarLoan": false,
         "paidForCare": false,
         "spouseItemizes": false
       },
@@ -44,6 +45,7 @@
         "canBeClaimed": false,
         "isBlind": false,
         "estimatedPayments": "0",
+        "hasCarLoan": false,
         "spouseItemizes": false
       }
     },

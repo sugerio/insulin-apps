@@ -63,6 +63,7 @@
         "canBeClaimed": false,
         "isBlind": false,
         "estimatedPayments": "0",
+        "hasCarLoan": false,
         "paidForCare": true,
         "householdEmployer": false,
         "priorYearCare": false,
@@ -79,6 +80,7 @@
         "canBeClaimed": false,
         "isBlind": false,
         "estimatedPayments": "0",
+        "hasCarLoan": false,
         "hasValidSSN": true,
         "studentOrDisabledMonths": "0"
       }

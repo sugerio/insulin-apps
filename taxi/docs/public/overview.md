@@ -92,12 +92,16 @@ The US return covers:
   (box 10 of the W-2) are excluded up to $5,000, and the rest is taxed as wages. Filing jointly, a spouse who was a
   full-time student or couldn't care for themselves, and had no wages, counts as earning $250 ($500) a month.
 - Deductions: the standard deduction, with the additional amounts at 65 or older and for blindness, the smaller
-  deduction of someone who can be claimed as a dependent, and the 2025 enhanced deduction for seniors.
+  deduction of someone who can be claimed as a dependent, and the 2025 deductions on Schedule 1-A: for seniors, for
+  qualified tips (up to $25,000), for the "half" of time-and-a-half overtime pay (up to $12,500, or $25,000 jointly),
+  and for interest on a loan for a new car assembled in the U.S. (up to $10,000). Each is smaller at a higher income.
+  Filing separately, the tips and overtime deductions can't be taken. The tips amount starts from box 7 of the W-2.
 - Tax: the IRS Tax Table under $100,000 and the Tax Computation Worksheet from $100,000, the Additional Medicare Tax,
   the net investment income tax, and a credit for excess social security tax withheld by two or more employers.
 
-A parent's release of the claim to a child (Form 8332), itemized deductions, tips and overtime pay, a household
-employee (Schedule H), and other income come in later versions. The app says so when one of them applies,
+A parent's release of the claim to a child (Form 8332), itemized deductions, allocated tips (box 8 of the W-2) and
+unreported tips (Form 4137), self-employment, a household employee (Schedule H), and other income come in later
+versions. The app says so when one of them applies,
 instead of giving a wrong amount. A finished US return downloads as one PDF: the IRS's Form 1040 and the schedules and
 forms it uses (Schedules 1-A, 2, 3, 8812 and EIC, and Forms 2441, 8959 and 8960), filled in, then a worksheet. Taxi
 doesn't read US forms by AI yet: enter each W-2 and 1099-INT on Income.

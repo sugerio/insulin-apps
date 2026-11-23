@@ -1,0 +1,182 @@
+# Schedule 1-A, Parts II to IV: the 2025 deductions for qualified tips, qualified overtime compensation and car loan
+# interest. Part V (the enhanced deduction for seniors) is in federal.yaml. "Instructions" is the 2025 Instructions for
+# Form 1040, Schedule 1-A section; "Schedule 1-A" the 2025 form. Each part is cut by the modified AGI of line 3.
+# Tips and overtime from self-employment (lines 5 and 14b) aren't asked: this app has no self-employment income yet.
+
+params:
+  tipsMax:
+    label: Most qualified tips deducted
+    source: "Schedule 1-A, line 7: $25,000, whatever the filing status"
+    value: 25000
+  overtimeMax:
+    label: Most qualified overtime compensation deducted
+    source: "Schedule 1-A, line 15: $12,500"
+    value: 12500
+  overtimeMaxJoint:
+    label: Most qualified overtime compensation deducted, Married filing jointly
+    source: "Schedule 1-A, line 15: $25,000 if married filing jointly"
+    value: 25000
+  tipsOvertimePhaseOutStart:
+    label: Modified AGI over which the tips and overtime deductions are reduced
+    source: "Schedule 1-A, lines 9 and 17: $150,000"
+    value: 150000
+  tipsOvertimePhaseOutStartJoint:
+    label: Modified AGI over which the tips and overtime deductions are reduced, Married filing jointly
+    source: "Schedule 1-A, lines 9 and 17: $300,000 if married filing jointly"
+    value: 300000
+  tipsOvertimeReduction:
+    label: Reduction of the tips and overtime deductions for each whole $1,000 of modified AGI over the threshold
+    source: "Schedule 1-A, lines 11, 12, 19 and 20: $100 for each $1,000, the result decreased to a whole number"
+    value: 100
+  carLoanMax:
+    label: Most car loan interest deducted
+    source: "Schedule 1-A, line 24: $10,000"
+    value: 10000
+  carLoanPhaseOutStart:
+    label: Modified AGI over which the car loan interest deduction is reduced
+    source: "Schedule 1-A, line 26: $100,000"
+    value: 100000
+  carLoanPhaseOutStartJoint:
+    label: Modified AGI over which the car loan interest deduction is reduced, Married filing jointly
+    source: "Schedule 1-A, line 26: $200,000 if married filing jointly"
+    value: 200000
+  carLoanReduction:
+    label: Reduction of the car loan interest deduction for each $1,000 (or part) of modified AGI over the threshold
+    source: "Schedule 1-A, lines 28 and 29: $200 for each $1,000, the result increased to a whole number"
+    value: 200
+
+questions:
+  # Asked in the card of "Tips or overtime pay" (questions.yaml), each for the person who received them.
+  qualifiedTips:
+    type: money
+    module: income
+    parent: hasTipsOrOvertime
+    ask: Qualified tips
+    suggest: US.boxTips
+    help: >-
+      Tips customers chose to give you, in cash or by card, in a job on the IRS's list of tipped occupations (such as
+      wait staff, bartenders, hairdressers, delivery and rideshare drivers; see IRS.gov/TippedOccupations). Box 7 of
+      your W-2 shows the tips you reported to your employer, and is the amount to start from. Not service charges or
+      automatic gratuities. Enter 0 if your job isn't on the list.
+  qualifiedOvertime:
+    type: money
+    module: income
+    parent: hasTipsOrOvertime
+    ask: Qualified overtime pay
+    help: >-
+      Only the "half" of time-and-a-half that the Fair Labor Standards Act requires for hours over 40 a week, in a job
+      that is not exempt from overtime. Your employer may show it in box 14 of your W-2 or on a statement. If you only
+      know the total paid for your overtime hours at time-and-a-half, divide it by 3. Not pay above time-and-a-half,
+      holiday or weekend premiums, or overtime paid under state rules only.
+
+  # Deductions
+  hasCarLoan:
+    type: boolean
+    module: deductions
+    ask: Interest on a loan for a new car
+    help: >-
+      Interest you paid in 2025 on a loan you took out after 2024 to buy a new car, minivan, van, SUV, pickup truck or
+      motorcycle (Schedule 1-A, Part IV). A lease doesn't count.
+    default: false
+  carLoanInterest:
+    type: money
+    module: deductions
+    parent: hasCarLoan
+    ask: Interest you paid on the loan in 2025
+    help: The interest only, not the payments of the loan itself. Your lender's statement shows it.
+  carLoanQualifies:
+    type: choice
+    module: deductions
+    parent: hasCarLoan
+    ask: Does the car qualify?
+    options: [yes, no]
+    optionLabels:
+      yes: Yes, all of these are true
+      no: No
+    help: >-
+      All of these are true: the car was new when you bought it (its first use started with you); its final assembly
+      was in the United States (the label on the car, or the plant in its VIN, says so); you expect to use it for
+      personal use more than half the time; and the loan is in your name and secured by a first lien on the car. You
+      write the car's VIN on Schedule 1-A yourself.
+
+lines:
+  # Part II: qualified tips, for each person who received them with a valid social security number.
+  US.boxTips:
+    label: Social security tips on this person's Forms W-2
+    formula: "sum(W2.box7)"
+    source: "Instructions, Schedule 1-A, line 4a: you can use the amount on Form W-2, box 7"
+  US.ownTips:
+    label: This person's qualified tips
+    formula: "if(answer.hasTipsOrOvertime, if(answer.qualifiedTips == 0, 0, if(answer.hasValidSSN, answer.qualifiedTips, 0)), 0)"
+    source: "Instructions, Schedule 1-A, Part II: the person who received qualified tips must have a valid social security number"
+  S1A.4c:
+    label: Qualified tips received as an employee
+    formula: "if(line.US.separate == 1, 0, line.US.ownTips + if(line.US.joint == 1, spouse.line.US.ownTips, 0))"
+    source: "Schedule 1-A, Part II: if married, you must file jointly to claim the deduction; filing jointly, both spouses' tips"
+  S1A.7:
+    label: Qualified tips, up to $25,000
+    formula: "min(line.S1A.4c, param.tipsMax)"
+    source: "Schedule 1-A, lines 6 and 7 (no tips from a trade or business, line 5)"
+  S1A.9:
+    label: Modified AGI over which the tips and overtime deductions are reduced
+    formula: "if(line.US.joint == 1, param.tipsOvertimePhaseOutStartJoint, param.tipsOvertimePhaseOutStart)"
+  S1A.10:
+    label: Modified AGI over the threshold
+    formula: "max(0, line.S1A.3 - line.S1A.9)"
+    source: "Schedule 1-A, lines 8 to 10 (and 16 to 18)"
+  S1A.12:
+    label: Reduction of the tips and overtime deductions
+    formula: "floor(line.S1A.10, 1000) / 1000 * param.tipsOvertimeReduction"
+    source: "Schedule 1-A, lines 11 and 12 (and 19 and 20): line 10 divided by $1,000, decreased to a whole number, times $100"
+  S1A.13:
+    label: Qualified tips deduction
+    formula: "max(0, line.S1A.7 - line.S1A.12)"
+
+  # Part III: qualified overtime compensation.
+  US.ownOvertime:
+    label: This person's qualified overtime compensation
+    formula: "if(answer.hasTipsOrOvertime, if(answer.qualifiedOvertime == 0, 0, if(answer.hasValidSSN, answer.qualifiedOvertime, 0)), 0)"
+    source: "Instructions, Schedule 1-A, Part III: the person who received it must have a valid social security number"
+  S1A.14c:
+    label: Qualified overtime compensation
+    formula: "if(line.US.separate == 1, 0, line.US.ownOvertime + if(line.US.joint == 1, spouse.line.US.ownOvertime, 0))"
+    source: "Schedule 1-A, lines 14a to 14c (none from Form 1099-NEC or 1099-MISC, line 14b); if married, you must file jointly"
+  S1A.15:
+    label: Qualified overtime compensation, up to $12,500 ($25,000 jointly)
+    formula: "min(line.S1A.14c, if(line.US.joint == 1, param.overtimeMaxJoint, param.overtimeMax))"
+  S1A.21:
+    label: Qualified overtime compensation deduction
+    formula: "max(0, line.S1A.15 - line.S1A.12)"
+    source: "Schedule 1-A, lines 16 to 21: the same threshold and reduction as the tips deduction (lines 9 to 12)"
+
+  # Part IV: car loan interest. No social security number or joint return is needed.
+  US.ownCarLoan:
+    label: This person's qualified passenger vehicle loan interest
+    formula: 'if(answer.hasCarLoan, if(answer.carLoanInterest == 0, 0, if(answer.carLoanQualifies == "yes", answer.carLoanInterest, 0)), 0)'
+  S1A.23:
+    label: Qualified passenger vehicle loan interest
+    formula: "line.US.ownCarLoan + if(line.US.joint == 1, spouse.line.US.ownCarLoan, 0)"
+    source: "Schedule 1-A, lines 22 and 23, column (iii): none deducted on Schedule C, E or F"
+  S1A.24:
+    label: Car loan interest, up to $10,000
+    formula: "min(line.S1A.23, param.carLoanMax)"
+  S1A.26:
+    label: Modified AGI over which the car loan interest deduction is reduced
+    formula: "if(line.US.joint == 1, param.carLoanPhaseOutStartJoint, param.carLoanPhaseOutStart)"
+  S1A.27:
+    label: Modified AGI over the car loan threshold
+    formula: "max(0, line.S1A.3 - line.S1A.26)"
+    source: "Schedule 1-A, lines 25 to 27"
+  S1A.29:
+    label: Reduction of the car loan interest deduction
+    formula: "(0 - floor(0 - line.S1A.27, 1000)) / 1000 * param.carLoanReduction"
+    source: "Schedule 1-A, lines 28 and 29: line 27 divided by $1,000, increased to a whole number, times $200"
+  S1A.30:
+    label: Car loan interest deduction
+    formula: "max(0, line.S1A.24 - line.S1A.29)"
+
+  # Part VI
+  S1A.38:
+    label: Additional deductions
+    formula: "line.S1A.13 + line.S1A.21 + line.S1A.30 + line.S1A.37"
+    source: "Schedule 1-A, line 38: lines 13, 21, 30 and 37"

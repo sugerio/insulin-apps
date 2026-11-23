@@ -82,11 +82,11 @@ export const aiAssistantsAndApi: DocTopic = {
               Idempotency-Key answers its first result. Once learned, the import's <Code>version</Code> is the one to name next.
             </li>
             <li>
-              <b>Whom it acts for.</b> The header <Code>x-on-behalf-of</Code> (1 to 200 characters, one line) on adding a note, a
+              <b>Whom it acts for.</b> The header <Code>x-on-behalf-of</Code> (1 to 200 characters, one line, UTF-8) on adding a note, a
               correction, files or a web page names whom the program acts for, such as the person who approved it. It is kept with
               the import, answered as <Code>onBehalfOf</Code>, and History shows it: "Partner Agent, on behalf of Ana Lee". It is a
               label only: it gives no access and isn't checked against anyone's account. A retry with the same Idempotency-Key keeps
-              the first value. Longer, or with control characters: 400.
+              the first value. Longer, with control characters, or not UTF-8: 400.
             </li>
             <li>
               <b>What nothing answered.</b> <Code>GET /api/collections/{'{id}'}/gaps</Code> lists the questions nothing in the

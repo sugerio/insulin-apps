@@ -1,4 +1,5 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { onBehalfOf } from '../../src/app/server/routes/common.ts'
 import { createHarness, ORG, PEOPLE, type Harness, type Person } from '../support/harness.ts'
 
 // What an API client that writes for people needs (an agent proposes, a person approves, the client writes):
@@ -251,13 +252,37 @@ describe('K3 x-on-behalf-of on changes', () => {
     expect(page.status).toBe(202)
     expect(page.body.import.onBehalfOf).toBe('Ana Lee')
     await setLimit('learned_month', 0)
-    // "José Núñez" as its UTF-8 bytes, one character each, as HTTP carries them.
+    // "José Núñez" as its UTF-8 bytes, one character each, as Node gives a header.
     const bytes = String.fromCharCode(...new TextEncoder().encode('José Núñez'))
     const waiting = await note(id, { text: 'Silver partners renew every June.' }, { 'x-on-behalf-of': bytes })
     expect(waiting.body.import).toMatchObject({ state: 'waiting', onBehalfOf: 'José Núñez' })
     const listed = await h.json<{ imports: { importId: string; createdBy: { id: string; name: string | null }; onBehalfOf: string | null }[] }>(PEOPLE.maya, 'GET', `/api/collections/${id}/imports?state=waiting`)
     expect(listed.body.imports).toEqual([expect.objectContaining({ importId: waiting.body.import.importId, createdBy: { id: CLIENT.id, name: 'CRM sync' }, onBehalfOf: 'José Núñez' })])
     expect(await importOf(id, waiting.body.import.importId, PEOPLE.maya)).toMatchObject({ state: 'waiting', onBehalfOf: 'José Núñez' })
+  })
+
+  it('on Workers, as it comes: already UTF-8, so "Ã©" stays "Ã©"; bytes that weren\'t UTF-8 are refused', async () => {
+    // The Workers runtime gives a header decoded from UTF-8, bytes that aren't UTF-8 as U+FFFD.
+    vi.stubGlobal('navigator', { userAgent: 'Cloudflare-Workers' })
+    try {
+      const id = await collection()
+      for (const label of ['Ã© Ana Lee', 'José Núñez']) {
+        const added = await note(id, { text: `Partners named by ${label} renew in March.` }, { 'x-on-behalf-of': label })
+        expect(added.body.import.onBehalfOf).toBe(label)
+      }
+      // Node can't build a header above U+00FF, so these call the reader the way a route does.
+      const request = (value: string) => ({ req: { header: () => value } }) as unknown as Parameters<typeof onBehalfOf>[0]
+      expect(onBehalfOf(request('李小龙 for Ana Lee'))).toBe('李小龙 for Ana Lee')
+      let refused: unknown
+      try {
+        onBehalfOf(request('Jos\uFFFD N\uFFFD\uFFFDez'))
+      } catch (error) {
+        refused = error
+      }
+      expect(refused).toMatchObject({ code: 'bad_request', extra: { header: 'x-on-behalf-of' } })
+    } finally {
+      vi.unstubAllGlobals()
+    }
   })
 })
 

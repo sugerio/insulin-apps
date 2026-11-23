@@ -151,7 +151,8 @@ whom the program acts for. It is kept with the import, answered as `onBehalfOf` 
 `GET /api/collections/{id}/imports/{importId}` and in the lists of imports, and History shows it: "Partner Agent, on behalf
 of Ana Lee". It is a label only: it gives no access, and Knowledge never checks it against anyone's account. It isn't part
 of the request a retry repeats: a retry with the same `Idempotency-Key` and another value keeps the first value. Longer
-than 200 characters, or with control characters, it answers 400 `bad_request` with `"header": "x-on-behalf-of"`.
+than 200 characters, with control characters, or not sent as UTF-8, it answers 400 `bad_request` with
+`"header": "x-on-behalf-of"`.
 
 ```bash
 curl -s https://knowledge.insulinapps.com/api/collections/$COLLECTION/notes \

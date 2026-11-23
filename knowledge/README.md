@@ -113,7 +113,7 @@ For programs that write what people approved: a note or a correction may carry `
 `version`, its restore point), refused with 409 `{ error: 'version_changed', currentVersion, message }` at another version
 and checked again by the engine when the import applies (the import then fails with error `version_changed`); an
 accepted request sent again with its `Idempotency-Key` answers first. Adding a note, a correction, files or a web page
-takes `x-on-behalf-of` (1 to 200 characters): a label kept with the import (`imports.on_behalf_of`), answered as
+takes `x-on-behalf-of` (1 to 200 characters, UTF-8): a label kept with the import (`imports.on_behalf_of`), answered as
 `onBehalfOf` and shown in History, never used for access and not part of what an idempotent retry compares (the first
 value stays).
 

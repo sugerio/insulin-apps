@@ -5,6 +5,7 @@ import { compileRules } from "../../src/app/shared/engine/compile.ts";
 import { EngineError } from "../../src/app/shared/engine/errors.ts";
 import { Evaluation, type EngineInput } from "../../src/app/shared/engine/evaluate.ts";
 import { loadRuleSet } from "../../src/app/shared/engine/rules.ts";
+import { PROVINCES } from "../../src/app/shared/people.ts";
 import { rulesFor } from "../../src/app/shared/rules/index.ts";
 
 // A small rule set that exercises the evaluator without depending on real tax numbers.
@@ -454,6 +455,40 @@ describe("the 2025 rules", () => {
     expect(unhandled("0")).toEqual([]);
     expect(unhandled("0.00")).toEqual([]);
     expect(unhandled("500")).toEqual(["T5 from Northwind Bank: box 15 isn't handled by this app"]);
+  });
+
+  // A spouse's formula reads the other return (`spouse.`), and whatever it reads there is asked on that return. Read
+  // the wrong way, a province's own question is asked of a spouse who lives elsewhere, and that return can't be
+  // finished until it is answered: Quebec's RL questions on an Ontario return once a Quebec spouse pooled the
+  // donations, or Saskatchewan's home renovation question on a Quebec return.
+  it("ask a province's own questions only on a return in that province, whatever the spouse's province", () => {
+    const couple = JSON.parse(readFileSync(resolve(import.meta.dirname, "../golden/ca-2025/ab-couple.json"), "utf8")).input as EngineInput;
+    const ca2025 = rulesFor(2025)!;
+    const quebecSlipQuestions = [...ca2025.questions.values()].filter((question) => question.slip?.startsWith("RL")).map((question) => question.id);
+    expect(quebecSlipQuestions).toEqual(expect.arrayContaining(["hasRl1", "hasRl2", "hasRl8"]));
+    const asked: string[] = [];
+    for (const first of PROVINCES) {
+      for (const second of PROVINCES) {
+        // Both directions of pooling the donations on one return.
+        for (const firstClaims of [true, false]) {
+          const input = structuredClone(couple);
+          input.people[0]!.province = first;
+          input.people[1]!.province = second;
+          for (const answers of Object.values(input.answers)) Object.assign(answers, { donations: "500", homeRenovationExpenses: "4000" });
+          input.answers.p1!.claimSpouseDonations = firstClaims;
+          input.answers.p2!.claimSpouseDonations = !firstClaims;
+          for (const person of new Evaluation(ca2025, input).result().people) {
+            const province = input.people.find((each) => each.id === person.personId)!.province;
+            for (const question of person.questions) {
+              if ((province !== "QC" && quebecSlipQuestions.includes(question)) || (province !== "SK" && question === "homeRenovationExpenses")) {
+                asked.push(`${question} on the ${province} return (the couple: ${first} and ${second})`);
+              }
+            }
+          }
+        }
+      }
+    }
+    expect(asked).toEqual([]);
   });
 
   describe("for a part-year resident", () => {

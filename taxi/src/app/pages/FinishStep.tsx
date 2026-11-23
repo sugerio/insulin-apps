@@ -118,8 +118,9 @@ function Results({ estimate, slips }: { estimate: Estimate; slips: SlipList }) {
         ) : (
         <Download
           ready={checks.length === 0}
+          country={year.country}
           quebec={balances.some((balance) => balance.name === "Quebec")}
-          toAdd={formsToAdd(evaluation, owner.id)}
+          toAdd={formsToAdd(rules, evaluation, owner.id)}
           href={`/api/years/${year.year}/returns/${owner.id}/forms`}
           fileName={`Taxi ${year.year} return - ${owner.name}.pdf`}
         />
@@ -156,12 +157,14 @@ function Headline({ title, refund, owing }: { title?: string; refund: string | n
  */
 function Download({
   ready,
+  country,
   quebec,
   toAdd,
   href,
   fileName,
 }: {
   ready: boolean;
+  country: string;
   quebec: boolean;
   toAdd: { form: string; why: string }[];
   href: string;
@@ -184,7 +187,13 @@ function Download({
   return (
     <section aria-label="Your forms" className="flex flex-col gap-2 rounded-lg border p-4">
       <h2 className="text-sm font-medium">Your forms</h2>
-      {quebec ? (
+      {country === "us" ? (
+        <p className="text-xs text-muted-foreground">
+          Form 1040 and the schedules and forms your return uses, filled in with what Taxi knows, and a worksheet that shows how each amount was worked
+          out. Add the social security numbers, your address and the other answers Taxi doesn't ask by hand. Attach Copy B of each W-2, sign Form 1040
+          and mail it to the IRS; or copy the amounts into IRS e-file software.
+        </p>
+      ) : quebec ? (
         <p className="text-xs text-muted-foreground">
           Both of your returns, filled in with what Taxi knows: the CRA's T1 for residents of Quebec with the schedules and forms it uses, then Revenu
           Québec's TP-1 with its schedules, and a worksheet that shows how each amount was worked out. Add your social insurance number, address and the

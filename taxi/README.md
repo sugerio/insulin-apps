@@ -52,8 +52,13 @@ uploaded slips read by AI (or typed in), income, deductions, credits, the result
   and are kept in the database; they are never in the repository. Where each amount goes is measured from the PDFs by
   `npm run form-layout` (`rules/ca/2025/form-layout.yaml`); what goes there is in `rules/ca/2025/forms.yaml`. Revenu
   Québec's forms also print in French, on their French versions, each measured on its own. A form the return needs that
-  isn't printed (such as Revenu Québec's Schedule D) is named on Finish and the worksheet (`formsToAdd`,
-  `src/app/shared/print.ts`).
+  isn't printed (such as Revenu Québec's Schedule D) is named on Finish and the worksheet (`formsToAdd` in
+  `forms.yaml`).
+- **The IRS's forms.** A finished US return prints the same way on the IRS's Form 1040 and the schedules and forms it
+  uses. The IRS publishes fill-in PDFs, so nothing is measured from the drawing: `npm run form-layout` reads each
+  field's box and the label the IRS gives it (`scripts/form-irs.ts`), and finds a row by the line number the label
+  starts with (`rules/us/2025/form-layout.yaml`). A form's table of dependants (`dependants` in `forms.yaml`) fills
+  one column for each dependant.
 - **Roles.** Owners, admins and editors prepare returns; viewers see everything and change nothing. Custom roles pick
   from two permissions: Prepare returns and View returns.
 - **Built-in Docs.** **Docs**, in everyone's navigation, explains the app and covers Canadian tax basics in plain words,
@@ -78,7 +83,7 @@ surviving spouse; dependants with the child tax credit, the credit for other dep
 credit (Part II-B too); the earned income credit; the credit for child and dependent care expenses and dependent
 care benefits (Form 2441); wages (W-2) and interest (1099-INT), the standard deduction (with the 2025 deduction
 for seniors), the Tax Table and Tax Computation Worksheet, the Additional Medicare Tax, the net investment income tax
-and excess social security tax. No state return, no printing and no AI reading yet; itemized
+and excess social security tax; printed on the IRS's forms. No state return and no AI reading yet; itemized
 deductions, tips or overtime and a household employee say so when they apply.
 
 ## Good to know

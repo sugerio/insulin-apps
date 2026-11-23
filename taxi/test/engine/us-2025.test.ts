@@ -352,8 +352,8 @@ describe("the 2025 US rules", () => {
     expect(credit("2455", 1, false)).toBe("842");
   });
 
-  it("show one federal refund or amount owed", () => {
+  it("show one federal refund or amount owed, and print on the IRS forms in their attachment order", () => {
     expect(rules.balances).toEqual([{ name: "Federal", refund: "F1040.34", owing: "F1040.37" }]);
-    expect(rules.forms.size).toBe(0);
+    expect([...rules.forms.keys()]).toEqual(["F1040", "S1A", "S2", "S3", "F2441", "SEIC", "S8812", "F8959", "F8960"]);
   });
 });

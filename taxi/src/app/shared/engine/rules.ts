@@ -166,9 +166,27 @@ export interface Hint {
 /**
  * What a form's text box can hold: facts about the person that no tax line computes, kept out of the formulas. A name
  * is split at its last space (first name, last name). The TP-1 asks for the spouse's last name and date of birth too.
+ * The IRS's forms ask for the spouse's whole name (filing separately), and each schedule for the names on the return
+ * (`returnNames`: both spouses' on a joint return).
  */
-export const PERSONAL_FACTS = ["firstName", "lastName", "birthDate", "province", "spouseFirstName", "spouseLastName", "spouseBirthDate"] as const;
+export const PERSONAL_FACTS = [
+  "firstName",
+  "lastName",
+  "birthDate",
+  "province",
+  "spouseFirstName",
+  "spouseLastName",
+  "spouseBirthDate",
+  "spouseName",
+  "returnNames",
+] as const;
 export type PersonalFact = (typeof PERSONAL_FACTS)[number];
+/**
+ * What a dependant's text box can hold: their name split at its last space, their whole name, and their year of birth.
+ * A field can also write a dependant's answer to a choice question in the form's own words (`labels`).
+ */
+export const DEPENDANT_FACTS = ["firstName", "lastName", "name", "birthYear"] as const;
+export type DependantFact = (typeof DEPENDANT_FACTS)[number];
 export const FIELD_KINDS = ["amount", "count", "tick", "text"] as const;
 
 /** Where a form's field is (form-layout.yaml): the page, and x and y in PDF points from the bottom left. */
@@ -192,6 +210,33 @@ export type FormField =
   | (FieldPlace & { kind: "count" | "tick"; formula: Formula; text: string })
   | (FieldPlace & { kind: "text"; fact: PersonalFact; width?: number; cell?: number });
 
+/**
+ * A field of a form's table of dependants, in the column (or row) of the table it is in: worked out for the dependant
+ * written there, from their side (`dependant.`), like a line with `each: dependant`. Its `when` is about the return
+ * instead (the filer's social security number): a dependant's side can't read the return's lines. Text is one of the
+ * dependant's facts, or their answer to a choice question in the form's words (an answer with no words leaves the box
+ * blank).
+ */
+export type DependantField =
+  | (FieldPlace & { column: number; kind: "amount"; formula: Formula; text: string; plain: boolean })
+  | (FieldPlace & { column: number; kind: "count" | "tick"; formula: Formula; text: string })
+  | (FieldPlace & { column: number; kind: "text"; fact: DependantFact; width?: number; cell?: number })
+  | (FieldPlace & { column: number; kind: "choice"; question: string; labels: Record<string, string>; width?: number });
+
+/**
+ * A form's table of dependants (Form 1040's, Schedule EIC's): when `when` is yes for the return, the dependants of the
+ * return for whom `which` is yes, in the year's order, one per column, as many as the form has columns. When there are
+ * more and the form has a "more" box (Form 1040's "more than four dependents"), it is ticked and the others are named
+ * on the worksheet; a form without one (Schedule EIC, which counts three at most) takes the first.
+ */
+export interface DependantTable {
+  when?: Formula;
+  which: Formula;
+  whichText: string;
+  columns: number;
+  more?: { page: number; x: number; y: number };
+  fields: DependantField[];
+}
 /**
  * A bracket table printed on a form (one column per bracket, in one or more parts): the column of the bracket the amount
  * falls in gets the amount, the amount over the bracket's floor, that times the rate, and that plus the printed base.
@@ -223,6 +268,19 @@ export interface FormSpec extends FormVersion {
   appliesText: string;
   /** The publisher's French version, with the same fields at that version's places. */
   french?: FormVersion;
+  /** The form's table of dependants. */
+  dependants?: DependantTable;
+}
+
+/**
+ * A form a return needs that isn't printed (forms.yaml `toAdd`): the worksheet and Finish name it, with what it is for,
+ * for the person to fill in and file with the printed forms.
+ */
+export interface FormToAdd {
+  id: string;
+  form: string;
+  why: string;
+  applies: Formula;
 }
 
 /** The languages a return's forms print in: English, or French where the form has a French version. */
@@ -257,8 +315,10 @@ export interface RuleSet {
   /** Per slip type, the boxes some formula reads, and the informational ones. Any other box with an amount is shown as not handled. */
   usedBoxes: Map<string, Set<string>>;
   hints: Map<string, Hint>;
-  /** The CRA forms a return is printed on, in order. */
+  /** The official forms a return is printed on, in order. */
   forms: Map<string, FormSpec>;
+  /** The forms a return can need that aren't printed, in the order they're attached. */
+  formsToAdd: FormToAdd[];
   /** The line a hint's what-if compares, added up over the year's returns: the refund less the balance owing. */
   outcome?: string;
   /**
@@ -291,6 +351,25 @@ const tablePartSchema = z.strictObject({
   times: z.number(),
   tax: z.number(),
   rows: z.tuple([z.string(), z.string(), z.string(), z.string()]),
+});
+
+/** A form's field as compiled: its place, and a formula (for text, the fact; for a choice, the question). */
+const compiledFieldSchema = z.strictObject({
+  key: z.string(),
+  kind: z.enum([...FIELD_KINDS, "choice"]),
+  page: z.number().int().min(1),
+  x: z.number(),
+  y: z.number(),
+  value: z.string(),
+  when: z.string().optional(),
+  zero: z.boolean().optional(),
+  plain: z.boolean().optional(),
+  width: z.number().optional(),
+  cell: z.number().optional(),
+  /** In a table of dependants: the column. */
+  column: z.number().int().min(1).optional(),
+  /** A choice's answers in the form's words. */
+  labels: z.record(z.string(), z.string()).optional(),
 });
 
 export const compiledRulesSchema = z.strictObject({
@@ -356,22 +435,16 @@ export const compiledRulesSchema = z.strictObject({
       sha256: z.string().regex(/^[0-9a-f]{64}$/),
       pages: z.number().int().min(1),
       applies: z.string(),
-      fields: z.array(
-        z.strictObject({
-          key: z.string(),
-          kind: z.enum(FIELD_KINDS),
-          page: z.number().int().min(1),
-          x: z.number(),
-          y: z.number(),
-          /** A formula; for text, the personal fact. */
-          value: z.string(),
+      fields: z.array(compiledFieldSchema),
+      dependants: z
+        .strictObject({
           when: z.string().optional(),
-          zero: z.boolean().optional(),
-          plain: z.boolean().optional(),
-          width: z.number().optional(),
-          cell: z.number().optional(),
-        }),
-      ),
+          which: z.string(),
+          columns: z.number().int().min(1),
+          more: z.tuple([z.number().int().min(1), z.number(), z.number()]).optional(),
+          fields: z.array(compiledFieldSchema),
+        })
+        .optional(),
       /** The French version: its file, and each field's place on it (in the fields' order), and each table's parts. */
       french: z
         .strictObject({
@@ -401,6 +474,7 @@ export const compiledRulesSchema = z.strictObject({
       ),
     }),
   ),
+  formsToAdd: z.array(z.strictObject({ id: z.string(), form: z.string(), why: z.string(), applies: z.string() })),
   slips: z.record(
     z.string(),
     z.strictObject({
@@ -445,6 +519,15 @@ export function loadRuleSet(json: unknown, where: (entry: string) => string = ()
       throw error;
     }
   };
+  /** A compiled field's place, and its condition. */
+  const placeOf = (where: string, field: z.infer<typeof compiledFieldSchema>) => ({
+    key: field.key,
+    page: field.page,
+    x: field.x,
+    y: field.y,
+    ...(field.when === undefined ? {} : { when: { formula: parse(where, field.when), text: field.when } }),
+  });
+  const sizeOf = (field: z.infer<typeof compiledFieldSchema>) => ({ ...(field.width === undefined ? {} : { width: field.width }), ...(field.cell === undefined ? {} : { cell: field.cell }) });
   const lines = new Map<string, Line>();
   for (const [id, line] of Object.entries(compiled.lines)) {
     const formula = parse(`lines.${id}`, line.formula);
@@ -510,6 +593,7 @@ export function loadRuleSet(json: unknown, where: (entry: string) => string = ()
     slips,
     usedBoxes,
     hints,
+    formsToAdd: compiled.formsToAdd.map((each) => ({ id: each.id, form: each.form, why: each.why, applies: parse(`formsToAdd.${each.id}`, each.applies) })),
     forms: new Map(
       Object.entries(compiled.forms).map(([id, form]) => {
         const entry = `forms.${id}`;
@@ -523,20 +607,40 @@ export function loadRuleSet(json: unknown, where: (entry: string) => string = ()
           appliesText: form.applies,
           fields: form.fields.map((field): FormField => {
             const where = `${entry}.fields.${field.key}`;
-            const place = {
-              key: field.key,
-              page: field.page,
-              x: field.x,
-              y: field.y,
-              ...(field.when === undefined ? {} : { when: { formula: parse(where, field.when), text: field.when } }),
-            };
+            const place = placeOf(where, field);
+            if (field.kind === "choice") return fail(where, "A choice is written only in a table of dependants");
             if (field.kind === "text") {
               const fact = PERSONAL_FACTS.find((each) => each === field.value) ?? fail(where, `No personal fact ${field.value}`);
-              return { ...place, kind: "text", fact, ...(field.width === undefined ? {} : { width: field.width }), ...(field.cell === undefined ? {} : { cell: field.cell }) };
+              return { ...place, kind: "text", fact, ...sizeOf(field) };
             }
             const formula = { formula: parse(where, field.value), text: field.value };
             return field.kind === "amount" ? { ...place, kind: "amount", ...formula, zero: field.zero ?? false, plain: field.plain ?? false } : { ...place, kind: field.kind, ...formula };
           }),
+          ...(form.dependants === undefined
+            ? {}
+            : {
+                dependants: {
+                  ...(form.dependants.when === undefined ? {} : { when: parse(`${entry}.dependants`, form.dependants.when) }),
+                  which: parse(`${entry}.dependants`, form.dependants.which),
+                  whichText: form.dependants.which,
+                  columns: form.dependants.columns,
+                  ...(form.dependants.more === undefined ? {} : { more: { page: form.dependants.more[0], x: form.dependants.more[1], y: form.dependants.more[2] } }),
+                  fields: form.dependants.fields.map((field): DependantField => {
+                    const where = `${entry}.dependants.${field.key}`;
+                    const column = field.column ?? fail(where, "A field of a table of dependants has a column");
+                    const place = { ...placeOf(where, field), column };
+                    if (field.kind === "text") {
+                      const fact = DEPENDANT_FACTS.find((each) => each === field.value) ?? fail(where, `No dependant's fact ${field.value}`);
+                      return { ...place, kind: "text", fact, ...sizeOf(field) };
+                    }
+                    if (field.kind === "choice") {
+                      return { ...place, kind: "choice", question: field.value, labels: field.labels ?? {}, ...(field.width === undefined ? {} : { width: field.width }) };
+                    }
+                    const formula = { formula: parse(where, field.value), text: field.value };
+                    return field.kind === "amount" ? { ...place, kind: "amount", ...formula, plain: field.plain ?? false } : { ...place, kind: field.kind, ...formula };
+                  }),
+                },
+              }),
           tables: form.tables.map((table) => ({ brackets: table.brackets, amount: parse(entry, table.amount), amountText: table.amount, parts: table.parts })),
         };
         if (form.french) {
@@ -757,6 +861,28 @@ function checkRuleSet(ruleSet: RuleSet, fail: (entry: string, message: string, c
       }
       if (field.when && formulaType(ruleSet, field.when.formula, at(where), new Set()) !== "boolean") fail(where, "when must be a yes/no value");
     }
+    if (form.dependants) {
+      const table = form.dependants;
+      const at2 = (where: string) => (message: string, column?: number) => fail(where, message, column);
+      if (form.french) fail(entry, "A form with a table of dependants has no French version");
+      if (formulaType(ruleSet, table.which, at2(`${entry}.dependants`), new Set(), "dependant") !== "boolean") fail(`${entry}.dependants`, "which must be a yes/no value");
+      if (table.when && formulaType(ruleSet, table.when, at2(`${entry}.dependants`), new Set()) !== "boolean") fail(`${entry}.dependants`, "when must be a yes/no value");
+      for (const field of table.fields) {
+        const where = `${entry}.dependants.${field.key}`;
+        if (field.page > form.pages) fail(where, `The form has ${form.pages} pages`);
+        if (field.column > table.columns) fail(where, `The table has ${table.columns} columns`);
+        if (field.kind === "amount" || field.kind === "count") {
+          if (formulaType(ruleSet, field.formula, at2(where), new Set(), "dependant") !== "number") fail(where, `${field.kind === "amount" ? "An amount" : "A count"} on a form must be a number`);
+        } else if (field.kind === "tick") {
+          if (formulaType(ruleSet, field.formula, at2(where), new Set(), "dependant") !== "boolean") fail(where, "A tick must be a yes/no value");
+        } else if (field.kind === "choice") {
+          const question = ruleSet.questions.get(field.question);
+          if (!question || question.type !== "choice" || !question.dependant) fail(where, `${field.question} isn't a choice question about a dependant`);
+          for (const option of Object.keys(field.labels)) if (!question!.options?.includes(option)) fail(where, `${field.question} has no answer ${option}`);
+        }
+        if (field.when && formulaType(ruleSet, field.when.formula, at2(where), new Set()) !== "boolean") fail(where, "when must be a yes/no value");
+      }
+    }
     for (const table of form.tables) {
       const param = ruleSet.params.get(table.brackets);
       if (!param || !Array.isArray(param.value)) return fail(entry, `No bracket table param ${table.brackets}`);
@@ -765,6 +891,11 @@ function checkRuleSet(ruleSet: RuleSet, fail: (entry: string, message: string, c
       if (columns !== param.value.length) fail(entry, `The table has ${columns} columns; ${table.brackets} has ${param.value.length} brackets`);
       if (formulaType(ruleSet, table.amount, at(entry), new Set()) !== "number") fail(entry, "A table's amount must be a number");
     }
+  }
+
+  for (const each of ruleSet.formsToAdd) {
+    const at = (message: string, column?: number) => fail(`formsToAdd.${each.id}`, message, column);
+    if (formulaType(ruleSet, each.applies, at, new Set()) !== "boolean") at("applies must be a yes/no value");
   }
 
   // Depth-first search for a cycle; the message lists it.

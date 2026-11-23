@@ -214,6 +214,11 @@ export class Evaluation {
     });
   }
 
+  /** The dependants a person's return claims (the person preparing's, when no one is named), in the year's order. */
+  dependantsOf(personId: string): EngineInput["family"]["dependants"] {
+    return this.claimedDependants().filter((each) => (each.claimedBy ?? this.selfId()) === personId);
+  }
+
   /** The other adult of the year, if both returns are prepared together. */
   spouse(personId: string): string | undefined {
     return this.spouseOf(personId);
@@ -384,7 +389,7 @@ export class Evaluation {
         // A dependant line's value for each dependant this person's return claims (the person preparing's when no one
         // is named), as a list. One not worked out yet leaves the list missing.
         const id = rest.join(".");
-        const claimed = this.claimedDependants().filter((each) => (each.claimedBy ?? this.selfId()) === personId);
+        const claimed = this.dependantsOf(personId);
         const reads = claimed.map((each) => `${each.id}:line.${id}`);
         const nodes = reads.map((read) => this.node(read));
         const missing = nodes.some((node) => node.value === null);

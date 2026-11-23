@@ -1,4 +1,4 @@
-import { PROVINCE_NAMES, formsToAdd, isAdult, printBlockers, type Province, type Slip, type TaxYear } from "#shared";
+import { PROVINCE_NAMES, filesJointly, formsToAdd, isAdult, printBlockers, returnsOf, type Province, type Slip, type TaxYear } from "#shared";
 import { Dec } from "../../shared/engine/decimal.ts";
 import { Evaluation } from "../../shared/engine/evaluate.ts";
 import { fillForms, personalFacts } from "../../shared/engine/forms.ts";
@@ -10,11 +10,11 @@ import { ApiError, conflict, logError, notFound } from "./http.ts";
 import { openYear } from "./returns.ts";
 import { engineInputOf, loadWorkspace, printYear, spouseResult } from "./workspace.ts";
 
-// A return printed on the CRA's own forms (and, for a resident of Quebec, on Revenu Québec's TP-1 and schedules after
-// them), with a worksheet: built on request from what is stored, only once the return is finished (shared/print.ts).
-// The print PDFs are downloaded from canada.ca or revenuquebec.ca the first time an organization prints and kept in D1
-// (form_files); a file whose SHA-256 isn't the one the layout was measured on is refused, so a form its publisher
-// changed is never filled in the wrong places.
+// A return printed on the official forms (the CRA's, and for a resident of Quebec Revenu Québec's TP-1 and schedules
+// after them; or the IRS's Form 1040 and its schedules), with a worksheet: built on request from what is stored, only
+// once the return is finished (shared/print.ts). The PDFs are downloaded from canada.ca, revenuquebec.ca or irs.gov the
+// first time an organization prints and kept in D1 (form_files); a file whose SHA-256 isn't the one the layout was
+// measured on is refused, so a form its publisher changed is never filled in the wrong places.
 
 type Db = D1Database;
 
@@ -26,9 +26,12 @@ export interface FormSource {
 
 const MAX_FORM_BYTES = 4 * 1024 * 1024;
 
-/** Who publishes a form, for the messages: the CRA on canada.ca, or Revenu Québec on revenuquebec.ca. */
+/** Who publishes a form, for the messages: the CRA on canada.ca, Revenu Québec on revenuquebec.ca, the IRS on irs.gov. */
 function publisherOf(url: string): { name: string; site: string } {
-  return new URL(url).hostname.endsWith("revenuquebec.ca") ? { name: "Revenu Québec", site: "revenuquebec.ca" } : { name: "the CRA", site: "canada.ca" };
+  const host = new URL(url).hostname;
+  if (host.endsWith("revenuquebec.ca")) return { name: "Revenu Québec", site: "revenuquebec.ca" };
+  if (host.endsWith("irs.gov")) return { name: "the IRS", site: "irs.gov" };
+  return { name: "the CRA", site: "canada.ca" };
 }
 const capital = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
 
@@ -91,15 +94,26 @@ export async function printReturn(
 ): Promise<{ bytes: Uint8Array<ArrayBuffer>; name: string }> {
   const { row, view } = await openYear(db, orgId, year);
   if (!view.adults.some((adult) => adult.personId === personId)) throw notFound("There is no such return in this year");
+  // A joint return is the person preparing's: the spouse has none of their own to print.
+  const members = returnsOf(view).find((each) => each.personId === personId)?.members;
+  if (!members) throw notFound("This person is on a joint return: print it from the return of the person preparing");
   const rules = rulesFor(view.country, year);
   if (!rules) throw notFound(`No tax rules for ${year}`);
-  // The United States' forms aren't measured for printing yet: its rules have none.
   if (rules.forms.size === 0) throw notFound("Printing this return on the official forms isn't available yet");
   const workspace = await loadWorkspace(db, orgId, row.id);
   const evaluation = new Evaluation(rules, engineInputOf(view, workspace));
-  const people = evaluation.result().people;
+  const evaluated = evaluation.result();
+  const people = evaluated.people;
   const result = people.find((person) => person.personId === personId)!;
-  const blockers = printBlockers(printYear(rules, view.issues, workspace), result, spouseResult(view, people, personId));
+  // The dependants this return claims, with what is still unanswered about each, as Finish shows them.
+  const selfId = view.people.find((each) => each.relationship === "self")?.id;
+  const dependants = evaluation.input.family.dependants
+    .filter((dependant) => members.includes(dependant.claimedBy ?? selfId ?? ""))
+    .flatMap((dependant) => {
+      const asked = evaluated.dependants.find((each) => each.dependantId === dependant.id);
+      return asked ? [{ name: dependant.name, result: asked }] : [];
+    });
+  const blockers = printBlockers(printYear(rules, view.issues, workspace), result, spouseResult(view, people, personId), dependants);
   if (blockers.length > 0) {
     throw conflict(`The return isn't finished, so its forms can't be printed yet: ${blockers.map((blocker) => blocker.text).join(" ")}`);
   }
@@ -109,6 +123,7 @@ export async function printReturn(
     spouseName: partner?.name,
     spouseBirthDate: partner?.birthDate,
     provinceName: (code) => PROVINCE_NAMES[code as Province] ?? code,
+    joint: filesJointly(view),
   });
   const filled = fillForms(rules, evaluation, personId, facts, language);
   const forms = [];
@@ -127,6 +142,7 @@ export async function printReturn(
     answers: workspace.answers[personId] ?? {},
     hints: applied.map(({ hint, effect }) => ({ hint, effect })),
     forms: filled.map((each) => each.form),
+    left: filled.flatMap((each) => (each.left.length > 0 ? [{ form: each.form, names: each.left }] : [])),
     now,
   });
   return { bytes: new Uint8Array(await buildReturnPdf(forms, worksheet)), name: `Taxi ${year} return - ${person.name}.pdf` };
@@ -167,41 +183,27 @@ interface WorksheetInput {
   answers: Record<string, string | boolean>;
   hints: { hint: string; effect: string | null }[];
   forms: FormSpec[];
+  /** The dependants a form's table had no room for, by form. */
+  left: { form: FormSpec; names: string[] }[];
   now: number;
 }
 
 /** The worksheet: how to file, the result, what went in (slips, answers, applied hints), and every line worked out. */
 function worksheetOf(rules: RuleSet, evaluation: Evaluation, view: TaxYear, input: WorksheetInput): Worksheet {
   const line = (id: string) => evaluation.line(input.personId, id).value;
-  const refund = line("T1.48400");
-  const owing = line("T1.48500");
   const prepared = new Date(input.now).toISOString().slice(0, 10);
   const formNames = input.forms.map((form) => form.title).join("; ");
-  const toAdd: WorksheetRow[] = formsToAdd(evaluation, input.personId).map(({ form, why }) => ({ text: form, notes: [why] }));
+  // A table of dependants with no room for some: the instructions ask for them on a statement attached to the form.
+  const statements: WorksheetRow[] = input.left.map(({ form, names }) => ({
+    text: `A statement with your other ${form.id === "F2441" ? "qualifying persons" : "dependents"}, attached to ${form.title.split(",")[0]}`,
+    notes: [`${form.title.split(",")[0]} has room for ${form.dependants!.columns}: list ${names.join(", ")} with the same details, as its instructions say`],
+  }));
+  const toAdd: WorksheetRow[] = [...statements, ...formsToAdd(rules, evaluation, input.personId).map(({ form, why }) => ({ text: form, notes: [why] }))];
   const otherForms = toAdd.length > 0 ? 'the forms under "Forms to fill in yourself", below, and any other form not listed above' : "any form not listed above";
-  // A resident of Quebec files two returns, the federal one and Revenu Québec's TP-1, each with its own result.
-  const quebec = evaluation.input.people.find((each) => each.id === input.personId)?.province === "QC";
-  const quebecOwing = line("TP1.479");
-
-  const result: WorksheetRow[] = [
-    owing && !owing.isZero() ? { text: "Balance owing (line 48500)", amount: money(owing) } : { text: "Refund (line 48400)", amount: money(refund ?? Dec.ZERO) },
-    ...["T1.15000", "T1.23600", "T1.26000", "T1.42000", "T1.42800", "T1.43500", "T1.43700"].map((id) => ({
-      text: `${rules.lines.get(id)!.label} (line ${id.split(".")[1]})`,
-      amount: money(line(id) ?? Dec.ZERO),
-    })),
-    ...(quebec
-      ? [
-          quebecOwing && !quebecOwing.isZero()
-            ? { text: "Quebec balance due (TP-1 line 479)", amount: money(quebecOwing) }
-            : { text: "Quebec refund (TP-1 line 478)", amount: money(line("TP1.478") ?? Dec.ZERO) },
-          ...["TP1.199", "TP1.275", "TP1.299", "TP1.432", "TP1.450"].map((id) => ({
-            text: `${rules.lines.get(id)!.label} (TP-1 line ${id.split(".")[1]})`,
-            amount: money(line(id) ?? Dec.ZERO),
-          })),
-        ]
-      : []),
-  ];
-
+  const { intro, result } =
+    rules.country === "us"
+      ? usWorksheet(rules, line, { prepared, formNames, otherForms, joint: filesJointly(view) })
+      : canadaWorksheet(rules, evaluation, line, input.personId, { prepared, formNames, otherForms });
   const slips: WorksheetRow[] = input.slips.map((slip) => {
     const type = rules.slips.get(slip.type);
     return {
@@ -246,6 +248,58 @@ function worksheetOf(rules: RuleSet, evaluation: Evaluation, view: TaxYear, inpu
 
   return {
     title: `${input.name}: ${view.year} return worksheet`,
+    intro,
+    sections: [
+      { heading: "Result", rows: result },
+      ...(toAdd.length > 0 ? [{ heading: "Forms to fill in yourself", rows: toAdd }] : []),
+      { heading: "Slips, receipts and notices", rows: slips.length > 0 ? slips : [{ text: "None." }] },
+      { heading: "Answers", rows: answers },
+      ...(hints.length > 0 ? [{ heading: "Hints applied", rows: hints }] : []),
+      { heading: "How each line is worked out", rows: lines },
+    ],
+  };
+}
+
+interface WorksheetText {
+  prepared: string;
+  formNames: string;
+  otherForms: string;
+}
+
+/** A Canadian return's worksheet text: how to file (a resident of Quebec files two returns), and the result. */
+function canadaWorksheet(
+  rules: RuleSet,
+  evaluation: Evaluation,
+  line: (id: string) => Dec | null,
+  personId: string,
+  { prepared, formNames, otherForms }: WorksheetText,
+): { intro: string[]; result: WorksheetRow[] } {
+  const refund = line("T1.48400");
+  const owing = line("T1.48500");
+  // A resident of Quebec files two returns, the federal one and Revenu Québec's TP-1, each with its own result.
+  const quebec = evaluation.input.people.find((each) => each.id === personId)?.province === "QC";
+  const quebecOwing = line("TP1.479");
+
+  const result: WorksheetRow[] = [
+    owing && !owing.isZero() ? { text: "Balance owing (line 48500)", amount: money(owing) } : { text: "Refund (line 48400)", amount: money(refund ?? Dec.ZERO) },
+    ...["T1.15000", "T1.23600", "T1.26000", "T1.42000", "T1.42800", "T1.43500", "T1.43700"].map((id) => ({
+      text: `${rules.lines.get(id)!.label} (line ${id.split(".")[1]})`,
+      amount: money(line(id) ?? Dec.ZERO),
+    })),
+    ...(quebec
+      ? [
+          quebecOwing && !quebecOwing.isZero()
+            ? { text: "Quebec balance due (TP-1 line 479)", amount: money(quebecOwing) }
+            : { text: "Quebec refund (TP-1 line 478)", amount: money(line("TP1.478") ?? Dec.ZERO) },
+          ...["TP1.199", "TP1.275", "TP1.299", "TP1.432", "TP1.450"].map((id) => ({
+            text: `${rules.lines.get(id)!.label} (TP-1 line ${id.split(".")[1]})`,
+            amount: money(line(id) ?? Dec.ZERO),
+          })),
+        ]
+      : []),
+  ];
+
+  return {
     intro: quebec
       ? [
           `Prepared with Taxi on ${prepared}. Taxi doesn't file returns. As a resident of Quebec you file two returns, and both are here, filled in with what Taxi knows: first the federal return on the CRA's forms, then your Quebec return on Revenu Québec's TP-1 and its schedules: ${formNames}.`,
@@ -262,14 +316,35 @@ function worksheetOf(rules: RuleSet, evaluation: Evaluation, view: TaxYear, inpu
           "To file online: copy the amounts into NETFILE-certified tax software and file there.",
           "Every line Taxi works out is listed below with how it was worked out.",
         ],
-    sections: [
-      { heading: "Result", rows: result },
-      ...(toAdd.length > 0 ? [{ heading: "Forms to fill in yourself", rows: toAdd }] : []),
-      { heading: "Slips, receipts and notices", rows: slips.length > 0 ? slips : [{ text: "None." }] },
-      { heading: "Answers", rows: answers },
-      ...(hints.length > 0 ? [{ heading: "Hints applied", rows: hints }] : []),
-      { heading: "How each line is worked out", rows: lines },
+    result,
+  };
+}
+
+/**
+ * A US return's worksheet text: what Taxi filled in, what is left to fill in by hand, and how to file (by mail to the
+ * IRS, at the address irs.gov gives for the state, or by e-file); and the result, from the rules' result lines.
+ */
+function usWorksheet(
+  rules: RuleSet,
+  line: (id: string) => Dec | null,
+  { prepared, formNames, otherForms, joint }: WorksheetText & { joint: boolean },
+): { intro: string[]; result: WorksheetRow[] } {
+  const named = (id: string) => `${rules.lines.get(id)!.label} (line ${id.split(".")[1]})`;
+  const owing = line("F1040.37");
+  const result: WorksheetRow[] = [
+    owing && !owing.isZero() ? { text: named("F1040.37"), amount: money(owing) } : { text: named("F1040.34"), amount: money(line("F1040.34") ?? Dec.ZERO) },
+    ...["F1040.9", "F1040.11a", "F1040.12e", "F1040.15", "F1040.16", "F1040.24", "F1040.33"].map((id) => ({ text: named(id), amount: money(line(id) ?? Dec.ZERO) })),
+  ];
+  return {
+    intro: [
+      `Prepared with Taxi on ${prepared}. Taxi doesn't file returns. Before this worksheet are the IRS's own forms, filled in with what Taxi knows: ${formNames}.`,
+      `Filled in for you: on Form 1040, ${joint ? "your names" : "your name"}, your filing status, each dependent's name and relationship with the boxes that apply, and every line Taxi works out; on each schedule and form above, the names on the return and every row Taxi works out. A row left blank is one Taxi doesn't know or that doesn't apply to you.`,
+      `Still to do by hand before you file on paper: the social security numbers (${joint ? "yours, your spouse's" : "yours"} and each dependent's or child's) on Form 1040 and at the top of each schedule and form; your address; the questions Taxi doesn't ask (the presidential election campaign fund, digital assets, whether your main home was in the U.S., and "And in the U.S." for each dependent); your bank details if you want the refund deposited; on Form 2441, each care provider's name, address and identifying number (Part I); and ${otherForms}. Then sign and date Form 1040${joint ? " (both of you)" : ""}, and attach Copy B of each Form W-2. Keep your forms and records; the IRS may ask for them.`,
+      "Mail the return to the IRS address for your state on irs.gov/WhereToFile: it is different when you send a payment with it.",
+      "To file online: copy the amounts into IRS e-file software (irs.gov/efile) and file there.",
+      "Every line Taxi works out is listed below with how it was worked out.",
     ],
+    result,
   };
 }
 

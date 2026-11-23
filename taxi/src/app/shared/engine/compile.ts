@@ -2,14 +2,15 @@ import { z } from "zod";
 import { Dec } from "./decimal.ts";
 import { RuleError } from "./errors.ts";
 import { percentToDecimal } from "./formula.ts";
-import { HINT_KINDS, MODULES, PERSONAL_FACTS, loadRuleSet, type CompiledRules } from "./rules.ts";
+import { DEPENDANT_FACTS, HINT_KINDS, MODULES, PERSONAL_FACTS, loadRuleSet, type CompiledRules } from "./rules.ts";
 
 // Compiles a year's rule files into the JSON the app imports. A year is a folder of YAML files: `year.yaml` names the
 // country, the year, the filing unit and the year it extends; the other files hold entries (params, lines, questions,
 // slips, result) in any split. A year that extends another lists only what changed: an entry replaces the one with
-// the same id, and `null` removes it. `hints` are checks on a return (hints.yaml). `forms` are the CRA forms a return is
-// printed on, row by row (forms.yaml), placed by `formLayout` (form-layout.yaml, measured from the CRA's PDFs). The compiler checks everything the engine relies on, so a broken rule file
-// fails the build instead of a return.
+// the same id, and `null` removes it. `hints` are checks on a return (hints.yaml). `forms` are the official forms a
+// return is printed on, row by row (forms.yaml), placed by `formLayout` (form-layout.yaml, measured from the forms'
+// PDFs); `formsToAdd` are the forms a return can need that aren't printed. The compiler checks everything the engine
+// relies on, so a broken rule file fails the build instead of a return.
 //
 // This module reads parsed YAML, not files: scripts/compile-rules.ts does the reading, and the tests call it directly.
 
@@ -26,7 +27,7 @@ export interface SourceYear {
 }
 
 const MANIFEST = "year.yaml";
-const SECTIONS = ["params", "lines", "questions", "slips", "hints", "forms", "formLayout"] as const;
+const SECTIONS = ["params", "lines", "questions", "slips", "hints", "forms", "formLayout", "formsToAdd"] as const;
 type Section = (typeof SECTIONS)[number];
 
 const sourceNumber = z.union([z.number(), z.string()]);
@@ -96,6 +97,21 @@ const sourceField = z.union([
   z.strictObject({ tick: sourceFormula }),
   z.strictObject({ text: z.enum(PERSONAL_FACTS), when: sourceFormula.optional() }),
 ]);
+/**
+ * A field of a form's table of dependants, by its place's name (each column's place is `<name>@<column>`, or
+ * `<place>@<column>` for a second field written in the same place under another condition): an amount or `count` or
+ * `tick` worked out for the dependant, one of the dependant's facts as `text`, or their answer to a choice question in
+ * the form's words (`choice` and `labels`). `when` is about the return.
+ */
+const dependantFieldExtras = { when: sourceFormula.optional(), place: z.string().min(1).optional() };
+const sourceDependantField = z.union([
+  sourceFormula,
+  z.strictObject({ value: sourceFormula, ...dependantFieldExtras }),
+  z.strictObject({ count: sourceFormula, ...dependantFieldExtras }),
+  z.strictObject({ tick: sourceFormula, ...dependantFieldExtras }),
+  z.strictObject({ text: z.enum(DEPENDANT_FACTS) }),
+  z.strictObject({ choice: z.string().min(1), labels: z.record(z.string(), z.string().min(1)) }),
+]);
 const sourceForm = z.strictObject({
   title: z.string().min(1),
   url: z.url(),
@@ -103,6 +119,16 @@ const sourceForm = z.strictObject({
   french: z.strictObject({ title: z.string().min(1), url: z.url() }).optional(),
   applies: z.string().min(1),
   fields: z.record(z.string(), sourceField),
+  /** The form's table of dependants: who is in it, how many columns it has, its "more" tick, and each column's fields. */
+  dependants: z
+    .strictObject({
+      when: z.string().min(1).optional(),
+      which: z.string().min(1),
+      columns: z.number().int().min(1),
+      more: z.string().optional(),
+      fields: z.record(z.string(), sourceDependantField),
+    })
+    .optional(),
   tables: z
     .array(
       z.strictObject({
@@ -124,6 +150,8 @@ const sourceLayout = z.strictObject({
   combs: z.record(z.string(), z.tuple([z.number().int().min(1), z.number(), z.number(), z.number()])).optional(),
   ticks: z.record(z.string(), z.tuple([z.number().int().min(1), z.number(), z.number()])).optional(),
 });
+
+const sourceFormToAdd = z.strictObject({ form: z.string().min(1), why: z.string().min(1), applies: z.string().min(1) });
 
 const manifestSchema = z.strictObject({
   country: z.string().regex(/^[a-z]{2}$/),
@@ -148,12 +176,13 @@ const entriesSchema = z.strictObject({
   hints: z.record(z.string(), sourceHint.nullable()).optional(),
   forms: z.record(z.string(), sourceForm.nullable()).optional(),
   formLayout: z.record(z.string(), sourceLayout.nullable()).optional(),
+  formsToAdd: z.record(z.string(), sourceFormToAdd.nullable()).optional(),
 });
 
 /** Compiles a chain of years, oldest first; the last is the year compiled. `hash` makes the version from the content. */
 export function compileRules(chain: SourceYear[], hash: (text: string) => string): CompiledRules {
   if (chain.length === 0) throw new Error("No rule folder to compile");
-  const merged: Record<Section, Record<string, unknown>> = { params: {}, lines: {}, questions: {}, slips: {}, hints: {}, forms: {}, formLayout: {} };
+  const merged: Record<Section, Record<string, unknown>> = { params: {}, lines: {}, questions: {}, slips: {}, hints: {}, forms: {}, formLayout: {}, formsToAdd: {} };
   const origin = new Map<string, string>();
   let manifest: z.infer<typeof manifestSchema> | undefined;
   let result: string[] | undefined;
@@ -258,6 +287,7 @@ export function compileRules(chain: SourceYear[], hash: (text: string) => string
         },
       };
     }),
+    formsToAdd: Object.entries(merged.formsToAdd as Record<string, z.infer<typeof sourceFormToAdd>>).map(([id, each]) => ({ id, ...each })),
     ...(outcome === undefined ? {} : { outcome }),
     balances: balances ?? [],
     ...(residency === undefined ? {} : { residency }),
@@ -305,6 +335,7 @@ function placeForm(form: z.infer<typeof sourceForm>, layout: z.infer<typeof sour
       const plain = (layout!.plain ?? []).some((each) => each === key || each === name);
       return { key, kind: "amount", page, x, y, value: spec.value, ...(spec.when === undefined ? {} : { when: spec.when }), ...(spec.zero ? { zero: true } : {}), ...(plain ? { plain } : {}) };
     }),
+    ...(form.dependants === undefined ? {} : { dependants: placeDependants(form.dependants, layout!, fail) }),
     tables: (form.tables ?? []).map((table) => ({
       brackets: table.brackets,
       amount: table.amount,
@@ -320,6 +351,43 @@ function placeForm(form: z.infer<typeof sourceForm>, layout: z.infer<typeof sour
       }),
     })),
   };
+}
+
+/** A table of dependants placed: each field once per column, at `<name>@<column>`. */
+function placeDependants(
+  table: NonNullable<z.infer<typeof sourceForm>["dependants"]>,
+  layout: z.infer<typeof sourceLayout>,
+  fail: (message: string) => never,
+): NonNullable<CompiledRules["forms"][string]["dependants"]> {
+  const fields: NonNullable<CompiledRules["forms"][string]["dependants"]>["fields"] = [];
+  for (let column = 1; column <= table.columns; column += 1) {
+    for (const [name, field] of Object.entries(table.fields)) {
+      const spec = typeof field === "string" ? { value: field } : field;
+      const key = `${"place" in spec && spec.place ? spec.place : name}@${column}`;
+      if ("text" in spec || "choice" in spec) {
+        const text = layout.text?.[key];
+        const comb = layout.combs?.[key];
+        const [page, x, y, size] = text ?? comb ?? fail(`The form has no text box or boxes ${key} (form-layout.yaml)`);
+        if ("text" in spec) fields.push({ key, column, kind: "text", page, x, y, value: spec.text, ...(text ? { width: size } : { cell: size }) });
+        else fields.push({ key, column, kind: "choice", page, x, y, value: spec.choice, labels: spec.labels, width: size });
+        continue;
+      }
+      if ("tick" in spec) {
+        const [page, x, y] = layout.ticks?.[key] ?? fail(`The form has no tick box ${key} (form-layout.yaml)`);
+        fields.push({ key, column, kind: "tick", page, x, y, value: spec.tick, ...(spec.when === undefined ? {} : { when: spec.when }) });
+        continue;
+      }
+      const [page, x, y] = layout.rows[key] ?? fail(`The form has no row ${key} (form-layout.yaml)`);
+      if ("count" in spec) {
+        fields.push({ key, column, kind: "count", page, x, y, value: spec.count, ...(spec.when === undefined ? {} : { when: spec.when }) });
+        continue;
+      }
+      const plain = (layout.plain ?? []).includes(key);
+      fields.push({ key, column, kind: "amount", page, x, y, value: spec.value, ...(spec.when === undefined ? {} : { when: spec.when }), ...(plain ? { plain } : {}) });
+    }
+  }
+  const more = table.more === undefined ? undefined : (layout.ticks?.[table.more] ?? fail(`The form has no tick box ${table.more} (form-layout.yaml)`));
+  return { ...(table.when === undefined ? {} : { when: table.when }), which: table.which, columns: table.columns, ...(more ? { more } : {}), fields };
 }
 
 function parse<T>(schema: z.ZodType<T>, file: SourceFile): T {

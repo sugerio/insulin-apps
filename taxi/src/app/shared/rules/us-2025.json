@@ -1363,9 +1363,1123 @@
     }
   },
   "hints": {},
-  "forms": {},
+  "forms": {
+    "F1040": {
+      "title": "Form 1040, U.S. Individual Income Tax Return",
+      "url": "https://www.irs.gov/pub/irs-prior/f1040--2025.pdf",
+      "sha256": "3d31c226df0d189ced80e039d01cf0f8820c1019681a0f0ca6264de277b7e982",
+      "pages": 2,
+      "applies": "true",
+      "fields": [
+        {"key":"9","kind":"amount","page":1,"x":575.5,"y":56.7,"value":"line.F1040.9","plain":true},
+        {"key":"14","kind":"amount","page":2,"x":575.5,"y":650.7,"value":"line.F1040.14","plain":true},
+        {"key":"15","kind":"amount","page":2,"x":575.5,"y":638.8,"value":"line.F1040.15","zero":true,"plain":true},
+        {"key":"16","kind":"amount","page":2,"x":575.5,"y":626.8,"value":"line.F1040.16","plain":true},
+        {"key":"18","kind":"amount","page":2,"x":575.5,"y":602.8,"value":"line.F1040.18","plain":true},
+        {"key":"19","kind":"amount","page":2,"x":575.5,"y":590.8,"value":"line.F1040.19","plain":true},
+        {"key":"20","kind":"amount","page":2,"x":575.5,"y":578.7,"value":"line.F1040.20","plain":true},
+        {"key":"21","kind":"amount","page":2,"x":575.5,"y":566.8,"value":"line.F1040.21","plain":true},
+        {"key":"22","kind":"amount","page":2,"x":575.5,"y":554.8,"value":"line.F1040.22","zero":true,"plain":true},
+        {"key":"23","kind":"amount","page":2,"x":575.5,"y":542.7,"value":"line.F1040.23","plain":true},
+        {"key":"24","kind":"amount","page":2,"x":575.5,"y":530.8,"value":"line.F1040.24","zero":true,"plain":true},
+        {"key":"26","kind":"amount","page":2,"x":575.5,"y":458.8,"value":"line.F1040.26","plain":true},
+        {"key":"28","kind":"amount","page":2,"x":481.2,"y":374.8,"value":"line.F1040.28","plain":true},
+        {"key":"31","kind":"amount","page":2,"x":481.2,"y":338.8,"value":"line.F1040.31","plain":true},
+        {"key":"32","kind":"amount","page":2,"x":575.5,"y":326.7,"value":"line.F1040.32","plain":true},
+        {"key":"33","kind":"amount","page":2,"x":575.5,"y":314.8,"value":"line.F1040.33","plain":true},
+        {"key":"34","kind":"amount","page":2,"x":575.5,"y":302.8,"value":"line.F1040.34","plain":true},
+        {"key":"37","kind":"amount","page":2,"x":575.5,"y":230.7,"value":"line.F1040.37","plain":true},
+        {"key":"firstName","kind":"text","page":1,"x":38,"y":687.8,"value":"firstName","width":211.3},
+        {"key":"lastName","kind":"text","page":1,"x":255,"y":687.8,"value":"lastName","width":210.3},
+        {
+          "key": "spouseFirstName",
+          "kind": "text",
+          "page": 1,
+          "x": 38,
+          "y": 663.7,
+          "value": "spouseFirstName",
+          "width": 211.3,
+          "when": "line.US.joint == 1"
+        },
+        {
+          "key": "spouseLastName",
+          "kind": "text",
+          "page": 1,
+          "x": 255,
+          "y": 663.7,
+          "value": "spouseLastName",
+          "width": 210.3,
+          "when": "line.US.joint == 1"
+        },
+        {"key":"single","kind":"tick","page":1,"x":101.6,"y":582,"value":"line.US.single == 1"},
+        {"key":"joint","kind":"tick","page":1,"x":101.6,"y":570,"value":"line.US.joint == 1"},
+        {"key":"separate","kind":"tick","page":1,"x":101.6,"y":558,"value":"line.US.separate == 1"},
+        {
+          "key": "separateSpouseName",
+          "kind": "text",
+          "page": 1,
+          "x": 182,
+          "y": 542.7,
+          "value": "spouseName",
+          "width": 140,
+          "when": "line.US.separate == 1"
+        },
+        {"key":"hoh","kind":"tick","page":1,"x":353.6,"y":582,"value":"line.US.hoh == 1"},
+        {"key":"qss","kind":"tick","page":1,"x":353.6,"y":570,"value":"line.US.qss == 1"},
+        {
+          "key": "livedApart",
+          "kind": "tick",
+          "page": 1,
+          "x": 99.6,
+          "y": 363.5,
+          "value": "line.US.separate == 1 and answer.livedApartLastSixMonths"
+        },
+        {"key":"1a","kind":"amount","page":1,"x":575.5,"y":332.8,"value":"line.F1040.1a","plain":true},
+        {"key":"1e","kind":"amount","page":1,"x":575.5,"y":284.8,"value":"line.F1040.1e","plain":true},
+        {"key":"1z","kind":"amount","page":1,"x":575.5,"y":224.8,"value":"line.F1040.1z","plain":true},
+        {"key":"2a","kind":"amount","page":1,"x":322.8,"y":212.8,"value":"line.F1040.2a","plain":true},
+        {"key":"2b","kind":"amount","page":1,"x":575.5,"y":212.8,"value":"line.F1040.2b","plain":true},
+        {"key":"11a","kind":"amount","page":1,"x":575.5,"y":32.8,"value":"line.F1040.11a","plain":true},
+        {"key":"11b","kind":"amount","page":2,"x":575.5,"y":746.8,"value":"line.F1040.11a","plain":true},
+        {"key":"claimYou","kind":"tick","page":2,"x":207.6,"y":738,"value":"answer.canBeClaimed"},
+        {
+          "key": "claimSpouse",
+          "kind": "tick",
+          "page": 2,
+          "x": 308.4,
+          "y": 738,
+          "value": "line.US.joint == 1 and spouse.answer.canBeClaimed"
+        },
+        {"key":"youSenior","kind":"tick","page":2,"x":157.2,"y":714,"value":"person.age >= 65"},
+        {"key":"youBlind","kind":"tick","page":2,"x":315.6,"y":714,"value":"answer.isBlind"},
+        {
+          "key": "spouseSenior",
+          "kind": "tick",
+          "page": 2,
+          "x": 157.2,
+          "y": 702,
+          "value": "line.US.joint == 1 and spouse.person.age >= 65"
+        },
+        {
+          "key": "spouseBlind",
+          "kind": "tick",
+          "page": 2,
+          "x": 315.6,
+          "y": 702,
+          "value": "line.US.joint == 1 and spouse.answer.isBlind"
+        },
+        {"key":"12e","kind":"amount","page":2,"x":575.5,"y":686.7,"value":"line.F1040.12e","plain":true},
+        {"key":"13b","kind":"amount","page":2,"x":575.5,"y":662.8,"value":"line.F1040.13b","plain":true},
+        {"key":"25a","kind":"amount","page":2,"x":481.2,"y":506.7,"value":"line.F1040.25a","plain":true},
+        {"key":"25b","kind":"amount","page":2,"x":481.2,"y":494.8,"value":"line.F1040.25b","plain":true},
+        {"key":"25c","kind":"amount","page":2,"x":481.2,"y":482.8,"value":"line.F1040.25c","plain":true},
+        {"key":"25d","kind":"amount","page":2,"x":575.5,"y":470.7,"value":"line.F1040.25d","plain":true},
+        {"key":"27a","kind":"amount","page":2,"x":481.2,"y":422.8,"value":"line.F1040.27a","plain":true},
+        {"key":"35a","kind":"amount","page":2,"x":575.5,"y":290.7,"value":"line.F1040.34","plain":true}
+      ],
+      "dependants": {
+        "when": "line.US.claimsDependants == 1",
+        "which": "line.DEP.dependent == 1",
+        "columns": 4,
+        "more": [1,83.7,419.5],
+        "fields": [
+          {"key":"firstName@1","column":1,"kind":"text","page":1,"x":147,"y":473.8,"value":"firstName","width":102.3},
+          {"key":"lastName@1","column":1,"kind":"text","page":1,"x":147,"y":461.8,"value":"lastName","width":102.3},
+          {
+            "key": "relationship@1",
+            "column": 1,
+            "kind": "choice",
+            "page": 1,
+            "x": 147,
+            "y": 437.8,
+            "value": "relationship",
+            "labels": {"child":"Child","foster":"Foster child"},
+            "width": 102.3
+          },
+          {
+            "key": "livedWithYou@1",
+            "column": 1,
+            "kind": "tick",
+            "page": 1,
+            "x": 173.6,
+            "y": 429,
+            "value": "dependant.answer.monthsWithYou >= 7"
+          },
+          {
+            "key": "student@1",
+            "column": 1,
+            "kind": "tick",
+            "page": 1,
+            "x": 152,
+            "y": 405,
+            "value": "dependant.answer.fullTimeStudent"
+          },
+          {"key":"disabled@1","column":1,"kind":"tick","page":1,"x":202.4,"y":405,"value":"dependant.answer.disabled"},
+          {
+            "key": "childTaxCredit@1",
+            "column": 1,
+            "kind": "tick",
+            "page": 1,
+            "x": 152,
+            "y": 384,
+            "value": "line.DEP.ctcChild == 1",
+            "when": "line.US.filerSSN == 1"
+          },
+          {
+            "key": "otherDependents@1",
+            "column": 1,
+            "kind": "tick",
+            "page": 1,
+            "x": 202.4,
+            "y": 384,
+            "value": "line.DEP.ctcChild == 0"
+          },
+          {
+            "key": "otherDependents@1",
+            "column": 1,
+            "kind": "tick",
+            "page": 1,
+            "x": 202.4,
+            "y": 384,
+            "value": "line.DEP.ctcChild == 1",
+            "when": "line.US.filerSSN == 0"
+          },
+          {"key":"firstName@2","column":2,"kind":"text","page":1,"x":255,"y":473.8,"value":"firstName","width":102.3},
+          {"key":"lastName@2","column":2,"kind":"text","page":1,"x":255,"y":461.8,"value":"lastName","width":102.3},
+          {
+            "key": "relationship@2",
+            "column": 2,
+            "kind": "choice",
+            "page": 1,
+            "x": 255,
+            "y": 437.8,
+            "value": "relationship",
+            "labels": {"child":"Child","foster":"Foster child"},
+            "width": 102.3
+          },
+          {
+            "key": "livedWithYou@2",
+            "column": 2,
+            "kind": "tick",
+            "page": 1,
+            "x": 281.6,
+            "y": 429,
+            "value": "dependant.answer.monthsWithYou >= 7"
+          },
+          {
+            "key": "student@2",
+            "column": 2,
+            "kind": "tick",
+            "page": 1,
+            "x": 260,
+            "y": 405,
+            "value": "dependant.answer.fullTimeStudent"
+          },
+          {"key":"disabled@2","column":2,"kind":"tick","page":1,"x":310.4,"y":405,"value":"dependant.answer.disabled"},
+          {
+            "key": "childTaxCredit@2",
+            "column": 2,
+            "kind": "tick",
+            "page": 1,
+            "x": 260,
+            "y": 384,
+            "value": "line.DEP.ctcChild == 1",
+            "when": "line.US.filerSSN == 1"
+          },
+          {
+            "key": "otherDependents@2",
+            "column": 2,
+            "kind": "tick",
+            "page": 1,
+            "x": 310.4,
+            "y": 384,
+            "value": "line.DEP.ctcChild == 0"
+          },
+          {
+            "key": "otherDependents@2",
+            "column": 2,
+            "kind": "tick",
+            "page": 1,
+            "x": 310.4,
+            "y": 384,
+            "value": "line.DEP.ctcChild == 1",
+            "when": "line.US.filerSSN == 0"
+          },
+          {"key":"firstName@3","column":3,"kind":"text","page":1,"x":363,"y":473.8,"value":"firstName","width":102.3},
+          {"key":"lastName@3","column":3,"kind":"text","page":1,"x":363,"y":461.8,"value":"lastName","width":102.3},
+          {
+            "key": "relationship@3",
+            "column": 3,
+            "kind": "choice",
+            "page": 1,
+            "x": 363,
+            "y": 437.8,
+            "value": "relationship",
+            "labels": {"child":"Child","foster":"Foster child"},
+            "width": 102.3
+          },
+          {
+            "key": "livedWithYou@3",
+            "column": 3,
+            "kind": "tick",
+            "page": 1,
+            "x": 389.6,
+            "y": 429,
+            "value": "dependant.answer.monthsWithYou >= 7"
+          },
+          {
+            "key": "student@3",
+            "column": 3,
+            "kind": "tick",
+            "page": 1,
+            "x": 368,
+            "y": 405,
+            "value": "dependant.answer.fullTimeStudent"
+          },
+          {"key":"disabled@3","column":3,"kind":"tick","page":1,"x":418.4,"y":405,"value":"dependant.answer.disabled"},
+          {
+            "key": "childTaxCredit@3",
+            "column": 3,
+            "kind": "tick",
+            "page": 1,
+            "x": 368,
+            "y": 384,
+            "value": "line.DEP.ctcChild == 1",
+            "when": "line.US.filerSSN == 1"
+          },
+          {
+            "key": "otherDependents@3",
+            "column": 3,
+            "kind": "tick",
+            "page": 1,
+            "x": 418.4,
+            "y": 384,
+            "value": "line.DEP.ctcChild == 0"
+          },
+          {
+            "key": "otherDependents@3",
+            "column": 3,
+            "kind": "tick",
+            "page": 1,
+            "x": 418.4,
+            "y": 384,
+            "value": "line.DEP.ctcChild == 1",
+            "when": "line.US.filerSSN == 0"
+          },
+          {"key":"firstName@4","column":4,"kind":"text","page":1,"x":471,"y":473.8,"value":"firstName","width":103},
+          {"key":"lastName@4","column":4,"kind":"text","page":1,"x":471,"y":461.8,"value":"lastName","width":103},
+          {
+            "key": "relationship@4",
+            "column": 4,
+            "kind": "choice",
+            "page": 1,
+            "x": 471,
+            "y": 437.8,
+            "value": "relationship",
+            "labels": {"child":"Child","foster":"Foster child"},
+            "width": 103
+          },
+          {
+            "key": "livedWithYou@4",
+            "column": 4,
+            "kind": "tick",
+            "page": 1,
+            "x": 497.6,
+            "y": 429,
+            "value": "dependant.answer.monthsWithYou >= 7"
+          },
+          {
+            "key": "student@4",
+            "column": 4,
+            "kind": "tick",
+            "page": 1,
+            "x": 476,
+            "y": 405,
+            "value": "dependant.answer.fullTimeStudent"
+          },
+          {"key":"disabled@4","column":4,"kind":"tick","page":1,"x":526.4,"y":405,"value":"dependant.answer.disabled"},
+          {
+            "key": "childTaxCredit@4",
+            "column": 4,
+            "kind": "tick",
+            "page": 1,
+            "x": 476,
+            "y": 384,
+            "value": "line.DEP.ctcChild == 1",
+            "when": "line.US.filerSSN == 1"
+          },
+          {
+            "key": "otherDependents@4",
+            "column": 4,
+            "kind": "tick",
+            "page": 1,
+            "x": 526.4,
+            "y": 384,
+            "value": "line.DEP.ctcChild == 0"
+          },
+          {
+            "key": "otherDependents@4",
+            "column": 4,
+            "kind": "tick",
+            "page": 1,
+            "x": 526.4,
+            "y": 384,
+            "value": "line.DEP.ctcChild == 1",
+            "when": "line.US.filerSSN == 0"
+          }
+        ]
+      },
+      "tables": []
+    },
+    "S1A": {
+      "title": "Schedule 1-A (Form 1040), Additional Deductions",
+      "url": "https://www.irs.gov/pub/irs-prior/f1040s1a--2025.pdf",
+      "sha256": "64f97b38ff4218e2f188fd55a8aab7043556687487c82bbefe0b6dd1a956ecd4",
+      "pages": 2,
+      "applies": "line.S1A.37 > 0",
+      "fields": [
+        {"key":"1","kind":"amount","page":1,"x":575.5,"y":662.8,"value":"line.F1040.11a","plain":true},
+        {"key":"3","kind":"amount","page":1,"x":575.5,"y":590.8,"value":"line.S1A.3","plain":true},
+        {"key":"31","kind":"amount","page":2,"x":575.5,"y":434.7,"value":"line.S1A.3","plain":true},
+        {"key":"32","kind":"amount","page":2,"x":575.5,"y":422.8,"value":"line.S1A.32","plain":true},
+        {
+          "key": "33",
+          "kind": "amount",
+          "page": 2,
+          "x": 575.5,
+          "y": 410.8,
+          "value": "max(0, line.S1A.3 - line.S1A.32)",
+          "plain": true
+        },
+        {
+          "key": "34",
+          "kind": "amount",
+          "page": 2,
+          "x": 575.5,
+          "y": 398.7,
+          "value": "round(max(0, line.S1A.3 - line.S1A.32) * param.seniorPhaseOutRate, 2)",
+          "plain": true
+        },
+        {"key":"35","kind":"amount","page":2,"x":575.5,"y":386.8,"value":"line.S1A.35","plain":true},
+        {"key":"37","kind":"amount","page":2,"x":575.5,"y":326.7,"value":"line.S1A.37","plain":true},
+        {"key":"38","kind":"amount","page":2,"x":575.5,"y":290.7,"value":"line.S1A.37","plain":true},
+        {"key":"names","kind":"text","page":1,"x":38,"y":687.8,"value":"returnNames","width":405.7},
+        {
+          "key": "36a",
+          "kind": "amount",
+          "page": 2,
+          "x": 575.5,
+          "y": 362.7,
+          "value": "if(person.age >= 65, line.S1A.35, 0)",
+          "plain": true
+        },
+        {
+          "key": "36b",
+          "kind": "amount",
+          "page": 2,
+          "x": 575.5,
+          "y": 338.8,
+          "value": "if(line.US.joint == 1, if(spouse.person.age >= 65, line.S1A.35, 0), 0)",
+          "plain": true
+        }
+      ],
+      "tables": []
+    },
+    "S2": {
+      "title": "Schedule 2 (Form 1040), Additional Taxes",
+      "url": "https://www.irs.gov/pub/irs-prior/f1040s2--2025.pdf",
+      "sha256": "64d867b683334cfc533993e37ccb0d143449ec29428a78206be2e4de333941e8",
+      "pages": 2,
+      "applies": "line.S2.21 > 0",
+      "fields": [
+        {"key":"11","kind":"amount","page":1,"x":575.5,"y":176.8,"value":"line.F8959.7","plain":true},
+        {"key":"12","kind":"amount","page":1,"x":575.5,"y":158.8,"value":"line.F8960.17","plain":true},
+        {"key":"21","kind":"amount","page":2,"x":575.5,"y":200.7,"value":"line.S2.21","plain":true},
+        {"key":"names","kind":"text","page":1,"x":38,"y":687.8,"value":"returnNames","width":405.7}
+      ],
+      "tables": []
+    },
+    "S3": {
+      "title": "Schedule 3 (Form 1040), Additional Credits and Payments",
+      "url": "https://www.irs.gov/pub/irs-prior/f1040s3--2025.pdf",
+      "sha256": "008cfd3fe3ebd0860452069b90fd0a3d53dda6dd8a5d870278370aa899a63f82",
+      "pages": 1,
+      "applies": "line.S3.8 > 0 or line.S3.11 > 0",
+      "fields": [
+        {"key":"2","kind":"amount","page":1,"x":575.5,"y":650.7,"value":"line.S3.2","plain":true},
+        {"key":"8","kind":"amount","page":1,"x":575.5,"y":374.8,"value":"line.S3.8","plain":true},
+        {"key":"11","kind":"amount","page":1,"x":575.5,"y":326.7,"value":"line.S3.11","plain":true},
+        {"key":"15","kind":"amount","page":1,"x":575.5,"y":182.7,"value":"line.S3.11","plain":true},
+        {"key":"names","kind":"text","page":1,"x":38,"y":687.8,"value":"returnNames","width":405.7}
+      ],
+      "tables": []
+    },
+    "F2441": {
+      "title": "Form 2441, Child and Dependent Care Expenses",
+      "url": "https://www.irs.gov/pub/irs-prior/f2441--2025.pdf",
+      "sha256": "6c3c2d19163fa4c4de829abf9a89b43f08b4f4f3cb169740fc7da43e914269ce",
+      "pages": 2,
+      "applies": "line.F2441.11 > 0 or line.F2441.12 > 0",
+      "fields": [
+        {"key":"3","kind":"amount","page":1,"x":575.5,"y":296.8,"value":"line.F2441.3","plain":true},
+        {
+          "key": "4",
+          "kind": "amount",
+          "page": 1,
+          "x": 575.5,
+          "y": 284.8,
+          "value": "line.F2441.4",
+          "when": "line.US.paidForCare == 1",
+          "plain": true
+        },
+        {
+          "key": "5",
+          "kind": "amount",
+          "page": 1,
+          "x": 575.5,
+          "y": 260.8,
+          "value": "line.F2441.5",
+          "when": "line.US.paidForCare == 1",
+          "plain": true
+        },
+        {"key":"6","kind":"amount","page":1,"x":575.5,"y":248.8,"value":"line.F2441.6","plain":true},
+        {
+          "key": "7",
+          "kind": "amount",
+          "page": 1,
+          "x": 459.6,
+          "y": 236.7,
+          "value": "line.F2441.7",
+          "when": "line.US.paidForCare == 1",
+          "plain": true
+        },
+        {
+          "key": "8",
+          "kind": "count",
+          "page": 1,
+          "x": 575.5,
+          "y": 164.7,
+          "value": "line.F2441.8 * 100",
+          "when": "line.US.paidForCare == 1"
+        },
+        {
+          "key": "10",
+          "kind": "amount",
+          "page": 1,
+          "x": 459.6,
+          "y": 62.8,
+          "value": "line.F2441.10",
+          "when": "line.US.paidForCare == 1",
+          "plain": true
+        },
+        {"key":"11","kind":"amount","page":1,"x":575.5,"y":38.7,"value":"line.F2441.11","plain":true},
+        {"key":"12","kind":"amount","page":2,"x":575.5,"y":674.8,"value":"line.F2441.12","plain":true},
+        {"key":"13","kind":"amount","page":2,"x":575.5,"y":650.7,"value":"line.F2441.13","plain":true},
+        {"key":"14","kind":"amount","page":2,"x":572.5,"y":638.8,"value":"line.F2441.14","plain":true},
+        {"key":"15","kind":"amount","page":2,"x":575.5,"y":626.8,"value":"line.F2441.15","plain":true},
+        {
+          "key": "16",
+          "kind": "amount",
+          "page": 2,
+          "x": 459.6,
+          "y": 602.8,
+          "value": "line.F2441.16",
+          "when": "line.F2441.12 > 0",
+          "plain": true
+        },
+        {
+          "key": "17",
+          "kind": "amount",
+          "page": 2,
+          "x": 459.6,
+          "y": 590.8,
+          "value": "line.F2441.17",
+          "when": "line.F2441.12 > 0",
+          "plain": true
+        },
+        {
+          "key": "18",
+          "kind": "amount",
+          "page": 2,
+          "x": 459.6,
+          "y": 578.7,
+          "value": "line.F2441.18",
+          "when": "line.F2441.12 > 0",
+          "plain": true
+        },
+        {
+          "key": "19",
+          "kind": "amount",
+          "page": 2,
+          "x": 459.6,
+          "y": 524.7,
+          "value": "line.F2441.19",
+          "when": "line.F2441.12 > 0",
+          "plain": true
+        },
+        {
+          "key": "20",
+          "kind": "amount",
+          "page": 2,
+          "x": 459.6,
+          "y": 482.8,
+          "value": "line.F2441.20",
+          "when": "line.F2441.12 > 0",
+          "plain": true
+        },
+        {
+          "key": "21",
+          "kind": "amount",
+          "page": 2,
+          "x": 459.6,
+          "y": 434.7,
+          "value": "line.F2441.21",
+          "when": "line.F2441.12 > 0",
+          "plain": true
+        },
+        {
+          "key": "22",
+          "kind": "amount",
+          "page": 2,
+          "x": 575.5,
+          "y": 398.7,
+          "value": "0",
+          "when": "line.F2441.12 > 0",
+          "zero": true,
+          "plain": true
+        },
+        {"key":"23","kind":"amount","page":2,"x":459.6,"y":386.8,"value":"line.F2441.15","plain":true},
+        {
+          "key": "24",
+          "kind": "amount",
+          "page": 2,
+          "x": 575.5,
+          "y": 362.7,
+          "value": "0",
+          "when": "line.F2441.12 > 0",
+          "zero": true,
+          "plain": true
+        },
+        {"key":"25","kind":"amount","page":2,"x":575.5,"y":338.8,"value":"line.F2441.25","plain":true},
+        {"key":"26","kind":"amount","page":2,"x":575.5,"y":314.8,"value":"line.F2441.26","plain":true},
+        {
+          "key": "27",
+          "kind": "amount",
+          "page": 2,
+          "x": 575.5,
+          "y": 266.8,
+          "value": "line.F2441.27",
+          "when": "line.F2441.12 > 0 and line.US.paidForCare == 1",
+          "plain": true
+        },
+        {
+          "key": "28",
+          "kind": "amount",
+          "page": 2,
+          "x": 575.5,
+          "y": 254.7,
+          "value": "line.F2441.25",
+          "when": "line.US.paidForCare == 1",
+          "plain": true
+        },
+        {
+          "key": "29",
+          "kind": "amount",
+          "page": 2,
+          "x": 575.5,
+          "y": 230.8,
+          "value": "line.F2441.29",
+          "when": "line.F2441.12 > 0 and line.US.paidForCare == 1",
+          "plain": true
+        },
+        {
+          "key": "30",
+          "kind": "amount",
+          "page": 2,
+          "x": 575.5,
+          "y": 206.8,
+          "value": "line.F2441.30",
+          "when": "line.F2441.12 > 0 and line.US.paidForCare == 1",
+          "plain": true
+        },
+        {
+          "key": "31",
+          "kind": "amount",
+          "page": 2,
+          "x": 575.5,
+          "y": 182.7,
+          "value": "line.F2441.31",
+          "when": "line.F2441.12 > 0 and line.US.paidForCare == 1",
+          "plain": true
+        },
+        {"key":"names","kind":"text","page":1,"x":38,"y":687.8,"value":"returnNames","width":412.9},
+        {
+          "key": "livedApart",
+          "kind": "tick",
+          "page": 1,
+          "x": 568.5,
+          "y": 667.5,
+          "value": "line.US.separate == 1 and line.US.careUnmarried == 1"
+        },
+        {
+          "key": "deemedIncome",
+          "kind": "tick",
+          "page": 1,
+          "x": 568.5,
+          "y": 643.5,
+          "value": "line.US.joint == 1 and answer.studentOrDisabledMonths + spouse.answer.studentOrDisabledMonths > 0"
+        },
+        {"key":"9a","kind":"amount","page":1,"x":575.5,"y":110.7,"value":"line.F2441.9a","plain":true},
+        {"key":"9c","kind":"amount","page":1,"x":575.5,"y":74.7,"value":"line.F2441.9a","plain":true},
+        {"key":"line22No","kind":"tick","page":2,"x":69.8,"y":414,"value":"line.F2441.12 > 0"}
+      ],
+      "dependants": {
+        "when": "line.US.paidForCare == 1",
+        "which": "line.DEP.careChildExpenses + line.DEP.careDisabledExpenses > 0",
+        "columns": 3,
+        "more": [1,568.5,396],
+        "fields": [
+          {"key":"firstName@1","column":1,"kind":"text","page":1,"x":38,"y":344.7,"value":"firstName","width":132.1},
+          {"key":"lastName@1","column":1,"kind":"text","page":1,"x":175.8,"y":344.7,"value":"lastName","width":131.1},
+          {"key":"disabled@1","column":1,"kind":"tick","page":1,"x":439.2,"y":348,"value":"line.DEP.careDisabled == 1"},
+          {
+            "key": "expenses@1",
+            "column": 1,
+            "kind": "amount",
+            "page": 1,
+            "x": 575.5,
+            "y": 344.7,
+            "value": "line.DEP.careChildExpenses + line.DEP.careDisabledExpenses",
+            "plain": true
+          },
+          {"key":"firstName@2","column":2,"kind":"text","page":1,"x":38,"y":332.8,"value":"firstName","width":132.1},
+          {"key":"lastName@2","column":2,"kind":"text","page":1,"x":175.8,"y":332.8,"value":"lastName","width":131.1},
+          {"key":"disabled@2","column":2,"kind":"tick","page":1,"x":439.2,"y":336,"value":"line.DEP.careDisabled == 1"},
+          {
+            "key": "expenses@2",
+            "column": 2,
+            "kind": "amount",
+            "page": 1,
+            "x": 575.5,
+            "y": 332.8,
+            "value": "line.DEP.careChildExpenses + line.DEP.careDisabledExpenses",
+            "plain": true
+          },
+          {"key":"firstName@3","column":3,"kind":"text","page":1,"x":38,"y":320.8,"value":"firstName","width":132.1},
+          {"key":"lastName@3","column":3,"kind":"text","page":1,"x":175.8,"y":320.8,"value":"lastName","width":131.1},
+          {"key":"disabled@3","column":3,"kind":"tick","page":1,"x":439.2,"y":324,"value":"line.DEP.careDisabled == 1"},
+          {
+            "key": "expenses@3",
+            "column": 3,
+            "kind": "amount",
+            "page": 1,
+            "x": 575.5,
+            "y": 320.8,
+            "value": "line.DEP.careChildExpenses + line.DEP.careDisabledExpenses",
+            "plain": true
+          }
+        ]
+      },
+      "tables": []
+    },
+    "SEIC": {
+      "title": "Schedule EIC (Form 1040), Earned Income Credit",
+      "url": "https://www.irs.gov/pub/irs-prior/f1040sei--2025.pdf",
+      "sha256": "b6dab52511ece16e710899542d952db578bf6c872d2580ee6760fb88ed77c4ba",
+      "pages": 2,
+      "applies": "line.F1040.27a > 0 and line.US.eicChildren > 0",
+      "fields": [{"key":"names","kind":"text","page":1,"x":38,"y":687.7,"value":"returnNames","width":427.3}],
+      "dependants": {
+        "which": "line.DEP.eicChild == 1",
+        "columns": 3,
+        "fields": [
+          {"key":"name@1","column":1,"kind":"text","page":1,"x":211.8,"y":470.7,"value":"name","width":116.6},
+          {"key":"birthYear@1","column":1,"kind":"text","page":1,"x":241.2,"y":332.7,"value":"birthYear","cell":21.6},
+          {
+            "key": "studentYes@1",
+            "column": 1,
+            "kind": "tick",
+            "page": 1,
+            "x": 223.5,
+            "y": 274,
+            "value": "dependant.age >= 19 and dependant.age < 24 and dependant.answer.fullTimeStudent"
+          },
+          {
+            "key": "studentNo@1",
+            "column": 1,
+            "kind": "tick",
+            "page": 1,
+            "x": 284.7,
+            "y": 274,
+            "value": "dependant.age >= 24 or (dependant.age >= 19 and not dependant.answer.fullTimeStudent)"
+          },
+          {
+            "key": "disabledYes@1",
+            "column": 1,
+            "kind": "tick",
+            "page": 1,
+            "x": 223.5,
+            "y": 232,
+            "value": "line.DEP.ageTest == 1 and dependant.age >= 19 and not (dependant.age < 24 and dependant.answer.fullTimeStudent)"
+          },
+          {
+            "key": "relationship@1",
+            "column": 1,
+            "kind": "choice",
+            "page": 1,
+            "x": 211.8,
+            "y": 152.7,
+            "value": "relationship",
+            "labels": {"child":"Child","foster":"Foster child"},
+            "width": 116.6
+          },
+          {
+            "key": "months@1",
+            "column": 1,
+            "kind": "count",
+            "page": 1,
+            "x": 265.9,
+            "y": 68.7,
+            "value": "dependant.answer.monthsWithYou"
+          },
+          {"key":"name@2","column":2,"kind":"text","page":1,"x":334.2,"y":470.7,"value":"name","width":116.7},
+          {"key":"birthYear@2","column":2,"kind":"text","page":1,"x":363.6,"y":332.7,"value":"birthYear","cell":21.6},
+          {
+            "key": "studentYes@2",
+            "column": 2,
+            "kind": "tick",
+            "page": 1,
+            "x": 345.9,
+            "y": 274,
+            "value": "dependant.age >= 19 and dependant.age < 24 and dependant.answer.fullTimeStudent"
+          },
+          {
+            "key": "studentNo@2",
+            "column": 2,
+            "kind": "tick",
+            "page": 1,
+            "x": 407.1,
+            "y": 274,
+            "value": "dependant.age >= 24 or (dependant.age >= 19 and not dependant.answer.fullTimeStudent)"
+          },
+          {
+            "key": "disabledYes@2",
+            "column": 2,
+            "kind": "tick",
+            "page": 1,
+            "x": 345.9,
+            "y": 232,
+            "value": "line.DEP.ageTest == 1 and dependant.age >= 19 and not (dependant.age < 24 and dependant.answer.fullTimeStudent)"
+          },
+          {
+            "key": "relationship@2",
+            "column": 2,
+            "kind": "choice",
+            "page": 1,
+            "x": 334.2,
+            "y": 152.7,
+            "value": "relationship",
+            "labels": {"child":"Child","foster":"Foster child"},
+            "width": 116.7
+          },
+          {
+            "key": "months@2",
+            "column": 2,
+            "kind": "count",
+            "page": 1,
+            "x": 388.3,
+            "y": 68.7,
+            "value": "dependant.answer.monthsWithYou"
+          },
+          {"key":"name@3","column":3,"kind":"text","page":1,"x":456.6,"y":470.7,"value":"name","width":117.4},
+          {"key":"birthYear@3","column":3,"kind":"text","page":1,"x":486,"y":332.7,"value":"birthYear","cell":21.6},
+          {
+            "key": "studentYes@3",
+            "column": 3,
+            "kind": "tick",
+            "page": 1,
+            "x": 468.3,
+            "y": 274,
+            "value": "dependant.age >= 19 and dependant.age < 24 and dependant.answer.fullTimeStudent"
+          },
+          {
+            "key": "studentNo@3",
+            "column": 3,
+            "kind": "tick",
+            "page": 1,
+            "x": 529.5,
+            "y": 274,
+            "value": "dependant.age >= 24 or (dependant.age >= 19 and not dependant.answer.fullTimeStudent)"
+          },
+          {
+            "key": "disabledYes@3",
+            "column": 3,
+            "kind": "tick",
+            "page": 1,
+            "x": 468.3,
+            "y": 232,
+            "value": "line.DEP.ageTest == 1 and dependant.age >= 19 and not (dependant.age < 24 and dependant.answer.fullTimeStudent)"
+          },
+          {
+            "key": "relationship@3",
+            "column": 3,
+            "kind": "choice",
+            "page": 1,
+            "x": 456.6,
+            "y": 152.7,
+            "value": "relationship",
+            "labels": {"child":"Child","foster":"Foster child"},
+            "width": 117.4
+          },
+          {
+            "key": "months@3",
+            "column": 3,
+            "kind": "count",
+            "page": 1,
+            "x": 510.7,
+            "y": 68.7,
+            "value": "dependant.answer.monthsWithYou"
+          }
+        ]
+      },
+      "tables": []
+    },
+    "S8812": {
+      "title": "Schedule 8812 (Form 1040), Credits for Qualifying Children and Other Dependents",
+      "url": "https://www.irs.gov/pub/irs-prior/f1040s8--2025.pdf",
+      "sha256": "6936462d67e2309d14a795aa0b88ef613cc6d79617431cfda3a2edf44aea52db",
+      "pages": 2,
+      "applies": "line.S8812.8 > 0",
+      "fields": [
+        {"key":"1","kind":"amount","page":1,"x":575.5,"y":650.7,"value":"line.F1040.11a","plain":true},
+        {"key":"3","kind":"amount","page":1,"x":575.5,"y":590.8,"value":"line.S8812.3","plain":true},
+        {"key":"4","kind":"count","page":1,"x":481.9,"y":578.7,"value":"line.S8812.4"},
+        {"key":"5","kind":"amount","page":1,"x":575.5,"y":566.8,"value":"line.S8812.5","plain":true},
+        {"key":"6","kind":"count","page":1,"x":481.9,"y":542.7,"value":"line.S8812.6"},
+        {"key":"7","kind":"amount","page":1,"x":575.5,"y":506.7,"value":"line.S8812.7","plain":true},
+        {"key":"8","kind":"amount","page":1,"x":575.5,"y":494.8,"value":"line.S8812.8","plain":true},
+        {"key":"9","kind":"amount","page":1,"x":575.5,"y":458.8,"value":"line.S8812.9","plain":true},
+        {"key":"10","kind":"amount","page":1,"x":575.5,"y":410.8,"value":"line.S8812.10","plain":true},
+        {"key":"11","kind":"amount","page":1,"x":575.5,"y":398.7,"value":"line.S8812.11","plain":true},
+        {"key":"12","kind":"amount","page":1,"x":575.5,"y":386.8,"value":"line.S8812.12","plain":true},
+        {"key":"13","kind":"amount","page":1,"x":575.5,"y":350.8,"value":"line.S8812.13","plain":true},
+        {"key":"14","kind":"amount","page":1,"x":575.5,"y":338.8,"value":"line.S8812.14","plain":true},
+        {"key":"17","kind":"amount","page":2,"x":575.5,"y":650.7,"value":"line.S8812.17","plain":true},
+        {
+          "key": "19",
+          "kind": "amount",
+          "page": 2,
+          "x": 481.2,
+          "y": 590.8,
+          "value": "line.S8812.19",
+          "when": "line.S8812.16a > 0",
+          "plain": true
+        },
+        {
+          "key": "20",
+          "kind": "amount",
+          "page": 2,
+          "x": 575.5,
+          "y": 578.7,
+          "value": "line.S8812.20",
+          "when": "line.S8812.16a > 0",
+          "plain": true
+        },
+        {
+          "key": "21",
+          "kind": "amount",
+          "page": 2,
+          "x": 481.2,
+          "y": 458.8,
+          "value": "line.S8812.21",
+          "when": "line.S8812.16a > 0 and line.S8812.16b >= param.actcThreeChildren and line.S8812.20 < line.S8812.17",
+          "plain": true
+        },
+        {
+          "key": "23",
+          "kind": "amount",
+          "page": 2,
+          "x": 481.2,
+          "y": 422.8,
+          "value": "line.S8812.21",
+          "when": "line.S8812.16a > 0 and line.S8812.16b >= param.actcThreeChildren and line.S8812.20 < line.S8812.17",
+          "plain": true
+        },
+        {
+          "key": "24",
+          "kind": "amount",
+          "page": 2,
+          "x": 481.2,
+          "y": 374.8,
+          "value": "line.S8812.24",
+          "when": "line.S8812.16a > 0 and line.S8812.16b >= param.actcThreeChildren and line.S8812.20 < line.S8812.17",
+          "plain": true
+        },
+        {
+          "key": "25",
+          "kind": "amount",
+          "page": 2,
+          "x": 575.5,
+          "y": 362.7,
+          "value": "line.S8812.25",
+          "when": "line.S8812.16a > 0 and line.S8812.16b >= param.actcThreeChildren and line.S8812.20 < line.S8812.17",
+          "plain": true
+        },
+        {
+          "key": "26",
+          "kind": "amount",
+          "page": 2,
+          "x": 575.5,
+          "y": 350.8,
+          "value": "line.S8812.26",
+          "when": "line.S8812.16a > 0 and line.S8812.16b >= param.actcThreeChildren and line.S8812.20 < line.S8812.17",
+          "plain": true
+        },
+        {"key":"27","kind":"amount","page":2,"x":575.5,"y":314.8,"value":"line.S8812.27","plain":true},
+        {"key":"names","kind":"text","page":1,"x":38,"y":675.7,"value":"returnNames","width":420.1},
+        {"key":"line12No","kind":"tick","page":1,"x":69.2,"y":378,"value":"line.S8812.8 <= line.S8812.11"},
+        {"key":"line12Yes","kind":"tick","page":1,"x":69.2,"y":366,"value":"line.S8812.8 > line.S8812.11"},
+        {"key":"16a","kind":"amount","page":2,"x":575.5,"y":698.8,"value":"line.S8812.16a","plain":true},
+        {
+          "key": "16bChildren",
+          "kind": "count",
+          "page": 2,
+          "x": 435.1,
+          "y": 686.7,
+          "value": "line.S8812.4",
+          "when": "line.S8812.16a > 0"
+        },
+        {
+          "key": "16b",
+          "kind": "amount",
+          "page": 2,
+          "x": 575.5,
+          "y": 674.8,
+          "value": "line.S8812.16b",
+          "when": "line.S8812.16a > 0",
+          "plain": true
+        },
+        {
+          "key": "18a",
+          "kind": "amount",
+          "page": 2,
+          "x": 481.2,
+          "y": 638.8,
+          "value": "line.S8812.18a",
+          "when": "line.S8812.16a > 0",
+          "plain": true
+        },
+        {
+          "key": "line19No",
+          "kind": "tick",
+          "page": 2,
+          "x": 70.8,
+          "y": 606,
+          "value": "line.S8812.16a > 0 and line.S8812.18a <= param.actcEarnedFloor"
+        },
+        {
+          "key": "line19Yes",
+          "kind": "tick",
+          "page": 2,
+          "x": 70.8,
+          "y": 594,
+          "value": "line.S8812.16a > 0 and line.S8812.18a > param.actcEarnedFloor"
+        },
+        {
+          "key": "line20No",
+          "kind": "tick",
+          "page": 2,
+          "x": 70.8,
+          "y": 558,
+          "value": "line.S8812.16a > 0 and line.S8812.16b < param.actcThreeChildren"
+        },
+        {
+          "key": "line20Yes",
+          "kind": "tick",
+          "page": 2,
+          "x": 70.8,
+          "y": 534,
+          "value": "line.S8812.16a > 0 and line.S8812.16b >= param.actcThreeChildren"
+        }
+      ],
+      "tables": []
+    },
+    "F8959": {
+      "title": "Form 8959, Additional Medicare Tax",
+      "url": "https://www.irs.gov/pub/irs-prior/f8959--2025.pdf",
+      "sha256": "13e64004948331d2b708c80b1b664bf69675028edd0b84f2de6e3ca9afaa996d",
+      "pages": 1,
+      "applies": "line.F8959.7 > 0 or line.F8959.24 > 0",
+      "fields": [
+        {"key":"1","kind":"amount","page":1,"x":481.2,"y":650.7,"value":"line.F8959.1","plain":true},
+        {"key":"4","kind":"amount","page":1,"x":481.2,"y":614.7,"value":"line.F8959.1","plain":true},
+        {"key":"5","kind":"amount","page":1,"x":481.2,"y":566.7,"value":"line.F8959.5","plain":true},
+        {
+          "key": "6",
+          "kind": "amount",
+          "page": 1,
+          "x": 575.5,
+          "y": 554.7,
+          "value": "max(0, line.F8959.1 - line.F8959.5)",
+          "plain": true
+        },
+        {"key":"7","kind":"amount","page":1,"x":575.5,"y":530.7,"value":"line.F8959.7","plain":true},
+        {"key":"18","kind":"amount","page":1,"x":575.5,"y":230.7,"value":"line.F8959.7","plain":true},
+        {"key":"19","kind":"amount","page":1,"x":481.2,"y":194.7,"value":"line.F8959.19","plain":true},
+        {"key":"20","kind":"amount","page":1,"x":481.2,"y":182.7,"value":"line.F8959.1","plain":true},
+        {"key":"21","kind":"amount","page":1,"x":481.2,"y":158.7,"value":"line.F8959.21","plain":true},
+        {"key":"22","kind":"amount","page":1,"x":575.5,"y":134.7,"value":"line.F8959.24","plain":true},
+        {"key":"24","kind":"amount","page":1,"x":575.5,"y":74.7,"value":"line.F8959.24","plain":true},
+        {"key":"names","kind":"text","page":1,"x":38,"y":687.7,"value":"returnNames","width":405.7}
+      ],
+      "tables": []
+    },
+    "F8960": {
+      "title": "Form 8960, Net Investment Income Tax",
+      "url": "https://www.irs.gov/pub/irs-prior/f8960--2025.pdf",
+      "sha256": "9b323b7166b5845a776f781b8c82eef94ccd998354e88fc33a1051c3b3789731",
+      "pages": 1,
+      "applies": "line.F8960.17 > 0",
+      "fields": [
+        {"key":"1","kind":"amount","page":1,"x":575.5,"y":638.8,"value":"line.F1040.2b","plain":true},
+        {"key":"8","kind":"amount","page":1,"x":575.5,"y":446.8,"value":"line.F1040.2b","plain":true},
+        {"key":"12","kind":"amount","page":1,"x":575.5,"y":326.7,"value":"line.F1040.2b","plain":true},
+        {"key":"13","kind":"amount","page":1,"x":481.2,"y":302.8,"value":"line.F8960.13","plain":true},
+        {"key":"14","kind":"amount","page":1,"x":481.2,"y":290.7,"value":"line.F8960.14","plain":true},
+        {
+          "key": "15",
+          "kind": "amount",
+          "page": 1,
+          "x": 481.2,
+          "y": 278.8,
+          "value": "max(0, line.F8960.13 - line.F8960.14)",
+          "plain": true
+        },
+        {
+          "key": "16",
+          "kind": "amount",
+          "page": 1,
+          "x": 575.5,
+          "y": 266.8,
+          "value": "min(line.F1040.2b, max(0, line.F8960.13 - line.F8960.14))",
+          "plain": true
+        },
+        {"key":"17","kind":"amount","page":1,"x":575.5,"y":242.8,"value":"line.F8960.17","plain":true},
+        {"key":"names","kind":"text","page":1,"x":38,"y":687.8,"value":"returnNames","width":412.9}
+      ],
+      "tables": []
+    }
+  },
+  "formsToAdd": [
+    {
+      "id": "SB",
+      "form": "Schedule B (Form 1040), Interest and Ordinary Dividends",
+      "why": "because your taxable interest is more than $1,500: list each payer and amount (your 1099-INT forms, below) in Part I, and answer the questions about foreign accounts and trusts in Part III",
+      "applies": "line.F1040.2b > 1500"
+    }
+  ],
   "outcome": "RESULT.net",
   "balances": [{"name":"Federal","refund":"F1040.34","owing":"F1040.37"}],
   "residency": "A U.S. citizen or resident alien all year",
-  "version": "0af4f72d77aad990"
+  "version": "3c80785241a2452b"
 }

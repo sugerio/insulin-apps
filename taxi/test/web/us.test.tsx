@@ -59,7 +59,7 @@ describe("a United States year", () => {
     expect(screen.getByText(/Filing status\./).closest("p")?.textContent).toMatch(/A married couple chooses: jointly, one return with both incomes/);
   });
 
-  it("shows the federal refund, and says the forms can't be printed yet", async () => {
+  it("shows the federal refund, and offers the IRS's forms to download", async () => {
     let alex: Person | undefined;
     const { router } = await renderApp("/returns", { seed: async (s) => void (alex = await seedFinishedUs(s)) });
     await screen.findByText("United States. File by April 15, 2026.");
@@ -68,8 +68,10 @@ describe("a United States year", () => {
     expect(screen.getByText("Refund").nextElementSibling?.textContent).toBe("$825.00");
     expect(within(results).getByText("Tax")).toBeTruthy();
     const forms = screen.getByRole("region", { name: "Your forms" });
-    expect(forms.textContent).toMatch(/Printing this return on the official forms comes in a later version/);
-    expect(screen.queryByRole("button", { name: /Open the forms/ })).toBeNull();
+    expect(forms.textContent).toMatch(/Form 1040 and the schedules and forms your return uses/);
+    expect(forms.textContent).toMatch(/mail it to the IRS/);
+    expect(forms.textContent).not.toMatch(/CRA|NETFILE/);
+    expect((within(forms).getByRole("button", { name: "Download the forms (PDF)" }) as HTMLButtonElement).disabled).toBe(false);
   });
 });
 

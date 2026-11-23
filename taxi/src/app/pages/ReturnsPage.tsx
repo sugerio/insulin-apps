@@ -104,7 +104,7 @@ function Years({ data, reload }: { data: YearList; reload: () => void }) {
             <p>Nothing is sent to the CRA. You get the CRA's own forms, filled in, to sign and mail.</p>
             <p>
               United States: the federal Form 1040 for wages and interest, in every filing status, with dependants, the child tax credit, the
-              earned income credit and the credit for child care. Printing comes in a later version.
+              earned income credit and the credit for child care, printed on the IRS's own forms.
             </p>
           </CardContent>
         </Card>

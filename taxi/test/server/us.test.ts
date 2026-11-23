@@ -1,5 +1,9 @@
+import { PDFArray, PDFDocument, PDFName, type PDFPage } from "pdf-lib";
+import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { Estimate, Person, TaxYear, YearList } from "#shared";
+import type { FormSource } from "../../src/app/server/lib/forms.ts";
+import { rulesFor } from "../../src/app/shared/rules/index.ts";
 import { startServer, type TestServer } from "../support/server.ts";
 
 // A United States year on the real server: started for the US, federal only (no state), with its own marital
@@ -90,9 +94,111 @@ describe("a United States year", () => {
     expect([line(answered, "F1040.24"), line(answered, "F1040.34"), line(answered, "F1040.37")]).toEqual(["2675", "825", "0"]);
     year = await json<TaxYear>(server.call("POST", "/api/years/2025/slips/confirm", { body: { revision: year.revision } }));
     expect(year.returns[0]!.steps).toMatchObject({ personal: "done", income: "done", deductions: "done", credits: "done", confirm: "done", finish: "done" });
-    // There are no official forms to print it on yet.
-    const forms = await json<{ error: { message: string } }>(server.call("GET", `/api/years/2025/returns/${alex.id}/forms`), 404);
-    expect(forms.error.message).toBe("Printing this return on the official forms isn't available yet");
+  });
+});
+
+describe("printing a US return", () => {
+  const rules = rulesFor("us", 2025)!;
+  /** Blank pages for each IRS form, each with an empty fill-in field as the IRS's have, counting the downloads. */
+  function standIn(): FormSource & { fetched: string[] } {
+    const fetched: string[] = [];
+    return {
+      fetched,
+      checkHash: false,
+      async fetch(url) {
+        fetched.push(url);
+        const form = [...rules.forms.values()].find((each) => each.url === url)!;
+        const pdf = await PDFDocument.create();
+        for (let page = 0; page < form.pages; page += 1) pdf.addPage([612, 792]);
+        pdf.getForm().createTextField("topmostSubform[0].Page1[0].f1_01[0]").addToPage(pdf.getPage(0), { x: 36, y: 700, width: 200, height: 14 });
+        return pdf.save();
+      },
+    };
+  }
+  /** Each page's text, with where it is. */
+  async function pagesOf(bytes: ArrayBuffer) {
+    const doc = await getDocument({ data: new Uint8Array(bytes) }).promise;
+    const pages = [];
+    for (let page = 1; page <= doc.numPages; page += 1) {
+      const items = (await (await doc.getPage(page)).getTextContent()).items.flatMap((item) => ("str" in item && item.str.trim() ? [{ text: item.str, x: item.transform[4] as number, y: item.transform[5] as number }] : []));
+      pages.push(items);
+    }
+    return pages;
+  }
+  const W2 = (personId: string, issuer: string, wages: string) => ({ personId, type: "W2", issuer, boxes: { 1: wages, 2: "3500", 4: "0", 5: wages, 6: (Number(wages) * 0.0145).toFixed(2) } });
+  const ANSWERS = { hasWages: true, hasInterest: false, hasTipsOrOvertime: false, canBeClaimed: false, isBlind: false, estimatedPayments: "0" };
+
+  /** A finished US year: Alex alone, or Alex and Sam filing jointly; each with a W-2 and every answer given. */
+  async function finished(joint: boolean) {
+    const alex = await addPerson("Alex Rivera", "self", "1984-02-02");
+    const sam = joint ? await addPerson("Sam Rivera", "spouse", "1986-06-06") : undefined;
+    const adults = [alex, ...(sam ? [sam] : [])];
+    let year = await json<TaxYear>(server.call("POST", "/api/years", { body: { year: 2025, country: "us", people: adults.map((each) => each.id) } }), 201);
+    year = await json<TaxYear>(
+      server.call("PUT", "/api/years/2025/personal-info", {
+        body: {
+          revision: year.revision,
+          maritalStatus: joint ? "married" : "single",
+          ...(joint ? { filingStatus: "joint" } : {}),
+          adults: adults.map((each) => ({ personId: each.id, province: null, residentAllYear: true })),
+        },
+      }),
+    );
+    for (const [index, each] of adults.entries()) {
+      year = await json<TaxYear>(server.call("POST", "/api/years/2025/slips", { body: { revision: year.revision, ...W2(each.id, index ? "Initech" : "Acme Tools", index ? "30000" : "40000") } }), 201);
+      year = await json<TaxYear>(server.call("PUT", "/api/years/2025/answers", { body: { revision: year.revision, personId: each.id, answers: ANSWERS } }));
+    }
+    year = await json<TaxYear>(server.call("POST", "/api/years/2025/slips/confirm", { body: { revision: year.revision } }));
+    expect(year.returns[0]!.steps.finish).toBe("done");
+    return { alex, sam };
+  }
+
+  it("prints a finished return on Form 1040, downloaded from irs.gov, then the US worksheet; the empty fields are gone", async () => {
+    server.close();
+    const source = standIn();
+    server = await startServer({ now: () => 1_767_225_600_000, forms: source });
+    const { alex } = await finished(false);
+    const response = await server.call("GET", `/api/years/2025/returns/${alex.id}/forms`);
+    expect(response.status, await response.clone().text()).toBe(200);
+    const bytes = await response.arrayBuffer();
+    expect(source.fetched).toEqual(["https://www.irs.gov/pub/irs-prior/f1040--2025.pdf"]);
+    // The stand-in's fill-in field isn't in the printed file: only what Taxi draws.
+    const printed = await PDFDocument.load(bytes);
+    expect(printed.catalog.has(PDFName.of("AcroForm"))).toBe(false);
+    const annotations = (page: PDFPage) => page.node.lookupMaybe(PDFName.of("Annots"), PDFArray)?.size() ?? 0;
+    expect(printed.getPages().slice(0, rules.forms.get("F1040")!.pages).map(annotations)).toEqual([0, 0]);
+
+    const pages = await pagesOf(bytes);
+    const f1040 = rules.forms.get("F1040")!;
+    const place = (key: string) => f1040.fields.find((field) => field.key === key)!;
+    const near = (key: string) => pages[place(key).page - 1]!.filter((item) => Math.abs(item.y - place(key).y) < 4).map((item) => item.text);
+    // Line 1a: the amount with its cents, ending at the box's right end; the name and the filing status.
+    expect(near("1a")).toContain("40,000.00");
+    expect(near("firstName")).toEqual(expect.arrayContaining(["Alex", "Rivera"]));
+    const single = place("single");
+    expect(pages[0]!.some((item) => item.text === "X" && Math.abs(item.y - (single.y - 9 * 0.36)) < 1)).toBe(true);
+    // $40,000 less $15,750: the refund is line 34, and all of it is refunded (35a).
+    expect(near("35a")).toContain("825.00");
+    const worksheet = pages.slice(f1040.pages).flat().map((item) => item.text).join(" ");
+    expect(worksheet).toContain("Alex Rivera: 2025 return worksheet");
+    expect(worksheet).toContain("Refund (line 34)");
+    expect(worksheet).toContain("irs.gov/WhereToFile");
+    expect(worksheet).toContain("W-2 from Acme Tools");
+  });
+
+  it("prints a joint return once, as the person preparing's, with both names; the spouse has none to print", async () => {
+    server.close();
+    server = await startServer({ now: () => 1_767_225_600_000, forms: standIn() });
+    const { alex, sam } = await finished(true);
+    const response = await server.call("GET", `/api/years/2025/returns/${alex.id}/forms`);
+    expect(response.status).toBe(200);
+    const pages = await pagesOf(await response.arrayBuffer());
+    const f1040 = rules.forms.get("F1040")!;
+    const spouse = f1040.fields.find((field) => field.key === "spouseFirstName")!;
+    expect(pages[0]!.filter((item) => Math.abs(item.y - spouse.y) < 4).map((item) => item.text)).toEqual(expect.arrayContaining(["Sam", "Rivera"]));
+    expect(pages.slice(f1040.pages).flat().map((item) => item.text).join(" ")).toContain("your names");
+    const theirs = await json<{ error: { message: string } }>(server.call("GET", `/api/years/2025/returns/${sam!.id}/forms`), 404);
+    expect(theirs.error.message).toBe("This person is on a joint return: print it from the return of the person preparing");
   });
 });
 

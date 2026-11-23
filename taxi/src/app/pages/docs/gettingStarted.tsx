@@ -26,8 +26,10 @@ export const gettingStarted: DocTopic = {
             citizen or resident alien for the whole year, in every filing status (single, married filing jointly or separately, head of
             household, qualifying surviving spouse), with wages (W-2) and interest (1099-INT), the standard deduction, the 2025 deduction for
             seniors, dependants with the child tax credit and the credit for other dependents, the earned income credit, and the credit for
-            child and dependent care. It prepares no state return, can't print the IRS forms or read them by AI yet, and says on the return
-            when something it doesn't handle yet applies, such as itemized deductions.
+            child and dependent care. A finished return downloads on the IRS's own forms: Form 1040 and the schedules it uses, filled in. Add
+            the social security numbers and your address by hand, attach Copy B of each W-2, sign and mail it to the IRS. It prepares no state
+            return, doesn't read US forms by AI yet, and says on the return when something it doesn't handle yet applies, such as itemized
+            deductions.
           </p>
           <p>
             <b>Who it is for:</b> residents of every province and territory, also in the year they moved to or from Canada (except in Quebec),

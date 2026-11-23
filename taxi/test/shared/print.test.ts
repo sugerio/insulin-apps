@@ -102,7 +102,7 @@ describe("printBlockers", () => {
 
 describe("formsToAdd", () => {
   const golden = (name: string): EngineInput => JSON.parse(readFileSync(resolve(import.meta.dirname, `../golden/ca-2025/${name}.json`), "utf8")).input;
-  const named = (input: EngineInput, personId = "p1") => formsToAdd(new Evaluation(rules, input), personId).map(({ form }) => form.split(",")[0]);
+  const named = (input: EngineInput, personId = "p1") => formsToAdd(rules, new Evaluation(rules, input), personId).map(({ form }) => form.split(",")[0]);
 
   it.each([
     ["single-employee-on", []],

@@ -139,8 +139,15 @@ left under Before you file, and the download is refused.
   under the other person, with a link to it.
 - A row Taxi doesn't know (a dependant's details, each expense category, a property's address) is left blank. The
   worksheet lists the slips, the answers, the hints applied and every line with its formula.
+- A US return prints on the IRS's own forms: Form 1040, then each schedule and form the return uses, in the order the
+  IRS asks them attached (Schedules 1-A, 2 and 3, Form 2441, Schedule EIC, Schedule 8812, and Forms 8959 and 8960).
+  Taxi downloads them from irs.gov the first time, and checks each file the same way. Form 1040 gets the names, the
+  filing status, the standard deduction boxes, and each dependent's name, relationship and boxes (four at most; the
+  worksheet lists the others for the statement the IRS asks for). Each schedule gets the names on the return. On a
+  joint return there is one PDF, the person preparing's. The social security numbers, the address and the questions
+  Taxi doesn't ask stay blank, as do the care providers on Form 2441.
 - A form the return needs that Taxi doesn't print is named under "Forms to fill in yourself", on Finish and on the
-  worksheet: Revenu Québec's Schedule D (the solidarity tax credit) for a resident of Quebec; Schedule 6 for residents
+  worksheet: for a US return, Schedule B when the taxable interest is more than $1,500; Revenu Québec's Schedule D (the solidarity tax credit) for a resident of Quebec; Schedule 6 for residents
   of Quebec, Alberta or Nunavut (5005-S6, 5009-S6, 5014-S6) when the return gets the Canada workers benefit or reports
   its advance payments from an RC210 slip, even with no benefit; Schedule MB428-A for Manitoba's family tax benefit;
   and Schedule ON(S11), BC(S11) or SK(S11) for provincial tuition amounts.

@@ -98,8 +98,9 @@ The US return covers:
 
 A parent's release of the claim to a child (Form 8332), itemized deductions, tips and overtime pay, a household
 employee (Schedule H), and other income come in later versions. The app says so when one of them applies,
-instead of giving a wrong amount. A US return can't be printed on the IRS forms yet, and its forms can't be read by AI
-yet: enter each W-2 and 1099-INT on Income, then copy the amounts into the forms or into tax software.
+instead of giving a wrong amount. A finished US return downloads as one PDF: the IRS's Form 1040 and the schedules and
+forms it uses (Schedules 1-A, 2, 3, 8812 and EIC, and Forms 2441, 8959 and 8960), filled in, then a worksheet. Taxi
+doesn't read US forms by AI yet: enter each W-2 and 1099-INT on Income.
 
 ## What it stores
 

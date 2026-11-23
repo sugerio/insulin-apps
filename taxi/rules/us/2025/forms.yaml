@@ -1,0 +1,311 @@
+# The IRS forms a return is printed on, and what goes in each row. A row is the line number printed beside its box
+# (form-layout.yaml finds it in the label the IRS gives each box of its fill-in PDF); a named place (a name, a filing
+# status box, a column of a table) is named in scripts/form-layout.ts by its field. Each amount is a formula from the
+# return's side, like a line's. A zero or a missing amount is left blank, unless the field says `zero: true`. Rows the
+# app has nothing for (IRA distributions, Schedule 1) are left out. A field is an amount unless it says otherwise:
+#   { count: <formula> }   a whole number (a number of children or months), with no cents
+#   { tick: <formula> }    a tick in a box, when the formula is yes from the person's answers (not from a usual answer)
+#   { text: <fact> }       the person's firstName or lastName, their spouse's spouseFirstName, spouseLastName or whole
+#                          spouseName, or the returnNames a schedule is headed with (both spouses' on a joint return)
+# A form's table of dependants (`dependants`) is filled for each dependant of the return that `which` takes, one per
+# column; its fields are worked out from the dependant's side (`dependant.`), and its `when`s are about the return.
+#
+# A form applies to the returns whose `applies` is yes; the forms print in the order of the attachment sequence number
+# printed at the top right of each, as the IRS asks them attached: Form 1040, then Schedules 1-A, 2 and 3, Form 2441,
+# Schedule EIC, Schedule 8812, and Forms 8959 and 8960.
+#
+# The PDFs come from irs.gov on first use (url: the 2025 revision's own address, which doesn't change when the IRS
+# publishes the next year's) and must match the layout's SHA-256: a form the IRS changes is placed again with npm run
+# form-layout before it is filled.
+
+forms:
+  F1040:
+    title: Form 1040, U.S. Individual Income Tax Return
+    url: https://www.irs.gov/pub/irs-prior/f1040--2025.pdf
+    applies: "true"
+    fields:
+      # Page 1: the names and the filing status. The social security numbers, the address, the presidential campaign
+      # fund, the digital assets question and the home in the U.S. stay for the person to fill in.
+      firstName: { text: firstName }
+      lastName: { text: lastName }
+      spouseFirstName: { text: spouseFirstName, when: "line.US.joint == 1" }
+      spouseLastName: { text: spouseLastName, when: "line.US.joint == 1" }
+      single: { tick: "line.US.single == 1" }
+      joint: { tick: "line.US.joint == 1" }
+      separate: { tick: "line.US.separate == 1" }
+      separateSpouseName: { text: spouseName, when: "line.US.separate == 1" }
+      hoh: { tick: "line.US.hoh == 1" }
+      qss: { tick: "line.US.qss == 1" }
+      livedApart: { tick: "line.US.separate == 1 and answer.livedApartLastSixMonths" }
+      # Income
+      1a: line.F1040.1a
+      1e: line.F1040.1e
+      1z: line.F1040.1z
+      2a: line.F1040.2a
+      2b: line.F1040.2b
+      "9": line.F1040.9
+      11a: line.F1040.11a
+      # Page 2: tax and credits
+      11b: line.F1040.11a
+      claimYou: { tick: answer.canBeClaimed }
+      claimSpouse: { tick: "line.US.joint == 1 and spouse.answer.canBeClaimed" }
+      youSenior: { tick: "person.age >= 65" }
+      youBlind: { tick: answer.isBlind }
+      spouseSenior: { tick: "line.US.joint == 1 and spouse.person.age >= 65" }
+      spouseBlind: { tick: "line.US.joint == 1 and spouse.answer.isBlind" }
+      12e: line.F1040.12e
+      13b: line.F1040.13b
+      "14": line.F1040.14
+      # "If zero or less, enter -0-" (lines 15 and 22), and the total tax.
+      "15": { value: line.F1040.15, zero: true }
+      "16": line.F1040.16
+      "18": line.F1040.18
+      "19": line.F1040.19
+      "20": line.F1040.20
+      "21": line.F1040.21
+      "22": { value: line.F1040.22, zero: true }
+      "23": line.F1040.23
+      "24": { value: line.F1040.24, zero: true }
+      # Payments
+      25a: line.F1040.25a
+      25b: line.F1040.25b
+      25c: line.F1040.25c
+      25d: line.F1040.25d
+      "26": line.F1040.26
+      27a: line.F1040.27a
+      "28": line.F1040.28
+      "31": line.F1040.31
+      "32": line.F1040.32
+      "33": line.F1040.33
+      # The refund, all of it refunded (line 35a); the routing and account numbers stay for the person to fill in.
+      "34": line.F1040.34
+      35a: line.F1040.34
+      "37": line.F1040.37
+    # The dependents this return claims, four on the form; with more, the "more than four" box is ticked and the
+    # worksheet lists the others, for the statement the instructions ask for. The child tax credit's box is for a
+    # child counted on Schedule 8812 line 4, which needs your social security number (without one, the child counts
+    # on line 6); any other dependent's is the credit for other dependents'. "And in the U.S." stays for the person
+    # to tick.
+    dependants:
+      when: "line.US.claimsDependants == 1"
+      which: "line.DEP.dependent == 1"
+      columns: 4
+      more: moreDependants
+      fields:
+        firstName: { text: firstName }
+        lastName: { text: lastName }
+        relationship: { choice: relationship, labels: { child: Child, foster: Foster child } }
+        livedWithYou: { tick: "dependant.answer.monthsWithYou >= 7" }
+        student: { tick: dependant.answer.fullTimeStudent }
+        disabled: { tick: dependant.answer.disabled }
+        childTaxCredit: { tick: "line.DEP.ctcChild == 1", when: "line.US.filerSSN == 1" }
+        otherDependents: { tick: "line.DEP.ctcChild == 0" }
+        childWithoutYourSSN: { tick: "line.DEP.ctcChild == 1", when: "line.US.filerSSN == 0", place: otherDependents }
+
+  S1A:
+    title: Schedule 1-A (Form 1040), Additional Deductions
+    url: https://www.irs.gov/pub/irs-prior/f1040s1a--2025.pdf
+    applies: "line.S1A.37 > 0"
+    fields:
+      names: { text: returnNames }
+      # Part I: modified AGI (no income from Puerto Rico or abroad)
+      "1": line.F1040.11a
+      "3": line.S1A.3
+      # Part V: the enhanced deduction for seniors
+      "31": line.S1A.3
+      "32": line.S1A.32
+      "33": "max(0, line.S1A.3 - line.S1A.32)"
+      "34": "round(max(0, line.S1A.3 - line.S1A.32) * param.seniorPhaseOutRate, 2)"
+      "35": line.S1A.35
+      36a: "if(person.age >= 65, line.S1A.35, 0)"
+      36b: "if(line.US.joint == 1, if(spouse.person.age >= 65, line.S1A.35, 0), 0)"
+      "37": line.S1A.37
+      "38": line.S1A.37
+
+  S2:
+    title: Schedule 2 (Form 1040), Additional Taxes
+    url: https://www.irs.gov/pub/irs-prior/f1040s2--2025.pdf
+    applies: "line.S2.21 > 0"
+    fields:
+      names: { text: returnNames }
+      "11": line.F8959.7
+      "12": line.F8960.17
+      "21": line.S2.21
+
+  S3:
+    title: Schedule 3 (Form 1040), Additional Credits and Payments
+    url: https://www.irs.gov/pub/irs-prior/f1040s3--2025.pdf
+    applies: "line.S3.8 > 0 or line.S3.11 > 0"
+    fields:
+      names: { text: returnNames }
+      "2": line.S3.2
+      "8": line.S3.8
+      "11": line.S3.11
+      "15": line.S3.11
+
+  F2441:
+    title: Form 2441, Child and Dependent Care Expenses
+    url: https://www.irs.gov/pub/irs-prior/f2441--2025.pdf
+    applies: "line.F2441.11 > 0 or line.F2441.12 > 0"
+    fields:
+      names: { text: returnNames }
+      # A and B: filing separately as unmarried, and the deemed income of a spouse who was a student or disabled.
+      livedApart: { tick: "line.US.separate == 1 and line.US.careUnmarried == 1" }
+      deemedIncome: { tick: "line.US.joint == 1 and answer.studentOrDisabledMonths + spouse.answer.studentOrDisabledMonths > 0" }
+      # Part I, the care providers (name, address, identifying number), stays for the person to fill in.
+      # Part II: the credit. Line 9b (2024 care paid in 2025) is 0: the app says so when it isn't.
+      "3": line.F2441.3
+      "4": { value: line.F2441.4, when: "line.US.paidForCare == 1" }
+      "5": { value: line.F2441.5, when: "line.US.paidForCare == 1" }
+      "6": line.F2441.6
+      "7": { value: line.F2441.7, when: "line.US.paidForCare == 1" }
+      # The rate's digits after the decimal point, printed on the form.
+      "8": { count: "line.F2441.8 * 100", when: "line.US.paidForCare == 1" }
+      9a: line.F2441.9a
+      9c: line.F2441.9a
+      "10": { value: line.F2441.10, when: "line.US.paidForCare == 1" }
+      "11": line.F2441.11
+      # Part III: dependent care benefits. Line 14 is printed in brackets on the form.
+      "12": line.F2441.12
+      "13": line.F2441.13
+      "14": line.F2441.14
+      "15": line.F2441.15
+      "16": { value: line.F2441.16, when: "line.F2441.12 > 0" }
+      "17": { value: line.F2441.17, when: "line.F2441.12 > 0" }
+      "18": { value: line.F2441.18, when: "line.F2441.12 > 0" }
+      "19": { value: line.F2441.19, when: "line.F2441.12 > 0" }
+      "20": { value: line.F2441.20, when: "line.F2441.12 > 0" }
+      "21": { value: line.F2441.21, when: "line.F2441.12 > 0" }
+      # No benefits from a sole proprietorship or partnership: line 22 is No and 0, and none are deductible (24).
+      line22No: { tick: "line.F2441.12 > 0" }
+      "22": { value: "0", when: "line.F2441.12 > 0", zero: true }
+      "23": line.F2441.15
+      "24": { value: "0", when: "line.F2441.12 > 0", zero: true }
+      "25": line.F2441.25
+      "26": line.F2441.26
+      "27": { value: line.F2441.27, when: "line.F2441.12 > 0 and line.US.paidForCare == 1" }
+      "28": { value: line.F2441.25, when: "line.US.paidForCare == 1" }
+      "29": { value: line.F2441.29, when: "line.F2441.12 > 0 and line.US.paidForCare == 1" }
+      "30": { value: line.F2441.30, when: "line.F2441.12 > 0 and line.US.paidForCare == 1" }
+      "31": { value: line.F2441.31, when: "line.F2441.12 > 0 and line.US.paidForCare == 1" }
+    # Line 2: each qualifying person with care expenses, three on the form; with more, its box is ticked and the
+    # worksheet lists the others. Their social security numbers stay for the person to fill in.
+    dependants:
+      when: "line.US.paidForCare == 1"
+      which: "line.DEP.careChildExpenses + line.DEP.careDisabledExpenses > 0"
+      columns: 3
+      more: moreQualifying
+      fields:
+        firstName: { text: firstName }
+        lastName: { text: lastName }
+        disabled: { tick: "line.DEP.careDisabled == 1" }
+        expenses: "line.DEP.careChildExpenses + line.DEP.careDisabledExpenses"
+
+  SEIC:
+    title: Schedule EIC (Form 1040), Earned Income Credit
+    url: https://www.irs.gov/pub/irs-prior/f1040sei--2025.pdf
+    applies: "line.F1040.27a > 0 and line.US.eicChildren > 0"
+    fields:
+      names: { text: returnNames }
+    # Each qualifying child, three at most: the credit counts three. Their social security numbers stay for the
+    # person to fill in. Lines 4a and 4b are for a child 19 or older: under 24 and a student, or else disabled.
+    dependants:
+      which: "line.DEP.eicChild == 1"
+      columns: 3
+      fields:
+        name: { text: name }
+        birthYear: { text: birthYear }
+        studentYes: { tick: "dependant.age >= 19 and dependant.age < 24 and dependant.answer.fullTimeStudent" }
+        studentNo: { tick: "dependant.age >= 24 or (dependant.age >= 19 and not dependant.answer.fullTimeStudent)" }
+        disabledYes: { tick: "line.DEP.ageTest == 1 and dependant.age >= 19 and not (dependant.age < 24 and dependant.answer.fullTimeStudent)" }
+        relationship: { choice: relationship, labels: { child: Child, foster: Foster child } }
+        months: { count: dependant.answer.monthsWithYou }
+
+  S8812:
+    title: Schedule 8812 (Form 1040), Credits for Qualifying Children and Other Dependents
+    url: https://www.irs.gov/pub/irs-prior/f1040s8--2025.pdf
+    applies: "line.S8812.8 > 0"
+    fields:
+      names: { text: returnNames }
+      # Part I
+      "1": line.F1040.11a
+      "3": line.S8812.3
+      "4": { count: line.S8812.4 }
+      "5": line.S8812.5
+      "6": { count: line.S8812.6 }
+      "7": line.S8812.7
+      "8": line.S8812.8
+      "9": line.S8812.9
+      "10": line.S8812.10
+      "11": line.S8812.11
+      line12No: { tick: "line.S8812.8 <= line.S8812.11" }
+      line12Yes: { tick: "line.S8812.8 > line.S8812.11" }
+      "12": line.S8812.12
+      "13": line.S8812.13
+      "14": line.S8812.14
+      # Part II-A, when the credits are more than the tax.
+      16a: line.S8812.16a
+      16bChildren: { count: line.S8812.4, when: "line.S8812.16a > 0" }
+      16b: { value: line.S8812.16b, when: "line.S8812.16a > 0" }
+      "17": line.S8812.17
+      18a: { value: line.S8812.18a, when: "line.S8812.16a > 0" }
+      line19No: { tick: "line.S8812.16a > 0 and line.S8812.18a <= param.actcEarnedFloor" }
+      line19Yes: { tick: "line.S8812.16a > 0 and line.S8812.18a > param.actcEarnedFloor" }
+      "19": { value: line.S8812.19, when: "line.S8812.16a > 0" }
+      "20": { value: line.S8812.20, when: "line.S8812.16a > 0" }
+      line20No: { tick: "line.S8812.16a > 0 and line.S8812.16b < param.actcThreeChildren" }
+      line20Yes: { tick: "line.S8812.16a > 0 and line.S8812.16b >= param.actcThreeChildren" }
+      # Part II-B, for three or more children when line 20 is less than line 17.
+      "21": { value: line.S8812.21, when: &partIIB "line.S8812.16a > 0 and line.S8812.16b >= param.actcThreeChildren and line.S8812.20 < line.S8812.17" }
+      "23": { value: line.S8812.21, when: *partIIB }
+      "24": { value: line.S8812.24, when: *partIIB }
+      "25": { value: line.S8812.25, when: *partIIB }
+      "26": { value: line.S8812.26, when: *partIIB }
+      # Part II-C
+      "27": line.S8812.27
+
+  F8959:
+    title: Form 8959, Additional Medicare Tax
+    url: https://www.irs.gov/pub/irs-prior/f8959--2025.pdf
+    applies: "line.F8959.7 > 0 or line.F8959.24 > 0"
+    fields:
+      names: { text: returnNames }
+      # Part I (no unreported tips or Form 8919 wages), Part IV and Part V. No self-employment or railroad
+      # retirement income, so Parts II and III are blank.
+      "1": line.F8959.1
+      "4": line.F8959.1
+      "5": line.F8959.5
+      "6": "max(0, line.F8959.1 - line.F8959.5)"
+      "7": line.F8959.7
+      "18": line.F8959.7
+      "19": line.F8959.19
+      "20": line.F8959.1
+      "21": line.F8959.21
+      "22": line.F8959.24
+      "24": line.F8959.24
+
+  F8960:
+    title: Form 8960, Net Investment Income Tax
+    url: https://www.irs.gov/pub/irs-prior/f8960--2025.pdf
+    applies: "line.F8960.17 > 0"
+    fields:
+      names: { text: returnNames }
+      # The only investment income the app takes is taxable interest, with no expenses against it.
+      "1": line.F1040.2b
+      "8": line.F1040.2b
+      "12": line.F1040.2b
+      "13": line.F8960.13
+      "14": line.F8960.14
+      "15": "max(0, line.F8960.13 - line.F8960.14)"
+      "16": "min(line.F1040.2b, max(0, line.F8960.13 - line.F8960.14))"
+      "17": line.F8960.17
+
+# Forms a return needs that aren't printed, in the order they're attached: the worksheet and Finish name them, for the
+# person to fill in and file with the forms. Each applies when its formula is yes.
+formsToAdd:
+  SB:
+    form: Schedule B (Form 1040), Interest and Ordinary Dividends
+    why: >-
+      because your taxable interest is more than $1,500: list each payer and amount (your 1099-INT forms, below) in
+      Part I, and answer the questions about foreign accounts and trusts in Part III
+    applies: "line.F1040.2b > 1500"

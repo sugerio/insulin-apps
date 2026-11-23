@@ -82,7 +82,8 @@
         "hasTipsOrOvertime": false,
         "canBeClaimed": false,
         "isBlind": false,
-        "estimatedPayments": "0"
+        "estimatedPayments": "0",
+        "hasValidSSN": true
       }
     },
     "slips": [
@@ -117,6 +118,7 @@
   "expected": {
     "p1": {
       "F1040.19": "4900",
+      "F1040.27a": "0",
       "F1040.28": "0",
       "S8812.12": "4900",
       "F1040.1a": "120000",

@@ -128,7 +128,7 @@ function UsTaxNotes() {
         <p>
           <b className="text-foreground">Dependants.</b> Each dependant in the year is asked a few questions below. They decide who is a
           qualifying child or relative: the child tax credit ($2,200 for each child under 17 with a social security number) or the credit for
-          other dependents ($500).
+          other dependents ($500), and the earned income credit for a lower income.
         </p>
         <p>
           <b className="text-foreground">Residency.</b> This is the federal return of a U.S. citizen or resident alien for the whole year. A

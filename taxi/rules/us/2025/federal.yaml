@@ -138,42 +138,6 @@ params:
     label: Most social security tax withheld on 2025 wages
     source: "Instructions, Schedule 3, line 11: 6.2% of the $176,100 wage base, $10,918.20"
     value: 10918.20
-  eicNoChildLimit:
-    label: AGI below which someone without a qualifying child can get the earned income credit, Single
-    source: "Instructions, line 27a, Step 1: less than $19,104 with no children"
-    value: 19104
-  eicNoChildLimitJoint:
-    label: AGI below which a couple without a qualifying child can get the earned income credit, Married filing jointly
-    source: "Instructions, line 27a, Step 1: less than $26,214 if married filing jointly, with no children"
-    value: 26214
-  eicLimitThreeChildren:
-    label: AGI below which someone with three or more qualifying children can get the earned income credit
-    source: "Instructions, line 27a, Step 1: less than $61,555 with three or more children who have valid SSNs"
-    value: 61555
-  eicLimitThreeChildrenJoint:
-    label: AGI below which a couple with three or more qualifying children can get the earned income credit, Married filing jointly
-    source: "Instructions, line 27a, Step 1: less than $68,675 if married filing jointly"
-    value: 68675
-  eicLimitTwoChildren:
-    label: AGI below which someone with two qualifying children can get the earned income credit
-    source: "Instructions, line 27a, Step 1: less than $57,310 with two children who have valid SSNs"
-    value: 57310
-  eicLimitTwoChildrenJoint:
-    label: AGI below which a couple with two qualifying children can get the earned income credit, Married filing jointly
-    source: "Instructions, line 27a, Step 1: less than $64,430 if married filing jointly"
-    value: 64430
-  eicLimitOneChild:
-    label: AGI below which someone with one qualifying child can get the earned income credit
-    source: "Instructions, line 27a, Step 1: less than $50,434 with one child who have valid SSNs"
-    value: 50434
-  eicLimitOneChildJoint:
-    label: AGI below which a couple with one qualifying child can get the earned income credit, Married filing jointly
-    source: "Instructions, line 27a, Step 1: less than $57,554 if married filing jointly"
-    value: 57554
-  eicInvestmentLimit:
-    label: Most investment income someone can have and get the earned income credit
-    source: "Instructions, line 27a, Investment Income: more than $11,950 and you can't take the credit"
-    value: 11950
   kiddieThreshold:
     label: Unearned income over which a child's tax is figured on Form 8615
     source: "Instructions, line 16, Form 8615: unearned income over $2,700"
@@ -447,8 +411,8 @@ lines:
     formula: "line.S3.11"
   F1040.32:
     label: Other payments and refundable credits
-    formula: "line.F1040.28 + line.F1040.31"
-    source: "Form 1040, line 32: lines 27a (not worked out yet), 28 and 31"
+    formula: "line.F1040.27a + line.F1040.28 + line.F1040.31"
+    source: "Form 1040, line 32: lines 27a, 28 and 31"
   F1040.33:
     label: Total payments
     formula: "line.F1040.25d + line.F1040.26 + line.F1040.32"
@@ -467,7 +431,7 @@ lines:
   SCOPE.return:
     label: Situations this app doesn't handle yet
     formula: >-
-      line.SCOPE.residency + line.SCOPE.widowed + line.SCOPE.tips + line.SCOPE.kiddie + line.SCOPE.eic + line.SCOPE.actc
+      line.SCOPE.residency + line.SCOPE.widowed + line.SCOPE.tips + line.SCOPE.kiddie
   SCOPE.residency:
     label: A nonresident or dual-status alien
     formula: >-
@@ -487,22 +451,3 @@ lines:
     label: A child's interest taxed at the parent's rate
     formula: 'if(line.US.joint == 1, 0, if(person.age < 24 and line.F1040.2b > param.kiddieThreshold, unsupported("Interest over $2,700 for someone under 24 may be taxed on Form 8615 (the kiddie tax), which this app doesn''t prepare"), 0))'
     source: "Instructions, line 16, Form 8615: not for someone filing a joint return"
-  US.eicAge:
-    label: People on the return 25 to 64 at the end of 2025
-    formula: "if(person.age >= 25 and person.age < 65, 1, 0) + if(line.US.joint == 1, if(spouse.person.age >= 25 and spouse.person.age < 65, 1, 0), 0)"
-  US.eicChildren:
-    label: Qualifying children for the earned income credit, as far as this app checks
-    formula: "if(line.US.claimsDependants == 0, 0, sum(dependants.DEP.eicChild))"
-  US.eicLimit:
-    label: AGI below which the earned income credit may apply
-    formula: >-
-      if(line.US.eicChildren == 0, if(line.US.joint == 1, param.eicNoChildLimitJoint, param.eicNoChildLimit),
-      if(line.US.eicChildren == 1, if(line.US.joint == 1, param.eicLimitOneChildJoint, param.eicLimitOneChild),
-      if(line.US.eicChildren == 2, if(line.US.joint == 1, param.eicLimitTwoChildrenJoint, param.eicLimitTwoChildren),
-      if(line.US.joint == 1, param.eicLimitThreeChildrenJoint, param.eicLimitThreeChildren))))
-  SCOPE.eic:
-    label: The earned income credit
-    formula: >-
-      if(line.US.separate == 1, 0, if((line.US.eicChildren > 0 or (line.US.claimable == 0 and line.US.eicAge > 0)) and line.F1040.1z > 0
-      and line.F1040.11a < line.US.eicLimit and line.F1040.2a + line.F1040.2b <= param.eicInvestmentLimit,
-      unsupported("You may get the earned income credit, which this app doesn't work out yet (Form 1040, line 27a)"), 0))

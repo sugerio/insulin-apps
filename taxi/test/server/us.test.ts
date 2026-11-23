@@ -259,3 +259,55 @@ describe("dependants on a US return", () => {
     expect(estimate.input.family.dependants[0]!.claimedBy).toBeUndefined();
   });
 });
+
+describe("the earned income credit", () => {
+  it("is worked out for a low income, once the filer's SSN is answered", async () => {
+    const rae = await addPerson("Rae Lopez", "self", "1995-04-04");
+    let year = await json<TaxYear>(server.call("POST", "/api/years", { body: { year: 2025, country: "us", people: [rae.id] } }), 201);
+    year = await json<TaxYear>(
+      server.call("PUT", "/api/years/2025/personal-info", { body: { revision: year.revision, maritalStatus: "single", adults: [{ personId: rae.id, province: null, residentAllYear: true }] } }),
+    );
+    year = await json<TaxYear>(
+      server.call("POST", "/api/years/2025/slips", {
+        body: { revision: year.revision, personId: rae.id, type: "W2", issuer: "Corner Market", boxes: { 1: "9000", 2: "0", 4: "558", 5: "9000", 6: "130.50" } },
+      }),
+      201,
+    );
+    const answers = { hasWages: true, hasInterest: false, hasTipsOrOvertime: false, canBeClaimed: false, isBlind: false, estimatedPayments: "0" };
+    year = await json<TaxYear>(server.call("PUT", "/api/years/2025/answers", { body: { revision: year.revision, personId: rae.id, answers } }));
+    let estimate = await json<Estimate>(server.call("GET", "/api/years/2025/estimate"));
+    // The credit needs a valid SSN: asked before the credit is worked out.
+    expect(estimate.result.people[0]!.missing.map((item) => item.question)).toEqual(["hasValidSSN"]);
+    await json<TaxYear>(server.call("PUT", "/api/years/2025/answers", { body: { revision: year.revision, personId: rae.id, answers: { hasValidSSN: true } } }));
+    estimate = await json<Estimate>(server.call("GET", "/api/years/2025/estimate"));
+    const line = (id: string) => estimate.result.people[0]!.lines.find((each) => each.id === id)?.value;
+    // $9,000 of earned income without a qualifying child: the largest credit, $649.
+    expect([line("F1040.27a"), line("F1040.34")]).toEqual(["649", "649"]);
+  });
+
+  it("asks a couple filing separately whether they lived apart, only with a qualifying child", async () => {
+    const max = await addPerson("Max Ford", "self", "1992-10-10");
+    const liv = await addPerson("Liv Ford", "spouse", "1993-11-11");
+    const kit = await addPerson("Kit Ford", "child", "2021-06-06");
+    let year = await json<TaxYear>(server.call("POST", "/api/years", { body: { year: 2025, country: "us", people: [max.id, liv.id, kit.id] } }), 201);
+    year = await json<TaxYear>(
+      server.call("PUT", "/api/years/2025/personal-info", {
+        body: { revision: year.revision, maritalStatus: "married", filingStatus: "separate", adults: [max, liv].map((each) => ({ personId: each.id, province: null, residentAllYear: true })) },
+      }),
+    );
+    year = await json<TaxYear>(
+      server.call("POST", "/api/years/2025/slips", {
+        body: { revision: year.revision, personId: max.id, type: "W2", issuer: "Garage", boxes: { 1: "20000", 2: "400", 4: "1240", 5: "20000", 6: "290" } },
+      }),
+      201,
+    );
+    const questions = async () => (await json<Estimate>(server.call("GET", "/api/years/2025/estimate"))).result.people[0]!.questions;
+    expect(await questions()).not.toContain("livedApartLastSixMonths");
+    await json<TaxYear>(
+      server.call("PUT", "/api/years/2025/answers", {
+        body: { revision: year.revision, personId: kit.id, answers: { relationship: "child", monthsWithYou: "12", hasSSN: true, filedJointReturn: false } },
+      }),
+    );
+    expect(await questions()).toContain("livedApartLastSixMonths");
+  });
+});

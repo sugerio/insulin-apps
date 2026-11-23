@@ -1,0 +1,142 @@
+{
+  "about": "Married filing separately with a child, living apart from the spouse for the last 6 months: the earned income credit",
+  "input": {
+    "country": "us",
+    "year": 2025,
+    "people": [
+      {
+        "id": "p1",
+        "name": "Max Ford",
+        "role": "self",
+        "birthDate": "1992-10-10",
+        "province": null,
+        "residentAllYear": true
+      },
+      {
+        "id": "p2",
+        "name": "Liv Ford",
+        "role": "spouse",
+        "birthDate": "1993-11-11",
+        "province": null,
+        "residentAllYear": true
+      }
+    ],
+    "family": {
+      "maritalStatus": "married",
+      "dependants": [
+        {
+          "id": "d1",
+          "name": "Kit Ford",
+          "birthDate": "2021-06-06",
+          "answers": {
+            "relationship": "child",
+            "monthsWithYou": "12",
+            "hasSSN": true,
+            "paidOwnSupport": false,
+            "filedJointReturn": false,
+            "citizenOrResident": true
+          }
+        }
+      ],
+      "filingStatus": "separate"
+    },
+    "answers": {
+      "p1": {
+        "hasWages": true,
+        "hasInterest": false,
+        "hasTipsOrOvertime": false,
+        "canBeClaimed": false,
+        "isBlind": false,
+        "estimatedPayments": "0",
+        "hasValidSSN": true,
+        "livedApartLastSixMonths": true,
+        "spouseItemizes": false
+      },
+      "p2": {
+        "hasWages": true,
+        "hasInterest": false,
+        "hasTipsOrOvertime": false,
+        "canBeClaimed": false,
+        "isBlind": false,
+        "estimatedPayments": "0",
+        "spouseItemizes": false
+      }
+    },
+    "slips": [
+      {
+        "id": "p1-w2-0",
+        "person": "p1",
+        "type": "W2",
+        "issuer": "Garage",
+        "boxes": {
+          "1": "20000",
+          "2": "400",
+          "4": "1240",
+          "5": "20000",
+          "6": "290"
+        }
+      },
+      {
+        "id": "p2-w2-0",
+        "person": "p2",
+        "type": "W2",
+        "issuer": "Salon",
+        "boxes": {
+          "1": "45000",
+          "2": "4000",
+          "4": "2790",
+          "5": "45000",
+          "6": "652.50"
+        }
+      }
+    ]
+  },
+  "expected": {
+    "p1": {
+      "F1040.19": "428",
+      "F1040.27a": "4328",
+      "F1040.28": "1700",
+      "S8812.12": "2200",
+      "F1040.1a": "20000",
+      "F1040.2a": "0",
+      "F1040.2b": "0",
+      "F1040.9": "20000",
+      "F1040.11a": "20000",
+      "F1040.12e": "15750",
+      "F1040.13b": "0",
+      "F1040.15": "4250",
+      "F1040.16": "428",
+      "F8959.7": "0",
+      "F8960.17": "0",
+      "F1040.24": "0",
+      "F1040.25c": "0",
+      "S3.11": "0",
+      "F1040.33": "6428",
+      "F1040.34": "6428",
+      "F1040.37": "0"
+    },
+    "p2": {
+      "F1040.19": "0",
+      "F1040.27a": "0",
+      "F1040.28": "0",
+      "S8812.12": "0",
+      "F1040.1a": "45000",
+      "F1040.2a": "0",
+      "F1040.2b": "0",
+      "F1040.9": "45000",
+      "F1040.11a": "45000",
+      "F1040.12e": "15750",
+      "F1040.13b": "0",
+      "F1040.15": "29250",
+      "F1040.16": "3275",
+      "F8959.7": "0",
+      "F8960.17": "0",
+      "F1040.24": "3275",
+      "F1040.25c": "0",
+      "S3.11": "0",
+      "F1040.33": "4000",
+      "F1040.34": "725",
+      "F1040.37": "0"
+    }
+  }
+}

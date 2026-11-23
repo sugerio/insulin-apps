@@ -15,6 +15,7 @@ result:
   - F1040.16
   - F1040.19
   - F1040.24
+  - F1040.27a
   - F1040.28
   - F1040.33
   - F1040.34
@@ -29,6 +30,7 @@ resultWhen:
   F1040.16: *ownReturn
   F1040.19: *ownReturn
   F1040.24: *ownReturn
+  F1040.27a: *ownReturn
   F1040.28: *ownReturn
   F1040.33: *ownReturn
   F1040.34: *ownReturn

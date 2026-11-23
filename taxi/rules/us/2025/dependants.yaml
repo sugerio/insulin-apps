@@ -40,8 +40,8 @@ params:
     source: "Schedule 8812, line 20: 15%"
     value: 15%
   actcThreeChildren:
-    label: Line 16b at which Part II-B can give more (three or more qualifying children)
-    source: "8812 instructions, Part II-A: if line 16b is $5,100 or more, see Part II-B"
+    label: Line 16b from which Part II-B applies (three or more qualifying children)
+    source: "8812 instructions, Part II-A: if line 16b is $5,100 or more, go to Part II-B"
     value: 5100
 
 questions:
@@ -129,7 +129,7 @@ questions:
     type: boolean
     module: about
     ask: You have a social security number valid for employment
-    help: From 2025 the child tax credit needs one, issued by the due date of the return. Filing jointly, one spouse's is enough.
+    help: Issued by the due date of the return. The child tax credit needs one (filing jointly, one spouse's is enough); the earned income credit needs one for you and, filing jointly, for your spouse.
   paidHalfOfHome:
     type: boolean
     module: about
@@ -194,11 +194,6 @@ lines:
     label: Lets a widow or widower file as a qualifying surviving spouse (1 for yes)
     formula: 'if(dependant.answer.relationship == "child" and line.DEP.dependent == 1 and dependant.answer.monthsWithYou == 12, 1, 0)'
     source: "Instructions, Qualifying Surviving Spouse: a child or stepchild (not a foster child) you can claim, who lived in your home all year"
-  DEP.eicChild:
-    each: dependant
-    label: A qualifying child for the earned income credit, as far as this app checks (1 for yes)
-    formula: "if(line.DEP.qualifyingChild == 1, if(dependant.answer.hasSSN, 1, 0), 0)"
-
   # Schedule 8812: the child tax credit, the credit for other dependents, and the additional child tax credit. Someone
   # who can be claimed as a dependent claims no one.
   US.claimsDependants:
@@ -270,12 +265,26 @@ lines:
   S8812.20:
     label: 15% of earned income over $2,500
     formula: "round(line.S8812.19 * param.actcRate, 2)"
+  # Part II-B, for three or more qualifying children: the social security and Medicare taxes withheld, less the earned
+  # income credit, when that is more than line 20.
+  US.ownSocialAndMedicare:
+    label: Social security and Medicare tax withheld on this person's Forms W-2
+    formula: "sum(W2.box4) + sum(W2.box6)"
+  S8812.21:
+    label: Social security, Medicare and Additional Medicare tax withheld
+    formula: "line.US.ownSocialAndMedicare + if(line.US.joint == 1, spouse.line.US.ownSocialAndMedicare, 0)"
+    source: "Schedule 8812, line 21: Forms W-2, boxes 4 and 6 (both spouses' on a joint return)"
+  S8812.24:
+    label: Earned income credit and excess social security tax
+    formula: "line.F1040.27a + line.S3.11"
+    source: "Schedule 8812, line 24: Form 1040 line 27a and Schedule 3 line 11"
+  S8812.25:
+    label: Taxes withheld over the earned income credit
+    formula: "max(0, line.S8812.21 - line.S8812.24)"
+  S8812.26:
+    label: The larger of line 20 and line 25
+    formula: "max(line.S8812.20, line.S8812.25)"
   S8812.27:
     label: Additional child tax credit
-    formula: "if(line.S8812.16a == 0, 0, min(line.S8812.17, line.S8812.20))"
-    source: "Schedule 8812, Part II-A, lines 16a to 20 and 27"
-  SCOPE.actc:
-    label: Part II-B of Schedule 8812, for three or more children
-    formula: >-
-      if(line.S8812.16a > 0 and line.S8812.16b >= param.actcThreeChildren and line.S8812.20 < line.S8812.17,
-      unsupported("With three or more qualifying children, Part II-B of Schedule 8812 may give a larger additional child tax credit, which this app doesn't work out yet"), 0)
+    formula: "if(line.S8812.16a == 0, 0, if(line.S8812.16b >= param.actcThreeChildren, min(line.S8812.17, line.S8812.26), min(line.S8812.17, line.S8812.20)))"
+    source: "Schedule 8812, lines 16a to 27: Part II-B when line 16b is $5,100 or more (three or more children)"

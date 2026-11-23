@@ -10,6 +10,7 @@
     "F1040.16",
     "F1040.19",
     "F1040.24",
+    "F1040.27a",
     "F1040.28",
     "F1040.33",
     "F1040.34",
@@ -23,6 +24,7 @@
     "F1040.16": "person.role == \"self\" or line.US.joint == 0",
     "F1040.19": "person.role == \"self\" or line.US.joint == 0",
     "F1040.24": "person.role == \"self\" or line.US.joint == 0",
+    "F1040.27a": "person.role == \"self\" or line.US.joint == 0",
     "F1040.28": "person.role == \"self\" or line.US.joint == 0",
     "F1040.33": "person.role == \"self\" or line.US.joint == 0",
     "F1040.34": "person.role == \"self\" or line.US.joint == 0",
@@ -75,9 +77,174 @@
       "source": "Schedule 8812, line 20: 15%"
     },
     "actcThreeChildren": {
-      "label": "Line 16b at which Part II-B can give more (three or more qualifying children)",
+      "label": "Line 16b from which Part II-B applies (three or more qualifying children)",
       "value": "5100",
-      "source": "8812 instructions, Part II-A: if line 16b is $5,100 or more, see Part II-B"
+      "source": "8812 instructions, Part II-A: if line 16b is $5,100 or more, go to Part II-B"
+    },
+    "eicRateInNoChild": {
+      "label": "Earned income credit rate as it rises, no qualifying child",
+      "value": "0.0765",
+      "source": "The 2025 EIC Table: 7.65% of the row's middle up to the earned income amount (Instructions, pages 49 to 60; IRC 32(b))"
+    },
+    "eicMaxNoChild": {
+      "label": "Largest earned income credit, no qualifying child",
+      "value": "649",
+      "source": "The 2025 EIC Table: $649, reached at $8,490 of earned income"
+    },
+    "eicEarnedAmountNoChild": {
+      "label": "Earned income at which the credit is largest, no qualifying child",
+      "value": "8490",
+      "source": "The 2025 EIC Table: the row with $8,490 in it already gives $649"
+    },
+    "eicRateOutNoChild": {
+      "label": "Earned income credit phase-out rate, no qualifying child",
+      "value": "0.0765",
+      "source": "The 2025 EIC Table: 7.65% of the row's middle over the phase-out start"
+    },
+    "eicStartNoChild": {
+      "label": "Income from which the earned income credit goes down, no qualifying child",
+      "value": "10620",
+      "source": "Instructions, EIC Worksheet A, line 4: $10,620 ($17,730 if married filing jointly)"
+    },
+    "eicStartNoChildJoint": {
+      "label": "Income from which the earned income credit goes down, no qualifying child, Married filing jointly",
+      "value": "17730",
+      "source": "Instructions, EIC Worksheet A, line 4: $17,730 if married filing jointly"
+    },
+    "eicLimitNoChild": {
+      "label": "Income from which there is no earned income credit, no qualifying child",
+      "value": "19104",
+      "source": "Instructions, line 27a, Step 1: less than $19,104 with no child who have valid SSNs"
+    },
+    "eicLimitNoChildJoint": {
+      "label": "Income from which there is no earned income credit, no qualifying child, Married filing jointly",
+      "value": "26214",
+      "source": "Instructions, line 27a, Step 1: less than $26,214 if married filing jointly"
+    },
+    "eicRateInOneChild": {
+      "label": "Earned income credit rate as it rises, one qualifying child",
+      "value": "0.34",
+      "source": "The 2025 EIC Table: 34% of the row's middle up to the earned income amount (Instructions, pages 49 to 60; IRC 32(b))"
+    },
+    "eicMaxOneChild": {
+      "label": "Largest earned income credit, one qualifying child",
+      "value": "4328",
+      "source": "The 2025 EIC Table: $4,328, reached at $12,730 of earned income"
+    },
+    "eicEarnedAmountOneChild": {
+      "label": "Earned income at which the credit is largest, one qualifying child",
+      "value": "12730",
+      "source": "The 2025 EIC Table: the row with $12,730 in it already gives $4,328"
+    },
+    "eicRateOutOneChild": {
+      "label": "Earned income credit phase-out rate, one qualifying child",
+      "value": "0.1598",
+      "source": "The 2025 EIC Table: 15.98% of the row's middle over the phase-out start"
+    },
+    "eicStartOneChild": {
+      "label": "Income from which the earned income credit goes down, one qualifying child",
+      "value": "23350",
+      "source": "Instructions, EIC Worksheet A, line 4: $23,350 ($30,470 if married filing jointly)"
+    },
+    "eicStartOneChildJoint": {
+      "label": "Income from which the earned income credit goes down, one qualifying child, Married filing jointly",
+      "value": "30470",
+      "source": "Instructions, EIC Worksheet A, line 4: $30,470 if married filing jointly"
+    },
+    "eicLimitOneChild": {
+      "label": "Income from which there is no earned income credit, one qualifying child",
+      "value": "50434",
+      "source": "Instructions, line 27a, Step 1: less than $50,434 with one child who have valid SSNs"
+    },
+    "eicLimitOneChildJoint": {
+      "label": "Income from which there is no earned income credit, one qualifying child, Married filing jointly",
+      "value": "57554",
+      "source": "Instructions, line 27a, Step 1: less than $57,554 if married filing jointly"
+    },
+    "eicRateInTwoChildren": {
+      "label": "Earned income credit rate as it rises, two qualifying children",
+      "value": "0.4",
+      "source": "The 2025 EIC Table: 40% of the row's middle up to the earned income amount (Instructions, pages 49 to 60; IRC 32(b))"
+    },
+    "eicMaxTwoChildren": {
+      "label": "Largest earned income credit, two qualifying children",
+      "value": "7152",
+      "source": "The 2025 EIC Table: $7,152, reached at $17,880 of earned income"
+    },
+    "eicEarnedAmountTwoChildren": {
+      "label": "Earned income at which the credit is largest, two qualifying children",
+      "value": "17880",
+      "source": "The 2025 EIC Table: the row with $17,880 in it already gives $7,152"
+    },
+    "eicRateOutTwoChildren": {
+      "label": "Earned income credit phase-out rate, two qualifying children",
+      "value": "0.2106",
+      "source": "The 2025 EIC Table: 21.06% of the row's middle over the phase-out start"
+    },
+    "eicStartTwoChildren": {
+      "label": "Income from which the earned income credit goes down, two qualifying children",
+      "value": "23350",
+      "source": "Instructions, EIC Worksheet A, line 4: $23,350 ($30,470 if married filing jointly)"
+    },
+    "eicStartTwoChildrenJoint": {
+      "label": "Income from which the earned income credit goes down, two qualifying children, Married filing jointly",
+      "value": "30470",
+      "source": "Instructions, EIC Worksheet A, line 4: $30,470 if married filing jointly"
+    },
+    "eicLimitTwoChildren": {
+      "label": "Income from which there is no earned income credit, two qualifying children",
+      "value": "57310",
+      "source": "Instructions, line 27a, Step 1: less than $57,310 with two children who have valid SSNs"
+    },
+    "eicLimitTwoChildrenJoint": {
+      "label": "Income from which there is no earned income credit, two qualifying children, Married filing jointly",
+      "value": "64430",
+      "source": "Instructions, line 27a, Step 1: less than $64,430 if married filing jointly"
+    },
+    "eicRateInThreeChildren": {
+      "label": "Earned income credit rate as it rises, three or more qualifying children",
+      "value": "0.45",
+      "source": "The 2025 EIC Table: 45% of the row's middle up to the earned income amount (Instructions, pages 49 to 60; IRC 32(b))"
+    },
+    "eicMaxThreeChildren": {
+      "label": "Largest earned income credit, three or more qualifying children",
+      "value": "8046",
+      "source": "The 2025 EIC Table: $8,046, reached at $17,880 of earned income"
+    },
+    "eicEarnedAmountThreeChildren": {
+      "label": "Earned income at which the credit is largest, three or more qualifying children",
+      "value": "17880",
+      "source": "The 2025 EIC Table: the row with $17,880 in it already gives $8,046"
+    },
+    "eicRateOutThreeChildren": {
+      "label": "Earned income credit phase-out rate, three or more qualifying children",
+      "value": "0.2106",
+      "source": "The 2025 EIC Table: 21.06% of the row's middle over the phase-out start"
+    },
+    "eicStartThreeChildren": {
+      "label": "Income from which the earned income credit goes down, three or more qualifying children",
+      "value": "23350",
+      "source": "Instructions, EIC Worksheet A, line 4: $23,350 ($30,470 if married filing jointly)"
+    },
+    "eicStartThreeChildrenJoint": {
+      "label": "Income from which the earned income credit goes down, three or more qualifying children, Married filing jointly",
+      "value": "30470",
+      "source": "Instructions, EIC Worksheet A, line 4: $30,470 if married filing jointly"
+    },
+    "eicLimitThreeChildren": {
+      "label": "Income from which there is no earned income credit, three or more qualifying children",
+      "value": "61555",
+      "source": "Instructions, line 27a, Step 1: less than $61,555 with three or more children who have valid SSNs"
+    },
+    "eicLimitThreeChildrenJoint": {
+      "label": "Income from which there is no earned income credit, three or more qualifying children, Married filing jointly",
+      "value": "68675",
+      "source": "Instructions, line 27a, Step 1: less than $68,675 if married filing jointly"
+    },
+    "eicInvestmentLimit": {
+      "label": "Most investment income someone can have and get the earned income credit",
+      "value": "11950",
+      "source": "Instructions, line 27a, Step 2: more than $11,950 and you can't take the credit"
     },
     "standardSingle": {
       "label": "Standard deduction, Single",
@@ -230,51 +397,6 @@
       "value": "10918.2",
       "source": "Instructions, Schedule 3, line 11: 6.2% of the $176,100 wage base, $10,918.20"
     },
-    "eicNoChildLimit": {
-      "label": "AGI below which someone without a qualifying child can get the earned income credit, Single",
-      "value": "19104",
-      "source": "Instructions, line 27a, Step 1: less than $19,104 with no children"
-    },
-    "eicNoChildLimitJoint": {
-      "label": "AGI below which a couple without a qualifying child can get the earned income credit, Married filing jointly",
-      "value": "26214",
-      "source": "Instructions, line 27a, Step 1: less than $26,214 if married filing jointly, with no children"
-    },
-    "eicLimitThreeChildren": {
-      "label": "AGI below which someone with three or more qualifying children can get the earned income credit",
-      "value": "61555",
-      "source": "Instructions, line 27a, Step 1: less than $61,555 with three or more children who have valid SSNs"
-    },
-    "eicLimitThreeChildrenJoint": {
-      "label": "AGI below which a couple with three or more qualifying children can get the earned income credit, Married filing jointly",
-      "value": "68675",
-      "source": "Instructions, line 27a, Step 1: less than $68,675 if married filing jointly"
-    },
-    "eicLimitTwoChildren": {
-      "label": "AGI below which someone with two qualifying children can get the earned income credit",
-      "value": "57310",
-      "source": "Instructions, line 27a, Step 1: less than $57,310 with two children who have valid SSNs"
-    },
-    "eicLimitTwoChildrenJoint": {
-      "label": "AGI below which a couple with two qualifying children can get the earned income credit, Married filing jointly",
-      "value": "64430",
-      "source": "Instructions, line 27a, Step 1: less than $64,430 if married filing jointly"
-    },
-    "eicLimitOneChild": {
-      "label": "AGI below which someone with one qualifying child can get the earned income credit",
-      "value": "50434",
-      "source": "Instructions, line 27a, Step 1: less than $50,434 with one child who have valid SSNs"
-    },
-    "eicLimitOneChildJoint": {
-      "label": "AGI below which a couple with one qualifying child can get the earned income credit, Married filing jointly",
-      "value": "57554",
-      "source": "Instructions, line 27a, Step 1: less than $57,554 if married filing jointly"
-    },
-    "eicInvestmentLimit": {
-      "label": "Most investment income someone can have and get the earned income credit",
-      "value": "11950",
-      "source": "Instructions, line 27a, Investment Income: more than $11,950 and you can't take the credit"
-    },
     "kiddieThreshold": {
       "label": "Unearned income over which a child's tax is figured on Form 8615",
       "value": "2700",
@@ -327,11 +449,6 @@
       "label": "Lets a widow or widower file as a qualifying surviving spouse (1 for yes)",
       "formula": "if(dependant.answer.relationship == \"child\" and line.DEP.dependent == 1 and dependant.answer.monthsWithYou == 12, 1, 0)",
       "source": "Instructions, Qualifying Surviving Spouse: a child or stepchild (not a foster child) you can claim, who lived in your home all year",
-      "each": "dependant"
-    },
-    "DEP.eicChild": {
-      "label": "A qualifying child for the earned income credit, as far as this app checks (1 for yes)",
-      "formula": "if(line.DEP.qualifyingChild == 1, if(dependant.answer.hasSSN, 1, 0), 0)",
       "each": "dependant"
     },
     "US.claimsDependants": {
@@ -388,14 +505,115 @@
     },
     "S8812.19": {"label":"Earned income over $2,500","formula":"max(0, line.S8812.18a - param.actcEarnedFloor)"},
     "S8812.20": {"label":"15% of earned income over $2,500","formula":"round(line.S8812.19 * param.actcRate, 2)"},
+    "US.ownSocialAndMedicare": {
+      "label": "Social security and Medicare tax withheld on this person's Forms W-2",
+      "formula": "sum(W2.box4) + sum(W2.box6)"
+    },
+    "S8812.21": {
+      "label": "Social security, Medicare and Additional Medicare tax withheld",
+      "formula": "line.US.ownSocialAndMedicare + if(line.US.joint == 1, spouse.line.US.ownSocialAndMedicare, 0)",
+      "source": "Schedule 8812, line 21: Forms W-2, boxes 4 and 6 (both spouses' on a joint return)"
+    },
+    "S8812.24": {
+      "label": "Earned income credit and excess social security tax",
+      "formula": "line.F1040.27a + line.S3.11",
+      "source": "Schedule 8812, line 24: Form 1040 line 27a and Schedule 3 line 11"
+    },
+    "S8812.25": {"label":"Taxes withheld over the earned income credit","formula":"max(0, line.S8812.21 - line.S8812.24)"},
+    "S8812.26": {"label":"The larger of line 20 and line 25","formula":"max(line.S8812.20, line.S8812.25)"},
     "S8812.27": {
       "label": "Additional child tax credit",
-      "formula": "if(line.S8812.16a == 0, 0, min(line.S8812.17, line.S8812.20))",
-      "source": "Schedule 8812, Part II-A, lines 16a to 20 and 27"
+      "formula": "if(line.S8812.16a == 0, 0, if(line.S8812.16b >= param.actcThreeChildren, min(line.S8812.17, line.S8812.26), min(line.S8812.17, line.S8812.20)))",
+      "source": "Schedule 8812, lines 16a to 27: Part II-B when line 16b is $5,100 or more (three or more children)"
     },
-    "SCOPE.actc": {
-      "label": "Part II-B of Schedule 8812, for three or more children",
-      "formula": "if(line.S8812.16a > 0 and line.S8812.16b >= param.actcThreeChildren and line.S8812.20 < line.S8812.17, unsupported(\"With three or more qualifying children, Part II-B of Schedule 8812 may give a larger additional child tax credit, which this app doesn't work out yet\"), 0)"
+    "DEP.eicChild": {
+      "label": "A qualifying child for the earned income credit (1 for yes)",
+      "formula": "if(line.DEP.relatedChild == 1 and dependant.answer.monthsWithYou >= 7 and line.DEP.ageTest == 1 and not dependant.answer.filedJointReturn, if(dependant.answer.hasSSN, 1, 0), 0)",
+      "source": "Instructions, line 27a, Step 3, Qualifying Child, with a valid SSN (Step 1)",
+      "each": "dependant"
+    },
+    "US.eicChildren": {"label":"Qualifying children for the earned income credit","formula":"sum(dependants.DEP.eicChild)"},
+    "US.eicKids": {
+      "label": "Qualifying children counted for the EIC Table (three or more count as three)",
+      "formula": "min(3, line.US.eicChildren)"
+    },
+    "US.eicRateIn": {
+      "label": "Earned income credit rate as it rises",
+      "formula": "if(line.US.eicKids == 0, param.eicRateInNoChild, if(line.US.eicKids == 1, param.eicRateInOneChild, if(line.US.eicKids == 2, param.eicRateInTwoChildren, param.eicRateInThreeChildren)))"
+    },
+    "US.eicMax": {
+      "label": "Largest earned income credit",
+      "formula": "if(line.US.eicKids == 0, param.eicMaxNoChild, if(line.US.eicKids == 1, param.eicMaxOneChild, if(line.US.eicKids == 2, param.eicMaxTwoChildren, param.eicMaxThreeChildren)))"
+    },
+    "US.eicEarnedAmount": {
+      "label": "Earned income at which the credit is largest",
+      "formula": "if(line.US.eicKids == 0, param.eicEarnedAmountNoChild, if(line.US.eicKids == 1, param.eicEarnedAmountOneChild, if(line.US.eicKids == 2, param.eicEarnedAmountTwoChildren, param.eicEarnedAmountThreeChildren)))"
+    },
+    "US.eicRateOut": {
+      "label": "Earned income credit phase-out rate",
+      "formula": "if(line.US.eicKids == 0, param.eicRateOutNoChild, if(line.US.eicKids == 1, param.eicRateOutOneChild, if(line.US.eicKids == 2, param.eicRateOutTwoChildren, param.eicRateOutThreeChildren)))"
+    },
+    "US.eicStart": {
+      "label": "Income from which the earned income credit goes down",
+      "formula": "if(line.US.eicKids == 0, if(line.US.joint == 1, param.eicStartNoChildJoint, param.eicStartNoChild), if(line.US.eicKids == 1, if(line.US.joint == 1, param.eicStartOneChildJoint, param.eicStartOneChild), if(line.US.eicKids == 2, if(line.US.joint == 1, param.eicStartTwoChildrenJoint, param.eicStartTwoChildren), if(line.US.joint == 1, param.eicStartThreeChildrenJoint, param.eicStartThreeChildren))))"
+    },
+    "US.eicLimit": {
+      "label": "Income from which there is no earned income credit",
+      "formula": "if(line.US.eicKids == 0, if(line.US.joint == 1, param.eicLimitNoChildJoint, param.eicLimitNoChild), if(line.US.eicKids == 1, if(line.US.joint == 1, param.eicLimitOneChildJoint, param.eicLimitOneChild), if(line.US.eicKids == 2, if(line.US.joint == 1, param.eicLimitTwoChildrenJoint, param.eicLimitTwoChildren), if(line.US.joint == 1, param.eicLimitThreeChildrenJoint, param.eicLimitThreeChildren))))"
+    },
+    "US.eicAge": {
+      "label": "People on the return 25 to 64 at the end of 2025",
+      "formula": "if(person.age >= 25 and person.age < 65, 1, 0) + if(line.US.joint == 1, if(spouse.person.age >= 25 and spouse.person.age < 65, 1, 0), 0)",
+      "source": "Instructions, line 27a, Step 4: at least 25 but under 65 at the end of 2025 (you, or your spouse filing jointly)"
+    },
+    "US.eicSSN": {
+      "label": "You, and your spouse filing jointly, have a valid SSN (1 for yes)",
+      "formula": "if(answer.hasValidSSN, if(line.US.joint == 1, if(spouse.answer.hasValidSSN, 1, 0), 1), 0)",
+      "source": "Instructions, line 27a, Step 1, question 2"
+    },
+    "US.eicEligible": {
+      "label": "Can take the earned income credit (1 for yes)",
+      "formula": "if(line.US.claimable == 1, 0, if(line.F1040.1z < 1, 0, if(line.F1040.2a + line.F1040.2b > param.eicInvestmentLimit, 0, if(line.F1040.11a >= line.US.eicLimit or line.F1040.1z >= line.US.eicLimit, 0, if(line.US.eicKids == 0, if(line.US.separate == 1 or line.US.hoh == 1, 0, if(line.US.eicAge > 0, line.US.eicSSN, 0)), if(line.US.separate == 1, if(answer.livedApartLastSixMonths, line.US.eicSSN, 0), line.US.eicSSN))))))",
+      "source": "Instructions, line 27a: Step 1 (AGI under the limit, valid SSNs), Step 2 (investment income: lines 2a and 2b), Step 3 (filing separately: a qualifying child and living apart for the last 6 months; not someone else's qualifying child, which the app takes as not being someone's dependent), Step 4 (no qualifying child: 25 to 64, not separately or head of household) and Step 5 (earned income under the limit)"
+    },
+    "US.eicRowEarned": {
+      "label": "Start of the EIC Table's row for earned income",
+      "formula": "if(line.F1040.1z < 50, 1, floor(line.F1040.1z, 50))"
+    },
+    "US.eicRowEndEarned": {
+      "label": "End of the EIC Table's row for earned income; the last row of a column stops at the limit",
+      "formula": "if(line.F1040.1z < 50, 50, min(line.US.eicRowEarned + 50, line.US.eicLimit))"
+    },
+    "US.eicMiddleEarned": {
+      "label": "Middle of the EIC Table's row for earned income",
+      "formula": "(line.US.eicRowEarned + line.US.eicRowEndEarned) / 2"
+    },
+    "US.eicTableEarned": {
+      "label": "Earned income credit from the EIC Table for earned income",
+      "formula": "if(line.F1040.1z < 1 or line.F1040.1z >= line.US.eicLimit, 0, round(max(0, if(line.US.eicRowEndEarned > line.US.eicEarnedAmount, line.US.eicMax, min(line.US.eicRateIn * line.US.eicMiddleEarned, line.US.eicMax)) - if(line.US.eicRowEarned >= line.US.eicStart, line.US.eicRateOut * (line.US.eicMiddleEarned - line.US.eicStart), 0)), 0))",
+      "source": "The 2025 EIC Table (Instructions, pages 49 to 60), checked row by row: each row's credit is worked out on the middle of the row (of the narrower last row, by its limit), to the nearest dollar; the row with the earned income amount gives the largest credit, and it goes down only from rows starting at the phase-out start"
+    },
+    "US.eicRowAGI": {
+      "label": "Start of the EIC Table's row for adjusted gross income",
+      "formula": "if(line.F1040.11a < 50, 1, floor(line.F1040.11a, 50))"
+    },
+    "US.eicRowEndAGI": {
+      "label": "End of the EIC Table's row for adjusted gross income; the last row of a column stops at the limit",
+      "formula": "if(line.F1040.11a < 50, 50, min(line.US.eicRowAGI + 50, line.US.eicLimit))"
+    },
+    "US.eicMiddleAGI": {
+      "label": "Middle of the EIC Table's row for adjusted gross income",
+      "formula": "(line.US.eicRowAGI + line.US.eicRowEndAGI) / 2"
+    },
+    "US.eicTableAGI": {
+      "label": "Earned income credit from the EIC Table for adjusted gross income",
+      "formula": "if(line.F1040.11a < 1 or line.F1040.11a >= line.US.eicLimit, 0, round(max(0, if(line.US.eicRowEndAGI > line.US.eicEarnedAmount, line.US.eicMax, min(line.US.eicRateIn * line.US.eicMiddleAGI, line.US.eicMax)) - if(line.US.eicRowAGI >= line.US.eicStart, line.US.eicRateOut * (line.US.eicMiddleAGI - line.US.eicStart), 0)), 0))",
+      "source": "The 2025 EIC Table (Instructions, pages 49 to 60), checked row by row: each row's credit is worked out on the middle of the row (of the narrower last row, by its limit), to the nearest dollar; the row with the earned income amount gives the largest credit, and it goes down only from rows starting at the phase-out start"
+    },
+    "F1040.27a": {
+      "label": "Earned income credit",
+      "formula": "if(line.US.eicEligible == 0, 0, if(line.F1040.11a == line.F1040.1z or line.F1040.11a < line.US.eicStart, line.US.eicTableEarned, min(line.US.eicTableEarned, line.US.eicTableAGI)))",
+      "source": "Instructions, EIC Worksheet A: the credit on earned income; when AGI differs and isn't under the phase-out start, the smaller of that and the credit on AGI"
     },
     "US.single": {
       "label": "Filing status is Single (1 for yes)",
@@ -618,8 +836,8 @@
     "F1040.31": {"label":"Credits and payments from Schedule 3","formula":"line.S3.11"},
     "F1040.32": {
       "label": "Other payments and refundable credits",
-      "formula": "line.F1040.28 + line.F1040.31",
-      "source": "Form 1040, line 32: lines 27a (not worked out yet), 28 and 31"
+      "formula": "line.F1040.27a + line.F1040.28 + line.F1040.31",
+      "source": "Form 1040, line 32: lines 27a, 28 and 31"
     },
     "F1040.33": {"label":"Total payments","formula":"line.F1040.25d + line.F1040.26 + line.F1040.32"},
     "F1040.34": {
@@ -631,7 +849,7 @@
     "RESULT.net": {"label":"Refund, less the amount owed","formula":"line.F1040.34 - line.F1040.37"},
     "SCOPE.return": {
       "label": "Situations this app doesn't handle yet",
-      "formula": "line.SCOPE.residency + line.SCOPE.widowed + line.SCOPE.tips + line.SCOPE.kiddie + line.SCOPE.eic + line.SCOPE.actc"
+      "formula": "line.SCOPE.residency + line.SCOPE.widowed + line.SCOPE.tips + line.SCOPE.kiddie"
     },
     "SCOPE.residency": {
       "label": "A nonresident or dual-status alien",
@@ -649,22 +867,6 @@
       "label": "A child's interest taxed at the parent's rate",
       "formula": "if(line.US.joint == 1, 0, if(person.age < 24 and line.F1040.2b > param.kiddieThreshold, unsupported(\"Interest over $2,700 for someone under 24 may be taxed on Form 8615 (the kiddie tax), which this app doesn't prepare\"), 0))",
       "source": "Instructions, line 16, Form 8615: not for someone filing a joint return"
-    },
-    "US.eicAge": {
-      "label": "People on the return 25 to 64 at the end of 2025",
-      "formula": "if(person.age >= 25 and person.age < 65, 1, 0) + if(line.US.joint == 1, if(spouse.person.age >= 25 and spouse.person.age < 65, 1, 0), 0)"
-    },
-    "US.eicChildren": {
-      "label": "Qualifying children for the earned income credit, as far as this app checks",
-      "formula": "if(line.US.claimsDependants == 0, 0, sum(dependants.DEP.eicChild))"
-    },
-    "US.eicLimit": {
-      "label": "AGI below which the earned income credit may apply",
-      "formula": "if(line.US.eicChildren == 0, if(line.US.joint == 1, param.eicNoChildLimitJoint, param.eicNoChildLimit), if(line.US.eicChildren == 1, if(line.US.joint == 1, param.eicLimitOneChildJoint, param.eicLimitOneChild), if(line.US.eicChildren == 2, if(line.US.joint == 1, param.eicLimitTwoChildrenJoint, param.eicLimitTwoChildren), if(line.US.joint == 1, param.eicLimitThreeChildrenJoint, param.eicLimitThreeChildren))))"
-    },
-    "SCOPE.eic": {
-      "label": "The earned income credit",
-      "formula": "if(line.US.separate == 1, 0, if((line.US.eicChildren > 0 or (line.US.claimable == 0 and line.US.eicAge > 0)) and line.F1040.1z > 0 and line.F1040.11a < line.US.eicLimit and line.F1040.2a + line.F1040.2b <= param.eicInvestmentLimit, unsupported(\"You may get the earned income credit, which this app doesn't work out yet (Form 1040, line 27a)\"), 0))"
     }
   },
   "questions": {
@@ -744,7 +946,7 @@
       "type": "boolean",
       "ask": "You have a social security number valid for employment",
       "module": "about",
-      "help": "From 2025 the child tax credit needs one, issued by the due date of the return. Filing jointly, one spouse's is enough."
+      "help": "Issued by the due date of the return. The child tax credit needs one (filing jointly, one spouse's is enough); the earned income credit needs one for you and, filing jointly, for your spouse."
     },
     "paidHalfOfHome": {
       "type": "boolean",
@@ -757,6 +959,12 @@
       "ask": "Your spouse died in 2023 or 2024",
       "module": "about",
       "help": "With a dependent child who lived with you all year, you may file as a qualifying surviving spouse."
+    },
+    "livedApartLastSixMonths": {
+      "type": "boolean",
+      "ask": "You and your spouse lived apart for the last 6 months of 2025",
+      "module": "about",
+      "help": "Filing separately, you can get the earned income credit only with a qualifying child, and only if you didn't share a home with your spouse for the last 6 months of 2025 (or were legally separated)."
     },
     "canBeClaimed": {
       "type": "boolean",
@@ -862,5 +1070,5 @@
   "outcome": "RESULT.net",
   "balances": [{"name":"Federal","refund":"F1040.34","owing":"F1040.37"}],
   "residency": "A U.S. citizen or resident alien all year",
-  "version": "1016aa9fab82f10a"
+  "version": "d5c38b0e4920b2bd"
 }

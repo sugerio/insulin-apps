@@ -49,7 +49,7 @@ function oneW2(options: {
     },
     answers: {
       p1: { hasTipsOrOvertime: false, spouseItemizes: false, hasValidSSN: true, paidHalfOfHome: true, ...options.answers },
-      ...(options.joint ? { p2: { hasTipsOrOvertime: false } } : {}),
+      ...(options.joint ? { p2: { hasTipsOrOvertime: false, hasValidSSN: true } } : {}),
     },
     slips: [
       { id: "w", person: "p1", type: "W2", issuer: "Acme", boxes: { 1: wages, 2: "0", 5: wages, 6: (Number(wages) * 0.0145).toFixed(2) } },
@@ -110,11 +110,9 @@ describe("the 2025 US rules", () => {
     };
     const cases: [string, EngineInput, RegExp][] = [
       ["a dual-status alien", oneW2({ taxable: "30000", resident: false }), /Form 1040-NR/],
-      ["three children whose credit Part II-B may raise", oneW2({ wages: "30000", dependants: 3 }), /Part II-B of Schedule 8812/],
       ["a spouse who died in 2025", oneW2({ taxable: "30000", maritalStatus: "widowed", answers: { spouseDiedIn2025: true } }), /file jointly for 2025/],
       ["tips or overtime", oneW2({ taxable: "30000", answers: { hasTipsOrOvertime: true } }), /tips and overtime/],
       ["a child's interest over $2,700", oneW2({ wages: "1000", birthDate: "2010-01-01", interest: "3000", answers: { canBeClaimed: true } }), /Form 8615/],
-      ["a low income that may get the earned income credit", oneW2({ wages: "15000" }), /earned income credit/],
       ["a spouse who itemizes", oneW2({ taxable: "30000", married: true, answers: { spouseItemizes: true } }), /itemize/],
     ];
     for (const [what, input, message] of cases) {
@@ -125,6 +123,9 @@ describe("the 2025 US rules", () => {
     // Widowed before 2025, the earned income credit's age and income limits, and a claimed dependent's small interest: handled.
     expect(notHandled(oneW2({ taxable: "30000", maritalStatus: "widowed", answers: { spouseDiedIn2025: false, spouseDiedIn2023Or2024: false } })).total).not.toBeNull();
     expect(notHandled(oneW2({ wages: "15000", birthDate: "2002-01-01" })).total).not.toBeNull();
+    // The earned income credit and Part II-B of Schedule 8812 are worked out.
+    expect(notHandled(oneW2({ wages: "15000" })).total).not.toBeNull();
+    expect(notHandled(oneW2({ wages: "30000", dependants: 3 })).total).not.toBeNull();
     expect(notHandled(oneW2({ wages: "25000" })).total).not.toBeNull();
     expect(notHandled(oneW2({ wages: "1000", birthDate: "2010-01-01", interest: "2700", answers: { canBeClaimed: true } })).total).not.toBeNull();
   });
@@ -191,6 +192,32 @@ describe("the 2025 US rules", () => {
     const names = JSON.stringify(why);
     expect(names).toContain("Kid 1: A qualifying child for the child tax credit");
     expect(names).toContain("Kid 2: A qualifying child for the child tax credit");
+  });
+
+  it("give the EIC Table's credit for every row, at both ends, with 0 to 3 children, single and jointly", () => {
+    const eic = JSON.parse(readFileSync(resolve(import.meta.dirname, "us-2025-eic-table.json"), "utf8")) as { rows: number[][]; footnotes: [number, number, boolean, number][] };
+    /** Earned income (and AGI) of `amount`, with `children` qualifying children, filing single (or head of household) or jointly. */
+    const credit = (amount: string, children: number, joint: boolean) => {
+      const input = oneW2({ wages: amount, joint, dependants: children, birthDate: "1990-05-05" });
+      return new Evaluation(rules, input).line("p1", "F1040.27a").value?.toString();
+    };
+    const wrong: string[] = [];
+    for (const [from, to, ...credits] of eic.rows as number[][]) {
+      for (const amount of [String(from), (to! - 0.01).toFixed(2)]) {
+        for (let column = 0; column < 8; column += 1) {
+          const children = column % 4;
+          const joint = column >= 4;
+          const got = credit(amount, children, joint);
+          if (got !== String(credits[column])) wrong.push(`${amount} with ${children} ${joint ? "jointly" : "single"}: ${got}, the table says ${credits[column]}`);
+        }
+      }
+    }
+    expect(eic.rows).toHaveLength(1366);
+    expect(wrong.slice(0, 10)).toEqual([]);
+    // The last row of a column, narrower than $50, from the table's footnotes.
+    for (const [amount, children, joint, expected] of eic.footnotes) expect(credit(String(amount), children, joint), `${amount} ${children} ${joint}`).toBe(String(expected));
+    // The table's own example: single, one child, $2,455: $842.
+    expect(credit("2455", 1, false)).toBe("842");
   });
 
   it("show one federal refund or amount owed", () => {

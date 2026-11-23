@@ -80,14 +80,17 @@ The US return covers:
 - Dependants: each dependant in the year gets a few questions on Personal info (relationship, months with you, school,
   support, social security number). The app works out who is a qualifying child or qualifying relative, the child tax
   credit ($2,200 for each child under 17 with a social security number), the credit for other dependents ($500), the
-  reduction over $200,000 ($400,000 jointly) of modified AGI, and the additional child tax credit.
+  reduction over $200,000 ($400,000 jointly) of modified AGI, and the additional child tax credit, with Part II-B of
+  Schedule 8812 for three or more children.
+- The earned income credit, with or without qualifying children, as the IRS's EIC Table gives it: the steps of
+  who can take it (income, investment income, valid SSNs, age without a child, filing separately), and the smaller of
+  the credits on earned income and on AGI when the worksheet asks for both.
 - Deductions: the standard deduction, with the additional amounts at 65 or older and for blindness, the smaller
   deduction of someone who can be claimed as a dependent, and the 2025 enhanced deduction for seniors.
 - Tax: the IRS Tax Table under $100,000 and the Tax Computation Worksheet from $100,000, the Additional Medicare Tax,
   the net investment income tax, and a credit for excess social security tax withheld by two or more employers.
 
-The earned income credit, the child and dependent care credit, a parent's release of the claim to a child (Form
-8332), the larger additional child tax credit that three or more children may get (Part II-B of Schedule 8812), itemized
+The child and dependent care credit, a parent's release of the claim to a child (Form 8332), itemized
 deductions, tips and overtime pay, and other income come in later versions. The app says so when one of them applies,
 instead of giving a wrong amount. A US return can't be printed on the IRS forms yet, and its forms can't be read by AI
 yet: enter each W-2 and 1099-INT on Income, then copy the amounts into the forms or into tax software.

@@ -75,9 +75,9 @@ compensation).
 United States: the federal Form 1040 of a U.S. citizen or resident alien for the whole year, filing single, married
 filing jointly (one return with both spouses on it), married filing separately, head of household or qualifying
 surviving spouse; dependants with the child tax credit, the credit for other dependents and the additional child tax
-credit; wages (W-2) and interest (1099-INT), the standard deduction (with the 2025 deduction
+credit (Part II-B too); the earned income credit; wages (W-2) and interest (1099-INT), the standard deduction (with the 2025 deduction
 for seniors), the Tax Table and Tax Computation Worksheet, the Additional Medicare Tax, the net investment income tax
-and excess social security tax. No state return, no printing and no AI reading yet; the earned income credit, child care,
+and excess social security tax. No state return, no printing and no AI reading yet; child care,
 itemized deductions and tips or overtime say so when they apply.
 
 ## Good to know

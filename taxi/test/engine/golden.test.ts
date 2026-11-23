@@ -25,11 +25,9 @@ const ALWAYS_ZERO: Record<string, string> = {
   // United States: each SCOPE line is zero, or says what isn't handled (test/engine/us-scope.test.ts checks each says so).
   "SCOPE.return": "situations the US return doesn't handle yet: zero, or says so",
   "SCOPE.residency": "a nonresident or dual-status alien: zero, or says so",
-  "SCOPE.actc": "Part II-B of Schedule 8812 for three or more children: zero, or says so",
   "SCOPE.widowed": "a spouse who died in 2025: zero, or says so",
   "SCOPE.tips": "tips and overtime: zero, or says so",
   "SCOPE.kiddie": "the kiddie tax: zero, or says so",
-  "SCOPE.eic": "the earned income credit: zero, or says so",
 };
 
 for (const folder of readdirSync(ROOT, { withFileTypes: true }).filter((entry) => entry.isDirectory()).map((entry) => entry.name)) {

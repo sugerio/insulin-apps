@@ -9,6 +9,7 @@
     "F1040.15",
     "F1040.16",
     "F1040.19",
+    "S3.2",
     "F1040.24",
     "F1040.27a",
     "F1040.28",
@@ -23,6 +24,7 @@
     "F1040.15": "person.role == \"self\" or line.US.joint == 0",
     "F1040.16": "person.role == \"self\" or line.US.joint == 0",
     "F1040.19": "person.role == \"self\" or line.US.joint == 0",
+    "S3.2": "person.role == \"self\" or line.US.joint == 0",
     "F1040.24": "person.role == \"self\" or line.US.joint == 0",
     "F1040.27a": "person.role == \"self\" or line.US.joint == 0",
     "F1040.28": "person.role == \"self\" or line.US.joint == 0",
@@ -31,6 +33,48 @@
     "F1040.37": "person.role == \"self\" or line.US.joint == 0"
   },
   "params": {
+    "careLimitOne": {
+      "label": "Most care expenses the credit counts for one qualifying person",
+      "value": "3000",
+      "source": "Form 2441, line 3: don't enter more than $3,000 if you had one qualifying person"
+    },
+    "careLimitTwo": {
+      "label": "Most care expenses the credit counts for two or more qualifying persons",
+      "value": "6000",
+      "source": "Form 2441, line 3: $6,000 if you had two or more persons"
+    },
+    "careRateMax": {
+      "label": "Credit rate up to the first AGI band",
+      "value": "0.35",
+      "source": "Form 2441, line 8: .35 for AGI not over $15,000"
+    },
+    "careRateMin": {"label":"Lowest credit rate","value":"0.2","source":"Form 2441, line 8: .20 for AGI over $43,000"},
+    "careRateStep": {
+      "label": "Rate taken off for each AGI band over the first",
+      "value": "0.01",
+      "source": "Form 2441, line 8: the rate goes down by .01 for each $2,000 band"
+    },
+    "careRateStart": {"label":"AGI up to which the rate is 35%","value":"15000","source":"Form 2441, line 8: $0 to $15,000"},
+    "careDeemedOne": {
+      "label": "Earned income a student or disabled spouse is treated as having each month, one qualifying person",
+      "value": "250",
+      "source": "2441 instructions, If You or Your Spouse Was a Student or Disabled: at least $250 a month"
+    },
+    "careDeemedTwo": {
+      "label": "Earned income a student or disabled spouse is treated as having each month, two or more qualifying persons",
+      "value": "500",
+      "source": "2441 instructions, If You or Your Spouse Was a Student or Disabled: $500 if you had two or more qualifying persons"
+    },
+    "careBenefitsMax": {
+      "label": "Most dependent care benefits that can be excluded",
+      "value": "5000",
+      "source": "2441 instructions, line 21: for 2025, $5,000 ($2,500 if married filing separately)"
+    },
+    "careBenefitsMaxSeparate": {
+      "label": "Most dependent care benefits that can be excluded, married filing separately",
+      "value": "2500",
+      "source": "Form 2441, line 21: $2,500 if married filing separately and you entered your spouse's earned income on line 19"
+    },
     "relativeIncomeLimit": {
       "label": "Gross income a qualifying relative must stay under",
       "value": "5200",
@@ -404,6 +448,198 @@
     }
   },
   "lines": {
+    "DEP.livedWithYou": {
+      "label": "Lived with you more than half of 2025 (1 for yes)",
+      "formula": "if(dependant.answer.monthsWithYou >= 7, 1, 0)",
+      "each": "dependant"
+    },
+    "DEP.careChild": {
+      "label": "A qualifying child under 13 for the care credit (1 for yes)",
+      "formula": "if(dependant.age <= 13, line.DEP.qualifyingChild, 0)",
+      "source": "2441 instructions, Qualifying Person(s), 1: a qualifying child under 13 you can claim; a child who turned 13 during 2025 qualifies for the part of the year before (the expenses asked are for that part)",
+      "each": "dependant"
+    },
+    "DEP.careDependant": {
+      "label": "Your dependent, or would be but for their gross income or a joint return (1 for yes)",
+      "formula": "if(line.DEP.relatedChild == 1 and line.DEP.ageTest == 1 and not dependant.answer.paidOwnSupport and dependant.answer.citizenOrResident, 1, if(dependant.answer.relationship == \"none\" and dependant.answer.monthsWithYou < 12, 0, if(dependant.answer.supportedByYou and dependant.answer.citizenOrResident, 1, 0)))",
+      "source": "2441 instructions, Qualifying Person(s), 3: a dependent, or one but for a gross income of $5,200 or more or a joint return",
+      "each": "dependant"
+    },
+    "DEP.careDisabled": {
+      "label": "A dependant over 13 who can't care for themselves, for the care credit (1 for yes)",
+      "formula": "if(dependant.age <= 13, 0, if(line.DEP.livedWithYou == 0, 0, if(dependant.answer.cantCareForSelf, line.DEP.careDependant, 0)))",
+      "source": "2441 instructions, Qualifying Person(s), 3: not physically or mentally able to care for themselves, and lived with you more than half the year",
+      "each": "dependant"
+    },
+    "DEP.careChildExpenses": {
+      "label": "Care expenses for a qualifying child under 13",
+      "formula": "if(line.DEP.careChild == 1, dependant.answer.careExpenses, 0)",
+      "each": "dependant"
+    },
+    "DEP.careDisabledExpenses": {
+      "label": "Care expenses for a dependant who can't care for themselves",
+      "formula": "if(line.DEP.careDisabled == 1, dependant.answer.careExpenses, 0)",
+      "each": "dependant"
+    },
+    "US.ownCareBenefits": {
+      "label": "Dependent care benefits on this person's Forms W-2, box 10",
+      "formula": "if(sum(W2.box10) > param.careBenefitsMax, unsupported(\"Dependent care benefits over $5,000 in box 10 of a W-2: the part over the plan's limit is already in box 1, which this app doesn't separate\"), sum(W2.box10))",
+      "source": "2441 instructions, line 12: box 10 of Form W-2, less amounts over the plan's exclusion that are reported as wages in box 1"
+    },
+    "US.careAsked": {
+      "label": "The return may have care expenses or dependent care benefits (1 for yes)",
+      "formula": "if(sum(dependants.DEP.livedWithYou) > 0, 1, if(line.F2441.12 > 0, 1, 0))",
+      "source": "2441 instructions, Qualifying Person(s): a qualifying person lived with you more than half of 2025"
+    },
+    "US.paidForCare": {
+      "label": "You paid for care so you could work (1 for yes)",
+      "formula": "if(line.US.careAsked == 0, 0, if(answer.paidForCare, 1, 0))"
+    },
+    "US.careUnmarried": {
+      "label": "Filing separately, treated as unmarried for the care credit (1 for yes)",
+      "formula": "if(line.US.separate == 0, 1, if(answer.livedApartLastSixMonths, if(answer.paidHalfOfHome, 1, 0), 0))",
+      "source": "2441 instructions, Married Persons Filing Separately: you lived apart from your spouse for the last 6 months of 2025 and paid more than half the cost of the home that was the qualifying person's main home for more than half the year (a qualifying person lived with you more than half the year in every case)"
+    },
+    "F2441.2": {
+      "label": "Qualifying persons",
+      "formula": "if(line.US.paidForCare == 0, 0, if(line.US.claimsDependants == 1, sum(dependants.DEP.careChild), 0) + sum(dependants.DEP.careDisabled) + if(line.US.joint == 1, if(answer.spouseNeedsCare, unsupported(\"Care for your spouse, who couldn't care for themselves, isn't worked out by this app yet (Form 2441)\"), 0), 0))",
+      "source": "Form 2441, line 2: a qualifying child under 13 needs you to be able to claim dependants; someone who can't care for themselves counts even when you could be claimed yourself (2441 instructions, Qualifying Person(s), 3c)"
+    },
+    "US.careExpenses": {
+      "label": "Care expenses for the qualifying persons",
+      "formula": "if(line.US.paidForCare == 0, 0, if(line.US.claimsDependants == 1, sum(dependants.DEP.careChildExpenses), 0) + sum(dependants.DEP.careDisabledExpenses))",
+      "source": "Form 2441, line 2, column (d), before the benefits of Part III are taken off (line 30)"
+    },
+    "US.careDeemedMonthly": {
+      "label": "Earned income treated as earned for each month as a student or not able to care for oneself",
+      "formula": "if(line.F2441.2 >= 2, param.careDeemedTwo, param.careDeemedOne)"
+    },
+    "US.careEarnedSelf": {
+      "label": "Your earned income for Form 2441, without dependent care benefits",
+      "formula": "if(line.US.joint == 0, line.US.ownWages, if(answer.studentOrDisabledMonths == 0, line.US.ownWages, if(line.US.ownWages > 0, unsupported(\"You had wages in months you were a student or weren't able to care for yourself: Form 2441 then compares them month by month, which this app doesn't do\"), if(spouse.answer.studentOrDisabledMonths > 0, unsupported(\"You and your spouse were both students or not able to care for yourselves in 2025: Form 2441 counts only one of you in a month, which this app doesn't work out\"), answer.studentOrDisabledMonths * line.US.careDeemedMonthly))))",
+      "source": "2441 instructions, lines 4 and 5, If You or Your Spouse Was a Student or Disabled"
+    },
+    "US.careEarnedSpouse": {
+      "label": "Your spouse's earned income for Form 2441, without dependent care benefits",
+      "formula": "if(spouse.answer.studentOrDisabledMonths == 0, spouse.line.US.ownWages, if(spouse.line.US.ownWages > 0, unsupported(\"Your spouse had wages in months they were a student or weren't able to care for themselves: Form 2441 then compares them month by month, which this app doesn't do\"), if(answer.studentOrDisabledMonths > 0, unsupported(\"You and your spouse were both students or not able to care for yourselves in 2025: Form 2441 counts only one of you in a month, which this app doesn't work out\"), spouse.answer.studentOrDisabledMonths * line.US.careDeemedMonthly)))",
+      "source": "2441 instructions, lines 4 and 5, If You or Your Spouse Was a Student or Disabled"
+    },
+    "US.careTaxableSelf": {
+      "label": "Your part of the taxable dependent care benefits",
+      "formula": "if(line.US.joint == 0, line.F2441.26, if(line.F2441.12 == 0, 0, round(line.F2441.26 * line.US.ownCareBenefits / line.F2441.12, 2)))",
+      "source": "Form 1040, line 1e is earned income (line 1z); filing jointly, it is shared by each spouse's box 10"
+    },
+    "F2441.12": {
+      "label": "Dependent care benefits received",
+      "formula": "line.US.ownCareBenefits + if(line.US.joint == 1, spouse.line.US.ownCareBenefits, 0)",
+      "source": "Form 2441, line 12: box 10 of each Form W-2 (both spouses' filing jointly)"
+    },
+    "F2441.13": {
+      "label": "Benefits carried over from 2024 and used in the grace period",
+      "formula": "if(line.F2441.12 == 0, 0, answer.careBenefitsCarriedOver)"
+    },
+    "F2441.14": {
+      "label": "Benefits forfeited or carried forward to 2026",
+      "formula": "if(line.F2441.12 == 0, 0, answer.careBenefitsForfeited)"
+    },
+    "F2441.15": {
+      "label": "Benefits for 2025",
+      "formula": "max(0, line.F2441.12 + line.F2441.13 - line.F2441.14)",
+      "source": "Form 2441, line 15: lines 12 and 13, less line 14"
+    },
+    "F2441.16": {"label":"Qualified expenses incurred in 2025","formula":"line.US.careExpenses"},
+    "F2441.17": {"label":"The smaller of line 15 and line 16","formula":"min(line.F2441.15, line.F2441.16)"},
+    "F2441.18": {
+      "label": "Your earned income",
+      "formula": "line.US.careEarnedSelf",
+      "source": "2441 instructions, line 18: as for line 4, but without the dependent care benefits on line 12"
+    },
+    "F2441.19": {
+      "label": "Your spouse's earned income, or yours",
+      "formula": "if(line.US.joint == 1, line.US.careEarnedSpouse, if(line.US.separate == 1, if(line.US.careUnmarried == 1, line.F2441.18, spouse.line.US.ownWages), line.F2441.18))",
+      "source": "2441 instructions, line 19: filing separately and not treated as unmarried, your spouse's earned income"
+    },
+    "F2441.20": {"label":"The smallest of lines 17, 18 and 19","formula":"max(0, min(line.F2441.17, line.F2441.18, line.F2441.19))"},
+    "F2441.21": {
+      "label": "Most benefits that can be excluded",
+      "formula": "if(line.US.separate == 1, if(line.US.careUnmarried == 1, param.careBenefitsMax, param.careBenefitsMaxSeparate), param.careBenefitsMax)",
+      "source": "Form 2441, line 21: $5,000; $2,500 filing separately with the spouse's earned income on line 19. A plan with a lower limit isn't asked about"
+    },
+    "F2441.25": {
+      "label": "Excluded benefits",
+      "formula": "if(line.F2441.15 == 0, 0, min(line.F2441.20, line.F2441.21))",
+      "source": "Form 2441, lines 22 to 25: no benefits from a sole proprietorship or partnership (line 22 is 0), so none are deductible (line 24). With no benefits, the earned income of lines 18 and 19 isn't needed"
+    },
+    "F2441.26": {
+      "label": "Taxable benefits",
+      "formula": "max(0, line.F2441.15 - line.F2441.25)",
+      "source": "Form 2441, lines 23 and 26: line 15 less the excluded benefits; it goes on Form 1040, line 1e"
+    },
+    "F2441.27": {
+      "label": "Most expenses the credit counts",
+      "formula": "if(line.F2441.2 >= 2, param.careLimitTwo, param.careLimitOne)"
+    },
+    "F2441.29": {
+      "label": "Most expenses left after the excluded benefits",
+      "formula": "max(0, line.F2441.27 - line.F2441.25)",
+      "source": "Form 2441, lines 28 and 29: line 27 less the deductible (none) and excluded benefits"
+    },
+    "F2441.30": {
+      "label": "Expenses not paid with excluded benefits",
+      "formula": "max(0, line.US.careExpenses - line.F2441.25)",
+      "source": "Form 2441, line 30: line 2, column (d), without the benefits on line 28"
+    },
+    "F2441.31": {"label":"Expenses for the credit after the benefits","formula":"min(line.F2441.29, line.F2441.30)"},
+    "F2441.3": {
+      "label": "Expenses for the credit",
+      "formula": "if(line.F2441.12 > 0, line.F2441.31, min(line.US.careExpenses, line.F2441.27))",
+      "source": "Form 2441, line 3: line 2, column (d), up to $3,000 ($6,000); line 31 when Part III is completed"
+    },
+    "F2441.4": {
+      "label": "Your earned income",
+      "formula": "line.US.careEarnedSelf + line.US.careTaxableSelf",
+      "source": "2441 instructions, lines 4 and 5: Form 1040 line 1z, figured for each spouse filing jointly"
+    },
+    "F2441.5": {
+      "label": "Your spouse's earned income, or yours",
+      "formula": "if(line.US.joint == 1, line.US.careEarnedSpouse + line.F2441.26 - line.US.careTaxableSelf, line.F2441.4)"
+    },
+    "F2441.6": {
+      "label": "The smallest of lines 3, 4 and 5",
+      "formula": "if(line.F2441.3 == 0, 0, max(0, min(line.F2441.3, line.F2441.4, line.F2441.5)))"
+    },
+    "F2441.7": {"label":"Adjusted gross income","formula":"line.F1040.11a"},
+    "F2441.8": {
+      "label": "Credit rate",
+      "formula": "max(param.careRateMin, param.careRateMax - param.careRateStep * max(0, 0 - floor(param.careRateStart - line.F2441.7, 2000)) / 2000)",
+      "source": "Form 2441, line 8: .35 up to $15,000, then .01 less for each $2,000 (or part of it) over, down to .20 over $43,000"
+    },
+    "F2441.9a": {"label":"Credit before the tax limit","formula":"round(line.F2441.6 * line.F2441.8, 2)"},
+    "F2441.10": {
+      "label": "Tax liability limit",
+      "formula": "line.F1040.18",
+      "source": "2441 instructions, Credit Limit Worksheet: Form 1040 line 18, less Schedule 3 lines 1 and 6l (no such credit is worked out by this app)"
+    },
+    "F2441.11": {
+      "label": "Credit for child and dependent care expenses",
+      "formula": "if(line.US.careExpenses == 0, 0, if(line.F2441.2 == 0, 0, if(line.US.careUnmarried == 0, 0, min(line.F2441.9a, line.F2441.10))))",
+      "source": "Form 2441, line 11: the smaller of lines 9c and 10; none without care expenses (line 3 is then 0). Line 9b, for 2024 care paid in 2025, is 0 (SCOPE.care says when it isn't). Filing separately, only when treated as unmarried (2441 instructions, line A)"
+    },
+    "S3.2": {
+      "label": "Credit for child and dependent care expenses",
+      "formula": "line.F2441.11",
+      "source": "Schedule 3, line 2: Form 2441, line 11"
+    },
+    "S3.8": {
+      "label": "Total nonrefundable credits from Schedule 3",
+      "formula": "line.S3.2",
+      "source": "Schedule 3, line 8: no other nonrefundable credit is worked out by this app"
+    },
+    "SCOPE.care": {
+      "label": "Care this app doesn't handle yet",
+      "formula": "if(line.US.paidForCare == 0, 0, if(answer.householdEmployer, unsupported(\"Household employment taxes for a household employee (Schedule H) aren't worked out by this app\"), 0) + if(answer.priorYearCare, unsupported(\"Care given in 2024 and paid for in 2025 adds to the credit on Form 2441 line 9b (Worksheet A), which this app doesn't work out yet\"), 0))",
+      "source": "Instructions for Schedule H (2025), lines A to C: cash wages of $2,800 to one employee, or $1,000 in a calendar quarter; 2441 instructions, line 9b and Worksheet A"
+    },
     "DEP.relatedChild": {
       "label": "Related as a qualifying child can be (1 for yes)",
       "formula": "if(dependant.answer.relationship == \"child\" or dependant.answer.relationship == \"foster\" or dependant.answer.relationship == \"sibling\" or dependant.answer.relationship == \"descendant\", 1, 0)",
@@ -491,8 +727,8 @@
     "S8812.12": {"label":"Credits after the reduction","formula":"max(0, line.S8812.8 - line.S8812.11)"},
     "S8812.13": {
       "label": "Credit limit",
-      "formula": "line.F1040.18",
-      "source": "8812 instructions, Credit Limit Worksheet A: Form 1040 line 18, less credits on Schedule 3 that this app doesn't work out yet"
+      "formula": "max(0, line.F1040.18 - line.S3.2)",
+      "source": "8812 instructions, Credit Limit Worksheet A: Form 1040 line 18, less Schedule 3 line 2 (the credit for child and dependent care expenses); the other credits it lists aren't worked out by this app"
     },
     "S8812.14": {"label":"Child tax credit and credit for other dependents","formula":"min(line.S8812.12, line.S8812.13)"},
     "S8812.16a": {"label":"Credits more than the tax","formula":"max(0, line.S8812.12 - line.S8812.14)"},
@@ -664,7 +900,12 @@
       "label": "Wages from Forms W-2, box 1",
       "formula": "line.US.ownWages + if(line.US.joint == 1, spouse.line.US.ownWages, 0)"
     },
-    "F1040.1z": {"label":"Wages and other earned income","formula":"line.F1040.1a"},
+    "F1040.1e": {
+      "label": "Taxable dependent care benefits",
+      "formula": "line.F2441.26",
+      "source": "Form 1040, line 1e: Form 2441, line 26"
+    },
+    "F1040.1z": {"label":"Wages and other earned income","formula":"line.F1040.1a + line.F1040.1e"},
     "F1040.2a": {
       "label": "Tax-exempt interest",
       "formula": "line.US.ownExemptInterest + if(line.US.joint == 1, spouse.line.US.ownExemptInterest, 0)",
@@ -757,11 +998,8 @@
       "formula": "line.S8812.14",
       "source": "Schedule 8812, line 14"
     },
-    "F1040.21": {
-      "label": "Total nonrefundable credits",
-      "formula": "line.F1040.19",
-      "source": "Form 1040, lines 19 and 20; no credit on Schedule 3 is worked out yet"
-    },
+    "F1040.20": {"label":"Nonrefundable credits from Schedule 3","formula":"line.S3.8"},
+    "F1040.21": {"label":"Total nonrefundable credits","formula":"line.F1040.19 + line.F1040.20"},
     "F1040.22": {"label":"Tax after nonrefundable credits","formula":"max(0, line.F1040.18 - line.F1040.21)"},
     "F8959.1": {
       "label": "Medicare wages and tips",
@@ -849,7 +1087,7 @@
     "RESULT.net": {"label":"Refund, less the amount owed","formula":"line.F1040.34 - line.F1040.37"},
     "SCOPE.return": {
       "label": "Situations this app doesn't handle yet",
-      "formula": "line.SCOPE.residency + line.SCOPE.widowed + line.SCOPE.tips + line.SCOPE.kiddie"
+      "formula": "line.SCOPE.residency + line.SCOPE.widowed + line.SCOPE.tips + line.SCOPE.kiddie + line.SCOPE.care"
     },
     "SCOPE.residency": {
       "label": "A nonresident or dual-status alien",
@@ -870,6 +1108,65 @@
     }
   },
   "questions": {
+    "paidForCare": {
+      "type": "boolean",
+      "ask": "You paid for the care of a child under 13, or of a dependant who can't care for themselves, so you could work",
+      "module": "about",
+      "help": "Day care, a babysitter, before- or after-school care or a day camp in 2025, so you (and your spouse, filing jointly) could work or look for work. Not overnight camp, school from kindergarten up, or care by your spouse, the child's parent, your dependant or your child under 19 (Form 2441)."
+    },
+    "householdEmployer": {
+      "type": "boolean",
+      "ask": "You paid a household employee, such as a nanny, $2,800 or more in 2025, or $1,000 or more in a calendar quarter of 2024 or 2025",
+      "module": "about",
+      "help": "Someone who works in your home and does the work the way you tell them. You may owe household employment taxes on Schedule H."
+    },
+    "priorYearCare": {
+      "type": "boolean",
+      "ask": "You paid in 2025 for care given in 2024",
+      "module": "about",
+      "help": "Care given in 2024 and paid for in 2025 can add to the 2025 credit (Form 2441, line 9b)."
+    },
+    "studentOrDisabledMonths": {
+      "type": "count",
+      "ask": "Months of 2025 you were a full-time student or weren't able to care for yourself",
+      "module": "about",
+      "help": "Filing jointly, for each such month you are treated as earning at least $250 ($500 with two or more people in care), so the credit for child care can apply when one of you didn't work. Enter 0 if neither applies.",
+      "max": 12
+    },
+    "spouseNeedsCare": {
+      "type": "boolean",
+      "ask": "Your spouse wasn't able to care for themselves, and you paid for their care",
+      "module": "about",
+      "help": "A spouse who can't dress, clean or feed themselves, or needs constant attention, and lived with you more than half of 2025."
+    },
+    "cantCareForSelf": {
+      "type": "boolean",
+      "ask": "Not able to care for themselves",
+      "module": "about",
+      "help": "They can't dress, clean or feed themselves because of a physical or mental condition, or need constant attention to stay safe.",
+      "dependant": true
+    },
+    "careExpenses": {
+      "type": "money",
+      "ask": "Care you paid for them in 2025 so you could work",
+      "module": "about",
+      "help": "Paid in 2025 for care given in 2025, including what dependent care benefits from your employer paid. For a child who turned 13 in 2025, only care before their birthday. Not food, clothing, school from kindergarten up, or overnight camp.",
+      "dependant": true
+    },
+    "careBenefitsCarriedOver": {
+      "type": "money",
+      "ask": "Dependent care benefits from 2024 used in 2025's grace period",
+      "module": "credits",
+      "help": "Money left in a dependent care account at the end of 2024 that your employer let you use in early 2025 (Form 2441, line 13).",
+      "default": "0"
+    },
+    "careBenefitsForfeited": {
+      "type": "money",
+      "ask": "Dependent care benefits you lost or carried forward to 2026",
+      "module": "credits",
+      "help": "Money in a dependent care account for 2025 that you didn't use, because you had no care expenses for it (Form 2441, line 14).",
+      "default": "0"
+    },
     "relationship": {
       "type": "choice",
       "ask": "Their relationship to you",
@@ -952,7 +1249,7 @@
       "type": "boolean",
       "ask": "You paid over half the cost of keeping up your home in 2025",
       "module": "about",
-      "help": "Rent or mortgage interest, property tax, utilities, repairs and food eaten at home. Head of household and qualifying surviving spouse need it."
+      "help": "Rent or mortgage interest, property tax, utilities, repairs and food eaten at home. Head of household and qualifying surviving spouse need it, and so does the credit for child care when filing separately."
     },
     "spouseDiedIn2023Or2024": {
       "type": "boolean",
@@ -964,7 +1261,7 @@
       "type": "boolean",
       "ask": "You and your spouse lived apart for the last 6 months of 2025",
       "module": "about",
-      "help": "Filing separately, you can get the earned income credit only with a qualifying child, and only if you didn't share a home with your spouse for the last 6 months of 2025 (or were legally separated)."
+      "help": "Filing separately, you can get the earned income credit (with a qualifying child) or the credit for child care only if you didn't share a home with your spouse for the last 6 months of 2025."
     },
     "canBeClaimed": {
       "type": "boolean",
@@ -1070,5 +1367,5 @@
   "outcome": "RESULT.net",
   "balances": [{"name":"Federal","refund":"F1040.34","owing":"F1040.37"}],
   "residency": "A U.S. citizen or resident alien all year",
-  "version": "d5c38b0e4920b2bd"
+  "version": "0af4f72d77aad990"
 }

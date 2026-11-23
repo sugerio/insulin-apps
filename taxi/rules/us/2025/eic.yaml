@@ -140,7 +140,7 @@ questions:
     type: boolean
     module: about
     ask: You and your spouse lived apart for the last 6 months of 2025
-    help: Filing separately, you can get the earned income credit only with a qualifying child, and only if you didn't share a home with your spouse for the last 6 months of 2025 (or were legally separated).
+    help: Filing separately, you can get the earned income credit (with a qualifying child) or the credit for child care only if you didn't share a home with your spouse for the last 6 months of 2025.
 
 lines:
   # A qualifying child for the EIC: relationship, age and a home with you for more than half of 2025; unlike a

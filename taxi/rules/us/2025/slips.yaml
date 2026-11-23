@@ -1,6 +1,6 @@
 # Information returns: what each one is, for the screens, and its boxes as printed. `informational` boxes never change
 # a return. Any other box no formula reads is kept and, unless it holds 0, shown as not handled by this app (on the
-# W-2: tips in boxes 7 and 8, dependent care benefits in box 10; on the 1099-INT: an early withdrawal penalty, foreign
+# W-2: tips in boxes 7 and 8; on the 1099-INT: an early withdrawal penalty, foreign
 # tax, private activity bond interest, market discount and bond premium).
 
 slips:

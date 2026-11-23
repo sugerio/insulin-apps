@@ -24,7 +24,8 @@
         "hasTipsOrOvertime": false,
         "canBeClaimed": false,
         "isBlind": false,
-        "estimatedPayments": "0"
+        "estimatedPayments": "0",
+        "paidForCare": false
       }
     },
     "slips": [
@@ -59,6 +60,8 @@
       "F1040.28": "0",
       "S8812.12": "0",
       "F1040.1a": "40000",
+      "F1040.1e": "0",
+      "S3.2": "0",
       "F1040.2a": "0",
       "F1040.2b": "120",
       "F1040.9": "40120",

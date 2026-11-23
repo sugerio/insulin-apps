@@ -134,7 +134,7 @@ questions:
     type: boolean
     module: about
     ask: You paid over half the cost of keeping up your home in 2025
-    help: Rent or mortgage interest, property tax, utilities, repairs and food eaten at home. Head of household and qualifying surviving spouse need it.
+    help: Rent or mortgage interest, property tax, utilities, repairs and food eaten at home. Head of household and qualifying surviving spouse need it, and so does the credit for child care when filing separately.
   spouseDiedIn2023Or2024:
     type: boolean
     module: about
@@ -241,8 +241,8 @@ lines:
     formula: "max(0, line.S8812.8 - line.S8812.11)"
   S8812.13:
     label: Credit limit
-    formula: "line.F1040.18"
-    source: "8812 instructions, Credit Limit Worksheet A: Form 1040 line 18, less credits on Schedule 3 that this app doesn't work out yet"
+    formula: "max(0, line.F1040.18 - line.S3.2)"
+    source: "8812 instructions, Credit Limit Worksheet A: Form 1040 line 18, less Schedule 3 line 2 (the credit for child and dependent care expenses); the other credits it lists aren't worked out by this app"
   S8812.14:
     label: Child tax credit and credit for other dependents
     formula: "min(line.S8812.12, line.S8812.13)"

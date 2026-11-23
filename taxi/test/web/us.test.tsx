@@ -135,7 +135,7 @@ describe("a joint return in the browser", () => {
 });
 
 describe("dependants in the browser", () => {
-  it("asks about each dependant on Personal info, and shows the child tax credit on Finish", async () => {
+  it("asks about each dependant on Personal info, and shows the child tax credit and the care credit on Finish", async () => {
     let ids: { alex: string; ava: string } | undefined;
     const { router, server } = await renderApp("/returns", {
       seed: async (s) => {
@@ -183,13 +183,29 @@ describe("dependants in the browser", () => {
     answer("Paid over half of their own support in 2025", "No");
     answer("Files a joint return for 2025", "No");
     answer("A U.S. citizen, U.S. national or U.S. resident alien", "Yes");
+    // A child who lived with you: whether you paid for care so you could work.
+    const yes = (question: string, choice: "Yes" | "No") =>
+      fireEvent.click(within(screen.getByRole("radiogroup", { name: question })).getByRole("radio", { name: choice }));
+    yes("You paid for the care of a child under 13, or of a dependant who can't care for themselves, so you could work", "Yes");
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(async () => {
       const estimate = (await (await server.call("GET", "/api/years/2025/estimate")).json()) as { input: { family: { dependants: { answers?: Record<string, unknown> }[] } } };
       expect(estimate.input.family.dependants[0]!.answers).toMatchObject({ hasSSN: true, citizenOrResident: true });
     });
+    // Then the care paid for the child, on the child's card, and two questions about you.
+    const child = (await screen.findByRole("heading", { name: "Dependant: Ava Rivera" })).closest<HTMLElement>("[data-slot=card]")!;
+    fireEvent.change(await within(child).findByRole("textbox", { name: "Care you paid for them in 2025 so you could work" }), { target: { value: "4000" } });
+    yes("You paid a household employee, such as a nanny, $2,800 or more in 2025, or $1,000 or more in a calendar quarter of 2024 or 2025", "No");
+    yes("You paid in 2025 for care given in 2024", "No");
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(async () => {
+      const estimate = (await (await server.call("GET", "/api/years/2025/estimate")).json()) as { input: { family: { dependants: { answers?: Record<string, unknown> }[] } } };
+      expect(estimate.input.family.dependants[0]!.answers).toMatchObject({ careExpenses: "4000" });
+    });
     await router.navigate(`/returns/2025/${ids!.alex}/finish?r=1`);
     const keyLines = await screen.findByRole("list", { name: "Key lines" });
     expect(within(keyLines).getByText("Child tax credit and credit for other dependents").closest("li")?.textContent).toMatch(/\$2,200\.00/);
+    // 20% of $3,000 at $58,000 of AGI.
+    expect(within(keyLines).getByText("Credit for child and dependent care expenses").closest("li")?.textContent).toMatch(/\$600\.00/);
   });
 });

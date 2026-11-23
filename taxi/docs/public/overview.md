@@ -85,13 +85,19 @@ The US return covers:
 - The earned income credit, with or without qualifying children, as the IRS's EIC Table gives it: the steps of
   who can take it (income, investment income, valid SSNs, age without a child, filing separately), and the smaller of
   the credits on earned income and on AGI when the worksheet asks for both.
+- The credit for child and dependent care expenses (Form 2441): care for a child under 13, or for a dependant who
+  can't care for themselves, so you could work. The care for each person is asked on their card. The credit is 35% to
+  20% of up to $3,000 of care ($6,000 for two or more people), limited by the earned income of each spouse. It is
+  taken before the child tax credit, so more of that one can be refunded. Dependent care benefits from an employer
+  (box 10 of the W-2) are excluded up to $5,000, and the rest is taxed as wages. Filing jointly, a spouse who was a
+  full-time student or couldn't care for themselves, and had no wages, counts as earning $250 ($500) a month.
 - Deductions: the standard deduction, with the additional amounts at 65 or older and for blindness, the smaller
   deduction of someone who can be claimed as a dependent, and the 2025 enhanced deduction for seniors.
 - Tax: the IRS Tax Table under $100,000 and the Tax Computation Worksheet from $100,000, the Additional Medicare Tax,
   the net investment income tax, and a credit for excess social security tax withheld by two or more employers.
 
-The child and dependent care credit, a parent's release of the claim to a child (Form 8332), itemized
-deductions, tips and overtime pay, and other income come in later versions. The app says so when one of them applies,
+A parent's release of the claim to a child (Form 8332), itemized deductions, tips and overtime pay, a household
+employee (Schedule H), and other income come in later versions. The app says so when one of them applies,
 instead of giving a wrong amount. A US return can't be printed on the IRS forms yet, and its forms can't be read by AI
 yet: enter each W-2 and 1099-INT on Income, then copy the amounts into the forms or into tax software.
 

@@ -219,9 +219,13 @@ lines:
   F1040.1a:
     label: Wages from Forms W-2, box 1
     formula: "line.US.ownWages + if(line.US.joint == 1, spouse.line.US.ownWages, 0)"
+  F1040.1e:
+    label: Taxable dependent care benefits
+    formula: "line.F2441.26"
+    source: "Form 1040, line 1e: Form 2441, line 26"
   F1040.1z:
     label: Wages and other earned income
-    formula: "line.F1040.1a"
+    formula: "line.F1040.1a + line.F1040.1e"
   F1040.2a:
     label: Tax-exempt interest
     formula: "line.US.ownExemptInterest + if(line.US.joint == 1, spouse.line.US.ownExemptInterest, 0)"
@@ -329,10 +333,12 @@ lines:
     label: Child tax credit and credit for other dependents
     formula: "line.S8812.14"
     source: "Schedule 8812, line 14"
+  F1040.20:
+    label: Nonrefundable credits from Schedule 3
+    formula: "line.S3.8"
   F1040.21:
     label: Total nonrefundable credits
-    formula: "line.F1040.19"
-    source: "Form 1040, lines 19 and 20; no credit on Schedule 3 is worked out yet"
+    formula: "line.F1040.19 + line.F1040.20"
   F1040.22:
     label: Tax after nonrefundable credits
     formula: "max(0, line.F1040.18 - line.F1040.21)"
@@ -431,7 +437,7 @@ lines:
   SCOPE.return:
     label: Situations this app doesn't handle yet
     formula: >-
-      line.SCOPE.residency + line.SCOPE.widowed + line.SCOPE.tips + line.SCOPE.kiddie
+      line.SCOPE.residency + line.SCOPE.widowed + line.SCOPE.tips + line.SCOPE.kiddie + line.SCOPE.care
   SCOPE.residency:
     label: A nonresident or dual-status alien
     formula: >-

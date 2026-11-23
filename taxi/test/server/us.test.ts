@@ -238,7 +238,7 @@ describe("dependants on a US return", () => {
       }),
       201,
     );
-    current = await json<TaxYear>(save(current.revision, alex.id, { hasWages: true, hasInterest: false, hasTipsOrOvertime: false, canBeClaimed: false, isBlind: false, estimatedPayments: "0", paidHalfOfHome: true, hasValidSSN: true }));
+    current = await json<TaxYear>(save(current.revision, alex.id, { hasWages: true, hasInterest: false, hasTipsOrOvertime: false, canBeClaimed: false, isBlind: false, estimatedPayments: "0", paidHalfOfHome: true, hasValidSSN: true, paidForCare: false }));
     // The child's questions are still to answer: Personal info isn't done.
     expect(current.returns[0]!.steps.personal).toBe("todo");
     current = await json<TaxYear>(save(current.revision, ava.id, childAnswers));

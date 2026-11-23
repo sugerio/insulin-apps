@@ -131,6 +131,11 @@ function UsTaxNotes() {
           other dependents ($500), and the earned income credit for a lower income.
         </p>
         <p>
+          <b className="text-foreground">Child care.</b> If you paid for the care of a child under 13, or of a dependant who can't care for
+          themselves, so you could work, enter the care for each one on their card. The credit is 20% to 35% of up to $3,000 ($6,000 for two
+          or more), and comes before the child tax credit.
+        </p>
+        <p>
           <b className="text-foreground">Residency.</b> This is the federal return of a U.S. citizen or resident alien for the whole year. A
           nonresident or dual-status alien files Form 1040-NR, which the app doesn't prepare. State returns aren't prepared.
         </p>

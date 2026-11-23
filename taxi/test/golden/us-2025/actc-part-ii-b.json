@@ -65,6 +65,7 @@
         "canBeClaimed": false,
         "isBlind": false,
         "estimatedPayments": "0",
+        "paidForCare": false,
         "paidHalfOfHome": true,
         "hasValidSSN": true
       }
@@ -101,6 +102,8 @@
       "F1040.28": "306",
       "S8812.12": "6600",
       "F1040.1a": "4000",
+      "F1040.1e": "0",
+      "S3.2": "0",
       "F1040.2a": "0",
       "F1040.2b": "12000",
       "F1040.9": "16000",

@@ -1,5 +1,5 @@
 # The 2025 United States federal rules (Form 1040): wages and interest, filing Single, Married filing jointly, Married
-# filing separately, Head of household or Qualifying surviving spouse; dependants and their credits (Schedule 8812); the standard deduction, the enhanced deduction for seniors, and the tax. Each number names its source in
+# filing separately, Head of household or Qualifying surviving spouse; dependants and their credits (Schedule 8812); the earned income credit; child and dependent care (Form 2441); the standard deduction, the enhanced deduction for seniors, and the tax. Each number names its source in
 # the 2025 Instructions for Form 1040 (i1040gi, February 25, 2026) or on the 2025 form; check it there before changing it.
 country: us
 year: 2025
@@ -14,6 +14,7 @@ result:
   - F1040.15
   - F1040.16
   - F1040.19
+  - S3.2
   - F1040.24
   - F1040.27a
   - F1040.28
@@ -29,6 +30,7 @@ resultWhen:
   F1040.15: *ownReturn
   F1040.16: *ownReturn
   F1040.19: *ownReturn
+  S3.2: *ownReturn
   F1040.24: *ownReturn
   F1040.27a: *ownReturn
   F1040.28: *ownReturn

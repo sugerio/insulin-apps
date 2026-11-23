@@ -1,0 +1,108 @@
+{
+  "about": "Head of household, one child, $5,000 of benefits with $200 from 2024's grace period and $500 lost, and $3,000 of care: $1,700 of the benefits taxed, no credit",
+  "input": {
+    "country": "us",
+    "year": 2025,
+    "people": [
+      {
+        "id": "p1",
+        "name": "Uma Shah",
+        "role": "self",
+        "birthDate": "1988-10-10",
+        "province": null,
+        "residentAllYear": true
+      }
+    ],
+    "family": {
+      "maritalStatus": "single",
+      "dependants": [
+        {
+          "id": "d1",
+          "name": "Raj Shah",
+          "birthDate": "2018-03-03",
+          "answers": {
+            "relationship": "child",
+            "monthsWithYou": "12",
+            "hasSSN": true,
+            "paidOwnSupport": false,
+            "filedJointReturn": false,
+            "citizenOrResident": true,
+            "careExpenses": "3000"
+          }
+        }
+      ]
+    },
+    "answers": {
+      "p1": {
+        "hasWages": true,
+        "hasInterest": false,
+        "hasTipsOrOvertime": false,
+        "canBeClaimed": false,
+        "isBlind": false,
+        "estimatedPayments": "0",
+        "paidForCare": true,
+        "householdEmployer": false,
+        "priorYearCare": false,
+        "careBenefitsCarriedOver": "200",
+        "careBenefitsForfeited": "500",
+        "paidHalfOfHome": true,
+        "hasValidSSN": true
+      }
+    },
+    "slips": [
+      {
+        "id": "p1-w2-0",
+        "person": "p1",
+        "type": "W2",
+        "issuer": "Globex",
+        "boxes": {
+          "1": "48000",
+          "2": "3000",
+          "4": "3286",
+          "5": "53000",
+          "6": "768.50",
+          "10": "5000"
+        }
+      }
+    ]
+  },
+  "expected": {
+    "p1": {
+      "F1040.19": "2200",
+      "F1040.27a": "113",
+      "F1040.28": "0",
+      "S8812.12": "2200",
+      "F1040.1a": "48000",
+      "F1040.1e": "1700",
+      "S3.2": "0",
+      "F1040.2a": "0",
+      "F1040.2b": "0",
+      "F1040.9": "49700",
+      "F1040.11a": "49700",
+      "F1040.12e": "23625",
+      "F1040.13b": "0",
+      "F1040.15": "26075",
+      "F1040.16": "2789",
+      "F8959.7": "0",
+      "F8960.17": "0",
+      "F1040.24": "589",
+      "F1040.25c": "0",
+      "S3.11": "0",
+      "F1040.33": "3113",
+      "F1040.34": "2524",
+      "F1040.37": "0",
+      "F2441.2": "1",
+      "F2441.3": "0",
+      "F2441.4": "49700",
+      "F2441.5": "49700",
+      "F2441.6": "0",
+      "F2441.8": "0.2",
+      "F2441.9a": "0",
+      "F2441.12": "5000",
+      "F2441.15": "4700",
+      "F2441.16": "3000",
+      "F2441.25": "3000",
+      "F2441.26": "1700"
+    }
+  }
+}

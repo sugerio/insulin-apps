@@ -61,6 +61,7 @@
         "canBeClaimed": false,
         "isBlind": false,
         "estimatedPayments": "0",
+        "paidForCare": false,
         "hasValidSSN": true
       },
       "p2": {
@@ -109,6 +110,8 @@
       "F1040.28": "0",
       "S8812.12": "2850",
       "F1040.1a": "430500",
+      "F1040.1e": "0",
+      "S3.2": "0",
       "F1040.2a": "0",
       "F1040.2b": "0",
       "F1040.9": "430500",

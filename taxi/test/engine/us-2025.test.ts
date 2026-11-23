@@ -25,6 +25,8 @@ function oneW2(options: {
   resident?: boolean;
   spouseResident?: boolean;
   maritalStatus?: string;
+  /** Dependent care benefits in box 10 of the W-2. */
+  box10?: string;
 }): EngineInput {
   const married = options.married || options.joint;
   const wages = options.wages ?? (Number(options.taxable ?? "0") + (options.joint ? 31500 : options.hoh ? 23625 : 15750)).toFixed(2);
@@ -48,11 +50,17 @@ function oneW2(options: {
       })),
     },
     answers: {
-      p1: { hasTipsOrOvertime: false, spouseItemizes: false, hasValidSSN: true, paidHalfOfHome: true, ...options.answers },
+      p1: { hasTipsOrOvertime: false, spouseItemizes: false, hasValidSSN: true, paidHalfOfHome: true, paidForCare: false, ...options.answers },
       ...(options.joint ? { p2: { hasTipsOrOvertime: false, hasValidSSN: true } } : {}),
     },
     slips: [
-      { id: "w", person: "p1", type: "W2", issuer: "Acme", boxes: { 1: wages, 2: "0", 5: wages, 6: (Number(wages) * 0.0145).toFixed(2) } },
+      {
+        id: "w",
+        person: "p1",
+        type: "W2",
+        issuer: "Acme",
+        boxes: { 1: wages, 2: "0", 5: wages, 6: (Number(wages) * 0.0145).toFixed(2), ...(options.box10 ? { 10: options.box10 } : {}) },
+      },
       ...(options.interest ? [{ id: "i", person: "p1", type: "INT", issuer: "Bank", boxes: { 1: options.interest } }] : []),
     ],
   };
@@ -128,6 +136,130 @@ describe("the 2025 US rules", () => {
     expect(notHandled(oneW2({ wages: "30000", dependants: 3 })).total).not.toBeNull();
     expect(notHandled(oneW2({ wages: "25000" })).total).not.toBeNull();
     expect(notHandled(oneW2({ wages: "1000", birthDate: "2010-01-01", interest: "2700", answers: { canBeClaimed: true } })).total).not.toBeNull();
+  });
+
+  describe("Form 2441, child and dependent care", () => {
+    const care = { paidForCare: true, householdEmployer: false, priorYearCare: false };
+    /** A head of household with children of 10 (each with `expenses` of care), or a couple filing jointly. */
+    const withCare = (options: Parameters<typeof oneW2>[0] & { expenses?: string }) => {
+      const input = oneW2({ hoh: !options.joint, ...options, answers: { ...care, ...(options.joint ? { spouseNeedsCare: false, studentOrDisabledMonths: "0" } : {}), ...options.answers } });
+      for (const dependant of input.family.dependants) dependant.answers = { ...dependant.answers, careExpenses: options.expenses ?? "3000" };
+      if (options.joint) input.answers.p2 = { ...input.answers.p2, studentOrDisabledMonths: "0" };
+      return input;
+    };
+    const line = (input: EngineInput, id: string) => new Evaluation(rules, input).line("p1", id).value?.toString() ?? null;
+
+    it("take the rate of line 8 for AGI at both ends of every band", () => {
+      // Form 2441, line 8: AGI "over" the first amount "but not over" the second.
+      const bands: [number, number, string][] = [[0, 15000, "0.35"]];
+      for (let from = 15000, rate = 34; from < 43000; from += 2000, rate -= 1) bands.push([from, from + 2000, `0.${rate}`]);
+      const wrong: string[] = [];
+      for (const [over, notOver, rate] of bands) {
+        for (const agi of [over === 0 ? "1" : (over + 0.01).toFixed(2), String(notOver)]) {
+          const got = line(withCare({ wages: agi }), "F2441.8");
+          if (Number(got) !== Number(rate)) wrong.push(`${agi}: ${got}, the form says ${rate}`);
+        }
+      }
+      for (const agi of ["43000.01", "250000"]) if (Number(line(withCare({ wages: agi }), "F2441.8")) !== 0.2) wrong.push(`${agi}: not .20`);
+      expect(bands).toHaveLength(15);
+      expect(wrong).toEqual([]);
+    });
+
+    it("take the credit before the child tax credit, so the rest of that can be refunded", () => {
+      const without = withCare({ wages: "40000", answers: { paidForCare: false } });
+      const withIt = withCare({ wages: "40000", expenses: "4000" });
+      expect(line(withIt, "S3.2")).toBe("660");
+      expect(Number(line(withIt, "F1040.19"))).toBe(Number(line(without, "F1040.19")) - 660);
+      expect(Number(line(withIt, "F1040.28"))).toBe(Number(line(without, "F1040.28")) + 660);
+    });
+
+    it("tax the dependent care benefits that care expenses don't use, as wages on line 1e", () => {
+      const input = withCare({ wages: "40000", box10: "5000", expenses: "3000", answers: { careBenefitsCarriedOver: "0", careBenefitsForfeited: "0" } });
+      expect(line(input, "F1040.1e")).toBe("2000");
+      expect(line(input, "F1040.1z")).toBe("42000");
+      expect(line(input, "S3.2")).toBe("0");
+    });
+
+    it("give the credit filing separately only to someone treated as unmarried, and exclude $2,500 of benefits", () => {
+      const separate = (livedApart: boolean) => {
+        const input = withCare({ wages: "30000", married: true, box10: "5000", expenses: "4000", answers: { livedApartLastSixMonths: livedApart, careBenefitsCarriedOver: "0", careBenefitsForfeited: "0" } });
+        input.people.push({ id: "p2", name: "Sam", role: "spouse", birthDate: "1991-06-06", province: null, residentAllYear: true });
+        input.answers.p2 = { hasTipsOrOvertime: false, spouseItemizes: false };
+        input.slips.push({ id: "s", person: "p2", type: "W2", issuer: "Initech", boxes: { 1: "20000", 2: "0", 5: "20000", 6: "290" } });
+        return input;
+      };
+      expect(line(separate(true), "F2441.21")).toBe("5000");
+      expect(line(separate(true), "F2441.19")).toBe("30000");
+      // Living together: the spouse's earned income on line 19, $2,500 excluded, $2,500 taxed, no credit.
+      expect(line(separate(false), "F2441.19")).toBe("20000");
+      expect(line(separate(false), "F2441.25")).toBe("2500");
+      expect(line(separate(false), "F1040.1e")).toBe("2500");
+      expect(line(separate(false), "S3.2")).toBe("0");
+    });
+
+    it("count a spouse with no wages who was a student as earning $250 a month, or $500 with two people in care", () => {
+      const student = (children: number) => {
+        const input = withCare({ wages: "60000", joint: true, dependants: children });
+        input.answers.p2 = { ...input.answers.p2, studentOrDisabledMonths: "9" };
+        return line(input, "F2441.5");
+      };
+      expect(student(1)).toBe("2250");
+      expect(student(2)).toBe("4500");
+    });
+
+    it("ask about care only when someone lived with you, and about each person only what decides", () => {
+      const asked = (input: EngineInput) => new Evaluation(rules, input).result();
+      expect(asked(oneW2({ taxable: "30000" })).people[0]!.questions).not.toContain("paidForCare");
+      expect(asked(oneW2({ taxable: "30000", box10: "1000" })).people[0]!.questions).toContain("paidForCare");
+      expect(asked(oneW2({ taxable: "30000", hoh: true })).people[0]!.questions).toContain("paidForCare");
+      // Not paid for care: nothing more is asked.
+      const none = asked(oneW2({ taxable: "30000", hoh: true }));
+      expect(none.people[0]!.questions).not.toContain("householdEmployer");
+      expect(none.dependants[0]!.questions).not.toContain("careExpenses");
+      // Paid: the care for a child of 10, and whether a 30-year-old who lives with you can care for themselves.
+      const input = withCare({ wages: "50000" });
+      expect(asked(input).people[0]!.questions).toEqual(expect.arrayContaining(["householdEmployer", "priorYearCare"]));
+      input.family.dependants.push({
+        id: "d9",
+        name: "Ana",
+        birthDate: "1995-01-01",
+        answers: { relationship: "sibling", monthsWithYou: "12", paidOwnSupport: false, filedJointReturn: false, citizenOrResident: true, grossIncome: "9000", supportedByYou: true, disabled: false },
+      });
+      const paid = asked(input);
+      expect(paid.people[0]!.questions).not.toContain("careBenefitsCarriedOver");
+      expect(paid.dependants[0]!.questions).toContain("careExpenses");
+      expect(paid.dependants[0]!.questions).not.toContain("cantCareForSelf");
+      expect(paid.dependants[1]!.missing.map((item) => item.question)).toEqual(["cantCareForSelf"]);
+      // Filing jointly, whether each spouse was a student.
+      const joint = asked(withCare({ wages: "50000", joint: true, dependants: 1 }));
+      expect(joint.people[1]!.questions).toContain("studentOrDisabledMonths");
+    });
+
+    it("say what they don't handle instead of giving a total tax", () => {
+      const total = (input: EngineInput) => {
+        const result = new Evaluation(rules, input).result().people[0]!;
+        return { total: result.lines.find((each) => each.id === "F1040.24")?.value ?? null, unhandled: result.unhandled.join(" ") };
+      };
+      const studentWithWages = withCare({ wages: "60000", joint: true, dependants: 1 });
+      studentWithWages.answers.p1 = { ...studentWithWages.answers.p1, studentOrDisabledMonths: "3" };
+      const bothStudents = withCare({ wages: "0", joint: true, dependants: 1 });
+      bothStudents.answers.p1 = { ...bothStudents.answers.p1, studentOrDisabledMonths: "3" };
+      bothStudents.answers.p2 = { ...bothStudents.answers.p2, studentOrDisabledMonths: "3" };
+      bothStudents.slips = [];
+      const cases: [string, EngineInput, RegExp][] = [
+        ["a household employee", withCare({ wages: "50000", answers: { householdEmployer: true } }), /Schedule H/],
+        ["2024 care paid in 2025", withCare({ wages: "50000", answers: { priorYearCare: true } }), /line 9b/],
+        ["benefits over $5,000", oneW2({ taxable: "30000", box10: "6000" }), /over \$5,000 in box 10/],
+        ["care for a spouse", withCare({ wages: "50000", joint: true, dependants: 1, answers: { spouseNeedsCare: true } }), /Care for your spouse/],
+        ["a student with wages", studentWithWages, /month by month/],
+        ["both spouses students", bothStudents, /only one of you/],
+      ];
+      for (const [what, input, message] of cases) {
+        const { total: value, unhandled } = total(input);
+        expect(value, what).toBeNull();
+        expect(unhandled, what).toMatch(message);
+      }
+    });
   });
 
   it("ask nothing about a spouse before the marital status is known", () => {

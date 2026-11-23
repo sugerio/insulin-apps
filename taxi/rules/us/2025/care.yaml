@@ -196,16 +196,16 @@ lines:
   US.careEarnedSelf:
     label: Your earned income for Form 2441, without dependent care benefits
     formula: >-
-      if(line.US.joint == 0, line.US.ownWages, if(answer.studentOrDisabledMonths == 0, line.US.ownWages,
-      if(line.US.ownWages > 0, unsupported("You had wages in months you were a student or weren't able to care for yourself: Form 2441 then compares them month by month, which this app doesn't do"),
+      if(line.US.joint == 0, line.US.ownEarned, if(answer.studentOrDisabledMonths == 0, line.US.ownEarned,
+      if(line.US.ownEarned > 0, unsupported("You had wages in months you were a student or weren't able to care for yourself: Form 2441 then compares them month by month, which this app doesn't do"),
       if(spouse.answer.studentOrDisabledMonths > 0, unsupported("You and your spouse were both students or not able to care for yourselves in 2025: Form 2441 counts only one of you in a month, which this app doesn't work out"),
       answer.studentOrDisabledMonths * line.US.careDeemedMonthly))))
     source: "2441 instructions, lines 4 and 5, If You or Your Spouse Was a Student or Disabled"
   US.careEarnedSpouse:
     label: Your spouse's earned income for Form 2441, without dependent care benefits
     formula: >-
-      if(spouse.answer.studentOrDisabledMonths == 0, spouse.line.US.ownWages,
-      if(spouse.line.US.ownWages > 0, unsupported("Your spouse had wages in months they were a student or weren't able to care for themselves: Form 2441 then compares them month by month, which this app doesn't do"),
+      if(spouse.answer.studentOrDisabledMonths == 0, spouse.line.US.ownEarned,
+      if(spouse.line.US.ownEarned > 0, unsupported("Your spouse had wages in months they were a student or weren't able to care for themselves: Form 2441 then compares them month by month, which this app doesn't do"),
       if(answer.studentOrDisabledMonths > 0, unsupported("You and your spouse were both students or not able to care for yourselves in 2025: Form 2441 counts only one of you in a month, which this app doesn't work out"),
       spouse.answer.studentOrDisabledMonths * line.US.careDeemedMonthly)))
     source: "2441 instructions, lines 4 and 5, If You or Your Spouse Was a Student or Disabled"
@@ -245,7 +245,7 @@ lines:
     label: Your spouse's earned income, or yours
     formula: >-
       if(line.US.joint == 1, line.US.careEarnedSpouse,
-      if(line.US.separate == 1, if(line.US.careUnmarried == 1, line.F2441.18, spouse.line.US.ownWages), line.F2441.18))
+      if(line.US.separate == 1, if(line.US.careUnmarried == 1, line.F2441.18, spouse.line.US.ownEarned), line.F2441.18))
     source: "2441 instructions, line 19: filing separately and not treated as unmarried, your spouse's earned income"
   F2441.20:
     label: The smallest of lines 17, 18 and 19

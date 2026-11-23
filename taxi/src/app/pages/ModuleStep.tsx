@@ -302,6 +302,9 @@ function ModuleForm({
         const answer = given[question.id];
         if (kind === "slip") return [question.id, slipsOf(question.slip!).length > 0 || answer === true];
         if (kind === "amount") return [question.id, (typeof answer === "string" && Number(answer) !== 0) || receiptsOf(question).length > 0 || (answer === undefined && suggestionOf(question) !== null)];
+        // A group with documents added to one of its parts (a 1099-NEC for the business) is on the return until it is
+        // answered otherwise.
+        if (kind === "group" && answer === undefined) return [question.id, partsOf(question).some((part) => receiptsOf(part).length > 0)];
         return [question.id, answer === true];
       }),
     ) as Record<string, boolean>,
@@ -829,7 +832,7 @@ function AmountItem({
         )
       ) : null}
       <AmountField
-        label={added ? "Not on an uploaded receipt" : question.ask}
+        label={added ? (type && !type.receipt ? `Not on ${article(noun)} ${noun}` : "Not on an uploaded receipt") : question.ask}
         labelHidden={!added}
         value={value}
         disabled={!editable || busy}

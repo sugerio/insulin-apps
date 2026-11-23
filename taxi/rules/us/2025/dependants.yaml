@@ -260,8 +260,8 @@ lines:
     formula: "min(line.S8812.16a, line.S8812.16b)"
   S8812.18a:
     label: Earned income
-    formula: "line.F1040.1z"
-    source: "8812 instructions, Earned Income Chart: wages on Form 1040 line 1z (no nontaxable combat pay or self-employment yet)"
+    formula: "line.US.earnedIncome"
+    source: "8812 instructions, Earned Income Chart and Earned Income Worksheet: wages on Form 1040 line 1z, plus a net profit from self-employment less the deductible part of its tax (no nontaxable combat pay)"
   S8812.19:
     label: Earned income over $2,500
     formula: "max(0, line.S8812.18a - param.actcEarnedFloor)"
@@ -277,13 +277,20 @@ lines:
     label: Social security, Medicare and Additional Medicare tax withheld
     formula: "line.US.ownSocialAndMedicare + if(line.US.joint == 1, spouse.line.US.ownSocialAndMedicare, 0)"
     source: "Schedule 8812, line 21: Forms W-2, boxes 4 and 6 (both spouses' on a joint return)"
+  S8812.22:
+    label: Deductible part of self-employment tax
+    formula: "line.S1.15"
+    source: "Schedule 8812, line 22: Schedule 1, line 15 (no Schedule 2, lines 5, 6 or 13)"
+  S8812.23:
+    label: Taxes withheld and self-employment tax deducted
+    formula: "line.S8812.21 + line.S8812.22"
   S8812.24:
     label: Earned income credit and excess social security tax
     formula: "line.F1040.27a + line.S3.11"
     source: "Schedule 8812, line 24: Form 1040 line 27a and Schedule 3 line 11"
   S8812.25:
     label: Taxes withheld over the earned income credit
-    formula: "max(0, line.S8812.21 - line.S8812.24)"
+    formula: "max(0, line.S8812.23 - line.S8812.24)"
   S8812.26:
     label: The larger of line 20 and line 25
     formula: "max(line.S8812.20, line.S8812.25)"

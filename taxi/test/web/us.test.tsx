@@ -23,7 +23,7 @@ async function seedFinishedUs(server: TestServer) {
   year = await call("PUT", "/api/years/2025/answers", {
     revision: year.revision,
     personId: alex.id,
-    answers: { hasWages: true, hasInterest: false, hasTipsOrOvertime: false, hasCarLoan: false, canBeClaimed: false, isBlind: false, estimatedPayments: "0" },
+    answers: { hasWages: true, hasInterest: false, hasTipsOrOvertime: false, hasCarLoan: false, hasSelfEmployment: false, canBeClaimed: false, isBlind: false, estimatedPayments: "0" },
   });
   await call("POST", "/api/years/2025/slips/confirm", { revision: year.revision });
   return alex;
@@ -159,7 +159,7 @@ describe("dependants in the browser", () => {
         await call("PUT", "/api/years/2025/answers", {
           revision: year.revision,
           personId: alex.id,
-          answers: { hasWages: true, hasInterest: false, hasTipsOrOvertime: false, hasCarLoan: false, canBeClaimed: false, isBlind: false, estimatedPayments: "0", paidHalfOfHome: true, hasValidSSN: true },
+          answers: { hasWages: true, hasInterest: false, hasTipsOrOvertime: false, hasCarLoan: false, hasSelfEmployment: false, canBeClaimed: false, isBlind: false, estimatedPayments: "0", paidHalfOfHome: true, hasValidSSN: true },
         });
       },
     });

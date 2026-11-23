@@ -166,8 +166,8 @@ export interface Hint {
 /**
  * What a form's text box can hold: facts about the person that no tax line computes, kept out of the formulas. A name
  * is split at its last space (first name, last name). The TP-1 asks for the spouse's last name and date of birth too.
- * The IRS's forms ask for the spouse's whole name (filing separately), and each schedule for the names on the return
- * (`returnNames`: both spouses' on a joint return).
+ * The IRS's forms ask for the spouse's whole name (filing separately), each schedule for the names on the return
+ * (`returnNames`: both spouses' on a joint return), and a person's own schedule for their whole name (`name`).
  */
 export const PERSONAL_FACTS = [
   "firstName",
@@ -179,6 +179,7 @@ export const PERSONAL_FACTS = [
   "spouseBirthDate",
   "spouseName",
   "returnNames",
+  "name",
 ] as const;
 export type PersonalFact = (typeof PERSONAL_FACTS)[number];
 /**
@@ -270,6 +271,11 @@ export interface FormSpec extends FormVersion {
   french?: FormVersion;
   /** The form's table of dependants. */
   dependants?: DependantTable;
+  /**
+   * Whose form it is on a joint return: the spouse's copy of a form each spouse files (Schedule C, Schedule SE) works
+   * its rows out from the spouse's side, and writes the spouse's name where the form asks for the person's.
+   */
+  side?: "spouse";
 }
 
 /**
@@ -435,6 +441,7 @@ export const compiledRulesSchema = z.strictObject({
       sha256: z.string().regex(/^[0-9a-f]{64}$/),
       pages: z.number().int().min(1),
       applies: z.string(),
+      side: z.literal("spouse").optional(),
       fields: z.array(compiledFieldSchema),
       dependants: z
         .strictObject({
@@ -605,6 +612,7 @@ export function loadRuleSet(json: unknown, where: (entry: string) => string = ()
           pages: form.pages,
           applies: parse(entry, form.applies),
           appliesText: form.applies,
+          ...(form.side === undefined ? {} : { side: form.side }),
           fields: form.fields.map((field): FormField => {
             const where = `${entry}.fields.${field.key}`;
             const place = placeOf(where, field);

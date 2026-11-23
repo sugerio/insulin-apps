@@ -1,0 +1,101 @@
+{
+  "about": "Single, $140,000 of wages and a $65,000 business profit: social security tax on the $36,100 left under $176,100, Additional Medicare Tax on the self-employment income over what the wages leave of $200,000",
+  "input": {
+    "country": "us",
+    "year": 2025,
+    "people": [
+      {
+        "id": "p1",
+        "name": "Max Hale",
+        "role": "self",
+        "birthDate": "1982-03-03",
+        "province": null,
+        "residentAllYear": true
+      }
+    ],
+    "family": {
+      "maritalStatus": "single",
+      "dependants": []
+    },
+    "answers": {
+      "p1": {
+        "hasWages": true,
+        "hasInterest": false,
+        "hasTipsOrOvertime": false,
+        "canBeClaimed": false,
+        "isBlind": false,
+        "estimatedPayments": "0",
+        "hasCarLoan": false,
+        "hasSelfEmployment": true,
+        "businessIncome": "70000",
+        "businessExtras": "none",
+        "businessAdvertising": "0",
+        "businessCar": "0",
+        "businessContractLabor": "1500",
+        "businessInsurance": "0",
+        "businessProfessional": "800",
+        "businessOffice": "0",
+        "businessRent": "200",
+        "businessSupplies": "1850",
+        "businessTravel": "400",
+        "businessMeals": "0",
+        "businessUtilities": "0",
+        "businessOtherExpenses": "250",
+        "paidForCare": false
+      }
+    },
+    "slips": [
+      {
+        "id": "p1-w2-0",
+        "person": "p1",
+        "type": "W2",
+        "issuer": "Globex",
+        "boxes": {
+          "1": "140000",
+          "2": "22000",
+          "3": "140000",
+          "4": "8680",
+          "5": "140000",
+          "6": "2030"
+        }
+      }
+    ]
+  },
+  "expected": {
+    "p1": {
+      "F1040.19": "0",
+      "F1040.27a": "0",
+      "F1040.28": "0",
+      "S8812.12": "0",
+      "F1040.1a": "140000",
+      "F1040.1e": "0",
+      "S3.2": "0",
+      "F1040.2a": "0",
+      "F1040.2b": "0",
+      "F1040.9": "205000",
+      "F1040.11a": "201891.4",
+      "F1040.12e": "15750",
+      "F1040.13b": "0",
+      "F1040.13a": "12378.28",
+      "F1040.8": "65000",
+      "F1040.10": "3108.6",
+      "F1040.15": "173763.12",
+      "F1040.16": "34550.15",
+      "F8959.7": "0",
+      "F8960.17": "0",
+      "F1040.24": "40767.6",
+      "F1040.25c": "0",
+      "S3.11": "0",
+      "F1040.33": "22000",
+      "F1040.34": "0",
+      "F1040.37": "18767.6",
+      "SC.31": "65000",
+      "SE.12": "6217.2",
+      "S1.3": "65000",
+      "S1.15": "3108.6",
+      "S2.4": "6217.2",
+      "F8995.15": "12378.28",
+      "F8959.18": "0.25"
+    }
+  }
+}

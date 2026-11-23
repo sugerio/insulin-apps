@@ -75,6 +75,11 @@ describe("2025 US forms", () => {
     ["tips-overtime-joint-phase-out", "F1040,S1A,S2,F8959"],
     ["overtime-and-car-loan-separate", "F1040,S1A"],
     ["car-loan-single", "F1040,S1A"],
+    ["freelancer-single", "F1040,S1,S2,SC,SE,F8995"],
+    ["side-business-ss-cap", "F1040,S1,S2,SC,SE,F8995,F8959"],
+    ["self-employed-parent-eic", "F1040,S1,S2,SC,SE,SEIC,S8812"],
+    ["joint-both-self-employed", "F1040,S1,S2,SC,SCS,SE,SES,F8995"],
+    ["small-profit-no-se-tax", "F1040,S1,SC,F8995"],
   ] as const) {
     it(`${name}: its forms hold the case's expected lines`, () => {
       const example = golden(name);
@@ -85,6 +90,8 @@ describe("2025 US forms", () => {
       expect(filled.map((each) => each.form.id).join(","), name).toBe(forms);
       let checked = 0;
       for (const { form, amounts } of filled) {
+        // The spouse's copy of a schedule holds the spouse's lines: checked on its own below.
+        if (form.side === "spouse") continue;
         for (const field of form.fields) {
           // A row that holds a line as it is: blank when the line is zero (unless the form asks for 0.00) or the row's
           // condition is no, else that amount.
@@ -203,6 +210,36 @@ describe("2025 US forms", () => {
       "3000",
       "3000",
     ]);
+  });
+
+  it("prints each spouse's own Schedule C and SE on a joint return, from their own side, with their name", () => {
+    const filled = print(golden("joint-both-self-employed").input);
+    const [mine, theirs] = [formOf(filled, "SC"), formOf(filled, "SCS")];
+    expect([at(mine, "name"), at(mine, "31"), at(mine, "8"), at(theirs, "name"), at(theirs, "31"), at(theirs, "20b")]).toEqual(["Ana Cruz", "25000", "500", "Leo Cruz", "34000", "2000"]);
+    expect([at(formOf(filled, "SE"), "name"), at(formOf(filled, "SES"), "name")]).toEqual(["Ana Cruz", "Leo Cruz"]);
+    // Ana's wages leave $116,100 under the wage base; Leo has none.
+    expect([at(formOf(filled, "SE"), "9"), at(formOf(filled, "SES"), "9")]).toEqual(["116100", "176100"]);
+    const f8995 = formOf(filled, "F8995");
+    expect([at(f8995, "qbi1"), at(f8995, "qbi2"), at(f8995, "names")]).toEqual(["23233.8", "31597.97", "Ana Cruz and Leo Cruz"]);
+    // Schedule 1 adds both businesses; Form 1040 takes its totals.
+    const s1 = formOf(filled, "S1");
+    expect([at(s1, "3"), at(formOf(filled, "F1040"), "8"), at(s1, "15"), at(formOf(filled, "F1040"), "10")]).toEqual(["59000", "59000", at(s1, "26"), at(s1, "26")]);
+  });
+
+  it("fills Schedule C's other expenses, half of the meals, and Form 8959 Part II", () => {
+    const freelancer = formOf(print(golden("freelancer-single").input), "SC");
+    expect(["1", "24b", "28", "31", "otherAmount", "48"].map((key) => at(freelancer, key))).toEqual(["60000", "400", "7600", "52400", undefined, undefined]);
+    const side = print(golden("side-business-ss-cap").input);
+    expect(["otherAmount", "48", "27b"].map((key) => at(formOf(side, "SC"), key))).toEqual(["250", "250", "250"]);
+    const f8959 = formOf(side, "F8959");
+    // $200,000 less $140,000 of Medicare wages leaves $60,000; the net earnings over it are taxed at 0.9%.
+    expect(["8", "11", "13", "18"].map((key) => at(f8959, key))).toEqual([at(formOf(side, "SE"), "6"), "60000", f8959.amounts.find((each) => each.key === "13")!.value.toString(), at(f8959, "18")]);
+    expect(at(formOf(side, "S2"), "11")).toBe(at(f8959, "18"));
+  });
+
+  it("leaves Schedule SE out under $400, but keeps the profit on Schedules C and 1", () => {
+    const small = print(golden("small-profit-no-se-tax").input);
+    expect([at(formOf(small, "SC"), "31"), at(formOf(small, "S1"), "3"), at(formOf(small, "S1"), "15")]).toEqual(["300", "300", undefined]);
   });
 
   it("works out Schedule 1-A's reduction for a modified AGI over $75,000", () => {

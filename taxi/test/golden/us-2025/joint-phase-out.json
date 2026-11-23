@@ -62,6 +62,7 @@
         "isBlind": false,
         "estimatedPayments": "0",
         "hasCarLoan": false,
+        "hasSelfEmployment": false,
         "paidForCare": false,
         "hasValidSSN": true
       },
@@ -73,6 +74,7 @@
         "isBlind": false,
         "estimatedPayments": "0",
         "hasCarLoan": false,
+        "hasSelfEmployment": false,
         "hasValidSSN": true
       }
     },
@@ -120,6 +122,9 @@
       "F1040.11a": "430500",
       "F1040.12e": "31500",
       "F1040.13b": "0",
+      "F1040.13a": "0",
+      "F1040.8": "0",
+      "F1040.10": "0",
       "F1040.15": "399000",
       "F1040.16": "81806",
       "F8959.7": "1624.5",

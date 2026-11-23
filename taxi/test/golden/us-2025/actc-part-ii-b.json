@@ -66,6 +66,7 @@
         "isBlind": false,
         "estimatedPayments": "0",
         "hasCarLoan": false,
+        "hasSelfEmployment": false,
         "paidForCare": false,
         "paidHalfOfHome": true,
         "hasValidSSN": true
@@ -111,6 +112,9 @@
       "F1040.11a": "16000",
       "F1040.12e": "23625",
       "F1040.13b": "0",
+      "F1040.13a": "0",
+      "F1040.8": "0",
+      "F1040.10": "0",
       "F1040.15": "0",
       "F1040.16": "0",
       "F8959.7": "0",

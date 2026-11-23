@@ -73,6 +73,12 @@ The US return covers:
 
 - Income: wages on Form W-2, and interest on Form 1099-INT (with savings bond and Treasury interest, and tax-exempt
   interest).
+- Self-employment: one business for each person, as a sole proprietor (Schedule C). Its income is each Form 1099-NEC
+  you add plus what you enter, and its expenses are asked line by line, with half of business meals. The app works out
+  the self-employment tax (Schedule SE), deducts half of it (Schedule 1), and takes the qualified business income
+  deduction (Form 8995) when taxable income is at or below $197,300 ($394,600 jointly). The profit counts as earned
+  income for the earned income credit, the child tax credit and the care credit. A loss, depreciation, a home office,
+  inventory and more than one business come in later versions.
 - Filing status: single, married filing jointly, married filing separately, head of household, or qualifying
   surviving spouse. A married couple chooses on Personal info. Jointly, both spouses are on one return, the person
   preparing's: each enters their own W-2s and answers on it. Separately, each spouse prepared here gets their own
@@ -100,11 +106,11 @@ The US return covers:
   the net investment income tax, and a credit for excess social security tax withheld by two or more employers.
 
 A parent's release of the claim to a child (Form 8332), itemized deductions, allocated tips (box 8 of the W-2) and
-unreported tips (Form 4137), self-employment, a household employee (Schedule H), and other income come in later
+unreported tips (Form 4137), a business loss, a household employee (Schedule H), and other income come in later
 versions. The app says so when one of them applies,
 instead of giving a wrong amount. A finished US return downloads as one PDF: the IRS's Form 1040 and the schedules and
-forms it uses (Schedules 1-A, 2, 3, 8812 and EIC, and Forms 2441, 8959 and 8960), filled in, then a worksheet. Taxi
-doesn't read US forms by AI yet: enter each W-2 and 1099-INT on Income.
+forms it uses (Schedules 1, 1-A, 2, 3, C, SE, 8812 and EIC, and Forms 2441, 8995, 8959 and 8960), filled in, then a
+worksheet. Taxi doesn't read US forms by AI yet: enter each W-2, 1099-INT and 1099-NEC on Income.
 
 ## What it stores
 

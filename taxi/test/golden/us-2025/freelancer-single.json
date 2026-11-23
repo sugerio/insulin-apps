@@ -1,0 +1,106 @@
+{
+  "about": "Single, a freelancer with $52,000 on two 1099-NECs (one withholding $1,500) and $8,000 more, and $7,600 of expenses with half of $800 of meals: Schedules C and SE, half the tax as an adjustment, and the QBI deduction limited by taxable income",
+  "input": {
+    "country": "us",
+    "year": 2025,
+    "people": [
+      {
+        "id": "p1",
+        "name": "Nia Ford",
+        "role": "self",
+        "birthDate": "1990-02-02",
+        "province": null,
+        "residentAllYear": true
+      }
+    ],
+    "family": {
+      "maritalStatus": "single",
+      "dependants": []
+    },
+    "answers": {
+      "p1": {
+        "hasWages": false,
+        "hasInterest": false,
+        "hasTipsOrOvertime": false,
+        "canBeClaimed": false,
+        "isBlind": false,
+        "estimatedPayments": "0",
+        "hasCarLoan": false,
+        "hasSelfEmployment": true,
+        "businessIncome": "8000",
+        "businessExtras": "none",
+        "businessAdvertising": "0",
+        "businessCar": "2400",
+        "businessContractLabor": "0",
+        "businessInsurance": "0",
+        "businessProfessional": "0",
+        "businessOffice": "1200",
+        "businessRent": "0",
+        "businessSupplies": "3000",
+        "businessTravel": "0",
+        "businessMeals": "800",
+        "businessUtilities": "600",
+        "businessOtherExpenses": "0",
+        "paidForCare": false
+      }
+    },
+    "slips": [
+      {
+        "id": "p1-nec-0",
+        "person": "p1",
+        "type": "NEC",
+        "issuer": "Acme Studio",
+        "boxes": {
+          "1": "30000",
+          "4": "1500"
+        }
+      },
+      {
+        "id": "p1-nec-1",
+        "person": "p1",
+        "type": "NEC",
+        "issuer": "Beta Labs",
+        "boxes": {
+          "1": "22000"
+        }
+      }
+    ]
+  },
+  "expected": {
+    "p1": {
+      "F1040.19": "0",
+      "F1040.27a": "0",
+      "F1040.28": "0",
+      "S8812.12": "0",
+      "F1040.1a": "0",
+      "F1040.1e": "0",
+      "S3.2": "0",
+      "F1040.2a": "0",
+      "F1040.2b": "0",
+      "F1040.9": "52400",
+      "F1040.11a": "48698.06",
+      "F1040.12e": "15750",
+      "F1040.13b": "0",
+      "F1040.13a": "6589.61",
+      "F1040.8": "52400",
+      "F1040.10": "3701.94",
+      "F1040.15": "26358.45",
+      "F1040.16": "2927",
+      "F8959.7": "0",
+      "F8960.17": "0",
+      "F1040.24": "10330.88",
+      "F1040.25c": "0",
+      "S3.11": "0",
+      "F1040.33": "1500",
+      "F1040.34": "0",
+      "F1040.37": "8830.88",
+      "SC.31": "52400",
+      "SE.12": "7403.88",
+      "S1.3": "52400",
+      "S1.15": "3701.94",
+      "S2.4": "7403.88",
+      "F8995.15": "6589.61",
+      "F8959.18": "0"
+    }
+  }
+}

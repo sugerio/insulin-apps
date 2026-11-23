@@ -189,8 +189,8 @@ lines:
   US.eicEligible:
     label: Can take the earned income credit (1 for yes)
     formula: >-
-      if(line.US.claimable == 1, 0, if(line.F1040.1z < 1, 0, if(line.F1040.2a + line.F1040.2b > param.eicInvestmentLimit, 0,
-      if(line.F1040.11a >= line.US.eicLimit or line.F1040.1z >= line.US.eicLimit, 0,
+      if(line.US.claimable == 1, 0, if(line.US.earnedIncome < 1, 0, if(line.F1040.2a + line.F1040.2b > param.eicInvestmentLimit, 0,
+      if(line.F1040.11a >= line.US.eicLimit or line.US.earnedIncome >= line.US.eicLimit, 0,
       if(line.US.eicKids == 0, if(line.US.separate == 1 or line.US.hoh == 1, 0, if(line.US.eicAge > 0, line.US.eicSSN, 0)),
       if(line.US.separate == 1, if(answer.livedApartLastSixMonths, line.US.eicSSN, 0), line.US.eicSSN))))))
     source: >-
@@ -200,17 +200,17 @@ lines:
       separately or head of household) and Step 5 (earned income under the limit)
   US.eicRowEarned:
     label: Start of the EIC Table's row for earned income
-    formula: "if(line.F1040.1z < 50, 1, floor(line.F1040.1z, 50))"
+    formula: "if(line.US.earnedIncome < 50, 1, floor(line.US.earnedIncome, 50))"
   US.eicRowEndEarned:
     label: End of the EIC Table's row for earned income; the last row of a column stops at the limit
-    formula: "if(line.F1040.1z < 50, 50, min(line.US.eicRowEarned + 50, line.US.eicLimit))"
+    formula: "if(line.US.earnedIncome < 50, 50, min(line.US.eicRowEarned + 50, line.US.eicLimit))"
   US.eicMiddleEarned:
     label: Middle of the EIC Table's row for earned income
     formula: "(line.US.eicRowEarned + line.US.eicRowEndEarned) / 2"
   US.eicTableEarned:
     label: Earned income credit from the EIC Table for earned income
     formula: >-
-      if(line.F1040.1z < 1 or line.F1040.1z >= line.US.eicLimit, 0, round(max(0,
+      if(line.US.earnedIncome < 1 or line.US.earnedIncome >= line.US.eicLimit, 0, round(max(0,
       if(line.US.eicRowEndEarned > line.US.eicEarnedAmount, line.US.eicMax, min(line.US.eicRateIn * line.US.eicMiddleEarned, line.US.eicMax))
       - if(line.US.eicRowEarned >= line.US.eicStart, line.US.eicRateOut * (line.US.eicMiddleEarned - line.US.eicStart), 0)), 0))
     source: >-
@@ -239,6 +239,6 @@ lines:
   F1040.27a:
     label: Earned income credit
     formula: >-
-      if(line.US.eicEligible == 0, 0, if(line.F1040.11a == line.F1040.1z or line.F1040.11a < line.US.eicStart,
+      if(line.US.eicEligible == 0, 0, if(line.F1040.11a == line.US.earnedIncome or line.F1040.11a < line.US.eicStart,
       line.US.eicTableEarned, min(line.US.eicTableEarned, line.US.eicTableAGI)))
     source: "Instructions, EIC Worksheet A: the credit on earned income; when AGI differs and isn't under the phase-out start, the smaller of that and the credit on AGI"

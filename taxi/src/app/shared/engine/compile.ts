@@ -118,6 +118,10 @@ const sourceForm = z.strictObject({
   /** The publisher's French version of the form: its title and url. It is placed by the layout `<id>-fr`. */
   french: z.strictObject({ title: z.string().min(1), url: z.url() }).optional(),
   applies: z.string().min(1),
+  /** The spouse's copy of a form each spouse files: its rows are worked out from the spouse's side. */
+  side: z.literal("spouse").optional(),
+  /** Placed by another form's layout: a second copy of the same PDF. */
+  layout: z.string().min(1).optional(),
   fields: z.record(z.string(), sourceField),
   /** The form's table of dependants: who is in it, how many columns it has, its "more" tick, and each column's fields. */
   dependants: z
@@ -271,7 +275,7 @@ export function compileRules(chain: SourceYear[], hash: (text: string) => string
       const fail = (message: string): never => {
         throw new RuleError({ file: where(`forms.${id}`), entry: `forms.${id}` }, message);
       };
-      const placed = placeForm(form, layouts[id], fail);
+      const placed = placeForm(form, layouts[form.layout ?? id], fail);
       if (!form.french) return placed;
       // The French version has the same fields, in the same order, each at its place on that version's PDF.
       const french = placeForm({ ...form, ...form.french }, layouts[`${id}-fr`], (message) => fail(`French version: ${message}`));
@@ -316,6 +320,7 @@ function placeForm(form: z.infer<typeof sourceForm>, layout: z.infer<typeof sour
     sha256: layout!.sha256,
     pages: layout!.pages,
     applies: form.applies,
+    ...(form.side === undefined ? {} : { side: form.side }),
     fields: Object.entries(form.fields).map(([key, field]): CompiledRules["forms"][string]["fields"][number] => {
       const spec = typeof field === "string" ? { value: field } : field;
       if ("text" in spec) {

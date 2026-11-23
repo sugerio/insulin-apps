@@ -127,7 +127,25 @@ const IRS_PLACES: Record<string, Record<string, IrsPlace>> = {
     "22a": { field: "Table_Line22[0].Line22a[0].f2_03[0]", label: "Row: 22a. Column: Interest for this loan: (i i i) Schedule 1-A" },
     "22b": { field: "Table_Line22[0].Line22b[0].f2_06[0]", label: "Row: 22b. Column: Interest for this loan: (i i i) Schedule 1-A" },
   },
+  // Line 7 has a second box for the amount repaid.
+  S1: { ...names("f1_01[0]"), "7": { field: "f1_12[0]", label: "7. Amount" } },
   S2: names("f1_01[0]"),
+  // Part V's rows are numbered 1 to 9 like page 1's lines: they are named, and only its first row is used.
+  SC: {
+    name: { field: "f1_1[0]", label: "Name of proprietor" },
+    "1": { field: "f1_10[0]", label: "1. Gross receipts or sales" },
+    otherKind: { field: "PartVTable[0].Item1[0].f2_15[0]", label: "Part V. Other Expenses" },
+    otherAmount: { field: "PartVTable[0].Item1[0].f2_16[0]", label: "1. Amount" },
+    ...Object.fromEntries(
+      [2, 3, 4, 5, 6, 7, 8, 9].map((row) => [`partV${row}`, { field: `PartVTable[0].Item${row}[0].f2_${16 + (row - 1) * 2}[0]`, label: `${row}. Amount` }]),
+    ),
+  },
+  SE: { name: { field: "f1_1[0]", label: "Name of person with self-employment income" } },
+  F8995: {
+    ...names("f1_01[0]"),
+    qbi1: { field: "Table[0].Row1i[0].f1_05[0]", label: "Row: i. Column: (c) Qualified business income" },
+    qbi2: { field: "Table[0].Row1ii[0].f1_08[0]", label: "Row: i i. Column: (c) Qualified business income" },
+  },
   S3: names("f1_01[0]"),
   S8812: {
     ...names("f1_1[0]"),

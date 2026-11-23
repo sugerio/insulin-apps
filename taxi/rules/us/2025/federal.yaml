@@ -196,7 +196,7 @@ lines:
     formula: "sum(W2.box2)"
   US.ownWithheld1099:
     label: Federal income tax withheld on this person's Forms 1099
-    formula: "sum(INT.box4)"
+    formula: "sum(INT.box4) + sum(NEC.box4)"
   US.ownEstimated:
     label: This person's estimated tax payments
     formula: "answer.estimatedPayments"
@@ -234,13 +234,24 @@ lines:
     label: Taxable interest
     formula: "line.US.ownTaxableInterest + if(line.US.joint == 1, spouse.line.US.ownTaxableInterest, 0)"
     source: "Form 1040, line 2b: Form 1099-INT, boxes 1 and 3 (savings bond and Treasury interest is taxed federally)"
+  F1040.8:
+    label: Additional income from Schedule 1
+    formula: "line.S1.10"
   F1040.9:
     label: Total income
-    formula: "line.F1040.1z + line.F1040.2b"
+    formula: "line.F1040.1z + line.F1040.2b + line.F1040.8"
+  F1040.10:
+    label: Adjustments to income from Schedule 1
+    formula: "line.S1.26"
   F1040.11a:
     label: Adjusted gross income
-    formula: "line.F1040.9"
-    source: "Form 1040, line 11a: line 9 less line 10; no adjustment from Schedule 1 is worked out yet"
+    formula: "line.F1040.9 - line.F1040.10"
+  US.earnedIncome:
+    label: Earned income
+    formula: "line.F1040.1z + line.S1.3 - line.S1.15"
+    source: >-
+      Instructions, line 27a, Worksheet B, and the Standard Deduction Worksheet for Dependents: wages (line 1z) plus the
+      net profit from self-employment, less the deductible part of self-employment tax (Schedule 1, line 15)
 
   # Standard deduction
   US.boxes:
@@ -255,7 +266,7 @@ lines:
     formula: "if(line.US.jointRates == 1, param.standardJoint, if(line.US.hoh == 1, param.standardHead, if(line.US.single == 1, param.standardSingle, param.standardSeparate)))"
   US.dependentStandard:
     label: Standard deduction for someone who can be claimed as a dependent, before line 12d's boxes
-    formula: "min(line.US.basicStandard, max(param.dependentMinimum, line.F1040.1z + param.dependentEarnedAdd))"
+    formula: "min(line.US.basicStandard, max(param.dependentMinimum, line.US.earnedIncome + param.dependentEarnedAdd))"
     source: "Instructions, Standard Deduction Worksheet for Dependents, lines 2 to 4"
   US.standard:
     label: Standard deduction with line 12d's boxes
@@ -293,9 +304,13 @@ lines:
     label: Additional deductions from Schedule 1-A
     formula: "line.S1A.38"
     source: "Schedule 1-A, line 38: the deductions for qualified tips, overtime and car loan interest (schedule1a.yaml) and for seniors"
+  F1040.13a:
+    label: Qualified business income deduction
+    formula: "line.F8995.15"
+    source: "Form 1040, line 13a: Form 8995, line 15 (self-employment.yaml)"
   F1040.14:
     label: Total deductions
-    formula: "line.F1040.12e + line.F1040.13b"
+    formula: "line.F1040.12e + line.F1040.13a + line.F1040.13b"
   F1040.15:
     label: Taxable income
     formula: "max(0, line.F1040.11a - line.F1040.14)"
@@ -356,6 +371,22 @@ lines:
     label: Additional Medicare Tax on Medicare wages
     formula: "round(max(0, line.F8959.1 - line.F8959.5) * param.additionalMedicareRate, 2)"
     source: "Form 8959, lines 4 to 7"
+  F8959.8:
+    label: Self-employment income for Additional Medicare Tax
+    formula: "line.SE.6 + if(line.US.joint == 1, spouse.line.SE.6, 0)"
+    source: "Form 8959, line 8: Schedule SE, Part I, line 6 (both spouses' on a joint return)"
+  F8959.11:
+    label: Threshold left after Medicare wages
+    formula: "max(0, line.F8959.5 - line.F8959.1)"
+    source: "Form 8959, lines 9 to 11: the line 5 threshold less the Medicare wages of line 4"
+  F8959.13:
+    label: Additional Medicare Tax on self-employment income
+    formula: "round(max(0, line.F8959.8 - line.F8959.11) * param.additionalMedicareRate, 2)"
+    source: "Form 8959, lines 12 and 13"
+  F8959.18:
+    label: Total Additional Medicare Tax
+    formula: "line.F8959.7 + line.F8959.13"
+    source: "Form 8959, line 18: lines 7 and 13 (no railroad retirement compensation, line 17)"
   F8960.13:
     label: Modified adjusted gross income
     formula: "line.F1040.11a"
@@ -367,10 +398,14 @@ lines:
     label: Net investment income tax
     formula: "round(min(line.F1040.2b, max(0, line.F8960.13 - line.F8960.14)) * param.niitRate, 2)"
     source: "Form 8960, lines 8 and 13 to 17: the smaller of the net investment income (here, taxable interest) and the MAGI over the threshold, times 3.8%"
+  S2.4:
+    label: Self-employment tax
+    formula: "line.SE.12 + if(line.US.joint == 1, spouse.line.SE.12, 0)"
+    source: "Schedule 2, line 4: Schedule SE, line 12 (each spouse's on a joint return)"
   S2.21:
     label: Total other taxes
-    formula: "line.F8959.7 + line.F8960.17"
-    source: "Schedule 2, line 21: lines 11 (Form 8959) and 12 (Form 8960)"
+    formula: "line.S2.4 + line.F8959.18 + line.F8960.17"
+    source: "Schedule 2, line 21: lines 4 (Schedule SE), 11 (Form 8959) and 12 (Form 8960)"
   F1040.23:
     label: Other taxes
     formula: "line.S2.21"

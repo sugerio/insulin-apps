@@ -81,6 +81,7 @@ export function personalFacts(
     spouseName: spouse?.trim() || null,
     // A joint return is in both spouses' names, the person preparing's first.
     returnNames: options.joint && spouse ? `${person.name.trim()} and ${spouse.trim()}` : person.name.trim() || null,
+    name: person.name.trim() || null,
   };
 }
 
@@ -94,6 +95,9 @@ export function fillForms(rules: RuleSet, evaluation: Evaluation, personId: stri
   for (const spec of rules.forms.values()) {
     if (evaluate(spec.applies) !== true) continue;
     const form = formIn(spec, language);
+    // The spouse's copy of a form works its rows out from the spouse's side, and names the spouse.
+    const side = spec.side === "spouse" ? (evaluation.spouse(personId) ?? personId) : personId;
+    const factOf = (fact: PersonalFact) => (spec.side === "spouse" ? facts[SPOUSE_FACT[fact] ?? fact] : facts[fact]);
     const amounts: PlacedAmount[] = [];
     const marks: PlacedMark[] = [];
     const place = (key: string, page: number, x: number, y: number, value: Dec | null, zero = false, plain = false) => {
@@ -101,17 +105,17 @@ export function fillForms(rules: RuleSet, evaluation: Evaluation, personId: stri
       amounts.push({ key, page, x, y, value: value.roundTo(2, "HALF_UP"), ...(plain ? { plain } : {}) });
     };
     for (const field of form.fields) {
-      if (field.when && evaluate(field.when.formula) !== true) continue;
+      if (field.when && evaluation.evaluate(side, field.when.formula).value !== true) continue;
       const { key, page, x, y } = field;
       if (field.kind === "text") {
-        const fact = facts[field.fact];
+        const fact = factOf(field.fact);
         if (!fact) continue;
         // A date in boxes is its digits, one per cell (year, month, day); elsewhere it is written as stored.
         const text = field.cell !== undefined && (field.fact === "birthDate" || field.fact === "spouseBirthDate") ? fact.replaceAll("-", "") : fact;
         marks.push({ kind: "text", key, page, x, y, text, ...(field.width === undefined ? {} : { width: field.width }), ...(field.cell === undefined ? {} : { cell: field.cell }) });
         continue;
       }
-      const { value, status } = evaluation.evaluate(personId, field.formula);
+      const { value, status } = evaluation.evaluate(side, field.formula);
       if (field.kind === "tick") {
         // A tick says something about the person, so it is written only from what they said, never from a question's
         // usual answer standing in for theirs.
@@ -150,6 +154,14 @@ export function fillForms(rules: RuleSet, evaluation: Evaluation, personId: stri
   }
   return filled;
 }
+
+/** On the spouse's copy of a form, the spouse's fact where the form asks for the person's. */
+const SPOUSE_FACT: Partial<Record<PersonalFact, PersonalFact>> = {
+  name: "spouseName",
+  firstName: "spouseFirstName",
+  lastName: "spouseLastName",
+  birthDate: "spouseBirthDate",
+};
 
 /**
  * A form's table of dependants: each dependant of the return the table takes, one per column, each field worked out

@@ -140,7 +140,8 @@ left under Before you file, and the download is refused.
 - A row Taxi doesn't know (a dependant's details, each expense category, a property's address) is left blank. The
   worksheet lists the slips, the answers, the hints applied and every line with its formula.
 - A US return prints on the IRS's own forms: Form 1040, then each schedule and form the return uses, in the order the
-  IRS asks them attached (Schedules 1-A, 2 and 3, Form 2441, Schedule EIC, Schedule 8812, and Forms 8959 and 8960).
+  IRS asks them attached (Schedules 1, 1-A, 2, 3, C and SE, Form 2441, Schedule EIC, Schedule 8812, and Forms 8995,
+  8959 and 8960). On a joint return each spouse with a business gets their own Schedule C and SE.
   Taxi downloads them from irs.gov the first time, and checks each file the same way. Form 1040 gets the names, the
   filing status, the standard deduction boxes, and each dependent's name, relationship and boxes (four at most; the
   worksheet lists the others for the statement the IRS asks for). Each schedule gets the names on the return. On a

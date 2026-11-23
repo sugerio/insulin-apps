@@ -11,8 +11,10 @@
 # column; its fields are worked out from the dependant's side (`dependant.`), and its `when`s are about the return.
 #
 # A form applies to the returns whose `applies` is yes; the forms print in the order of the attachment sequence number
-# printed at the top right of each, as the IRS asks them attached: Form 1040, then Schedules 1-A, 2 and 3, Form 2441,
-# Schedule EIC, Schedule 8812, and Forms 8959 and 8960.
+# printed at the top right of each, as the IRS asks them attached: Form 1040, then Schedules 1, 1-A, 2, 3, C and SE
+# (on a joint return, the spouse's copy after the preparer's), Form 2441, Schedule EIC, Schedule 8812, and Forms 8995,
+# 8959 and 8960. A form with `side: spouse` is the spouse's copy, worked out from their side; `layout` reuses another
+# form's places on the same PDF.
 #
 # The PDFs come from irs.gov on first use (url: the 2025 revision's own address, which doesn't change when the IRS
 # publishes the next year's) and must match the layout's SHA-256: a form the IRS changes is placed again with npm run
@@ -43,7 +45,9 @@ forms:
       1z: line.F1040.1z
       2a: line.F1040.2a
       2b: line.F1040.2b
+      "8": line.F1040.8
       "9": line.F1040.9
+      "10": line.F1040.10
       11a: line.F1040.11a
       # Page 2: tax and credits
       11b: line.F1040.11a
@@ -54,6 +58,7 @@ forms:
       spouseSenior: { tick: "line.US.joint == 1 and spouse.person.age >= 65" }
       spouseBlind: { tick: "line.US.joint == 1 and spouse.answer.isBlind" }
       12e: line.F1040.12e
+      13a: line.F1040.13a
       13b: line.F1040.13b
       "14": line.F1040.14
       # "If zero or less, enter -0-" (lines 15 and 22), and the total tax.
@@ -101,6 +106,18 @@ forms:
         childTaxCredit: { tick: "line.DEP.ctcChild == 1", when: "line.US.filerSSN == 1" }
         otherDependents: { tick: "line.DEP.ctcChild == 0" }
         childWithoutYourSSN: { tick: "line.DEP.ctcChild == 1", when: "line.US.filerSSN == 0", place: otherDependents }
+
+  S1:
+    title: Schedule 1 (Form 1040), Additional Income and Adjustments to Income
+    url: https://www.irs.gov/pub/irs-prior/f1040s1--2025.pdf
+    applies: "line.S1.10 > 0 or line.S1.26 > 0"
+    fields:
+      names: { text: returnNames }
+      # Part I: business income only; Part II: the deductible part of self-employment tax only.
+      "3": line.S1.3
+      "10": line.S1.10
+      "15": line.S1.15
+      "26": line.S1.26
 
   S1A:
     title: Schedule 1-A (Form 1040), Additional Deductions
@@ -160,7 +177,8 @@ forms:
     applies: "line.S2.21 > 0"
     fields:
       names: { text: returnNames }
-      "11": line.F8959.7
+      "4": line.S2.4
+      "11": line.F8959.18
       "12": line.F8960.17
       "21": line.S2.21
 
@@ -174,6 +192,72 @@ forms:
       "8": line.S3.8
       "11": line.S3.11
       "15": line.S3.11
+
+  # Schedule C: each person's business, the person preparing's here and the spouse's below on a joint return. The
+  # business's name, address, code and accounting method, the vehicle information of Part IV (with car expenses) and
+  # what the other expenses are (Part V) stay for the person to fill in.
+  SC:
+    title: Schedule C (Form 1040), Profit or Loss From Business
+    url: https://www.irs.gov/pub/irs-prior/f1040sc--2025.pdf
+    applies: "line.SC.31 > 0"
+    fields: &scheduleC
+      name: { text: name }
+      "1": line.SC.1
+      "3": line.SC.1
+      "5": line.SC.1
+      "7": line.SC.7
+      "8": line.SC.8
+      "9": line.SC.9
+      "11": line.SC.11
+      "15": line.SC.15
+      "17": line.SC.17
+      "18": line.SC.18
+      20b: line.SC.20b
+      "22": line.SC.22
+      24a: line.SC.24a
+      24b: line.SC.24b
+      "25": line.SC.25
+      27b: line.SC.27b
+      "28": line.SC.28
+      "29": line.SC.31
+      "31": line.SC.31
+      otherAmount: line.SC.27b
+      "48": line.SC.27b
+  SCS:
+    title: Schedule C (Form 1040), Profit or Loss From Business (spouse)
+    url: https://www.irs.gov/pub/irs-prior/f1040sc--2025.pdf
+    applies: "line.US.joint == 1 and spouse.line.SC.31 > 0"
+    side: spouse
+    layout: SC
+    fields: *scheduleC
+
+  # Schedule SE: each person with $400 or more of net earnings from self-employment.
+  SE:
+    title: Schedule SE (Form 1040), Self-Employment Tax
+    url: https://www.irs.gov/pub/irs-prior/f1040sse--2025.pdf
+    applies: "line.SE.6 > 0"
+    fields: &scheduleSE
+      name: { text: name }
+      "2": line.SC.31
+      "3": line.SC.31
+      4a: line.SE.4a
+      4c: line.SE.4a
+      "6": line.SE.6
+      # Line 7, $176,100, is printed on the form.
+      8a: line.SE.8a
+      8d: line.SE.8a
+      "9": line.SE.9
+      "10": line.SE.10
+      "11": line.SE.11
+      "12": line.SE.12
+      "13": line.SE.13
+  SES:
+    title: Schedule SE (Form 1040), Self-Employment Tax (spouse)
+    url: https://www.irs.gov/pub/irs-prior/f1040sse--2025.pdf
+    applies: "line.US.joint == 1 and spouse.line.SE.6 > 0"
+    side: spouse
+    layout: SE
+    fields: *scheduleSE
 
   F2441:
     title: Form 2441, Child and Dependent Care Expenses
@@ -289,17 +373,36 @@ forms:
       line20Yes: { tick: "line.S8812.16a > 0 and line.S8812.16b >= param.actcThreeChildren" }
       # Part II-B, for three or more children when line 20 is less than line 17.
       "21": { value: line.S8812.21, when: &partIIB "line.S8812.16a > 0 and line.S8812.16b >= param.actcThreeChildren and line.S8812.20 < line.S8812.17" }
-      "23": { value: line.S8812.21, when: *partIIB }
+      "22": { value: line.S8812.22, when: *partIIB }
+      "23": { value: line.S8812.23, when: *partIIB }
       "24": { value: line.S8812.24, when: *partIIB }
       "25": { value: line.S8812.25, when: *partIIB }
       "26": { value: line.S8812.26, when: *partIIB }
       # Part II-C
       "27": line.S8812.27
 
+  F8995:
+    title: Form 8995, Qualified Business Income Deduction Simplified Computation
+    url: https://www.irs.gov/pub/irs-prior/f8995--2025.pdf
+    applies: "line.F8995.15 > 0"
+    fields:
+      names: { text: returnNames }
+      # Line 1: each spouse's business; its name and identifying number stay for the person to fill in.
+      qbi1: { value: "line.SC.31 - line.SE.13", when: "line.SC.31 > 0" }
+      qbi2: { value: "spouse.line.SC.31 - spouse.line.SE.13", when: "line.US.joint == 1 and spouse.line.SC.31 > 0" }
+      "2": line.F8995.2
+      "4": line.F8995.2
+      "5": line.F8995.5
+      "10": line.F8995.5
+      "11": line.F8995.11
+      "13": line.F8995.11
+      "14": line.F8995.14
+      "15": line.F8995.15
+
   F8959:
     title: Form 8959, Additional Medicare Tax
     url: https://www.irs.gov/pub/irs-prior/f8959--2025.pdf
-    applies: "line.F8959.7 > 0 or line.F8959.24 > 0"
+    applies: "line.F8959.18 > 0 or line.F8959.24 > 0"
     fields:
       names: { text: returnNames }
       # Part I (no unreported tips or Form 8919 wages), Part IV and Part V. No self-employment or railroad
@@ -309,7 +412,14 @@ forms:
       "5": line.F8959.5
       "6": "max(0, line.F8959.1 - line.F8959.5)"
       "7": line.F8959.7
-      "18": line.F8959.7
+      # Part II: self-employment income, over what the wages leave of the threshold.
+      "8": line.F8959.8
+      "9": { value: line.F8959.5, when: &seIncome "line.F8959.8 > 0" }
+      "10": { value: line.F8959.1, when: *seIncome }
+      "11": { value: line.F8959.11, when: *seIncome }
+      "12": "max(0, line.F8959.8 - line.F8959.11)"
+      "13": line.F8959.13
+      "18": line.F8959.18
       "19": line.F8959.19
       "20": line.F8959.1
       "21": line.F8959.21

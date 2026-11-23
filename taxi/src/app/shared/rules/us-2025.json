@@ -6,11 +6,13 @@
     "F1040.9",
     "F1040.11a",
     "F1040.12e",
+    "F1040.13a",
     "F1040.13b",
     "F1040.15",
     "F1040.16",
     "F1040.19",
     "S3.2",
+    "F1040.23",
     "F1040.24",
     "F1040.27a",
     "F1040.28",
@@ -22,11 +24,13 @@
     "F1040.9": "person.role == \"self\" or line.US.joint == 0",
     "F1040.11a": "person.role == \"self\" or line.US.joint == 0",
     "F1040.12e": "person.role == \"self\" or line.US.joint == 0",
+    "F1040.13a": "person.role == \"self\" or line.US.joint == 0",
     "F1040.13b": "person.role == \"self\" or line.US.joint == 0",
     "F1040.15": "person.role == \"self\" or line.US.joint == 0",
     "F1040.16": "person.role == \"self\" or line.US.joint == 0",
     "F1040.19": "person.role == \"self\" or line.US.joint == 0",
     "S3.2": "person.role == \"self\" or line.US.joint == 0",
+    "F1040.23": "person.role == \"self\" or line.US.joint == 0",
     "F1040.24": "person.role == \"self\" or line.US.joint == 0",
     "F1040.27a": "person.role == \"self\" or line.US.joint == 0",
     "F1040.28": "person.role == \"self\" or line.US.joint == 0",
@@ -489,6 +493,44 @@
       "label": "Reduction of the car loan interest deduction for each $1,000 (or part) of modified AGI over the threshold",
       "value": "200",
       "source": "Schedule 1-A, lines 28 and 29: $200 for each $1,000, the result increased to a whole number"
+    },
+    "mealsDeductible": {
+      "label": "Share of business meals deducted",
+      "value": "0.5",
+      "source": "Schedule C, line 24b: deductible meals, generally 50% of their cost (Instructions for Schedule C)"
+    },
+    "seNetEarningsRate": {
+      "label": "Share of the net profit that is net earnings from self-employment",
+      "value": "0.9235",
+      "source": "Schedule SE, line 4a: 92.35% (0.9235)"
+    },
+    "seMinimum": {
+      "label": "Net earnings from self-employment under which no self-employment tax is owed",
+      "value": "400",
+      "source": "Schedule SE, line 4c: less than $400, you don't owe self-employment tax"
+    },
+    "socialSecurityWageBase": {
+      "label": "Most wages and self-employment earnings subject to social security tax",
+      "value": "176100",
+      "source": "Schedule SE, line 7: $176,100 for 2025"
+    },
+    "seSocialSecurityRate": {
+      "label": "Social security part of the self-employment tax",
+      "value": "0.124",
+      "source": "Schedule SE, line 10: 12.4% (0.124)"
+    },
+    "seMedicareRate": {"label":"Medicare part of the self-employment tax","value":"0.029","source":"Schedule SE, line 11: 2.9% (0.029)"},
+    "seDeductibleShare": {"label":"Share of the self-employment tax deducted","value":"0.5","source":"Schedule SE, line 13: 50% (0.50)"},
+    "qbiRate": {"label":"Qualified business income deduction rate","value":"0.2","source":"Form 8995, lines 5 and 14: 20% (0.20)"},
+    "qbiThreshold": {
+      "label": "Taxable income before the QBI deduction up to which Form 8995 is used",
+      "value": "197300",
+      "source": "Instructions, line 13a: $197,300"
+    },
+    "qbiThresholdJoint": {
+      "label": "Taxable income before the QBI deduction up to which Form 8995 is used, Married filing jointly",
+      "value": "394600",
+      "source": "Instructions, line 13a: $394,600 if married filing jointly"
     }
   },
   "lines": {
@@ -560,12 +602,12 @@
     },
     "US.careEarnedSelf": {
       "label": "Your earned income for Form 2441, without dependent care benefits",
-      "formula": "if(line.US.joint == 0, line.US.ownWages, if(answer.studentOrDisabledMonths == 0, line.US.ownWages, if(line.US.ownWages > 0, unsupported(\"You had wages in months you were a student or weren't able to care for yourself: Form 2441 then compares them month by month, which this app doesn't do\"), if(spouse.answer.studentOrDisabledMonths > 0, unsupported(\"You and your spouse were both students or not able to care for yourselves in 2025: Form 2441 counts only one of you in a month, which this app doesn't work out\"), answer.studentOrDisabledMonths * line.US.careDeemedMonthly))))",
+      "formula": "if(line.US.joint == 0, line.US.ownEarned, if(answer.studentOrDisabledMonths == 0, line.US.ownEarned, if(line.US.ownEarned > 0, unsupported(\"You had wages in months you were a student or weren't able to care for yourself: Form 2441 then compares them month by month, which this app doesn't do\"), if(spouse.answer.studentOrDisabledMonths > 0, unsupported(\"You and your spouse were both students or not able to care for yourselves in 2025: Form 2441 counts only one of you in a month, which this app doesn't work out\"), answer.studentOrDisabledMonths * line.US.careDeemedMonthly))))",
       "source": "2441 instructions, lines 4 and 5, If You or Your Spouse Was a Student or Disabled"
     },
     "US.careEarnedSpouse": {
       "label": "Your spouse's earned income for Form 2441, without dependent care benefits",
-      "formula": "if(spouse.answer.studentOrDisabledMonths == 0, spouse.line.US.ownWages, if(spouse.line.US.ownWages > 0, unsupported(\"Your spouse had wages in months they were a student or weren't able to care for themselves: Form 2441 then compares them month by month, which this app doesn't do\"), if(answer.studentOrDisabledMonths > 0, unsupported(\"You and your spouse were both students or not able to care for yourselves in 2025: Form 2441 counts only one of you in a month, which this app doesn't work out\"), spouse.answer.studentOrDisabledMonths * line.US.careDeemedMonthly)))",
+      "formula": "if(spouse.answer.studentOrDisabledMonths == 0, spouse.line.US.ownEarned, if(spouse.line.US.ownEarned > 0, unsupported(\"Your spouse had wages in months they were a student or weren't able to care for themselves: Form 2441 then compares them month by month, which this app doesn't do\"), if(answer.studentOrDisabledMonths > 0, unsupported(\"You and your spouse were both students or not able to care for yourselves in 2025: Form 2441 counts only one of you in a month, which this app doesn't work out\"), spouse.answer.studentOrDisabledMonths * line.US.careDeemedMonthly)))",
       "source": "2441 instructions, lines 4 and 5, If You or Your Spouse Was a Student or Disabled"
     },
     "US.careTaxableSelf": {
@@ -600,7 +642,7 @@
     },
     "F2441.19": {
       "label": "Your spouse's earned income, or yours",
-      "formula": "if(line.US.joint == 1, line.US.careEarnedSpouse, if(line.US.separate == 1, if(line.US.careUnmarried == 1, line.F2441.18, spouse.line.US.ownWages), line.F2441.18))",
+      "formula": "if(line.US.joint == 1, line.US.careEarnedSpouse, if(line.US.separate == 1, if(line.US.careUnmarried == 1, line.F2441.18, spouse.line.US.ownEarned), line.F2441.18))",
       "source": "2441 instructions, line 19: filing separately and not treated as unmarried, your spouse's earned income"
     },
     "F2441.20": {"label":"The smallest of lines 17, 18 and 19","formula":"max(0, min(line.F2441.17, line.F2441.18, line.F2441.19))"},
@@ -780,8 +822,8 @@
     "S8812.17": {"label":"The smaller of line 16a and line 16b","formula":"min(line.S8812.16a, line.S8812.16b)"},
     "S8812.18a": {
       "label": "Earned income",
-      "formula": "line.F1040.1z",
-      "source": "8812 instructions, Earned Income Chart: wages on Form 1040 line 1z (no nontaxable combat pay or self-employment yet)"
+      "formula": "line.US.earnedIncome",
+      "source": "8812 instructions, Earned Income Chart and Earned Income Worksheet: wages on Form 1040 line 1z, plus a net profit from self-employment less the deductible part of its tax (no nontaxable combat pay)"
     },
     "S8812.19": {"label":"Earned income over $2,500","formula":"max(0, line.S8812.18a - param.actcEarnedFloor)"},
     "S8812.20": {"label":"15% of earned income over $2,500","formula":"round(line.S8812.19 * param.actcRate, 2)"},
@@ -794,12 +836,18 @@
       "formula": "line.US.ownSocialAndMedicare + if(line.US.joint == 1, spouse.line.US.ownSocialAndMedicare, 0)",
       "source": "Schedule 8812, line 21: Forms W-2, boxes 4 and 6 (both spouses' on a joint return)"
     },
+    "S8812.22": {
+      "label": "Deductible part of self-employment tax",
+      "formula": "line.S1.15",
+      "source": "Schedule 8812, line 22: Schedule 1, line 15 (no Schedule 2, lines 5, 6 or 13)"
+    },
+    "S8812.23": {"label":"Taxes withheld and self-employment tax deducted","formula":"line.S8812.21 + line.S8812.22"},
     "S8812.24": {
       "label": "Earned income credit and excess social security tax",
       "formula": "line.F1040.27a + line.S3.11",
       "source": "Schedule 8812, line 24: Form 1040 line 27a and Schedule 3 line 11"
     },
-    "S8812.25": {"label":"Taxes withheld over the earned income credit","formula":"max(0, line.S8812.21 - line.S8812.24)"},
+    "S8812.25": {"label":"Taxes withheld over the earned income credit","formula":"max(0, line.S8812.23 - line.S8812.24)"},
     "S8812.26": {"label":"The larger of line 20 and line 25","formula":"max(line.S8812.20, line.S8812.25)"},
     "S8812.27": {
       "label": "Additional child tax credit",
@@ -853,16 +901,16 @@
     },
     "US.eicEligible": {
       "label": "Can take the earned income credit (1 for yes)",
-      "formula": "if(line.US.claimable == 1, 0, if(line.F1040.1z < 1, 0, if(line.F1040.2a + line.F1040.2b > param.eicInvestmentLimit, 0, if(line.F1040.11a >= line.US.eicLimit or line.F1040.1z >= line.US.eicLimit, 0, if(line.US.eicKids == 0, if(line.US.separate == 1 or line.US.hoh == 1, 0, if(line.US.eicAge > 0, line.US.eicSSN, 0)), if(line.US.separate == 1, if(answer.livedApartLastSixMonths, line.US.eicSSN, 0), line.US.eicSSN))))))",
+      "formula": "if(line.US.claimable == 1, 0, if(line.US.earnedIncome < 1, 0, if(line.F1040.2a + line.F1040.2b > param.eicInvestmentLimit, 0, if(line.F1040.11a >= line.US.eicLimit or line.US.earnedIncome >= line.US.eicLimit, 0, if(line.US.eicKids == 0, if(line.US.separate == 1 or line.US.hoh == 1, 0, if(line.US.eicAge > 0, line.US.eicSSN, 0)), if(line.US.separate == 1, if(answer.livedApartLastSixMonths, line.US.eicSSN, 0), line.US.eicSSN))))))",
       "source": "Instructions, line 27a: Step 1 (AGI under the limit, valid SSNs), Step 2 (investment income: lines 2a and 2b), Step 3 (filing separately: a qualifying child and living apart for the last 6 months; not someone else's qualifying child, which the app takes as not being someone's dependent), Step 4 (no qualifying child: 25 to 64, not separately or head of household) and Step 5 (earned income under the limit)"
     },
     "US.eicRowEarned": {
       "label": "Start of the EIC Table's row for earned income",
-      "formula": "if(line.F1040.1z < 50, 1, floor(line.F1040.1z, 50))"
+      "formula": "if(line.US.earnedIncome < 50, 1, floor(line.US.earnedIncome, 50))"
     },
     "US.eicRowEndEarned": {
       "label": "End of the EIC Table's row for earned income; the last row of a column stops at the limit",
-      "formula": "if(line.F1040.1z < 50, 50, min(line.US.eicRowEarned + 50, line.US.eicLimit))"
+      "formula": "if(line.US.earnedIncome < 50, 50, min(line.US.eicRowEarned + 50, line.US.eicLimit))"
     },
     "US.eicMiddleEarned": {
       "label": "Middle of the EIC Table's row for earned income",
@@ -870,7 +918,7 @@
     },
     "US.eicTableEarned": {
       "label": "Earned income credit from the EIC Table for earned income",
-      "formula": "if(line.F1040.1z < 1 or line.F1040.1z >= line.US.eicLimit, 0, round(max(0, if(line.US.eicRowEndEarned > line.US.eicEarnedAmount, line.US.eicMax, min(line.US.eicRateIn * line.US.eicMiddleEarned, line.US.eicMax)) - if(line.US.eicRowEarned >= line.US.eicStart, line.US.eicRateOut * (line.US.eicMiddleEarned - line.US.eicStart), 0)), 0))",
+      "formula": "if(line.US.earnedIncome < 1 or line.US.earnedIncome >= line.US.eicLimit, 0, round(max(0, if(line.US.eicRowEndEarned > line.US.eicEarnedAmount, line.US.eicMax, min(line.US.eicRateIn * line.US.eicMiddleEarned, line.US.eicMax)) - if(line.US.eicRowEarned >= line.US.eicStart, line.US.eicRateOut * (line.US.eicMiddleEarned - line.US.eicStart), 0)), 0))",
       "source": "The 2025 EIC Table (Instructions, pages 49 to 60), checked row by row: each row's credit is worked out on the middle of the row (of the narrower last row, by its limit), to the nearest dollar; the row with the earned income amount gives the largest credit, and it goes down only from rows starting at the phase-out start"
     },
     "US.eicRowAGI": {
@@ -892,7 +940,7 @@
     },
     "F1040.27a": {
       "label": "Earned income credit",
-      "formula": "if(line.US.eicEligible == 0, 0, if(line.F1040.11a == line.F1040.1z or line.F1040.11a < line.US.eicStart, line.US.eicTableEarned, min(line.US.eicTableEarned, line.US.eicTableAGI)))",
+      "formula": "if(line.US.eicEligible == 0, 0, if(line.F1040.11a == line.US.earnedIncome or line.F1040.11a < line.US.eicStart, line.US.eicTableEarned, min(line.US.eicTableEarned, line.US.eicTableAGI)))",
       "source": "Instructions, EIC Worksheet A: the credit on earned income; when AGI differs and isn't under the phase-out start, the smaller of that and the credit on AGI"
     },
     "US.single": {
@@ -928,7 +976,7 @@
     "US.ownMedicareWages": {"label":"This person's Medicare wages and tips, Forms W-2 box 5","formula":"sum(W2.box5)"},
     "US.ownMedicareTax": {"label":"This person's Medicare tax withheld, Forms W-2 box 6","formula":"sum(W2.box6)"},
     "US.ownWithheldW2": {"label":"Federal income tax withheld on this person's Forms W-2","formula":"sum(W2.box2)"},
-    "US.ownWithheld1099": {"label":"Federal income tax withheld on this person's Forms 1099","formula":"sum(INT.box4)"},
+    "US.ownWithheld1099": {"label":"Federal income tax withheld on this person's Forms 1099","formula":"sum(INT.box4) + sum(NEC.box4)"},
     "US.ownEstimated": {"label":"This person's estimated tax payments","formula":"answer.estimatedPayments"},
     "US.ownBoxes": {
       "label": "This person's boxes on line 12d (born before January 2, 1961; blind)",
@@ -960,11 +1008,14 @@
       "formula": "line.US.ownTaxableInterest + if(line.US.joint == 1, spouse.line.US.ownTaxableInterest, 0)",
       "source": "Form 1040, line 2b: Form 1099-INT, boxes 1 and 3 (savings bond and Treasury interest is taxed federally)"
     },
-    "F1040.9": {"label":"Total income","formula":"line.F1040.1z + line.F1040.2b"},
-    "F1040.11a": {
-      "label": "Adjusted gross income",
-      "formula": "line.F1040.9",
-      "source": "Form 1040, line 11a: line 9 less line 10; no adjustment from Schedule 1 is worked out yet"
+    "F1040.8": {"label":"Additional income from Schedule 1","formula":"line.S1.10"},
+    "F1040.9": {"label":"Total income","formula":"line.F1040.1z + line.F1040.2b + line.F1040.8"},
+    "F1040.10": {"label":"Adjustments to income from Schedule 1","formula":"line.S1.26"},
+    "F1040.11a": {"label":"Adjusted gross income","formula":"line.F1040.9 - line.F1040.10"},
+    "US.earnedIncome": {
+      "label": "Earned income",
+      "formula": "line.F1040.1z + line.S1.3 - line.S1.15",
+      "source": "Instructions, line 27a, Worksheet B, and the Standard Deduction Worksheet for Dependents: wages (line 1z) plus the net profit from self-employment, less the deductible part of self-employment tax (Schedule 1, line 15)"
     },
     "US.boxes": {
       "label": "Boxes checked on line 12d",
@@ -981,7 +1032,7 @@
     },
     "US.dependentStandard": {
       "label": "Standard deduction for someone who can be claimed as a dependent, before line 12d's boxes",
-      "formula": "min(line.US.basicStandard, max(param.dependentMinimum, line.F1040.1z + param.dependentEarnedAdd))",
+      "formula": "min(line.US.basicStandard, max(param.dependentMinimum, line.US.earnedIncome + param.dependentEarnedAdd))",
       "source": "Instructions, Standard Deduction Worksheet for Dependents, lines 2 to 4"
     },
     "US.standard": {
@@ -1016,7 +1067,12 @@
       "formula": "line.S1A.38",
       "source": "Schedule 1-A, line 38: the deductions for qualified tips, overtime and car loan interest (schedule1a.yaml) and for seniors"
     },
-    "F1040.14": {"label":"Total deductions","formula":"line.F1040.12e + line.F1040.13b"},
+    "F1040.13a": {
+      "label": "Qualified business income deduction",
+      "formula": "line.F8995.15",
+      "source": "Form 1040, line 13a: Form 8995, line 15 (self-employment.yaml)"
+    },
+    "F1040.14": {"label":"Total deductions","formula":"line.F1040.12e + line.F1040.13a + line.F1040.13b"},
     "F1040.15": {"label":"Taxable income","formula":"max(0, line.F1040.11a - line.F1040.14)"},
     "US.tableRow": {
       "label": "The middle of the Tax Table's row for line 15",
@@ -1060,6 +1116,26 @@
       "formula": "round(max(0, line.F8959.1 - line.F8959.5) * param.additionalMedicareRate, 2)",
       "source": "Form 8959, lines 4 to 7"
     },
+    "F8959.8": {
+      "label": "Self-employment income for Additional Medicare Tax",
+      "formula": "line.SE.6 + if(line.US.joint == 1, spouse.line.SE.6, 0)",
+      "source": "Form 8959, line 8: Schedule SE, Part I, line 6 (both spouses' on a joint return)"
+    },
+    "F8959.11": {
+      "label": "Threshold left after Medicare wages",
+      "formula": "max(0, line.F8959.5 - line.F8959.1)",
+      "source": "Form 8959, lines 9 to 11: the line 5 threshold less the Medicare wages of line 4"
+    },
+    "F8959.13": {
+      "label": "Additional Medicare Tax on self-employment income",
+      "formula": "round(max(0, line.F8959.8 - line.F8959.11) * param.additionalMedicareRate, 2)",
+      "source": "Form 8959, lines 12 and 13"
+    },
+    "F8959.18": {
+      "label": "Total Additional Medicare Tax",
+      "formula": "line.F8959.7 + line.F8959.13",
+      "source": "Form 8959, line 18: lines 7 and 13 (no railroad retirement compensation, line 17)"
+    },
     "F8960.13": {"label":"Modified adjusted gross income","formula":"line.F1040.11a"},
     "F8960.14": {
       "label": "Threshold for the net investment income tax",
@@ -1071,10 +1147,15 @@
       "formula": "round(min(line.F1040.2b, max(0, line.F8960.13 - line.F8960.14)) * param.niitRate, 2)",
       "source": "Form 8960, lines 8 and 13 to 17: the smaller of the net investment income (here, taxable interest) and the MAGI over the threshold, times 3.8%"
     },
+    "S2.4": {
+      "label": "Self-employment tax",
+      "formula": "line.SE.12 + if(line.US.joint == 1, spouse.line.SE.12, 0)",
+      "source": "Schedule 2, line 4: Schedule SE, line 12 (each spouse's on a joint return)"
+    },
     "S2.21": {
       "label": "Total other taxes",
-      "formula": "line.F8959.7 + line.F8960.17",
-      "source": "Schedule 2, line 21: lines 11 (Form 8959) and 12 (Form 8960)"
+      "formula": "line.S2.4 + line.F8959.18 + line.F8960.17",
+      "source": "Schedule 2, line 21: lines 4 (Schedule SE), 11 (Form 8959) and 12 (Form 8960)"
     },
     "F1040.23": {"label":"Other taxes","formula":"line.S2.21"},
     "F1040.24": {"label":"Total tax","formula":"line.F1040.22 + line.F1040.23 + line.SCOPE.return"},
@@ -1229,6 +1310,125 @@
       "label": "Additional deductions",
       "formula": "line.S1A.13 + line.S1A.21 + line.S1A.30 + line.S1A.37",
       "source": "Schedule 1-A, line 38: lines 13, 21, 30 and 37"
+    },
+    "SC.1": {
+      "label": "Gross receipts",
+      "formula": "if(answer.hasSelfEmployment, answer.businessIncome + sum(NEC.box1), if(count(NEC.box1) > 0, unsupported(\"A Form 1099-NEC is added, but no self-employment income: say you had it on Income, or remove the 1099-NEC\"), 0))",
+      "source": "Schedule C, line 1: the 1099-NEC amounts and the business's other income"
+    },
+    "SC.7": {
+      "label": "Gross income",
+      "formula": "line.SC.1",
+      "source": "Schedule C, lines 2 to 7: no returns, cost of goods sold or other income"
+    },
+    "SC.8": {"label":"Advertising","formula":"if(answer.hasSelfEmployment, answer.businessAdvertising, 0)"},
+    "SC.9": {"label":"Car and truck expenses","formula":"if(answer.hasSelfEmployment, answer.businessCar, 0)"},
+    "SC.11": {"label":"Contract labor","formula":"if(answer.hasSelfEmployment, answer.businessContractLabor, 0)"},
+    "SC.15": {"label":"Insurance (other than health)","formula":"if(answer.hasSelfEmployment, answer.businessInsurance, 0)"},
+    "SC.17": {"label":"Legal and professional services","formula":"if(answer.hasSelfEmployment, answer.businessProfessional, 0)"},
+    "SC.18": {"label":"Office expense","formula":"if(answer.hasSelfEmployment, answer.businessOffice, 0)"},
+    "SC.20b": {"label":"Rent of other business property","formula":"if(answer.hasSelfEmployment, answer.businessRent, 0)"},
+    "SC.22": {"label":"Supplies","formula":"if(answer.hasSelfEmployment, answer.businessSupplies, 0)"},
+    "SC.24a": {"label":"Travel","formula":"if(answer.hasSelfEmployment, answer.businessTravel, 0)"},
+    "SC.24b": {
+      "label": "Deductible business meals",
+      "formula": "if(answer.hasSelfEmployment, round(answer.businessMeals * param.mealsDeductible, 2), 0)"
+    },
+    "SC.25": {"label":"Utilities","formula":"if(answer.hasSelfEmployment, answer.businessUtilities, 0)"},
+    "SC.27b": {
+      "label": "Other expenses",
+      "formula": "if(answer.hasSelfEmployment, answer.businessOtherExpenses, 0)",
+      "source": "Schedule C, line 27b: Part V, line 48"
+    },
+    "SC.28": {
+      "label": "Total expenses",
+      "formula": "line.SC.8 + line.SC.9 + line.SC.11 + line.SC.15 + line.SC.17 + line.SC.18 + line.SC.20b + line.SC.22 + line.SC.24a + line.SC.24b + line.SC.25 + line.SC.27b",
+      "source": "Schedule C, line 28: lines 8 through 27b, the expenses asked; no depreciation (line 13)"
+    },
+    "SC.31": {
+      "label": "Net profit",
+      "formula": "if(answer.hasSelfEmployment == false, line.SC.1, if(answer.businessExtras == \"assets\", unsupported(\"Depreciation of business property (Form 4562) isn't worked out by this app yet\"), if(answer.businessExtras == \"home\", unsupported(\"A home office (Form 8829) isn't worked out by this app yet\"), if(answer.businessExtras == \"inventory\", unsupported(\"Cost of goods sold (Schedule C, Part III) isn't worked out by this app yet\"), if(answer.businessExtras == \"several\", unsupported(\"More than one business: this app prepares one Schedule C for each person\"), if(line.SC.7 - line.SC.28 < 0, unsupported(\"A business loss (Schedule C) isn't worked out by this app yet\"), line.SC.7 - line.SC.28))))))",
+      "source": "Schedule C, lines 29 to 31: no home office (line 30)"
+    },
+    "SE.4a": {
+      "label": "Net earnings from self-employment",
+      "formula": "round(line.SC.31 * param.seNetEarningsRate, 2)",
+      "source": "Schedule SE, lines 2 to 4c: the Schedule C profit times 92.35%; no farm income or optional method"
+    },
+    "SE.6": {
+      "label": "Net earnings from self-employment subject to the tax",
+      "formula": "if(line.SE.4a < param.seMinimum, 0, line.SE.4a)",
+      "source": "Schedule SE, lines 4c and 6: less than $400, you stop (no church employee income, line 5)"
+    },
+    "SE.8a": {
+      "label": "Social security wages and tips on Forms W-2",
+      "formula": "sum(W2.box3) + sum(W2.box7)",
+      "source": "Schedule SE, line 8a: boxes 3 and 7 of Form(s) W-2"
+    },
+    "SE.9": {
+      "label": "Room left under the social security wage base",
+      "formula": "max(0, param.socialSecurityWageBase - line.SE.8a)",
+      "source": "Schedule SE, lines 7 to 9"
+    },
+    "SE.10": {
+      "label": "Social security part of the self-employment tax",
+      "formula": "round(min(line.SE.6, line.SE.9) * param.seSocialSecurityRate, 2)"
+    },
+    "SE.11": {"label":"Medicare part of the self-employment tax","formula":"round(line.SE.6 * param.seMedicareRate, 2)"},
+    "SE.12": {
+      "label": "Self-employment tax",
+      "formula": "line.SE.10 + line.SE.11",
+      "source": "Schedule SE, lines 10 to 12: none when the net earnings are less than $400 (line 6 is then 0)"
+    },
+    "SE.13": {"label":"Deduction for half of the self-employment tax","formula":"round(line.SE.12 * param.seDeductibleShare, 2)"},
+    "US.ownEarned": {
+      "label": "This person's earned income",
+      "formula": "line.US.ownWages + line.SC.31 - line.SE.13",
+      "source": "Instructions, line 27a, Worksheet B, and the Earned Income Chart of Schedule 8812 and Form 2441's earned income: wages, plus the Schedule SE, line 3 profit less the Schedule 1, line 15 deduction"
+    },
+    "S1.3": {
+      "label": "Business income",
+      "formula": "line.SC.31 + if(line.US.joint == 1, spouse.line.SC.31, 0)",
+      "source": "Schedule 1, line 3: Schedule C, line 31 (each spouse's on a joint return)"
+    },
+    "S1.10": {
+      "label": "Additional income",
+      "formula": "line.S1.3",
+      "source": "Schedule 1, line 10: only business income is worked out"
+    },
+    "S1.15": {
+      "label": "Deductible part of self-employment tax",
+      "formula": "line.SE.13 + if(line.US.joint == 1, spouse.line.SE.13, 0)"
+    },
+    "S1.26": {
+      "label": "Adjustments to income",
+      "formula": "line.S1.15",
+      "source": "Schedule 1, line 26: only the deductible part of self-employment tax is worked out"
+    },
+    "F8995.2": {
+      "label": "Qualified business income",
+      "formula": "line.S1.3 - line.S1.15",
+      "source": "Form 8995, lines 1 and 2: each business's net profit less the deductible part of its self-employment tax (Instructions for Form 8995)"
+    },
+    "F8995.5": {
+      "label": "Qualified business income component",
+      "formula": "round(max(0, line.F8995.2) * param.qbiRate, 2)",
+      "source": "Form 8995, lines 3 to 5: no loss carried forward"
+    },
+    "F8995.11": {
+      "label": "Taxable income before the qualified business income deduction",
+      "formula": "max(0, line.F1040.11a - line.F1040.12e - line.F1040.13b)",
+      "source": "Instructions for Form 8995, line 11: Form 1040, line 11a, minus lines 12e and 13b"
+    },
+    "F8995.14": {
+      "label": "Income limitation",
+      "formula": "round(line.F8995.11 * param.qbiRate, 2)",
+      "source": "Form 8995, lines 12 to 14: no net capital gain or qualified dividends"
+    },
+    "F8995.15": {
+      "label": "Qualified business income deduction",
+      "formula": "if(line.F8995.5 == 0, 0, if(line.F8995.11 > if(line.US.joint == 1, param.qbiThresholdJoint, param.qbiThreshold), unsupported(\"Taxable income over $197,300 ($394,600 jointly) with business income: the deduction is figured on Form 8995-A, which this app doesn't prepare yet\"), min(line.F8995.5, line.F8995.14)))",
+      "source": "Form 8995, line 15 (lines 6 to 10: no REIT dividends or PTP income)"
     }
   },
   "questions": {
@@ -1478,9 +1678,115 @@
       "parent": "hasCarLoan",
       "optionLabels": {"yes":"Yes, all of these are true","no":"No"},
       "options": ["yes","no"]
+    },
+    "hasSelfEmployment": {
+      "type": "boolean",
+      "ask": "Self-employment income",
+      "module": "income",
+      "help": "Income from your own business as a sole proprietor: freelancing, contract or gig work, a shop or a trade (Schedule C). A Form 1099-NEC, 1099-K or 1099-MISC often shows it. One business for each person.",
+      "default": false
+    },
+    "businessIncome": {
+      "type": "money",
+      "ask": "Business income not on a 1099-NEC",
+      "module": "income",
+      "help": "Each Form 1099-NEC you add is counted. Enter everything else the business was paid in 2025: cash, cards, payment apps and platforms (a Form 1099-K), checks. Leave out sales tax you collected.",
+      "receipts": "NEC",
+      "parent": "hasSelfEmployment"
+    },
+    "businessAdvertising": {"type":"money","ask":"Advertising","module":"income","parent":"hasSelfEmployment"},
+    "businessCar": {
+      "type": "money",
+      "ask": "Car and truck expenses",
+      "module": "income",
+      "help": "The business part only: the standard mileage rate (70 cents a mile for 2025) times your business miles, or the business share of your actual costs, plus parking and tolls.",
+      "parent": "hasSelfEmployment"
+    },
+    "businessContractLabor": {
+      "type": "money",
+      "ask": "Contract labor",
+      "module": "income",
+      "help": "What you paid people who aren't your employees.",
+      "parent": "hasSelfEmployment"
+    },
+    "businessInsurance": {"type":"money","ask":"Insurance (other than health)","module":"income","parent":"hasSelfEmployment"},
+    "businessProfessional": {"type":"money","ask":"Legal and professional services","module":"income","parent":"hasSelfEmployment"},
+    "businessOffice": {
+      "type": "money",
+      "ask": "Office expenses",
+      "module": "income",
+      "help": "Postage, software subscriptions, stationery and other office costs.",
+      "parent": "hasSelfEmployment"
+    },
+    "businessRent": {
+      "type": "money",
+      "ask": "Rent of business property",
+      "module": "income",
+      "help": "Rent for an office, a shop or a stall. Not for your home.",
+      "parent": "hasSelfEmployment"
+    },
+    "businessSupplies": {"type":"money","ask":"Supplies","module":"income","parent":"hasSelfEmployment"},
+    "businessTravel": {
+      "type": "money",
+      "ask": "Travel",
+      "module": "income",
+      "help": "Business trips away from home overnight. Not meals, which are asked next.",
+      "parent": "hasSelfEmployment"
+    },
+    "businessMeals": {
+      "type": "money",
+      "ask": "Business meals",
+      "module": "income",
+      "help": "The full cost; half of it is deducted.",
+      "parent": "hasSelfEmployment"
+    },
+    "businessUtilities": {
+      "type": "money",
+      "ask": "Utilities and phone",
+      "module": "income",
+      "help": "For business property, and the business part of your phone and internet.",
+      "parent": "hasSelfEmployment"
+    },
+    "businessOtherExpenses": {
+      "type": "money",
+      "ask": "Other expenses",
+      "module": "income",
+      "help": "Fees, bank charges, education for the business and other costs not above. List them in Part V of Schedule C.",
+      "parent": "hasSelfEmployment"
+    },
+    "businessExtras": {
+      "type": "choice",
+      "ask": "Anything else on your Schedule C",
+      "module": "income",
+      "parent": "hasSelfEmployment",
+      "optionLabels": {
+        "none": "None of these",
+        "assets": "Equipment, a vehicle or other property to depreciate (Form 4562)",
+        "home": "A home office (Form 8829)",
+        "inventory": "Goods you make or buy to sell (cost of goods sold)",
+        "several": "More than one business"
+      },
+      "options": ["none","assets","home","inventory","several"],
+      "default": "none"
     }
   },
   "slips": {
+    "NEC": {
+      "title": "Form 1099-NEC Nonemployee Compensation",
+      "about": "What a business paid you for work as a contractor or freelancer, not as its employee, and any federal income tax it withheld",
+      "boxes": {
+        "1": "Nonemployee compensation",
+        "4": "Federal income tax withheld",
+        "5": "State tax withheld",
+        "6": "State/Payer's state no.",
+        "7": "State income"
+      },
+      "informational": ["5","6","7"],
+      "name": "1099-NEC",
+      "counts": [],
+      "receipt": false,
+      "printedYears": [0]
+    },
     "W2": {
       "title": "Form W-2 Wage and Tax Statement",
       "about": "Wages an employer paid, and the federal income, social security and Medicare tax it withheld",
@@ -1534,7 +1840,9 @@
       "pages": 2,
       "applies": "true",
       "fields": [
+        {"key":"8","kind":"amount","page":1,"x":575.5,"y":68.8,"value":"line.F1040.8","plain":true},
         {"key":"9","kind":"amount","page":1,"x":575.5,"y":56.7,"value":"line.F1040.9","plain":true},
+        {"key":"10","kind":"amount","page":1,"x":575.5,"y":44.8,"value":"line.F1040.10","plain":true},
         {"key":"14","kind":"amount","page":2,"x":575.5,"y":650.7,"value":"line.F1040.14","plain":true},
         {"key":"15","kind":"amount","page":2,"x":575.5,"y":638.8,"value":"line.F1040.15","zero":true,"plain":true},
         {"key":"16","kind":"amount","page":2,"x":575.5,"y":626.8,"value":"line.F1040.16","plain":true},
@@ -1632,6 +1940,7 @@
           "value": "line.US.joint == 1 and spouse.answer.isBlind"
         },
         {"key":"12e","kind":"amount","page":2,"x":575.5,"y":686.7,"value":"line.F1040.12e","plain":true},
+        {"key":"13a","kind":"amount","page":2,"x":575.5,"y":674.8,"value":"line.F1040.13a","plain":true},
         {"key":"13b","kind":"amount","page":2,"x":575.5,"y":662.8,"value":"line.F1040.13b","plain":true},
         {"key":"25a","kind":"amount","page":2,"x":481.2,"y":506.7,"value":"line.F1040.25a","plain":true},
         {"key":"25b","kind":"amount","page":2,"x":481.2,"y":494.8,"value":"line.F1040.25b","plain":true},
@@ -1894,6 +2203,21 @@
       },
       "tables": []
     },
+    "S1": {
+      "title": "Schedule 1 (Form 1040), Additional Income and Adjustments to Income",
+      "url": "https://www.irs.gov/pub/irs-prior/f1040s1--2025.pdf",
+      "sha256": "8dafec719f6a4716c259a2bdaca546d9bb9e262d1eabef885fe116a7327458fa",
+      "pages": 2,
+      "applies": "line.S1.10 > 0 or line.S1.26 > 0",
+      "fields": [
+        {"key":"3","kind":"amount","page":1,"x":575.5,"y":572.8,"value":"line.S1.3","plain":true},
+        {"key":"10","kind":"amount","page":1,"x":575.5,"y":116.8,"value":"line.S1.10","plain":true},
+        {"key":"15","kind":"amount","page":2,"x":575.5,"y":650.7,"value":"line.S1.15","plain":true},
+        {"key":"26","kind":"amount","page":2,"x":575.5,"y":242.8,"value":"line.S1.26","plain":true},
+        {"key":"names","kind":"text","page":1,"x":38,"y":687.8,"value":"returnNames","width":405.7}
+      ],
+      "tables": []
+    },
     "S1A": {
       "title": "Schedule 1-A (Form 1040), Additional Deductions",
       "url": "https://www.irs.gov/pub/irs-prior/f1040s1a--2025.pdf",
@@ -2152,7 +2476,8 @@
       "pages": 2,
       "applies": "line.S2.21 > 0",
       "fields": [
-        {"key":"11","kind":"amount","page":1,"x":575.5,"y":176.8,"value":"line.F8959.7","plain":true},
+        {"key":"4","kind":"amount","page":1,"x":575.5,"y":314.8,"value":"line.S2.4","plain":true},
+        {"key":"11","kind":"amount","page":1,"x":575.5,"y":176.8,"value":"line.F8959.18","plain":true},
         {"key":"12","kind":"amount","page":1,"x":575.5,"y":158.8,"value":"line.F8960.17","plain":true},
         {"key":"21","kind":"amount","page":2,"x":575.5,"y":200.7,"value":"line.S2.21","plain":true},
         {"key":"names","kind":"text","page":1,"x":38,"y":687.8,"value":"returnNames","width":405.7}
@@ -2171,6 +2496,118 @@
         {"key":"11","kind":"amount","page":1,"x":575.5,"y":326.7,"value":"line.S3.11","plain":true},
         {"key":"15","kind":"amount","page":1,"x":575.5,"y":182.7,"value":"line.S3.11","plain":true},
         {"key":"names","kind":"text","page":1,"x":38,"y":687.8,"value":"returnNames","width":405.7}
+      ],
+      "tables": []
+    },
+    "SC": {
+      "title": "Schedule C (Form 1040), Profit or Loss From Business",
+      "url": "https://www.irs.gov/pub/irs-prior/f1040sc--2025.pdf",
+      "sha256": "ddf401dbe060467d39f90ad2abf645df1de31512821a150dc68a3882bbf19716",
+      "pages": 2,
+      "applies": "line.SC.31 > 0",
+      "fields": [
+        {"key":"1","kind":"amount","page":1,"x":575.5,"y":518.8,"value":"line.SC.1","plain":true},
+        {"key":"3","kind":"amount","page":1,"x":575.5,"y":494.8,"value":"line.SC.1","plain":true},
+        {"key":"5","kind":"amount","page":1,"x":575.5,"y":470.7,"value":"line.SC.1","plain":true},
+        {"key":"7","kind":"amount","page":1,"x":575.5,"y":446.8,"value":"line.SC.7","plain":true},
+        {"key":"8","kind":"amount","page":1,"x":294,"y":422.8,"value":"line.SC.8","plain":true},
+        {"key":"9","kind":"amount","page":1,"x":294,"y":398.7,"value":"line.SC.9","plain":true},
+        {"key":"11","kind":"amount","page":1,"x":294,"y":374.8,"value":"line.SC.11","plain":true},
+        {"key":"15","kind":"amount","page":1,"x":294,"y":290.7,"value":"line.SC.15","plain":true},
+        {"key":"17","kind":"amount","page":1,"x":294,"y":242.8,"value":"line.SC.17","plain":true},
+        {"key":"18","kind":"amount","page":1,"x":575.5,"y":422.8,"value":"line.SC.18","plain":true},
+        {"key":"22","kind":"amount","page":1,"x":575.5,"y":350.8,"value":"line.SC.22","plain":true},
+        {"key":"25","kind":"amount","page":1,"x":575.5,"y":290.7,"value":"line.SC.25","plain":true},
+        {"key":"28","kind":"amount","page":1,"x":575.5,"y":230.8,"value":"line.SC.28","plain":true},
+        {"key":"29","kind":"amount","page":1,"x":575.5,"y":218.7,"value":"line.SC.31","plain":true},
+        {"key":"31","kind":"amount","page":1,"x":575.5,"y":122.8,"value":"line.SC.31","plain":true},
+        {"key":"48","kind":"amount","page":2,"x":575.5,"y":38.7,"value":"line.SC.27b","plain":true},
+        {"key":"name","kind":"text","page":1,"x":38,"y":687.8,"value":"name","width":405.7},
+        {"key":"20b","kind":"amount","page":1,"x":575.5,"y":374.8,"value":"line.SC.20b","plain":true},
+        {"key":"24a","kind":"amount","page":1,"x":575.5,"y":314.8,"value":"line.SC.24a","plain":true},
+        {"key":"24b","kind":"amount","page":1,"x":575.5,"y":302.8,"value":"line.SC.24b","plain":true},
+        {"key":"27b","kind":"amount","page":1,"x":575.5,"y":242.8,"value":"line.SC.27b","plain":true},
+        {"key":"otherAmount","kind":"amount","page":2,"x":575.5,"y":242.7,"value":"line.SC.27b","plain":true}
+      ],
+      "tables": []
+    },
+    "SCS": {
+      "title": "Schedule C (Form 1040), Profit or Loss From Business (spouse)",
+      "url": "https://www.irs.gov/pub/irs-prior/f1040sc--2025.pdf",
+      "sha256": "ddf401dbe060467d39f90ad2abf645df1de31512821a150dc68a3882bbf19716",
+      "pages": 2,
+      "applies": "line.US.joint == 1 and spouse.line.SC.31 > 0",
+      "side": "spouse",
+      "fields": [
+        {"key":"1","kind":"amount","page":1,"x":575.5,"y":518.8,"value":"line.SC.1","plain":true},
+        {"key":"3","kind":"amount","page":1,"x":575.5,"y":494.8,"value":"line.SC.1","plain":true},
+        {"key":"5","kind":"amount","page":1,"x":575.5,"y":470.7,"value":"line.SC.1","plain":true},
+        {"key":"7","kind":"amount","page":1,"x":575.5,"y":446.8,"value":"line.SC.7","plain":true},
+        {"key":"8","kind":"amount","page":1,"x":294,"y":422.8,"value":"line.SC.8","plain":true},
+        {"key":"9","kind":"amount","page":1,"x":294,"y":398.7,"value":"line.SC.9","plain":true},
+        {"key":"11","kind":"amount","page":1,"x":294,"y":374.8,"value":"line.SC.11","plain":true},
+        {"key":"15","kind":"amount","page":1,"x":294,"y":290.7,"value":"line.SC.15","plain":true},
+        {"key":"17","kind":"amount","page":1,"x":294,"y":242.8,"value":"line.SC.17","plain":true},
+        {"key":"18","kind":"amount","page":1,"x":575.5,"y":422.8,"value":"line.SC.18","plain":true},
+        {"key":"22","kind":"amount","page":1,"x":575.5,"y":350.8,"value":"line.SC.22","plain":true},
+        {"key":"25","kind":"amount","page":1,"x":575.5,"y":290.7,"value":"line.SC.25","plain":true},
+        {"key":"28","kind":"amount","page":1,"x":575.5,"y":230.8,"value":"line.SC.28","plain":true},
+        {"key":"29","kind":"amount","page":1,"x":575.5,"y":218.7,"value":"line.SC.31","plain":true},
+        {"key":"31","kind":"amount","page":1,"x":575.5,"y":122.8,"value":"line.SC.31","plain":true},
+        {"key":"48","kind":"amount","page":2,"x":575.5,"y":38.7,"value":"line.SC.27b","plain":true},
+        {"key":"name","kind":"text","page":1,"x":38,"y":687.8,"value":"name","width":405.7},
+        {"key":"20b","kind":"amount","page":1,"x":575.5,"y":374.8,"value":"line.SC.20b","plain":true},
+        {"key":"24a","kind":"amount","page":1,"x":575.5,"y":314.8,"value":"line.SC.24a","plain":true},
+        {"key":"24b","kind":"amount","page":1,"x":575.5,"y":302.8,"value":"line.SC.24b","plain":true},
+        {"key":"27b","kind":"amount","page":1,"x":575.5,"y":242.8,"value":"line.SC.27b","plain":true},
+        {"key":"otherAmount","kind":"amount","page":2,"x":575.5,"y":242.7,"value":"line.SC.27b","plain":true}
+      ],
+      "tables": []
+    },
+    "SE": {
+      "title": "Schedule SE (Form 1040), Self-Employment Tax",
+      "url": "https://www.irs.gov/pub/irs-prior/f1040sse--2025.pdf",
+      "sha256": "05bc2b3e1dfca65d8c6fc6d652af4fa3736e953c6575d6e9f82590484677d347",
+      "pages": 2,
+      "applies": "line.SE.6 > 0",
+      "fields": [
+        {"key":"2","kind":"amount","page":1,"x":575.5,"y":530.8,"value":"line.SC.31","plain":true},
+        {"key":"3","kind":"amount","page":1,"x":575.5,"y":518.8,"value":"line.SC.31","plain":true},
+        {"key":"6","kind":"amount","page":1,"x":575.5,"y":410.8,"value":"line.SE.6","plain":true},
+        {"key":"9","kind":"amount","page":1,"x":575.5,"y":302.8,"value":"line.SE.9","plain":true},
+        {"key":"10","kind":"amount","page":1,"x":575.5,"y":290.7,"value":"line.SE.10","plain":true},
+        {"key":"11","kind":"amount","page":1,"x":575.5,"y":278.8,"value":"line.SE.11","plain":true},
+        {"key":"12","kind":"amount","page":1,"x":575.5,"y":254.7,"value":"line.SE.12","plain":true},
+        {"key":"13","kind":"amount","page":1,"x":481.2,"y":218.7,"value":"line.SE.13","plain":true},
+        {"key":"name","kind":"text","page":1,"x":38,"y":687.8,"value":"name","width":319.3},
+        {"key":"4a","kind":"amount","page":1,"x":575.5,"y":506.7,"value":"line.SE.4a","plain":true},
+        {"key":"4c","kind":"amount","page":1,"x":575.5,"y":458.8,"value":"line.SE.4a","plain":true},
+        {"key":"8a","kind":"amount","page":1,"x":481.2,"y":350.8,"value":"line.SE.8a","plain":true},
+        {"key":"8d","kind":"amount","page":1,"x":575.5,"y":314.8,"value":"line.SE.8a","plain":true}
+      ],
+      "tables": []
+    },
+    "SES": {
+      "title": "Schedule SE (Form 1040), Self-Employment Tax (spouse)",
+      "url": "https://www.irs.gov/pub/irs-prior/f1040sse--2025.pdf",
+      "sha256": "05bc2b3e1dfca65d8c6fc6d652af4fa3736e953c6575d6e9f82590484677d347",
+      "pages": 2,
+      "applies": "line.US.joint == 1 and spouse.line.SE.6 > 0",
+      "side": "spouse",
+      "fields": [
+        {"key":"2","kind":"amount","page":1,"x":575.5,"y":530.8,"value":"line.SC.31","plain":true},
+        {"key":"3","kind":"amount","page":1,"x":575.5,"y":518.8,"value":"line.SC.31","plain":true},
+        {"key":"6","kind":"amount","page":1,"x":575.5,"y":410.8,"value":"line.SE.6","plain":true},
+        {"key":"9","kind":"amount","page":1,"x":575.5,"y":302.8,"value":"line.SE.9","plain":true},
+        {"key":"10","kind":"amount","page":1,"x":575.5,"y":290.7,"value":"line.SE.10","plain":true},
+        {"key":"11","kind":"amount","page":1,"x":575.5,"y":278.8,"value":"line.SE.11","plain":true},
+        {"key":"12","kind":"amount","page":1,"x":575.5,"y":254.7,"value":"line.SE.12","plain":true},
+        {"key":"13","kind":"amount","page":1,"x":481.2,"y":218.7,"value":"line.SE.13","plain":true},
+        {"key":"name","kind":"text","page":1,"x":38,"y":687.8,"value":"name","width":319.3},
+        {"key":"4a","kind":"amount","page":1,"x":575.5,"y":506.7,"value":"line.SE.4a","plain":true},
+        {"key":"4c","kind":"amount","page":1,"x":575.5,"y":458.8,"value":"line.SE.4a","plain":true},
+        {"key":"8a","kind":"amount","page":1,"x":481.2,"y":350.8,"value":"line.SE.8a","plain":true},
+        {"key":"8d","kind":"amount","page":1,"x":575.5,"y":314.8,"value":"line.SE.8a","plain":true}
       ],
       "tables": []
     },
@@ -2656,12 +3093,22 @@
           "plain": true
         },
         {
+          "key": "22",
+          "kind": "amount",
+          "page": 2,
+          "x": 481.2,
+          "y": 434.7,
+          "value": "line.S8812.22",
+          "when": "line.S8812.16a > 0 and line.S8812.16b >= param.actcThreeChildren and line.S8812.20 < line.S8812.17",
+          "plain": true
+        },
+        {
           "key": "23",
           "kind": "amount",
           "page": 2,
           "x": 481.2,
           "y": 422.8,
-          "value": "line.S8812.21",
+          "value": "line.S8812.23",
           "when": "line.S8812.16a > 0 and line.S8812.16b >= param.actcThreeChildren and line.S8812.20 < line.S8812.17",
           "plain": true
         },
@@ -2764,12 +3211,51 @@
       ],
       "tables": []
     },
+    "F8995": {
+      "title": "Form 8995, Qualified Business Income Deduction Simplified Computation",
+      "url": "https://www.irs.gov/pub/irs-prior/f8995--2025.pdf",
+      "sha256": "55380ad230303e1586ce97f0f224265b8337ad18c9204f0fb7325e95a76b5cde",
+      "pages": 1,
+      "applies": "line.F8995.15 > 0",
+      "fields": [
+        {"key":"2","kind":"amount","page":1,"x":481.2,"y":434.7,"value":"line.F8995.2","plain":true},
+        {"key":"4","kind":"amount","page":1,"x":481.2,"y":410.7,"value":"line.F8995.2","plain":true},
+        {"key":"5","kind":"amount","page":1,"x":575.5,"y":398.7,"value":"line.F8995.5","plain":true},
+        {"key":"10","kind":"amount","page":1,"x":575.5,"y":302.7,"value":"line.F8995.5","plain":true},
+        {"key":"11","kind":"amount","page":1,"x":481.2,"y":290.7,"value":"line.F8995.11","plain":true},
+        {"key":"13","kind":"amount","page":1,"x":481.2,"y":254.7,"value":"line.F8995.11","plain":true},
+        {"key":"14","kind":"amount","page":1,"x":575.5,"y":242.7,"value":"line.F8995.14","plain":true},
+        {"key":"15","kind":"amount","page":1,"x":575.5,"y":218.7,"value":"line.F8995.15","plain":true},
+        {"key":"names","kind":"text","page":1,"x":38,"y":675.7,"value":"returnNames","width":398.5},
+        {
+          "key": "qbi1",
+          "kind": "amount",
+          "page": 1,
+          "x": 575.5,
+          "y": 554.7,
+          "value": "line.SC.31 - line.SE.13",
+          "when": "line.SC.31 > 0",
+          "plain": true
+        },
+        {
+          "key": "qbi2",
+          "kind": "amount",
+          "page": 1,
+          "x": 575.5,
+          "y": 530.7,
+          "value": "spouse.line.SC.31 - spouse.line.SE.13",
+          "when": "line.US.joint == 1 and spouse.line.SC.31 > 0",
+          "plain": true
+        }
+      ],
+      "tables": []
+    },
     "F8959": {
       "title": "Form 8959, Additional Medicare Tax",
       "url": "https://www.irs.gov/pub/irs-prior/f8959--2025.pdf",
       "sha256": "13e64004948331d2b708c80b1b664bf69675028edd0b84f2de6e3ca9afaa996d",
       "pages": 1,
-      "applies": "line.F8959.7 > 0 or line.F8959.24 > 0",
+      "applies": "line.F8959.18 > 0 or line.F8959.24 > 0",
       "fields": [
         {"key":"1","kind":"amount","page":1,"x":481.2,"y":650.7,"value":"line.F8959.1","plain":true},
         {"key":"4","kind":"amount","page":1,"x":481.2,"y":614.7,"value":"line.F8959.1","plain":true},
@@ -2784,7 +3270,48 @@
           "plain": true
         },
         {"key":"7","kind":"amount","page":1,"x":575.5,"y":530.7,"value":"line.F8959.7","plain":true},
-        {"key":"18","kind":"amount","page":1,"x":575.5,"y":230.7,"value":"line.F8959.7","plain":true},
+        {"key":"8","kind":"amount","page":1,"x":481.2,"y":494.7,"value":"line.F8959.8","plain":true},
+        {
+          "key": "9",
+          "kind": "amount",
+          "page": 1,
+          "x": 481.2,
+          "y": 446.7,
+          "value": "line.F8959.5",
+          "when": "line.F8959.8 > 0",
+          "plain": true
+        },
+        {
+          "key": "10",
+          "kind": "amount",
+          "page": 1,
+          "x": 481.2,
+          "y": 434.7,
+          "value": "line.F8959.1",
+          "when": "line.F8959.8 > 0",
+          "plain": true
+        },
+        {
+          "key": "11",
+          "kind": "amount",
+          "page": 1,
+          "x": 481.2,
+          "y": 422.7,
+          "value": "line.F8959.11",
+          "when": "line.F8959.8 > 0",
+          "plain": true
+        },
+        {
+          "key": "12",
+          "kind": "amount",
+          "page": 1,
+          "x": 575.5,
+          "y": 410.7,
+          "value": "max(0, line.F8959.8 - line.F8959.11)",
+          "plain": true
+        },
+        {"key":"13","kind":"amount","page":1,"x":575.5,"y":386.7,"value":"line.F8959.13","plain":true},
+        {"key":"18","kind":"amount","page":1,"x":575.5,"y":230.7,"value":"line.F8959.18","plain":true},
         {"key":"19","kind":"amount","page":1,"x":481.2,"y":194.7,"value":"line.F8959.19","plain":true},
         {"key":"20","kind":"amount","page":1,"x":481.2,"y":182.7,"value":"line.F8959.1","plain":true},
         {"key":"21","kind":"amount","page":1,"x":481.2,"y":158.7,"value":"line.F8959.21","plain":true},
@@ -2841,5 +3368,5 @@
   "outcome": "RESULT.net",
   "balances": [{"name":"Federal","refund":"F1040.34","owing":"F1040.37"}],
   "residency": "A U.S. citizen or resident alien all year",
-  "version": "dd42ece341f5f858"
+  "version": "e66dcfe314ec272d"
 }

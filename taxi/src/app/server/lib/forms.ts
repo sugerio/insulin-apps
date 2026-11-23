@@ -331,6 +331,7 @@ function usWorksheet(
 ): { intro: string[]; result: WorksheetRow[] } {
   const named = (id: string) => `${rules.lines.get(id)!.label} (line ${id.split(".")[1]})`;
   const carLoan = line("S1A.30")?.gt(Dec.ZERO) ?? false;
+  const business = line("S1.3")?.gt(Dec.ZERO) ?? false;
   const owing = line("F1040.37");
   const result: WorksheetRow[] = [
     owing && !owing.isZero() ? { text: named("F1040.37"), amount: money(owing) } : { text: named("F1040.34"), amount: money(line("F1040.34") ?? Dec.ZERO) },
@@ -340,7 +341,7 @@ function usWorksheet(
     intro: [
       `Prepared with Taxi on ${prepared}. Taxi doesn't file returns. Before this worksheet are the IRS's own forms, filled in with what Taxi knows: ${formNames}.`,
       `Filled in for you: on Form 1040, ${joint ? "your names" : "your name"}, your filing status, each dependent's name and relationship with the boxes that apply, and every line Taxi works out; on each schedule and form above, the names on the return and every row Taxi works out. A row left blank is one Taxi doesn't know or that doesn't apply to you.`,
-      `Still to do by hand before you file on paper: the social security numbers (${joint ? "yours, your spouse's" : "yours"} and each dependent's or child's) on Form 1040 and at the top of each schedule and form; your address; the questions Taxi doesn't ask (the presidential election campaign fund, digital assets, whether your main home was in the U.S., and "And in the U.S." for each dependent); your bank details if you want the refund deposited; on Form 2441, each care provider's name, address and identifying number (Part I);${carLoan ? " on Schedule 1-A, line 22, the vehicle identification number (VIN) of each car whose loan interest you deduct;" : ""} and ${otherForms}. Then sign and date Form 1040${joint ? " (both of you)" : ""}, and attach Copy B of each Form W-2. Keep your forms and records; the IRS may ask for them.`,
+      `Still to do by hand before you file on paper: the social security numbers (${joint ? "yours, your spouse's" : "yours"} and each dependent's or child's) on Form 1040 and at the top of each schedule and form; your address; the questions Taxi doesn't ask (the presidential election campaign fund, digital assets, whether your main home was in the U.S., and "And in the U.S." for each dependent); your bank details if you want the refund deposited; on Form 2441, each care provider's name, address and identifying number (Part I);${carLoan ? " on Schedule 1-A, line 22, the vehicle identification number (VIN) of each car whose loan interest you deduct;" : ""}${business ? " on Schedule C, the business's description, code, name, address and accounting method, the questions at the top, Part IV about your vehicle if you deduct car expenses, and what your other expenses are in Part V; on Form 8995, each business's name;" : ""} and ${otherForms}. Then sign and date Form 1040${joint ? " (both of you)" : ""}, and attach Copy B of each Form W-2. Keep your forms and records; the IRS may ask for them.`,
       "Mail the return to the IRS address for your state on irs.gov/WhereToFile: it is different when you send a payment with it.",
       "To file online: copy the amounts into IRS e-file software (irs.gov/efile) and file there.",
       "Every line Taxi works out is listed below with how it was worked out.",

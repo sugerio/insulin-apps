@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
+import { Dec } from "../../src/app/shared/engine/decimal.ts";
 import { Evaluation, type EngineInput } from "../../src/app/shared/engine/evaluate.ts";
 import { rulesFor } from "../../src/app/shared/rules/index.ts";
 
@@ -53,8 +54,8 @@ function oneW2(options: {
       })),
     },
     answers: {
-      p1: { hasTipsOrOvertime: false, hasCarLoan: false, spouseItemizes: false, hasValidSSN: true, paidHalfOfHome: true, paidForCare: false, ...options.answers },
-      ...(options.joint ? { p2: { hasTipsOrOvertime: false, hasCarLoan: false, hasValidSSN: true, ...options.spouseAnswers } } : {}),
+      p1: { hasTipsOrOvertime: false, hasCarLoan: false, hasSelfEmployment: false, spouseItemizes: false, hasValidSSN: true, paidHalfOfHome: true, paidForCare: false, ...options.answers },
+      ...(options.joint ? { p2: { hasTipsOrOvertime: false, hasCarLoan: false, hasSelfEmployment: false, hasValidSSN: true, ...options.spouseAnswers } } : {}),
     },
     slips: [
       {
@@ -356,7 +357,7 @@ describe("the 2025 US rules", () => {
 
   it("show one federal refund or amount owed, and print on the IRS forms in their attachment order", () => {
     expect(rules.balances).toEqual([{ name: "Federal", refund: "F1040.34", owing: "F1040.37" }]);
-    expect([...rules.forms.keys()]).toEqual(["F1040", "S1A", "S2", "S3", "F2441", "SEIC", "S8812", "F8959", "F8960"]);
+    expect([...rules.forms.keys()]).toEqual(["F1040", "S1", "S1A", "S2", "S3", "SC", "SCS", "SE", "SES", "F2441", "SEIC", "S8812", "F8995", "F8959", "F8960"]);
   });
 });
 
@@ -411,5 +412,89 @@ describe("Schedule 1-A: tips, overtime and car loan interest", () => {
     expect(questions({ hasCarLoan: true })).not.toContain("carLoanQualifies");
     expect(questions({ hasCarLoan: true, carLoanInterest: "900" })).toContain("carLoanQualifies");
     expect(rules.questions.get("hasCarLoan")!.module).toBe("deductions");
+  });
+});
+
+describe("self-employment: Schedules C, SE and 1, and Form 8995", () => {
+  const evaluation = (input: EngineInput) => new Evaluation(rules, input);
+  const line = (input: EngineInput, id: string) => evaluation(input).line("p1", id).value?.toString() ?? null;
+  /** A business with this income (beside a $1 W-2) and expenses; `extra` adds answers. */
+  const business = (income: string, extra: Record<string, string | boolean> = {}, wages = "1") => {
+    const expenses = ["Advertising", "Car", "ContractLabor", "Insurance", "Professional", "Office", "Rent", "Supplies", "Travel", "Meals", "Utilities", "OtherExpenses"];
+    return oneW2({
+      wages,
+      answers: {
+        hasSelfEmployment: true,
+        businessIncome: income,
+        businessExtras: "none",
+        ...Object.fromEntries(expenses.map((name) => [`business${name}`, "0"])),
+        ...extra,
+      },
+    });
+  };
+
+  it("works out the profit with half of the meals, and self-employment tax on 92.35% of it", () => {
+    const input = business("10000", { businessSupplies: "1000", businessMeals: "500" });
+    // $10,000 less $1,000 and half of $500: $8,750; 92.35% is $8,080.63; 15.3% of it, $1,236.34; half deducted.
+    expect(["SC.24b", "SC.31", "SE.4a", "SE.10", "SE.11", "SE.12", "SE.13", "S1.15"].map((id) => line(input, id))).toEqual([
+      "250",
+      "8750",
+      "8080.63",
+      "1002",
+      "234.34",
+      "1236.34",
+      "618.17",
+      "618.17",
+    ]);
+    // Adjusted gross income: $1 of wages and the profit, less half the tax; the profit is earned income too.
+    expect([line(input, "F1040.9"), line(input, "F1040.11a"), line(input, "US.earnedIncome")]).toEqual(["8751", "8132.83", "8132.83"]);
+  });
+
+  it("owes no self-employment tax under $400 of net earnings", () => {
+    // $433 is $399.88 of net earnings; $434, $400.80.
+    expect([line(business("433"), "SE.12"), line(business("434"), "SE.6")]).toEqual(["0", "400.8"]);
+  });
+
+  it("takes social security tax only on the room left under $176,100 by the W-2's boxes 3 and 7", () => {
+    const capped = business("50000", {}, "170000");
+    capped.slips[0]!.boxes = { ...capped.slips[0]!.boxes, 3: "170000" };
+    expect([line(capped, "SE.9"), line(capped, "SE.10")]).toEqual(["6100", "756.4"]);
+    const over = business("50000", {}, "180000");
+    over.slips[0]!.boxes = { ...over.slips[0]!.boxes, 3: "180000" };
+    expect([line(over, "SE.9"), line(over, "SE.10")]).toEqual(["0", "0"]);
+  });
+
+  it("adds the 1099-NEC amounts to the other income, and their withholding to line 25b", () => {
+    const input = business("5000");
+    input.slips.push({ id: "n", person: "p1", type: "NEC", issuer: "Acme", boxes: { 1: "12000", 4: "300" } });
+    expect([line(input, "SC.1"), line(input, "F1040.25b")]).toEqual(["17000", "300"]);
+  });
+
+  it("limits the QBI deduction to 20% of the taxable income before it", () => {
+    const input = business("40000");
+    const qbi = Dec.from(line(input, "F8995.2")!);
+    const before = Dec.from(line(input, "F8995.11")!);
+    expect(line(input, "F8995.15")).toBe(Dec.min(qbi.mul(Dec.from("0.2")).roundTo(2, "HALF_UP"), before.mul(Dec.from("0.2")).roundTo(2, "HALF_UP")).toString());
+    expect(line(input, "F1040.13a")).toBe(line(input, "F8995.15"));
+  });
+
+  it("says what it doesn't handle: a loss, more than one business, depreciation, a home office, inventory, Form 8995-A, a 1099-NEC without a business", () => {
+    const unhandled = (input: EngineInput) => evaluation(input).result().people[0]!.unhandled.join(" ");
+    expect(unhandled(business("1000", { businessSupplies: "2000" }))).toMatch(/business loss/);
+    expect(unhandled(business("1000", { businessExtras: "several" }))).toMatch(/one Schedule C/);
+    expect(unhandled(business("1000", { businessExtras: "assets" }))).toMatch(/Form 4562/);
+    expect(unhandled(business("1000", { businessExtras: "home" }))).toMatch(/Form 8829/);
+    expect(unhandled(business("1000", { businessExtras: "inventory" }))).toMatch(/Part III/);
+    expect(unhandled(business("260000"))).toMatch(/Form 8995-A/);
+    const stray = oneW2({ wages: "30000" });
+    stray.slips.push({ id: "n", person: "p1", type: "NEC", issuer: "Acme", boxes: { 1: "500" } });
+    expect(unhandled(stray)).toMatch(/1099-NEC is added/);
+  });
+
+  it("asks the expenses only once there is a business", () => {
+    const questions = (answers: Record<string, string | boolean>) => evaluation(oneW2({ wages: "40000", answers })).result().people[0]!.questions;
+    expect(questions({})).toContain("hasSelfEmployment");
+    expect(questions({})).not.toContain("businessIncome");
+    expect(questions({ hasSelfEmployment: true })).toEqual(expect.arrayContaining(["businessIncome", "businessSupplies", "businessMeals", "businessExtras"]));
   });
 });

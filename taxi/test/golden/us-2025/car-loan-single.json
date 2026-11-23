@@ -26,6 +26,7 @@
         "isBlind": false,
         "estimatedPayments": "0",
         "hasCarLoan": true,
+        "hasSelfEmployment": false,
         "carLoanInterest": "12000",
         "carLoanQualifies": "yes",
         "paidForCare": false
@@ -62,6 +63,9 @@
       "F1040.11a": "60000",
       "F1040.12e": "15750",
       "F1040.13b": "10000",
+      "F1040.13a": "0",
+      "F1040.8": "0",
+      "F1040.10": "0",
       "F1040.15": "34250",
       "F1040.16": "3875",
       "F8959.7": "0",

@@ -1,0 +1,314 @@
+# Self-employment: one business of each person, as a sole proprietor, on Schedule C; its self-employment tax on
+# Schedule SE; the business income and half the tax as an adjustment on Schedule 1; and the qualified business income
+# deduction on Form 8995. "Instructions" is the 2025 Instructions for Form 1040; "Schedule C", "Schedule SE" and "Form
+# 8995" the 2025 forms. Each spouse has their own Schedule C and SE; a joint return adds them up on Schedule 1.
+#
+# Not worked out, said on the return instead: a loss, more than one business, depreciation (Form 4562), a home office
+# (Form 8829), inventory and cost of goods sold (Part III), and taxable income over the Form 8995 threshold (Form
+# 8995-A). Not asked: self-employed health insurance and retirement plans (Schedule 1, lines 16 and 17).
+
+params:
+  mealsDeductible:
+    label: Share of business meals deducted
+    source: "Schedule C, line 24b: deductible meals, generally 50% of their cost (Instructions for Schedule C)"
+    value: 50%
+  seNetEarningsRate:
+    label: Share of the net profit that is net earnings from self-employment
+    source: "Schedule SE, line 4a: 92.35% (0.9235)"
+    value: 92.35%
+  seMinimum:
+    label: Net earnings from self-employment under which no self-employment tax is owed
+    source: "Schedule SE, line 4c: less than $400, you don't owe self-employment tax"
+    value: 400
+  socialSecurityWageBase:
+    label: Most wages and self-employment earnings subject to social security tax
+    source: "Schedule SE, line 7: $176,100 for 2025"
+    value: 176100
+  seSocialSecurityRate:
+    label: Social security part of the self-employment tax
+    source: "Schedule SE, line 10: 12.4% (0.124)"
+    value: 12.4%
+  seMedicareRate:
+    label: Medicare part of the self-employment tax
+    source: "Schedule SE, line 11: 2.9% (0.029)"
+    value: 2.9%
+  seDeductibleShare:
+    label: Share of the self-employment tax deducted
+    source: "Schedule SE, line 13: 50% (0.50)"
+    value: 50%
+  qbiRate:
+    label: Qualified business income deduction rate
+    source: "Form 8995, lines 5 and 14: 20% (0.20)"
+    value: 20%
+  qbiThreshold:
+    label: Taxable income before the QBI deduction up to which Form 8995 is used
+    source: "Instructions, line 13a: $197,300"
+    value: 197300
+  qbiThresholdJoint:
+    label: Taxable income before the QBI deduction up to which Form 8995 is used, Married filing jointly
+    source: "Instructions, line 13a: $394,600 if married filing jointly"
+    value: 394600
+
+slips:
+  NEC:
+    title: Form 1099-NEC Nonemployee Compensation
+    name: 1099-NEC
+    about: What a business paid you for work as a contractor or freelancer, not as its employee, and any federal income tax it withheld
+    boxes:
+      1: Nonemployee compensation
+      4: Federal income tax withheld
+      5: State tax withheld
+      6: State/Payer's state no.
+      7: State income
+    # Boxes 5 to 7 are for the state return.
+    informational: [5, 6, 7]
+
+questions:
+  hasSelfEmployment:
+    type: boolean
+    module: income
+    ask: Self-employment income
+    help: >-
+      Income from your own business as a sole proprietor: freelancing, contract or gig work, a shop or a trade
+      (Schedule C). A Form 1099-NEC, 1099-K or 1099-MISC often shows it. One business for each person.
+    default: false
+  businessIncome:
+    type: money
+    module: income
+    parent: hasSelfEmployment
+    receipts: NEC
+    ask: Business income not on a 1099-NEC
+    help: >-
+      Each Form 1099-NEC you add is counted. Enter everything else the business was paid in 2025: cash, cards, payment
+      apps and platforms (a Form 1099-K), checks. Leave out sales tax you collected.
+  businessAdvertising:
+    type: money
+    module: income
+    parent: hasSelfEmployment
+    ask: Advertising
+  businessCar:
+    type: money
+    module: income
+    parent: hasSelfEmployment
+    ask: Car and truck expenses
+    help: >-
+      The business part only: the standard mileage rate (70 cents a mile for 2025) times your business miles, or the
+      business share of your actual costs, plus parking and tolls.
+  businessContractLabor:
+    type: money
+    module: income
+    parent: hasSelfEmployment
+    ask: Contract labor
+    help: What you paid people who aren't your employees.
+  businessInsurance:
+    type: money
+    module: income
+    parent: hasSelfEmployment
+    ask: Insurance (other than health)
+  businessProfessional:
+    type: money
+    module: income
+    parent: hasSelfEmployment
+    ask: Legal and professional services
+  businessOffice:
+    type: money
+    module: income
+    parent: hasSelfEmployment
+    ask: Office expenses
+    help: Postage, software subscriptions, stationery and other office costs.
+  businessRent:
+    type: money
+    module: income
+    parent: hasSelfEmployment
+    ask: Rent of business property
+    help: Rent for an office, a shop or a stall. Not for your home.
+  businessSupplies:
+    type: money
+    module: income
+    parent: hasSelfEmployment
+    ask: Supplies
+  businessTravel:
+    type: money
+    module: income
+    parent: hasSelfEmployment
+    ask: Travel
+    help: Business trips away from home overnight. Not meals, which are asked next.
+  businessMeals:
+    type: money
+    module: income
+    parent: hasSelfEmployment
+    ask: Business meals
+    help: The full cost; half of it is deducted.
+  businessUtilities:
+    type: money
+    module: income
+    parent: hasSelfEmployment
+    ask: Utilities and phone
+    help: For business property, and the business part of your phone and internet.
+  businessOtherExpenses:
+    type: money
+    module: income
+    parent: hasSelfEmployment
+    ask: Other expenses
+    help: Fees, bank charges, education for the business and other costs not above. List them in Part V of Schedule C.
+  businessExtras:
+    type: choice
+    module: income
+    parent: hasSelfEmployment
+    ask: Anything else on your Schedule C
+    options: [none, assets, home, inventory, several]
+    optionLabels:
+      none: None of these
+      assets: Equipment, a vehicle or other property to depreciate (Form 4562)
+      home: A home office (Form 8829)
+      inventory: Goods you make or buy to sell (cost of goods sold)
+      several: More than one business
+    default: none
+
+lines:
+  # Schedule C: this person's business.
+  SC.1:
+    label: Gross receipts
+    formula: >-
+      if(answer.hasSelfEmployment, answer.businessIncome + sum(NEC.box1),
+      if(count(NEC.box1) > 0, unsupported("A Form 1099-NEC is added, but no self-employment income: say you had it on Income, or remove the 1099-NEC"), 0))
+    source: "Schedule C, line 1: the 1099-NEC amounts and the business's other income"
+  SC.7:
+    label: Gross income
+    formula: "line.SC.1"
+    source: "Schedule C, lines 2 to 7: no returns, cost of goods sold or other income"
+  SC.8:
+    label: Advertising
+    formula: "if(answer.hasSelfEmployment, answer.businessAdvertising, 0)"
+  SC.9:
+    label: Car and truck expenses
+    formula: "if(answer.hasSelfEmployment, answer.businessCar, 0)"
+  SC.11:
+    label: Contract labor
+    formula: "if(answer.hasSelfEmployment, answer.businessContractLabor, 0)"
+  SC.15:
+    label: Insurance (other than health)
+    formula: "if(answer.hasSelfEmployment, answer.businessInsurance, 0)"
+  SC.17:
+    label: Legal and professional services
+    formula: "if(answer.hasSelfEmployment, answer.businessProfessional, 0)"
+  SC.18:
+    label: Office expense
+    formula: "if(answer.hasSelfEmployment, answer.businessOffice, 0)"
+  SC.20b:
+    label: Rent of other business property
+    formula: "if(answer.hasSelfEmployment, answer.businessRent, 0)"
+  SC.22:
+    label: Supplies
+    formula: "if(answer.hasSelfEmployment, answer.businessSupplies, 0)"
+  SC.24a:
+    label: Travel
+    formula: "if(answer.hasSelfEmployment, answer.businessTravel, 0)"
+  SC.24b:
+    label: Deductible business meals
+    formula: "if(answer.hasSelfEmployment, round(answer.businessMeals * param.mealsDeductible, 2), 0)"
+  SC.25:
+    label: Utilities
+    formula: "if(answer.hasSelfEmployment, answer.businessUtilities, 0)"
+  SC.27b:
+    label: Other expenses
+    formula: "if(answer.hasSelfEmployment, answer.businessOtherExpenses, 0)"
+    source: "Schedule C, line 27b: Part V, line 48"
+  SC.28:
+    label: Total expenses
+    formula: >-
+      line.SC.8 + line.SC.9 + line.SC.11 + line.SC.15 + line.SC.17 + line.SC.18 + line.SC.20b + line.SC.22
+      + line.SC.24a + line.SC.24b + line.SC.25 + line.SC.27b
+    source: "Schedule C, line 28: lines 8 through 27b, the expenses asked; no depreciation (line 13)"
+  SC.31:
+    label: Net profit
+    formula: >-
+      if(answer.hasSelfEmployment == false, line.SC.1,
+      if(answer.businessExtras == "assets", unsupported("Depreciation of business property (Form 4562) isn't worked out by this app yet"),
+      if(answer.businessExtras == "home", unsupported("A home office (Form 8829) isn't worked out by this app yet"),
+      if(answer.businessExtras == "inventory", unsupported("Cost of goods sold (Schedule C, Part III) isn't worked out by this app yet"),
+      if(answer.businessExtras == "several", unsupported("More than one business: this app prepares one Schedule C for each person"),
+      if(line.SC.7 - line.SC.28 < 0, unsupported("A business loss (Schedule C) isn't worked out by this app yet"),
+      line.SC.7 - line.SC.28))))))
+    source: "Schedule C, lines 29 to 31: no home office (line 30)"
+
+  # Schedule SE: this person's self-employment tax.
+  SE.4a:
+    label: Net earnings from self-employment
+    formula: "round(line.SC.31 * param.seNetEarningsRate, 2)"
+    source: "Schedule SE, lines 2 to 4c: the Schedule C profit times 92.35%; no farm income or optional method"
+  SE.6:
+    label: Net earnings from self-employment subject to the tax
+    formula: "if(line.SE.4a < param.seMinimum, 0, line.SE.4a)"
+    source: "Schedule SE, lines 4c and 6: less than $400, you stop (no church employee income, line 5)"
+  SE.8a:
+    label: Social security wages and tips on Forms W-2
+    formula: "sum(W2.box3) + sum(W2.box7)"
+    source: "Schedule SE, line 8a: boxes 3 and 7 of Form(s) W-2"
+  SE.9:
+    label: Room left under the social security wage base
+    formula: "max(0, param.socialSecurityWageBase - line.SE.8a)"
+    source: "Schedule SE, lines 7 to 9"
+  SE.10:
+    label: Social security part of the self-employment tax
+    formula: "round(min(line.SE.6, line.SE.9) * param.seSocialSecurityRate, 2)"
+  SE.11:
+    label: Medicare part of the self-employment tax
+    formula: "round(line.SE.6 * param.seMedicareRate, 2)"
+  SE.12:
+    label: Self-employment tax
+    formula: "line.SE.10 + line.SE.11"
+    source: "Schedule SE, lines 10 to 12: none when the net earnings are less than $400 (line 6 is then 0)"
+  SE.13:
+    label: Deduction for half of the self-employment tax
+    formula: "round(line.SE.12 * param.seDeductibleShare, 2)"
+
+  # Each person's earned income: wages and the business's net profit, less the deductible half of the tax.
+  US.ownEarned:
+    label: This person's earned income
+    formula: "line.US.ownWages + line.SC.31 - line.SE.13"
+    source: >-
+      Instructions, line 27a, Worksheet B, and the Earned Income Chart of Schedule 8812 and Form 2441's earned income:
+      wages, plus the Schedule SE, line 3 profit less the Schedule 1, line 15 deduction
+
+  # Schedule 1
+  S1.3:
+    label: Business income
+    formula: "line.SC.31 + if(line.US.joint == 1, spouse.line.SC.31, 0)"
+    source: "Schedule 1, line 3: Schedule C, line 31 (each spouse's on a joint return)"
+  S1.10:
+    label: Additional income
+    formula: "line.S1.3"
+    source: "Schedule 1, line 10: only business income is worked out"
+  S1.15:
+    label: Deductible part of self-employment tax
+    formula: "line.SE.13 + if(line.US.joint == 1, spouse.line.SE.13, 0)"
+  S1.26:
+    label: Adjustments to income
+    formula: "line.S1.15"
+    source: "Schedule 1, line 26: only the deductible part of self-employment tax is worked out"
+
+  # Form 8995: qualified business income deduction, at or below the threshold.
+  F8995.2:
+    label: Qualified business income
+    formula: "line.S1.3 - line.S1.15"
+    source: "Form 8995, lines 1 and 2: each business's net profit less the deductible part of its self-employment tax (Instructions for Form 8995)"
+  F8995.5:
+    label: Qualified business income component
+    formula: "round(max(0, line.F8995.2) * param.qbiRate, 2)"
+    source: "Form 8995, lines 3 to 5: no loss carried forward"
+  F8995.11:
+    label: Taxable income before the qualified business income deduction
+    formula: "max(0, line.F1040.11a - line.F1040.12e - line.F1040.13b)"
+    source: "Instructions for Form 8995, line 11: Form 1040, line 11a, minus lines 12e and 13b"
+  F8995.14:
+    label: Income limitation
+    formula: "round(line.F8995.11 * param.qbiRate, 2)"
+    source: "Form 8995, lines 12 to 14: no net capital gain or qualified dividends"
+  F8995.15:
+    label: Qualified business income deduction
+    formula: >-
+      if(line.F8995.5 == 0, 0, if(line.F8995.11 > if(line.US.joint == 1, param.qbiThresholdJoint, param.qbiThreshold),
+      unsupported("Taxable income over $197,300 ($394,600 jointly) with business income: the deduction is figured on Form 8995-A, which this app doesn't prepare yet"),
+      min(line.F8995.5, line.F8995.14)))
+    source: "Form 8995, line 15 (lines 6 to 10: no REIT dividends or PTP income)"

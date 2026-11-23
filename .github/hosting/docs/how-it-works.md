@@ -58,7 +58,7 @@ arrow esign.r -> esdb.l
 | `insulin-apps.com` | Everything that isn't an app: the landing page, these docs (with their search and the docs' MCP server, see [Searching the docs](/docs/platform/searching-the-docs)), privacy and terms; sign-up, sign-in, two-step sign-in, Google and enterprise SSO; your account and organizations; the organization's people, roles, settings, OAuth clients and single sign-on; each app's settings at `/apps/<app>/settings/...` (people, integrations, API access and Connect AI); the OAuth authorization server for AI agents and OAuth clients; SCIM at `/scim/v2`. |
 | `<app>.insulin-apps.com` | The app itself, plus the gateway's endpoints there: `/mcp` and its OAuth metadata, and `/settings/users`, `/settings/integrations`, `/settings/api` and `/settings/connect-ai`, which only redirect to the app's settings on the apex. |
 | `www.insulin-apps.com` | A permanent redirect to `insulin-apps.com`. |
-| `auth.insulin-apps.com` | A redirect to the same path on `insulin-apps.com`, where sign-in used to live, so links in older e-mails keep working. |
+| `auth.insulin-apps.com` | A redirect to the same path on `insulin-apps.com`, where sign-in lives. |
 
 An app's settings pages (people, integrations, API access and Connect AI) are served on `insulin-apps.com`, never on the
 app's own host.

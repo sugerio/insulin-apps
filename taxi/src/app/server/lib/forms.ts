@@ -33,8 +33,10 @@ function publisherOf(url: string): { name: string; site: string } {
 const capital = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
 
 // canada.ca never answers a request without a User-Agent and revenuquebec.ca refuses it (403); a Worker's fetch sends
-// none of its own.
-const USER_AGENT = "Mozilla/5.0 (compatible; Insulin Apps Taxi)";
+// none of its own. canada.ca also drops a bot's User-Agent that has no contact URL (measured 2026-11-23: "Mozilla/5.0
+// (compatible; Insulin Apps Taxi)" and "Taxi/1.0" are dropped, the same with "+https://…" added are answered), so keep
+// the URL.
+const USER_AGENT = "Mozilla/5.0 (compatible; InsulinAppsTaxi/1.0; +https://taxi.insulinapps.com)";
 // One form's download, its body included. The sites answer in a second or two; a first print downloads its few forms
 // one after another, and the whole print has to answer well within the 100 seconds Cloudflare waits for a response.
 const DOWNLOAD_TIMEOUT_MS = 15_000;

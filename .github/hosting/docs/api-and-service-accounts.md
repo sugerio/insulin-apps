@@ -18,12 +18,12 @@ a token that lasts an hour, and calls the app's API with it. The app treats its 
 the same role.
 
 An OAuth client reaches only the app's own API, under `/api/`. It can never reach people, roles, integrations, single
-sign-on or anything else on `insulinapps.com`.
+sign-on or anything else on `insulin-apps.com`.
 
 ## The API access page
 
-Each app's OAuth clients are on its **API access** page: `https://insulinapps.com/apps/<app>/settings/api`, for example
-`https://insulinapps.com/apps/captable/settings/api`. The app's own `https://<app>.insulinapps.com/settings/api` leads
+Each app's OAuth clients are on its **API access** page: `https://insulin-apps.com/apps/<app>/settings/api`, for example
+`https://insulin-apps.com/apps/captable/settings/api`. The app's own `https://<app>.insulin-apps.com/settings/api` leads
 there, and in the app's navigation it is under **Settings**, next to **People**, **Integrations** and **Connect AI**.
 
 | Who | What they can do |
@@ -36,7 +36,7 @@ Only the organization's owners and admins manage OAuth clients, because a client
 it: it belongs to the organization. Everyone else sees the list with the note "Only the owners and admins of …
 create, change, rotate and delete OAuth clients."
 
-The page also shows how a program gets a token: the **Token URL** (`https://insulinapps.com/oauth/token`), the grant
+The page also shows how a program gets a token: the **Token URL** (`https://insulin-apps.com/oauth/token`), the grant
 type, the app's **Resource**, and a curl example with placeholders for the client id and secret.
 
 ![The API access page of Cap Table with an OAuth client listed, one whose secret was just rotated, the form for a new client and the token URL with a curl example](/docs/assets/screenshots/platform-api-access.png "An app's API access page")
@@ -89,7 +89,7 @@ envelope the client creates, including those it made before. Removing someone ta
 ## Every OAuth client of the organization
 
 The organization's owners and admins, and nobody else, have **Settings › OAuth clients**
-(`https://insulinapps.com/settings/oauth-clients`). It lists every app's OAuth clients for API access and every AI agent
+(`https://insulin-apps.com/settings/oauth-clients`). It lists every app's OAuth clients for API access and every AI agent
 anyone in the organization connected ([AI agents](/docs/platform/ai-agents)), in one table: the name, the app, the type
 (**API access** or **AI agent (MCP)**), who created it and when, when it was last used, and its status.
 
@@ -106,15 +106,15 @@ page, when the client is created or its secret rotated. A program that should wo
 Ask the token endpoint for a `client_credentials` token, with the client id and secret as HTTP Basic credentials:
 
 ```bash
-curl -s https://insulinapps.com/oauth/token \
+curl -s https://insulin-apps.com/oauth/token \
   -u 'ia_sa_EXAMPLEclientid:ia_sk_EXAMPLEsecret' \
   -d grant_type=client_credentials \
-  -d resource=https://captable.insulinapps.com
+  -d resource=https://captable.insulin-apps.com
 ```
 
-- **Token URL**: `https://insulinapps.com/oauth/token`, for every app.
+- **Token URL**: `https://insulin-apps.com/oauth/token`, for every app.
 - **Credentials**: HTTP Basic (`-u id:secret`), or `client_id` and `client_secret` in the body.
-- **`resource`** (optional): the app's address, `https://<app>.insulinapps.com`. If you send it, it must be the app the
+- **`resource`** (optional): the app's address, `https://<app>.insulin-apps.com`. If you send it, it must be the app the
   client belongs to.
 - The body can be a form (`application/x-www-form-urlencoded`) or JSON.
 
@@ -138,7 +138,7 @@ The token lasts an hour. There is no refresh token: ask for a new token when it 
 | `415 invalid_request` | Send the parameters as a form or as JSON. |
 | `429 slow_down` | Too many token requests; wait for `Retry-After` (60 seconds). |
 
-To revoke a token before it expires, `POST` it as `token` to `https://insulinapps.com/oauth/revoke` with the same
+To revoke a token before it expires, `POST` it as `token` to `https://insulin-apps.com/oauth/revoke` with the same
 credentials.
 
 ## Call the API
@@ -146,13 +146,13 @@ credentials.
 Send the token as a bearer token to the app's address:
 
 ```bash
-curl -s https://captable.insulinapps.com/api/catalog \
+curl -s https://captable.insulin-apps.com/api/catalog \
   -H 'Authorization: Bearer ia_at_EXAMPLEaccesstoken'
 ```
 
 ```http
 POST /api/... HTTP/1.1
-Host: captable.insulinapps.com
+Host: captable.insulin-apps.com
 Authorization: Bearer ia_at_EXAMPLEaccesstoken
 Content-Type: application/json
 Idempotency-Key: 6f1c2e0a-0b7d-4c55-9a51-2d1f3e4a5b6c
@@ -204,7 +204,7 @@ The app's own answers pass through unchanged. These come from Insulin Apps befor
 
 | Status and `error` | Meaning |
 |---|---|
-| `401 invalid_token` | The token is missing, expired or revoked, or it is a person's agent token (those work only on `/mcp`). The `WWW-Authenticate` header points to `https://<app>.insulinapps.com/.well-known/oauth-protected-resource`. |
+| `401 invalid_token` | The token is missing, expired or revoked, or it is a person's agent token (those work only on `/mcp`). The `WWW-Authenticate` header points to `https://<app>.insulin-apps.com/.well-known/oauth-protected-resource`. |
 | `401 invalid_request` | The path isn't under `/api/`. |
 | `403 no_app_access` | The OAuth client no longer has a role in the app. |
 | `429 rate_limited` | Too many requests from this OAuth client; wait for `Retry-After` (60 seconds). |

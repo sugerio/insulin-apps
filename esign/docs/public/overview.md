@@ -35,7 +35,7 @@ product's one-time link) and the code emailed to them give access to their own t
 
 ## The pages
 
-Members open Esign at `https://esign.insulinapps.com`. Its navigation has five entries:
+Members open Esign at `https://esign.insulin-apps.com`. Its navigation has five entries:
 
 | Page | What it shows |
 | --- | --- |
@@ -43,7 +43,7 @@ Members open Esign at `https://esign.insulinapps.com`. Its navigation has five e
 | **Templates** | The templates you own or that are shared with you: PDFs with their signer roles and placed fields. Those who manage upload new ones here. |
 | **Contacts** | Your organization's address book: everyone its envelopes named as signers, and anyone added by hand. Everyone who can use Esign sees it; those who manage add, change and delete contacts. |
 | **Docs** | The built-in help: getting started, the main tasks, what signers see, statuses, evidence, roles, background on electronic signatures and a glossary. Every role can open it. |
-| **Settings** | Esign's **People**, **Integrations**, **API access** and **Connect AI** pages, which are the platform's pages on `https://insulinapps.com/apps/esign/settings/` (see [Roles and access](/docs/esign/roles-and-access#people-and-integrations-live-on-the-platform)). |
+| **Settings** | Esign's **People**, **Integrations**, **API access** and **Connect AI** pages, which are the platform's pages on `https://insulin-apps.com/apps/esign/settings/` (see [Roles and access](/docs/esign/roles-and-access#people-and-integrations-live-on-the-platform)). |
 
 Signers see only the public pages, which have no navigation: the signing page (`/sign`), the page that downloads their
 signed copy (`/copy`) and, for host products, the embedded field editor (`/editor/page/...`).
@@ -68,13 +68,13 @@ in this browser (`localStorage`, key `insulin-nav`). Below 768 pixels wide, a to
 a menu button that opens both columns.
 
 Esign declares its sections in its `package.json` under `insulin.navigation`. The platform reads the same list, so
-Esign's Settings pages on insulinapps.com show the same first column.
+Esign's Settings pages on insulin-apps.com show the same first column.
 
 ## How it runs on Insulin Apps
 
-Esign is an open-source Insulin app. On insulinapps.com it runs at `https://esign.insulinapps.com`, behind the platform:
+Esign is an open-source Insulin app. On insulin-apps.com it runs at `https://esign.insulin-apps.com`, behind the platform:
 
-- **Sign-in is the platform's.** You sign in at `https://insulinapps.com` with email and password, Google or your
+- **Sign-in is the platform's.** You sign in at `https://insulin-apps.com` with email and password, Google or your
   company's single sign-on. Esign has no sign-in screens of its own. See
   [Sign-in and security](/docs/platform/sign-in-and-security).
 - **Your role comes from your organization.** Owners, admins and editors send and manage envelopes; viewers see them.

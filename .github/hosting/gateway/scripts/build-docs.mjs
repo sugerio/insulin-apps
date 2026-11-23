@@ -175,7 +175,7 @@ function llmsTxt(sections) {
   const lines = [
     '# Insulin Apps',
     '',
-    '> Open-source business apps hosted at insulinapps.com: one account and organization for every app, roles from Owner to Viewer, AI agents over MCP and service accounts for each app\'s API.',
+    '> Open-source business apps hosted at insulin-apps.com: one account and organization for every app, roles from Owner to Viewer, AI agents over MCP and service accounts for each app\'s API.',
     '',
     `These pages explain how to set up an organization, sign in, manage people and roles, connect AI agents and call the API, and how to use each app. Each link is the page's Markdown; the same page as HTML is at the address without .md. ${ORIGIN_TOKEN}/docs/llms-full.txt has every page in one file.`,
     '',

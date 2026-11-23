@@ -5,7 +5,7 @@
  *   exports, shares, fact checks and awake time, engine events still waiting to be applied, its saved answers to
  *   changes (idempotency), and its name and purpose.
  *   The activity log keeps that it was deleted, with its name, by whom and when, for the organization;
- * - a deleted organization (insulinapps.com): every row Knowledge kept for it. Only that its engine data was purged
+ * - a deleted organization (insulin-apps.com): every row Knowledge kept for it. Only that its engine data was purged
  *   remains (table org_purges: the organization's id and two times).
  */
 const COLLECTION_TABLES = [

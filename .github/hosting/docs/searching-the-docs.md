@@ -25,11 +25,11 @@ heading.
 
 ## Search as JSON
 
-Programs search the same way with a `GET` to `https://insulinapps.com/docs/search.json`. It needs no sign-in and answers
+Programs search the same way with a `GET` to `https://insulin-apps.com/docs/search.json`. It needs no sign-in and answers
 any origin (CORS), so a page on another site can call it too.
 
 ```bash
-curl 'https://insulinapps.com/docs/search.json?q=rotate+secret&limit=3'
+curl 'https://insulin-apps.com/docs/search.json?q=rotate+secret&limit=3'
 ```
 
 | Parameter | Meaning |
@@ -47,8 +47,8 @@ The answer is JSON, the best result first:
       "title": "API access with OAuth clients",
       "section": "Platform",
       "heading": "Rotate the secret without downtime",
-      "url": "https://insulinapps.com/docs/platform/api-and-service-accounts#rotate-the-secret-without-downtime",
-      "markdown": "https://insulinapps.com/docs/platform/api-and-service-accounts.md",
+      "url": "https://insulin-apps.com/docs/platform/api-and-service-accounts#rotate-the-secret-without-downtime",
+      "markdown": "https://insulin-apps.com/docs/platform/api-and-service-accounts.md",
       "snippet": "Rotate secret makes a new secret and shows it once. The previous secret keeps working for 24 hours…"
     }
   ]
@@ -60,13 +60,13 @@ Markdown. Without `q`, the answer is `400` with `"error": "missing_query"`.
 
 ## The docs' MCP server
 
-AI agents can search and read the docs through their own MCP server, `https://insulinapps.com/docs/mcp`, which needs
+AI agents can search and read the docs through their own MCP server, `https://insulin-apps.com/docs/mcp`, which needs
 no sign-in and no OAuth. It is separate from the apps' MCP servers: it only reads these public pages.
 
 | Tool | What it does |
 |---|---|
 | `search_docs` | Searches the docs: `query`, the words, and `limit`, 1 to 20 results (8 if left out). Each result has the page's title, section, heading, address and a passage. |
-| `read_doc` | Reads one page as Markdown: `page` is its address, such as `/docs/platform/ai-agents` or the full `https://insulinapps.com/docs/platform/ai-agents` (a `#heading` or `.md` at the end is fine). |
+| `read_doc` | Reads one page as Markdown: `page` is its address, such as `/docs/platform/ai-agents` or the full `https://insulin-apps.com/docs/platform/ai-agents` (a `#heading` or `.md` at the end is fine). |
 | `list_docs` | Lists every page, by section, with its address and description. |
 
 An agent usually searches first, then reads the best page. The commands below name the server `insulin-apps-docs`; any
@@ -75,7 +75,7 @@ name works.
 ### Claude Code
 
 ```bash
-claude mcp add --transport http insulin-apps-docs https://insulinapps.com/docs/mcp
+claude mcp add --transport http insulin-apps-docs https://insulin-apps.com/docs/mcp
 ```
 
 Add `--scope user` to have it in every project. There is nothing to sign in to.
@@ -83,24 +83,24 @@ Add `--scope user` to have it in every project. There is nothing to sign in to.
 ### Codex CLI
 
 ```bash
-codex mcp add insulin-apps-docs --url https://insulinapps.com/docs/mcp
+codex mcp add insulin-apps-docs --url https://insulin-apps.com/docs/mcp
 ```
 
 ### Gemini CLI
 
 ```bash
-gemini mcp add --transport http insulin-apps-docs https://insulinapps.com/docs/mcp
+gemini mcp add --transport http insulin-apps-docs https://insulin-apps.com/docs/mcp
 ```
 
 ### opencode
 
 ```bash
-opencode mcp add insulin-apps-docs --url https://insulinapps.com/docs/mcp
+opencode mcp add insulin-apps-docs --url https://insulin-apps.com/docs/mcp
 ```
 
 ### Claude.ai, ChatGPT and other clients
 
-Add a custom connector with the address `https://insulinapps.com/docs/mcp` and no authentication. Any other MCP client
+Add a custom connector with the address `https://insulin-apps.com/docs/mcp` and no authentication. Any other MCP client
 connects the same way: Streamable HTTP, no sign-in.
 
 ### For MCP client developers
@@ -115,11 +115,11 @@ connects the same way: Streamable HTTP, no sign-in.
 
 ## For search engines and AI crawlers
 
-- `https://insulinapps.com/robots.txt` lets every crawler, AI crawlers included, read the site; only the search pages'
+- `https://insulin-apps.com/robots.txt` lets every crawler, AI crawlers included, read the site; only the search pages'
   results are left out.
-- `https://insulinapps.com/sitemap.xml` lists the landing page, the privacy notice, the terms and every docs page.
-- `https://insulinapps.com/llms.txt` (the same as [`/docs/llms.txt`](/docs/llms.txt)) lists every page with its
-  description, and `https://insulinapps.com/llms-full.txt` has all of them in one file. Each page's Markdown is at its
+- `https://insulin-apps.com/sitemap.xml` lists the landing page, the privacy notice, the terms and every docs page.
+- `https://insulin-apps.com/llms.txt` (the same as [`/docs/llms.txt`](/docs/llms.txt)) lists every page with its
+  description, and `https://insulin-apps.com/llms-full.txt` has all of them in one file. Each page's Markdown is at its
   address with `.md` added.
 - Each page has a description, a canonical address, Open Graph tags for link previews, and schema.org data
   (`TechArticle` and `BreadcrumbList`) as microdata.

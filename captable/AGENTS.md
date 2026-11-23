@@ -9,7 +9,7 @@ before changing code. [docs/architecture.md](docs/architecture.md) explains how 
 Cap Table is an equity management app on the Insulin app template: one npm package, Vite + React + Nitro, deployed as a
 Cloudflare Worker with one D1 database. Its source of truth is an append-only, hash-chained ledger of transactions;
 every number (positions, vesting, deadlines, the cap table) is computed by replaying that ledger with a pure TypeScript
-engine shared by the server and the browser. Users, roles and permissions come from the Insulin platform (the console, or insulinapps.com). A company is set up by
+engine shared by the server and the browser. Users, roles and permissions come from the Insulin platform (the console, or insulin-apps.com). A company is set up by
 importing Pulley's reports or the app's spreadsheet template.
 
 ## Commands
@@ -181,7 +181,7 @@ keeps the two equal. The organization's custom roles are built from them.
 
 | Role (`x-suger-app-role`) | Permissions |
 |---|---|
-| `OWNER`, `ADMIN`, `EDITOR` | all three. Behind insulinapps.com, org owners arrive as `ADMIN`. Editors write: the platform's Editor is "everything but managing users, roles and integrations", and Cap Table has none of those. |
+| `OWNER`, `ADMIN`, `EDITOR` | all three. Behind insulin-apps.com, org owners arrive as `ADMIN`. Editors write: the platform's Editor is "everything but managing users, roles and integrations", and Cap Table has none of those. |
 | `USER`, `VIEWER` | `portfolio.view` |
 
 - **Decide by permission or access level, never by role name.** `x-suger-app-permissions` (from the hosting platform,
@@ -288,6 +288,6 @@ setup too. When behaviour changes, update the guide that describes it: `README.m
 in-app Docs describe only what the app does, in plain words, and their equity topics stay general information, not
 advice.
 
-The public docs at `https://insulinapps.com/docs/captable/` are `docs/public/*.md` (front matter `title`,
+The public docs at `https://insulin-apps.com/docs/captable/` are `docs/public/*.md` (front matter `title`,
 `description`, `order`), for people and AI agents; update the page that describes a behaviour in the same change, then
 run `npm run build:docs` in `.github/hosting/gateway/` and commit its `src/assets/docs-content.ts`.

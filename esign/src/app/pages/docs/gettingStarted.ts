@@ -25,7 +25,7 @@ export const gettingStarted: DocTopic = {
         [b('Templates'), ' (', h(PageLink, { to: '/templates' }, 'open'), '): the PDFs your organization sends, with their signer roles and fields.'],
         [b('Contacts'), ' (', h(PageLink, { to: '/contacts' }, 'open'), '): your organization\'s address book, everyone its envelopes named as signers and anyone added by hand; everyone who can use Esign sees it.'],
         [b('Docs'), ': these pages. Everyone in the organization can read them, whatever their role.'],
-        [b('Settings'), ': Esign\'s People, Integrations, API access and Connect AI pages. They are Insulin Apps pages, on insulinapps.com, where your organization manages who can use Esign, its stored credentials, its API clients and the AI agents connected to it.'],
+        [b('Settings'), ': Esign\'s People, Integrations, API access and Connect AI pages. They are Insulin Apps pages, on insulin-apps.com, where your organization manages who can use Esign, its stored credentials, its API clients and the AI agents connected to it.'],
       ),
     },
     {
@@ -35,7 +35,7 @@ export const gettingStarted: DocTopic = {
         p('The navigation on the left has two columns.'),
         ul(
           [b('The first column'), ' has your organization at the top: choose it to see your other organizations, switch to one, go to All apps (your home page on Insulin Apps), or create a new one. Below are Envelopes, Templates and Contacts, then Docs and Settings, and at the bottom your name and role, with your Insulin Apps account and Sign out.'],
-          [b('The second column'), ' lists what the open section holds. For Docs: the topics, then Public docs, Esign\'s documentation on the web. For Settings: People, Integrations, API access and Connect AI, which open on insulinapps.com (in the console\'s preview they are listed without links). Envelopes, Templates and Contacts have none: each of those pages has its own search, filters and buttons.'],
+          [b('The second column'), ' lists what the open section holds. For Docs: the topics, then Public docs, Esign\'s documentation on the web. For Settings: People, Integrations, API access and Connect AI, which open on insulin-apps.com (in the console\'s preview they are listed without links). Envelopes, Templates and Contacts have none: each of those pages has its own search, filters and buttons.'],
           [b('The bar above the page'), ' shows where you are, such as Envelopes › Envelope. Choose the section\'s name to go back to it.'],
         ),
         p('Each column has its own button to collapse it to icons; point at an icon to see its name. Esign remembers your choice in this browser. On a narrow screen, such as a phone, the menu button at the top opens both columns.'),

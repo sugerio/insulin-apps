@@ -28,7 +28,7 @@ export const gettingStarted: DocTopic = {
             <li><b>Private until shared.</b> A new collection is visible to its owner only, until they share it with everyone in the organization or with specific people, like a shared document.</li>
           </ul>
           <p>
-            Sign-in, organizations, people and roles, AI assistant connections and API clients are managed on insulinapps.com, as
+            Sign-in, organizations, people and roles, AI assistant connections and API clients are managed on insulin-apps.com, as
             for every Insulin app. Knowledge has no accounts of its own.
           </p>
         </>
@@ -60,7 +60,7 @@ export const gettingStarted: DocTopic = {
       body: (
         <>
           <p>
-            Knowledge uses the role each person has in Knowledge on insulinapps.com: from their organization role (organization
+            Knowledge uses the role each person has in Knowledge on insulin-apps.com: from their organization role (organization
             owners and admins are Admins here), or a role given for Knowledge alone. The navigation shows each role what it can use:
           </p>
           <DocTable
@@ -78,7 +78,7 @@ export const gettingStarted: DocTopic = {
             information of every collection on the Collections page, and can delete one at a time. See <DocLink to="sharing-and-roles" section="three-kinds-of-roles">The three kinds of roles</DocLink>.
           </p>
           <p>
-            <b>Settings</b> opens Insulin Apps' own pages on insulinapps.com: People, Integrations, API access and Connect AI.
+            <b>Settings</b> opens Insulin Apps' own pages on insulin-apps.com: People, Integrations, API access and Connect AI.
             Knowledge only links to them.
           </p>
         </>

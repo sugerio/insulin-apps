@@ -1,6 +1,6 @@
 /*
  * Cap Table's stylesheet: Tailwind CSS v4 with shadcn/ui's theme (MIT), the radix-nova style with the neutral base
- * colour, as on insulinapps.com. System fonts only: no web fonts are loaded. Dark mode follows the system unless the
+ * colour, as on insulin-apps.com. System fonts only: no web fonts are loaded. Dark mode follows the system unless the
  * theme switch (AppLayout) sets html[data-theme], and the `dark:` variant does the same. Tailwind scans this folder
  * (src/app) for classes; the server and the shared code hold none. Screens use these utilities and the components in
  * components/ui; there is no other stylesheet.

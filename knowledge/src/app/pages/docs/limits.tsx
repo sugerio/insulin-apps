@@ -15,7 +15,7 @@ export const limits: DocTopic = {
       body: (
         <>
           <p>
-            Insulin Knowledge is free on insulinapps.com. To keep it free for everyone, each organization has limits, which
+            Insulin Knowledge is free on insulin-apps.com. To keep it free for everyone, each organization has limits, which
             Insulin Apps sets and can raise for one organization. These are the defaults; Admins see your organization's own
             under <b>Usage and limits</b> in <b>Rules and data</b>, with what you used beside each.
           </p>

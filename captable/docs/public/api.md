@@ -11,28 +11,28 @@ which returns only what that caller may use right now.
 
 ## Base URL and authentication
 
-The base URL is `https://captable.insulinapps.com`, and every endpoint is under `/api/`. There are two ways in besides
+The base URL is `https://captable.insulin-apps.com`, and every endpoint is under `/api/`. There are two ways in besides
 the browser:
 
-- **AI agents over MCP.** Connect an MCP client to `https://captable.insulinapps.com/mcp`. Cap Table's **Connect AI**
-  page (`https://insulinapps.com/apps/captable/settings/connect-ai`, or **Settings › Connect AI** in Cap Table) has the
+- **AI agents over MCP.** Connect an MCP client to `https://captable.insulin-apps.com/mcp`. Cap Table's **Connect AI**
+  page (`https://insulin-apps.com/apps/captable/settings/connect-ai`, or **Settings › Connect AI** in Cap Table) has the
   command for Claude Code, Codex, Gemini CLI and opencode, and the steps for Claude.ai and ChatGPT. The agent signs in as
   you and acts with your role. Its `endpoints` tool shows this app's catalog, `read` sends a GET, and `change` sends a
   POST, PUT, PATCH or DELETE with a JSON body. See [AI agents](/docs/platform/ai-agents).
 - **OAuth clients.** An owner or admin of the organization creates an OAuth client, with a role, on Cap Table's **API
-  access** page (`https://insulinapps.com/apps/captable/settings/api`, or **Settings › API access** in Cap Table), which
+  access** page (`https://insulin-apps.com/apps/captable/settings/api`, or **Settings › API access** in Cap Table), which
   also shows the token URL and a curl example. Your program gets a token with the client-credentials grant and sends it
   as a Bearer token. **Rotate secret** keeps the previous secret working for 24 hours, so the program can switch over. See
   [API access with OAuth clients](/docs/platform/api-and-service-accounts).
 
 ```bash
 # Get an access token (it lasts an hour), then ask what this OAuth client may call.
-TOKEN=$(curl -s https://insulinapps.com/oauth/token \
+TOKEN=$(curl -s https://insulin-apps.com/oauth/token \
   -u "$CLIENT_ID:$CLIENT_SECRET" \
   -d grant_type=client_credentials \
-  -d resource=https://captable.insulinapps.com | jq -r .access_token)
+  -d resource=https://captable.insulin-apps.com | jq -r .access_token)
 
-curl -s https://captable.insulinapps.com/api/catalog -H "Authorization: Bearer $TOKEN"
+curl -s https://captable.insulin-apps.com/api/catalog -H "Authorization: Bearer $TOKEN"
 ```
 
 A person's MCP token works only on `/mcp`, and an OAuth client's token only on `/api/*`. Either way, Cap Table sees

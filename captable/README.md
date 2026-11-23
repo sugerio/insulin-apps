@@ -53,7 +53,7 @@ holdings.
   recorded in it.
 - **No background jobs for the cap table.** Scheduled terminations and option expiries take effect when an owner, admin
   or editor opens the dashboard, or chooses **Process due items** there.
-- **Hourly usage counts.** On insulinapps.com, the platform calls Cap Table every five minutes, and once an hour Cap
+- **Hourly usage counts.** On insulin-apps.com, the platform calls Cap Table every five minutes, and once an hour Cap
   Table sends it counts for each organization (whether its company is set up; its stakeholders, share classes, equity
   plans, securities, ledger transactions, documents, valuations and exercise requests; the size of its documents) and
   the database's size, so that Insulin Apps can watch usage and plan capacity. Never names, e-mail addresses, amounts or
@@ -98,7 +98,7 @@ accounts or passwords.
 | Owner, Admin, Editor | Manage the cap table: the import, stakeholders, grants, exercises, terminations, valuations, documents, settings and reports. |
 | Viewer (and User, in the Insulin console) | The holder view: their own holdings only. |
 
-On insulinapps.com, an organization's owners and admins can also give someone access to Cap Table alone (Admin, Editor
+On insulin-apps.com, an organization's owners and admins can also give someone access to Cap Table alone (Admin, Editor
 or Viewer of the app), and its owner can make **custom roles** for Cap Table from three permissions, which
 `package.json` declares under `insulin.permissions`:
 
@@ -116,7 +116,7 @@ or Viewer of the app), and its owner can make **custom roles** for Cap Table fro
   the cap table has to. Those who manage it see their holdings in the cap table itself; the holder view is for Viewers.
 - **About the Editor role:** an editor changes the cap table just as an admin does (and, in the Insulin console, can also
   publish the app). Give it only to people you would trust with the whole cap table.
-- **AI agents and API clients** (on insulinapps.com) act with the role and permissions of the person who connected
+- **AI agents and API clients** (on insulin-apps.com) act with the role and permissions of the person who connected
   them, or the role the client was given, and their changes are in the history like any other.
 
 ## The holder view

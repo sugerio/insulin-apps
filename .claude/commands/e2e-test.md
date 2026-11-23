@@ -20,7 +20,7 @@ Input: `$ARGUMENTS`.
 ## Safety rules
 
 1. **The local stack only.** Drive the gateway and the apps on this machine, at `*.insulinapps.localhost`, as the
-   gateway's `npm run dev` runs them. Never `insulinapps.com` or an app's production address. People sign up during
+   gateway's `npm run dev` runs them. Never `insulin-apps.com` or an app's production address. People sign up during
    the run through the captured-mail page, as `@example.test` people. Google sign-in is off locally; never use a
    real Google, SSO, GitHub or AI-client account.
 2. **No real outside services.** The one outside call allowed is Cloudflare's Turnstile test widget, which the
@@ -312,7 +312,7 @@ PR needs it.
 `release.yml` deploys it to production within minutes of its checks passing (`deploy-release.yml`). For each change
 the run didn't cover (anything without `E2E-covered ✅` and a confirmed pass), write a case for a person to check
 once the Release run for the merge has deployed: `MT01`…, the change it covers, why it's manual, preconditions,
-numbered steps on the production address (`https://insulinapps.com/`, `https://<app>.insulinapps.com/`), one
+numbered steps on the production address (`https://insulin-apps.com/`, `https://<app>.insulin-apps.com/`), one
 result to observe, and `- [ ] Pass · [ ] Fail · Notes:`. A CI/CD change's checks name the workflow runs to watch
 and what each must show. On production, the checks only read, or use records the tester creates for the check and
 removes afterwards; a check that would e-mail someone, change someone's records or store a credential says "an

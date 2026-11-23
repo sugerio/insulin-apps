@@ -10,13 +10,13 @@ signing page and the editor use, and shows examples. It is for developers and AI
 
 ## Base URL and authentication
 
-The base URL is `https://esign.insulinapps.com`. Every endpoint is under `/api/`.
+The base URL is `https://esign.insulin-apps.com`. Every endpoint is under `/api/`.
 
 | Caller | How it authenticates | Notes |
 | --- | --- | --- |
-| A person in the browser | Their insulinapps.com session | What Esign's own pages do. |
-| An OAuth client (a service account) | `Authorization: Bearer` with a token from `https://insulinapps.com/oauth/token` | Created by an owner or admin of the organization on Esign's **API access** tab (`https://insulinapps.com/apps/esign/settings/api`), with a role of its own; the tab shows the token URL and a curl example. **Rotate secret** keeps the previous secret working for 24 hours. See [API access with OAuth clients](/docs/platform/api-and-service-accounts). |
-| An AI agent | Through the MCP server at `https://esign.insulinapps.com/mcp` | Acts with the person's role. Esign's **Connect AI** page (`https://insulinapps.com/apps/esign/settings/connect-ai`, or **Connect AI** in the account bar) has the setup for Claude Code, Codex, Gemini CLI, opencode, Claude.ai and ChatGPT. Its tools `read` and `change` call these endpoints. See [AI agents](/docs/platform/ai-agents). |
+| A person in the browser | Their insulin-apps.com session | What Esign's own pages do. |
+| An OAuth client (a service account) | `Authorization: Bearer` with a token from `https://insulin-apps.com/oauth/token` | Created by an owner or admin of the organization on Esign's **API access** tab (`https://insulin-apps.com/apps/esign/settings/api`), with a role of its own; the tab shows the token URL and a curl example. **Rotate secret** keeps the previous secret working for 24 hours. See [API access with OAuth clients](/docs/platform/api-and-service-accounts). |
+| An AI agent | Through the MCP server at `https://esign.insulin-apps.com/mcp` | Acts with the person's role. Esign's **Connect AI** page (`https://insulin-apps.com/apps/esign/settings/connect-ai`, or **Connect AI** in the account bar) has the setup for Claude Code, Codex, Gemini CLI, opencode, Claude.ai and ChatGPT. Its tools `read` and `change` call these endpoints. See [AI agents](/docs/platform/ai-agents). |
 | A signer's page | A one-time code exchanged for a page session (`x-esign-session` header) | Only the public `/api/public/` endpoints. |
 
 Every management call sees only the caller's organization, and in it only the templates and envelopes the caller owns or
@@ -283,10 +283,10 @@ These examples use synthetic values. Replace the client id and secret with your 
 ### Get a token
 
 ```bash
-TOKEN=$(curl -s https://insulinapps.com/oauth/token \
+TOKEN=$(curl -s https://insulin-apps.com/oauth/token \
   -u "$CLIENT_ID:$CLIENT_SECRET" \
   -d grant_type=client_credentials \
-  -d resource=https://esign.insulinapps.com | jq -r .access_token)
+  -d resource=https://esign.insulin-apps.com | jq -r .access_token)
 ```
 
 Tokens last an hour. Ask for a new one when it expires.
@@ -294,7 +294,7 @@ Tokens last an hour. Ask for a new one when it expires.
 ### Upload a template
 
 ```bash
-curl -s https://esign.insulinapps.com/api/templates \
+curl -s https://esign.insulin-apps.com/api/templates \
   -H "Authorization: Bearer $TOKEN" \
   -F file=@./partnership-agreement.pdf \
   -F 'roles=["partner","seller"]'
@@ -307,7 +307,7 @@ curl -s https://esign.insulinapps.com/api/templates \
 ### Send it
 
 ```bash
-curl -s https://esign.insulinapps.com/api/envelopes \
+curl -s https://esign.insulin-apps.com/api/envelopes \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -H "Idempotency-Key: $(uuidgen)" \
@@ -342,15 +342,15 @@ envelope back.
 ### Follow it
 
 ```bash
-curl -s https://esign.insulinapps.com/api/envelopes/$ENVELOPE_ID -H "Authorization: Bearer $TOKEN"
-curl -s https://esign.insulinapps.com/api/envelopes/$ENVELOPE_ID/audit -H "Authorization: Bearer $TOKEN"
+curl -s https://esign.insulin-apps.com/api/envelopes/$ENVELOPE_ID -H "Authorization: Bearer $TOKEN"
+curl -s https://esign.insulin-apps.com/api/envelopes/$ENVELOPE_ID/audit -H "Authorization: Bearer $TOKEN"
 ```
 
 When the status is `COMPLETED`, download the signed PDF with its certificate:
 
 ```bash
 curl -s -o signed-with-certificate.pdf \
-  https://esign.insulinapps.com/api/envelopes/$ENVELOPE_ID/delivery-pdf -H "Authorization: Bearer $TOKEN"
+  https://esign.insulin-apps.com/api/envelopes/$ENVELOPE_ID/delivery-pdf -H "Authorization: Bearer $TOKEN"
 ```
 
 ### From an AI agent
@@ -385,7 +385,7 @@ A host product shows the signing page inside its own pages:
    `POST /api/envelopes/{id}/tasks/{taskId}/recipient-view` with
    `{"signedInEmail": "…", "allowedParentOrigin": "https://app.example.com"}`: the email of the account signed in to the
    host, and the origin of the host page that will frame the signing page. It gets `{code, url}`.
-2. The host frames `url`, which is `https://esign.insulinapps.com/sign?host=HOST_ORIGIN#code=CODE`. The code stays in
+2. The host frames `url`, which is `https://esign.insulin-apps.com/sign?host=HOST_ORIGIN#code=CODE`. The code stays in
    the fragment, which browsers never send; never log it.
 3. The page exchanges the code for a 15-minute session, takes the signer through review, the emailed code and signing,
    and posts `esign.signing.finished` (`signed` or `declined`) or `esign.signing.cancel` to the host.

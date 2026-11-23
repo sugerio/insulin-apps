@@ -9,18 +9,18 @@ with an authenticator app, and, for companies, single sign-on (SSO) with SAML 2.
 provisioning with SCIM 2.0. The first half is for everyone; the second half is for the organization owners and IT admins
 who connect an identity provider.
 
-All sign-in happens at `https://insulinapps.com`. Apps never ask for your password: they receive who you are from
+All sign-in happens at `https://insulin-apps.com`. Apps never ask for your password: they receive who you are from
 Insulin Apps.
 
 ## Passwords
 
 - A password has 10 to 200 characters. It is stored only as a salted hash, never as the password itself.
 - **Confirming your address.** A new account gets a confirmation e-mail. Its link works once and expires after 24 hours.
-  You can ask for a new one at any time: **Get a new confirmation link** at `https://insulinapps.com/resend-verification`.
+  You can ask for a new one at any time: **Get a new confirmation link** at `https://insulin-apps.com/resend-verification`.
 - **Forgot your password?** On **Sign in**, choose **Forgot your password?**, enter your address and choose **Send link**.
   The link expires after 1 hour. On **Choose a new password**, enter a **New password** and choose **Save password**. This
   also works for an account that has only signed in with Google so far: it gives the account a password.
-- **Changing your password.** On **Account** (`https://insulinapps.com/account`), under **Change password**, enter your
+- **Changing your password.** On **Account** (`https://insulin-apps.com/account`), under **Change password**, enter your
   **Current password** and a **New password**, then **Save password**. An account that signs in with Google only sees
   **Set a password** instead.
 
@@ -39,9 +39,9 @@ profile and e-mail address.
 
 ## Sessions
 
-- Signing in starts a session that lasts 30 days and renews while you use it. It works on `insulinapps.com` and in every
+- Signing in starts a session that lasts 30 days and renews while you use it. It works on `insulin-apps.com` and in every
   app.
-- **Sign out** is under your name at the bottom of the navigation, on `insulinapps.com` and inside each app (or in the
+- **Sign out** is under your name at the bottom of the navigation, on `insulin-apps.com` and inside each app (or in the
   account bar, in an app without the navigation).
 - **A change of credentials signs you out everywhere else.** Setting, changing or resetting your password, and turning
   two-step sign-in on or off, end all your other sessions. They also disconnect all your AI agents, so an agent connected
@@ -55,7 +55,7 @@ Google Authenticator, Microsoft Authenticator, 1Password or Authy.
 
 ### Turn it on
 
-1. Go to **Account** → **Security** (`https://insulinapps.com/account/security`).
+1. Go to **Account** → **Security** (`https://insulin-apps.com/account/security`).
 2. Under **Two-step sign-in**, enter **Your password** and choose **Set up two-step sign-in**. An account without a
    password can do this within ten minutes of signing in instead, so that a session left open on someone else's computer
    can't be used.
@@ -95,7 +95,7 @@ On **Account** → **Security**, while two-step sign-in is on:
 Single sign-on lets your company's identity provider, such as Okta, Microsoft Entra ID or Google Workspace, sign people
 in to Insulin Apps with their work accounts. It works for addresses in e-mail domains your organization has verified.
 Only the organization's **owners** can set it up, under **Single sign-on** in the organization's settings
-(`https://insulinapps.com/settings/sso`).
+(`https://insulin-apps.com/settings/sso`).
 
 ![The Single sign-on settings with Domains, Identity provider, What your identity provider needs and SCIM provisioning](/docs/assets/screenshots/platform-sso.png "Single sign-on settings")
 
@@ -137,9 +137,9 @@ In your identity provider, create a SAML app with the values under **What your i
 
 | Insulin Apps shows | Value |
 |---|---|
-| **Entity ID (audience)** | `https://insulinapps.com/sso/saml/<connection id>` |
-| **Assertion consumer service (ACS) URL** | `https://insulinapps.com/sso/saml/<connection id>/acs` |
-| **Metadata URL** | `https://insulinapps.com/sso/saml/<connection id>/metadata` |
+| **Entity ID (audience)** | `https://insulin-apps.com/sso/saml/<connection id>` |
+| **Assertion consumer service (ACS) URL** | `https://insulin-apps.com/sso/saml/<connection id>/acs` |
+| **Metadata URL** | `https://insulin-apps.com/sso/saml/<connection id>/metadata` |
 | **Name ID format** | Email address |
 
 Then copy these from your identity provider into Insulin Apps:
@@ -166,7 +166,7 @@ under **What your identity provider needs**:
 
 | Insulin Apps shows | Value |
 |---|---|
-| **Redirect URI (sign-in redirect URL)** | `https://insulinapps.com/sso/oidc/<connection id>/callback` |
+| **Redirect URI (sign-in redirect URL)** | `https://insulin-apps.com/sso/oidc/<connection id>/callback` |
 
 Then copy these into Insulin Apps:
 
@@ -202,7 +202,7 @@ They are signed in only once the code is accepted. Someone who hasn't turned it 
 SCIM lets your identity provider add and remove people in your organization automatically. It is set up by owners under
 **SCIM provisioning** on the same **Single sign-on** page.
 
-1. Copy the **SCIM base URL**: `https://insulinapps.com/scim/v2`.
+1. Copy the **SCIM base URL**: `https://insulin-apps.com/scim/v2`.
 2. Under **New token name**, name the system that will use it (for example "Identity provider") and choose **Create
    token**. Copy the token into your identity provider now: it isn't shown again.
 3. In your identity provider, set the SCIM base URL and use the token as a bearer token.

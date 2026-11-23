@@ -1,6 +1,6 @@
-# Hosting the apps on insulinapps.com
+# Hosting the apps on insulin-apps.com
 
-Every app in this repository runs at its own address, `<app>.insulinapps.com`, with its own checks; releases deploy it.
+Every app in this repository runs at its own address, `<app>.insulin-apps.com`, with its own checks; releases deploy it.
 People create an account and an organization, invite their teammates with a role in every app or in specific apps,
 connect AI agents, and use the apps for real work. Data is kept; nothing is reset. How accounts, roles and access work
 is in [DESIGN.md](DESIGN.md).
@@ -81,8 +81,8 @@ present, because a retained secret is not removed merely by omitting it from a n
 The gateway deploy also uploads the docs' images: `.github/hosting/docs/assets/` is the Worker's static-assets
 directory (binding `DOCS_ASSETS`, `run_worker_first: true`), uploaded by `wrangler deploy` with the Worker, so the
 same Workers Scripts permission covers it. Every request still reaches the gateway first; it serves the directory only
-at `https://insulinapps.com/docs/assets/*`. The pages themselves are compiled into the Worker
-(`src/assets/docs-content.ts`), so docs reach `https://insulinapps.com/docs/` with the next release that deploys the
+at `https://insulin-apps.com/docs/assets/*`. The pages themselves are compiled into the Worker
+(`src/assets/docs-content.ts`), so docs reach `https://insulin-apps.com/docs/` with the next release that deploys the
 gateway. Keep only
 images in that directory: everything in it is uploaded.
 
@@ -132,7 +132,7 @@ release that deploys one, since the deploy creates the engine's buckets through 
    - `ORG_REQUEST_EMAIL`: Insulin Apps support's address, which receives requests for more organizations from people
      whose email domain has all it may have (DESIGN.md §3.1), with Reply-To set to the requester. Optional; without it
      the page at the limit points to `SUPPORT_EMAIL` or the issues instead. Set it here only, never in the repository
-   - `SITE_DOMAIN` only when the domain is not `insulinapps.com`
+   - `SITE_DOMAIN` only when the domain is not `insulin-apps.com`
 
    **App secrets.** An app that lists names under `insulin.secrets` in its `package.json` (DESIGN.md §8.3), such as
    `ESIGN_OTP_KEY`, gets each one that this environment holds, as a secret or else a variable of exactly that name,
@@ -152,14 +152,14 @@ release that deploys one, since the deploy creates the engine's buckets through 
 
 3. Create a Google OAuth web client. Register this exact redirect URI:
 
-   `https://insulinapps.com/auth/google/callback`
+   `https://insulin-apps.com/auth/google/callback`
 
-   Sites set up before sign-in moved to the apex registered `https://auth.insulinapps.com/auth/google/callback`; add the
-   apex URI (keep the old one until the deploy is out), because Google compares the exact redirect URI.
+   Sites set up before sign-in moved to the apex registered the same path on `auth.`; add the apex URI (keep the old
+   one until the deploy is out), because Google compares the exact redirect URI.
 
-   On its Branding page, set the application home page to `https://insulinapps.com`, the privacy policy to
-   `https://insulinapps.com/privacy` and the terms of service to `https://insulinapps.com/terms`, and list
-   `insulinapps.com` as an authorized domain: Google refuses to publish the app without them. Then publish it from the
+   On its Branding page, set the application home page to `https://insulin-apps.com`, the privacy policy to
+   `https://insulin-apps.com/privacy` and the terms of service to `https://insulin-apps.com/terms`, and list
+   `insulin-apps.com` as an authorized domain: Google refuses to publish the app without them. Then publish it from the
    Audience page so that any Google account can sign in. With a different `SITE_DOMAIN`, register the same paths on
    that domain instead. Put the client ID and secret in the matching GitHub environment settings. Google sign-in can be
    disabled by leaving both settings empty.
@@ -198,15 +198,15 @@ release that deploys one, since the deploy creates the engine's buckets through 
    without such a policy from December 2, 2026. The workflow runs the default branch's code, reads the pull request's
    commits as data, and has a read-only token.
 
-9. **The operator console** (optional; DESIGN.md §11), at `https://insulinapps.com/super` for Insulin Apps staff.
+9. **The operator console** (optional; DESIGN.md §11), at `https://insulin-apps.com/super` for Insulin Apps staff.
    In the company's Google Workspace Admin console, under **Apps → Web and mobile apps → Add app → Add custom SAML
    app**, create a SAML app for it alone (named, say, "Insulin Apps operator console"):
 
    - From **Google Identity Provider details**, copy the SSO URL, the entity ID and the certificate into the
      `production` environment's variables `SUPER_SAML_IDP_SSO_URL`, `SUPER_SAML_IDP_ENTITY_ID` and
      `SUPER_SAML_IDP_CERT` (the whole PEM, `-----BEGIN CERTIFICATE-----` lines included).
-   - **Service provider details:** ACS URL `https://insulinapps.com/super/saml/acs`, entity ID
-     `https://insulinapps.com/super`, name ID format `EMAIL`, name ID **Basic Information › Primary email**. Leave
+   - **Service provider details:** ACS URL `https://insulin-apps.com/super/saml/acs`, entity ID
+     `https://insulin-apps.com/super`, name ID format `EMAIL`, name ID **Basic Information › Primary email**. Leave
      "Signed response" as it is: the console accepts a signed response or a signed assertion.
    - **Attribute mapping:** First name to `firstName`, Last name to `lastName`; under **Group membership**, pick the
      operators' Google group and name the app attribute `groups` (exactly). Google sends the group's name; members of
@@ -275,7 +275,7 @@ The person then creates the organization themselves at `/orgs/new`. To go back t
 
 ### Suspend, disable or reinstate an organization or account
 
-In the operator console (`https://insulinapps.com/super`, owner setup step 9), an admin opens the organization or
+In the operator console (`https://insulin-apps.com/super`, owner setup step 9), an admin opens the organization or
 the person, chooses **Suspend** (pause while you look into it), **Disable** (end it for abuse or fraud, which also ends
 an account's sessions and AI agents, or an organization's AI agents, API clients, invitations and SCIM tokens, for
 good) or **Reinstate**, and gives a reason, which the audit log keeps and the people concerned never see. It applies at

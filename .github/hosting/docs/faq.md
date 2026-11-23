@@ -11,12 +11,12 @@ is for everyone: members, owners and admins, and AI agents looking for a quick f
 
 ### Do I need a separate account for each app?
 
-No. One account at `insulinapps.com` works in every app. You sign in once, and every app at `<app>.insulinapps.com`
+No. One account at `insulin-apps.com` works in every app. You sign in once, and every app at `<app>.insulin-apps.com`
 knows who you are. See [Getting started](/docs/platform/getting-started).
 
 ### I didn't get the confirmation e-mail. What now?
 
-Wait a few minutes and check your spam folder. Then ask for a new link at `https://insulinapps.com/resend-verification`,
+Wait a few minutes and check your spam folder. Then ask for a new link at `https://insulin-apps.com/resend-verification`,
 or sign in: if your password is right, you are offered **Send a new link**. Links work once and expire after 24 hours.
 
 ### I signed up with Google. Can I also use a password?
@@ -45,7 +45,7 @@ apps** gives access only to the apps chosen, with a role in each. A person has o
 
 ### How do I remove someone from one app only?
 
-If they have specific-apps access, open that app's people page (`https://insulinapps.com/apps/<app>/settings/users`) and
+If they have specific-apps access, open that app's people page (`https://insulin-apps.com/apps/<app>/settings/users`) and
 choose **Remove** next to them. If it was their last app, they leave the organization. If they have an organization role,
 change their access to **Specific apps** on the organization's **People** page and leave out that app.
 
@@ -64,7 +64,7 @@ address. To see the whole cap table without changing it, ask an owner for a cust
 ### Can I be in more than one organization?
 
 Yes. Apps open in your active organization. Switch it from the organization menu at the top of the navigation, on
-`insulinapps.com` and inside an app (or from the account bar, in an app without the navigation). The same menu has
+`insulin-apps.com` and inside an app (or from the account bar, in an app without the navigation). The same menu has
 **Create an organization**.
 
 ### How many organizations can we create?

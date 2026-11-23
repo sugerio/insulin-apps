@@ -15,7 +15,7 @@ person, with that person's access and no more.
 
 **Already here.** Files with the same content as files the collection had already learned; nothing changed.
 
-**API client.** A program the organization set up on insulinapps.com to call Knowledge. It reaches a collection only
+**API client.** A program the organization set up on insulin-apps.com to call Knowledge. It reaches a collection only
 when the collection is shared with it by name.
 
 **Asleep.** A collection nobody asked for a while sleeps, to keep Knowledge free. The first question wakes it up, in

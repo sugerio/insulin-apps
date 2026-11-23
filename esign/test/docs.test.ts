@@ -99,7 +99,7 @@ test('the topics are listed in reading order, in two groups, and /docs opens the
  assert.equal(new Set(items.map(i=>i.icon)).size,items.length,'a different icon for each, for the collapsed column');
 });
 
-// Esign's Docs at https://esign.insulinapps.com/docs showed everything in one narrow column: a misplaced parenthesis
+// Esign's Docs at https://esign.insulin-apps.com/docs showed everything in one narrow column: a misplaced parenthesis
 // rendered the article inside the topic list's <nav>, so the two-column grid had one child, in its 13rem column.
 test('a topic is the page itself: its article is the outermost element, never inside a navigation',()=>{
  for(const topic of [undefined,...DOC_TOPICS.map(t=>t.slug)]){

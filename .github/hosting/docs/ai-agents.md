@@ -15,12 +15,12 @@ Every app is its own MCP server, at `/mcp` on the app's address:
 
 | App | MCP server |
 |---|---|
-| Cap Table | `https://captable.insulinapps.com/mcp` |
-| Esign | `https://esign.insulinapps.com/mcp` |
-| Any app | `https://<app>.insulinapps.com/mcp` |
+| Cap Table | `https://captable.insulin-apps.com/mcp` |
+| Esign | `https://esign.insulin-apps.com/mcp` |
+| Any app | `https://<app>.insulin-apps.com/mcp` |
 
 You add the server to your agent once: each app's [Connect AI page](#the-connect-ai-page) has the command for your
-client, ready to copy. The first time the agent connects, it opens `insulinapps.com` in your browser.
+client, ready to copy. The first time the agent connects, it opens `insulin-apps.com` in your browser.
 You sign in (with two-step sign-in, if you use it), choose the organization, and choose **Allow**. From then on the
 agent works in that app, in that organization, **as you**: with your role there, re-checked on every call.
 
@@ -30,8 +30,8 @@ organization can't see another.
 ## The Connect AI page
 
 Every app has a **Connect AI** page with everything you need to connect an agent to it:
-`https://insulinapps.com/apps/<app>/settings/connect-ai`, for example
-`https://insulinapps.com/apps/captable/settings/connect-ai`. You reach it three ways:
+`https://insulin-apps.com/apps/<app>/settings/connect-ai`, for example
+`https://insulin-apps.com/apps/captable/settings/connect-ai`. You reach it three ways:
 
 - inside the app, from **Settings** → **Connect AI** in its navigation (or **Connect AI** in the account bar, in an
   app without the navigation);
@@ -55,12 +55,12 @@ Everyone who can use the app can open it, Viewers and people with access to spec
 ## Connect your agent
 
 These are the commands the Connect AI page shows. The examples use Cap Table; for another app, change both the name and
-the address, for example `esign` and `https://esign.insulinapps.com/mcp`, or copy them from that app's Connect AI page.
+the address, for example `esign` and `https://esign.insulin-apps.com/mcp`, or copy them from that app's Connect AI page.
 
 ### Claude Code
 
 ```bash
-claude mcp add --transport http captable https://captable.insulinapps.com/mcp
+claude mcp add --transport http captable https://captable.insulin-apps.com/mcp
 ```
 
 Then run `/mcp` in Claude Code, choose `captable` and sign in in the browser window it opens. Add `--scope user` to the
@@ -69,16 +69,16 @@ command to have the server in every project, not only the current one.
 ### Codex CLI
 
 ```bash
-codex mcp add captable --url https://captable.insulinapps.com/mcp
+codex mcp add captable --url https://captable.insulin-apps.com/mcp
 codex mcp login captable
 ```
 
-The second command opens `insulinapps.com` in your browser to sign in and allow the connection.
+The second command opens `insulin-apps.com` in your browser to sign in and allow the connection.
 
 ### Gemini CLI
 
 ```bash
-gemini mcp add --transport http captable https://captable.insulinapps.com/mcp
+gemini mcp add --transport http captable https://captable.insulin-apps.com/mcp
 ```
 
 Then run `/mcp auth captable` in Gemini CLI to sign in. The command adds the server to the current project; add
@@ -87,16 +87,16 @@ Then run `/mcp auth captable` in Gemini CLI to sign in. The command adds the ser
 ### opencode
 
 ```bash
-opencode mcp add captable --url https://captable.insulinapps.com/mcp
+opencode mcp add captable --url https://captable.insulin-apps.com/mcp
 opencode mcp auth captable
 ```
 
-The second command opens `insulinapps.com` in your browser to sign in and allow the connection.
+The second command opens `insulin-apps.com` in your browser to sign in and allow the connection.
 
 ### Claude.ai and ChatGPT
 
 Claude.ai and ChatGPT connect from their own servers, as a custom connector that takes the app's MCP address, such as
-`https://captable.insulinapps.com/mcp`.
+`https://captable.insulin-apps.com/mcp`.
 
 - **Claude.ai**: **Customize** → **Connectors** → **Add** → **Add custom connector**; paste the address and connect. On
   Team and Enterprise plans an owner adds it under **Organization settings** → **Connectors**, and members then connect
@@ -104,7 +104,7 @@ Claude.ai and ChatGPT connect from their own servers, as a custom connector that
 - **ChatGPT**: where your plan or workspace allows custom MCP servers (**Plugins** → **Add custom MCP server**), paste the
   address and choose OAuth to sign in.
 
-The connector sends you to `insulinapps.com` to sign in and allow it, like any other agent. Insulin Apps accepts these
+The connector sends you to `insulin-apps.com` to sign in and allow it, like any other agent. Insulin Apps accepts these
 connectors' registered callbacks:
 
 - `https://claude.ai/api/mcp/auth_callback`
@@ -186,7 +186,7 @@ for each new change, and the same key again only when you retry that same change
   organization. If an owner lowers your role, your agent's power drops at its next call; if you lose access, its calls are
   refused (`no_app_access`). A Viewer's agent can't change anything a Viewer can't.
 - **Only the app's own API.** Tools reach paths under `/api/` on that app, never the platform's `/api/__suger/`, and never
-  the pages of `insulinapps.com`.
+  the pages of `insulin-apps.com`.
 - **Never people, roles, integrations or billing.** Inviting people, changing roles, custom roles, OAuth clients for API
   access, stored credentials, single sign-on and organization settings are browser-only. Apps also refuse their own changes of
   that kind unless they come from a browser.
@@ -215,7 +215,7 @@ and the agent must connect again. After 30 days, the agent asks you to sign in a
 
 ## See and disconnect your agents
 
-**Account** → **AI agents** (`https://insulinapps.com/account/agents`) lists every agent you connected, in every app and
+**Account** → **AI agents** (`https://insulin-apps.com/account/agents`) lists every agent you connected, in every app and
 organization, with its app, organization, when it was connected, until when, and when it was last used. **Disconnect**
 stops it at once. Under **Connect an agent**, it lists the apps you can use in your active organization, each with its
 MCP address and a **Connect AI** button that opens that app's Connect AI page.
@@ -228,7 +228,7 @@ anyone in the organization connected to the app, with who connected it, and they
 of one app only (through access to specific apps) sees just their own.
 
 The organization's owners and admins also see every app's agents, with every OAuth client for API access, on
-**Settings › OAuth clients** (`https://insulinapps.com/settings/oauth-clients`), with who connected each, when, and when
+**Settings › OAuth clients** (`https://insulin-apps.com/settings/oauth-clients`), with who connected each, when, and when
 it was last used. **Revoke** there ends an agent's access at once and keeps it listed, marked **Revoked** with the day and
 who revoked it, until its 30 days would have ended or its person leaves the organization; **Delete** takes it off the list. A revoked agent no longer appears in
 its person's lists, and the person can connect it again, which makes a new grant.
@@ -249,15 +249,15 @@ A grant also ends when:
 - **Transport**: stateless Streamable HTTP. `POST` JSON-RPC to `/mcp` and get JSON back (no server-sent events, no
   session). Protocol versions `2025-11-25`, `2025-06-18`, `2025-03-26` and `2024-11-05`.
 - **Discovery**: an unauthenticated request gets `401` with
-  `WWW-Authenticate: Bearer resource_metadata="https://<app>.insulinapps.com/.well-known/oauth-protected-resource/mcp"`.
-  That document names the authorization server, `https://insulinapps.com`, whose metadata is at
-  `https://insulinapps.com/.well-known/oauth-authorization-server`.
-- **Registration**: `POST https://insulinapps.com/oauth/register` (RFC 7591), public clients only
+  `WWW-Authenticate: Bearer resource_metadata="https://<app>.insulin-apps.com/.well-known/oauth-protected-resource/mcp"`.
+  That document names the authorization server, `https://insulin-apps.com`, whose metadata is at
+  `https://insulin-apps.com/.well-known/oauth-authorization-server`.
+- **Registration**: `POST https://insulin-apps.com/oauth/register` (RFC 7591), public clients only
   (`token_endpoint_auth_method: "none"`), grant types `authorization_code` and `refresh_token`, redirect URIs on a loopback
   address or one of the hosted callbacks above. A client that never gets a grant is deleted after a day.
-- **Authorization**: `GET https://insulinapps.com/oauth/authorize` with `response_type=code`, PKCE (`S256`) and
-  `resource=https://<app>.insulinapps.com/mcp` (the app's origin is accepted too). The answer carries `iss`.
-- **Tokens**: `POST https://insulinapps.com/oauth/token` with `authorization_code` or `refresh_token`.
-  `POST https://insulinapps.com/oauth/revoke` revokes a token; revoking a refresh token ends the grant.
+- **Authorization**: `GET https://insulin-apps.com/oauth/authorize` with `response_type=code`, PKCE (`S256`) and
+  `resource=https://<app>.insulin-apps.com/mcp` (the app's origin is accepted too). The answer carries `iss`.
+- **Tokens**: `POST https://insulin-apps.com/oauth/token` with `authorization_code` or `refresh_token`.
+  `POST https://insulin-apps.com/oauth/revoke` revokes a token; revoking a refresh token ends the grant.
 - A person's token works only on `/mcp`, never directly on `/api/*`. Programs that call the API directly use an
   [OAuth client](/docs/platform/api-and-service-accounts) from the app's **API access** page.

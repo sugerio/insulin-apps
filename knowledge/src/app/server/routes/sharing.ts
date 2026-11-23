@@ -99,7 +99,7 @@ export function sharingRoutes() {
     const status = await memberStatus(c.env, collection.org_id, [principalId]).catch(() => null)
     if (status && status !== 'deleted') {
       const entry = status.entries.find((candidate) => candidate.id === principalId && (candidate.type === type || candidate.gone))
-      if (!entry?.member) throw badRequest(type === 'client' ? "That API client can't use Knowledge in your organization." : "That person can't use Knowledge in your organization. Invite them on insulinapps.com first.")
+      if (!entry?.member) throw badRequest(type === 'client' ? "That API client can't use Knowledge in your organization." : "That person can't use Knowledge in your organization. Invite them on insulin-apps.com first.")
       await db.prepare(
         `INSERT INTO members (org_id, principal_type, principal_id, app_role, org_role, permissions, away, unchecked, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?7, 0, 0, ?6)
          ON CONFLICT (org_id, principal_type, principal_id) DO UPDATE SET app_role = COALESCE(excluded.app_role, members.app_role),

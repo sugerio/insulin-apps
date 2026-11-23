@@ -11,27 +11,27 @@ which returns only what that caller may use right now.
 
 ## Connect
 
-The base URL is `https://knowledge.insulinapps.com`, and every endpoint is under `/api/`.
+The base URL is `https://knowledge.insulin-apps.com`, and every endpoint is under `/api/`.
 
-- **AI assistants.** Connect an MCP client to `https://knowledge.insulinapps.com/mcp`. Knowledge's **Connect AI** page
-  (`https://insulinapps.com/apps/knowledge/settings/connect-ai`, or **Settings › Connect AI** in Knowledge) has the setup
+- **AI assistants.** Connect an MCP client to `https://knowledge.insulin-apps.com/mcp`. Knowledge's **Connect AI** page
+  (`https://insulin-apps.com/apps/knowledge/settings/connect-ai`, or **Settings › Connect AI** in Knowledge) has the setup
   for Claude Code, Codex, Gemini CLI, opencode, Claude.ai and ChatGPT. The assistant signs in as you and acts with your
   role in Knowledge and your role in each collection, no more. See [AI agents](/docs/platform/ai-agents).
 - **OAuth clients.** An owner or admin of the organization creates an OAuth client, with a role in Knowledge, on
-  Knowledge's **API access** page (`https://insulinapps.com/apps/knowledge/settings/api`). The program gets a token
+  Knowledge's **API access** page (`https://insulin-apps.com/apps/knowledge/settings/api`). The program gets a token
   with the client-credentials grant and sends it as a Bearer token. See
   [API access with OAuth clients](/docs/platform/api-and-service-accounts).
 
-![Knowledge's Connect AI page on insulinapps.com: the address of Knowledge's MCP server, what happens the first time an assistant connects, and the setup for Claude Code and Codex CLI](/docs/assets/screenshots/knowledge-connect-ai.png "Settings › Connect AI: Knowledge's MCP server and each client's setup")
+![Knowledge's Connect AI page on insulin-apps.com: the address of Knowledge's MCP server, what happens the first time an assistant connects, and the setup for Claude Code and Codex CLI](/docs/assets/screenshots/knowledge-connect-ai.png "Settings › Connect AI: Knowledge's MCP server and each client's setup")
 
 ```bash
 # Get an access token, then ask what this OAuth client may call.
-TOKEN=$(curl -s https://insulinapps.com/oauth/token \
+TOKEN=$(curl -s https://insulin-apps.com/oauth/token \
   -u "$CLIENT_ID:$CLIENT_SECRET" \
   -d grant_type=client_credentials \
-  -d resource=https://knowledge.insulinapps.com | jq -r .access_token)
+  -d resource=https://knowledge.insulin-apps.com | jq -r .access_token)
 
-curl -s https://knowledge.insulinapps.com/api/catalog -H "Authorization: Bearer $TOKEN"
+curl -s https://knowledge.insulin-apps.com/api/catalog -H "Authorization: Bearer $TOKEN"
 ```
 
 ## Who sees what
@@ -80,7 +80,7 @@ title: How an AI assistant asks Knowledge
 description: An AI assistant signs in once to Knowledge's MCP server and asks with its person's roles, naming one to five collections in each search. Knowledge returns passages with their files, pages and exact words, covered false when nothing covers the question, or a time to ask again while a collection wakes or learns.
 size: 760 x 360
 box assistant 20 30 180 84 "Your AI assistant" "Claude, ChatGPT, Codex," "Gemini, opencode…"
-box mcp 240 30 260 84 accent "Knowledge's MCP server" "knowledge.insulinapps.com/mcp" "acts as you: your roles, no more"
+box mcp 240 30 260 84 accent "Knowledge's MCP server" "knowledge.insulin-apps.com/mcp" "acts as you: your roles, no more"
 box search 530 30 200 84 "A search" "names 1 to 5 collections" "you can ask"
 box passages 20 200 230 110 accent "Passages" "each with its file, pages and" "exact words: the assistant" "writes the answer and links" "to the sources"
 box uncovered 265 200 230 110 muted "covered: false" "nothing in them covers" "the question: the assistant" "says it won't guess"

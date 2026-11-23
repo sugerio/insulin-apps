@@ -39,7 +39,7 @@ type Me = api.MeResponse;
 // the repository's root), built from shadcn/ui's Sidebar. Level 1 has the organization switcher, Cap Table's sections
 // from the navigation manifest (`insulin.navigation` in package.json) for the person's role and what they have here
 // (the company workspace, their own holdings), then Docs and Settings, and the person at the bottom. Level 2 lists the
-// open section's items, or Settings' pages, which are Insulin Apps' own pages on insulinapps.com. Each level collapses
+// open section's items, or Settings' pages, which are Insulin Apps' own pages on insulin-apps.com. Each level collapses
 // to its icons (a collapsed item's label is its `title` and `aria-label`), remembered in this browser (`insulin-nav`).
 // On a narrow screen (use-mobile.ts) both levels open stacked in a sheet from the menu button beside the breadcrumb,
 // which the header above each page carries.
@@ -326,7 +326,7 @@ function CollapseToggle({ collapsed, controls, name, menu = false, onToggle }: {
   );
 }
 
-/** Settings' level 2: Insulin Apps' pages for this app, on insulinapps.com, which the app only links to. */
+/** Settings' level 2: Insulin Apps' pages for this app, on insulin-apps.com, which the app only links to. */
 function SettingsItems({ platform, collapsed }: { platform: PlatformAccount | null | undefined; collapsed: boolean }) {
   const links = settingsLinks(platform);
   const reachable = links.some((link) => link.href);
@@ -356,7 +356,7 @@ function SettingsItems({ platform, collapsed }: { platform: PlatformAccount | nu
       </SidebarMenu>
       {reachable ? null : (
         <p className="mt-2 px-2 text-xs text-muted-foreground group-data-[collapsible=icon]:hidden">
-          People, integrations, API access and Connect AI are managed on Insulin Apps (insulinapps.com) when Cap Table is used there.
+          People, integrations, API access and Connect AI are managed on Insulin Apps (insulin-apps.com) when Cap Table is used there.
         </p>
       )}
     </SidebarGroup>

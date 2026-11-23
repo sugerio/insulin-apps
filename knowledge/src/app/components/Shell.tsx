@@ -29,7 +29,7 @@ import { CrumbSlotContext } from './Page.tsx'
 // shadcn/ui's Sidebar as Cap Table's is. Level 1 has the organization switcher, Knowledge's sections from the navigation
 // manifest (`insulin.navigation` in package.json) for what the person's permissions leave them, then Docs and Settings,
 // and the person at the bottom. Level 2 lists the person's collections under Collections (with "New collection" for
-// those who may start one), or Settings' pages, which are Insulin Apps' own pages on insulinapps.com. Each level
+// those who may start one), or Settings' pages, which are Insulin Apps' own pages on insulin-apps.com. Each level
 // collapses to its icons (a collapsed item's label is its `title` and `aria-label`), remembered in this browser
 // (`insulin-nav`). Below 768 px both levels open stacked in a drawer from the menu button in the header.
 
@@ -285,7 +285,7 @@ function CollectionItems({ me, collections, pathname, collapsed, onPick }: {
   )
 }
 
-/** Settings' level 2: Insulin Apps' pages for this app, on insulinapps.com, which the app only links to. */
+/** Settings' level 2: Insulin Apps' pages for this app, on insulin-apps.com, which the app only links to. */
 function SettingsItems({ platform, collapsed }: { platform: PlatformAccount | null | undefined; collapsed: boolean }) {
   const fromPlatform = settingsLinks(platform)
   return (
@@ -293,7 +293,7 @@ function SettingsItems({ platform, collapsed }: { platform: PlatformAccount | nu
       <SidebarMenu>
         {SETTINGS_LINKS.map(({ key, label, path }) => {
           const Glyph = SETTINGS_ICONS[key] ?? Settings
-          // The app's own host redirects these paths to insulinapps.com when the platform's account doesn't name them.
+          // The app's own host redirects these paths to insulin-apps.com when the platform's account doesn't name them.
           const href = fromPlatform.find((link) => link.key === key)?.href ?? path
           return (
             <SidebarMenuItem key={key}>
@@ -309,7 +309,7 @@ function SettingsItems({ platform, collapsed }: { platform: PlatformAccount | nu
       </SidebarMenu>
       {collapsed ? null : (
         <p className="mt-2 px-2 text-xs text-muted-foreground">
-          People, integrations, API access and Connect AI are Insulin Apps' pages, on insulinapps.com. Knowledge only links to them.
+          People, integrations, API access and Connect AI are Insulin Apps' pages, on insulin-apps.com. Knowledge only links to them.
         </p>
       )}
     </SidebarGroup>

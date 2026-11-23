@@ -75,7 +75,7 @@ compensation).
 
 - **No SIN, address or bank details in Taxi's fields.** You write them on the paper return when you sign it. An
   uploaded file is kept as it was uploaded, so a slip's printed SIN and address are in it until the file is deleted or a new version of it is read.
-- **Hourly usage counts.** On insulinapps.com, the platform calls Taxi every five minutes, and once an hour it
+- **Hourly usage counts.** On insulin-apps.com, the platform calls Taxi every five minutes, and once an hour it
   sends counts for each organization (profiles, people, tax years, returns and files), the bytes each one stores and
   the database's size. Never names,
   birth dates, amounts or documents.

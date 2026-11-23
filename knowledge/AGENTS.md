@@ -122,7 +122,7 @@ Every Insulin app ships a **Docs** entry in its navigation:
 - tests cover the Docs entry for each role and every topic rendering.
 
 Cap Table is the reference: `captable/src/app/pages/docs/` and `captable/src/app/components/Docs.tsx`. The public docs
-at `https://insulinapps.com/docs/knowledge/` are `docs/public/*.md` (front matter `title`, `description`, `order`);
+at `https://insulin-apps.com/docs/knowledge/` are `docs/public/*.md` (front matter `title`, `description`, `order`);
 update the page that describes a behaviour in the same change, then run `npm run build:docs` in
 `.github/hosting/gateway/` and commit its `src/assets/docs-content.ts`.
 

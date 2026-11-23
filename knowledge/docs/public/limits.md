@@ -4,7 +4,7 @@ description: The free limits each organization has in Knowledge, what happens ne
 order: 10
 ---
 
-Insulin Knowledge is free on insulinapps.com. To keep it free for everyone, each organization has limits, which Insulin
+Insulin Knowledge is free on insulin-apps.com. To keep it free for everyone, each organization has limits, which Insulin
 Apps sets and can raise for one organization. This page lists them and what happens at each. It is for Admins watching
 usage, and for AI agents that get a `quota_exceeded` error.
 

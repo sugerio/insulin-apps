@@ -225,7 +225,7 @@ jobs:
           RELEASE_COMMIT: ${{ needs.release.outputs.commit }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
-          SITE_DOMAIN: ${{ vars.SITE_DOMAIN || 'insulinapps.com' }}
+          SITE_DOMAIN: ${{ vars.SITE_DOMAIN || 'insulin-apps.com' }}
           # The address an app's limit messages name (SUGER_SUPPORT_EMAIL). Optional.
           SUPPORT_EMAIL: ${{ vars.SUPPORT_EMAIL }}
           # Optional: derives the app's SUGER_APP_TOKEN for the gateway's integration proxy and mail relay.
@@ -272,7 +272,7 @@ jobs:
           RELEASE_COMMIT: ${{ needs.release.outputs.commit }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
-          SITE_DOMAIN: ${{ vars.SITE_DOMAIN || 'insulinapps.com' }}
+          SITE_DOMAIN: ${{ vars.SITE_DOMAIN || 'insulin-apps.com' }}
           GOOGLE_CLIENT_ID: ${{ vars.GOOGLE_CLIENT_ID }}
           GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
           TURNSTILE_SITE_KEY: ${{ vars.TURNSTILE_SITE_KEY }}

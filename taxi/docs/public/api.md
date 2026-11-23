@@ -9,9 +9,9 @@ agents connected over MCP. The list for any caller is `GET /api/catalog`, which 
 
 ## Base URL and authentication
 
-The base URL is `https://taxi.insulinapps.com`, and every endpoint is under `/api/`.
+The base URL is `https://taxi.insulin-apps.com`, and every endpoint is under `/api/`.
 
-- **AI agents over MCP.** Connect an MCP client to `https://taxi.insulinapps.com/mcp`. The **Connect AI** page
+- **AI agents over MCP.** Connect an MCP client to `https://taxi.insulin-apps.com/mcp`. The **Connect AI** page
   (**Settings › Connect AI**) has the setup for each client. The agent acts with your role.
 - **OAuth clients.** An owner or admin creates one on the **API access** page (**Settings › API access**), with a role.
   Get a token with the client-credentials grant and send it as `Authorization: Bearer <token>`.

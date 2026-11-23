@@ -59,7 +59,7 @@ Run from `taxi/` unless noted.
 | `src/app/router.tsx`, `src/app/pages/`, `src/app/components/` | The React app: Returns (`/returns`, with Start a year), Profile (`/profile`, the people), one person's return (`/returns/:year/:personId/:step`, framed by `YearFrame.tsx`: the year, its estimate and slips, the open return and the switcher; an old `/returns/:year/:step` link opens the person preparing's return), Docs; `PeopleEditor.tsx` holds the people list and the picker of who is in a year |
 | `src/app/components/AppLayout.tsx`, `src/app/lib/navigation.ts`, `lib/platform.ts` | The shell: the two-level navigation, Docs and Settings, the organization switcher and the person |
 | `src/app/pages/docs/`, `components/Docs.tsx` | The in-app Docs: one static TSX file per topic |
-| `docs/public/` | The public docs at `insulinapps.com/docs/taxi/` |
+| `docs/public/` | The public docs at `insulin-apps.com/docs/taxi/` |
 | `test/support/server.ts`, `test/web/support.tsx` | The real server on an in-memory D1 with the platform's headers; the whole React app rendered against it |
 
 ## Platform files: leave them alone
@@ -119,7 +119,7 @@ Every Insulin app ships a **Docs** entry in its navigation:
 - tests cover the Docs entry for each role and every topic rendering (`test/web/docs.test.tsx`).
 
 Taxi's Docs are `src/app/pages/docs/` and `src/app/components/Docs.tsx`. The public docs at
-`https://insulinapps.com/docs/taxi/` are `docs/public/*.md` (front matter `title`, `description`, `order`);
+`https://insulin-apps.com/docs/taxi/` are `docs/public/*.md` (front matter `title`, `description`, `order`);
 update the page that describes a behaviour in the same change, then run `npm run build:docs` in
 `.github/hosting/gateway/` and commit its `src/assets/docs-content.ts`.
 

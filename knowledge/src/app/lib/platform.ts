@@ -3,7 +3,7 @@ import { z } from "zod";
 
 // Copied from Cap Table (src/app/lib/platform.ts), with Knowledge's name and public docs.
 
-// The Insulin Apps account around the app: on insulinapps.com the gateway answers `/__insulin/*` on the app's own host
+// The Insulin Apps account around the app: on insulin-apps.com the gateway answers `/__insulin/*` on the app's own host
 // (the account bar uses the same endpoints): who is signed in, their organizations and the links to the platform's
 // pages. Knowledge reads it for the organization switcher, the person's Account and Sign out, and the Settings links.
 // Elsewhere (the Insulin console's frame, the local preview) there is no such account: the shell then shows the

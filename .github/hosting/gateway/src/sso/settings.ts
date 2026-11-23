@@ -1,4 +1,4 @@
-// insulinapps.com/settings/sso (DESIGN.md §7): an organization's OWNERs claim and verify e-mail domains, set up the
+// insulin-apps.com/settings/sso (DESIGN.md §7): an organization's OWNERs claim and verify e-mail domains, set up the
 // SAML or OIDC connection, and create SCIM tokens. Every write re-checks the OWNER role in its own statement.
 import type { Context } from '../context.ts'
 import { newId, randomToken, seal, sha256Hex } from '../crypto.ts'

@@ -55,7 +55,7 @@ const open = (link: string | null, what = 'Open it') => (link ? `\n\n${what}: ${
 
 /**
  * A link to a page of Knowledge, for mail. The app's address is the platform's host with the app's name in front
- * (knowledge.insulinapps.com beside insulinapps.com), read from the mail relay's address the deploy gives the app, so
+ * (knowledge.insulin-apps.com beside insulin-apps.com), read from the mail relay's address the deploy gives the app, so
  * no host is written here. Null without a relay, when no mail is sent anyway.
  */
 export function appLink(env: Pick<Bindings, 'SUGER_MAIL_URL'>, path: string): string | null {

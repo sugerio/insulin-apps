@@ -6,7 +6,7 @@ import { logError } from './http.ts'
 import { effectiveLimit } from './limits.ts'
 
 /**
- * An organization's Rules and data (table `org_settings`): its time zone (until insulinapps.com keeps one), who
+ * An organization's Rules and data (table `org_settings`): its time zone (until insulin-apps.com keeps one), who
  * writes answers on the site (the built-in model through the engine, or the organization's own model through its
  * integration on the platform), and what is hidden before anything is learned. Every collection's engine settings
  * are built from these and the collection's own (keep-ready window, minutes awake).

@@ -3,7 +3,7 @@ import { applyEngineEvent } from '../../src/app/server/outbox.ts'
 import { createHarness, ORG, PEOPLE, type Harness } from '../support/harness.ts'
 
 // The platform's five-minute tick: who may call it, member events and the resync after 410, the engine's outbox
-// applied once, deletions retried, and the organization deleted on insulinapps.com purged.
+// applied once, deletions retried, and the organization deleted on insulin-apps.com purged.
 
 let h: Harness
 beforeEach(async () => { h = await createHarness() })
@@ -35,7 +35,7 @@ describe('the tick', () => {
     expect(await h.db.prepare(`SELECT cursor FROM sync_state WHERE name = 'member_events'`).first('cursor')).toBe('2')
   })
 
-  it('an API client revoked loses its shares, and an organization deleted on insulinapps.com is purged in the engine', async () => {
+  it('an API client revoked loses its shares, and an organization deleted on insulin-apps.com is purged in the engine', async () => {
     const id = await h.collection(PEOPLE.maya)
     await h.note(PEOPLE.maya, id, 'Partner discounts stop at 20 percent.')
     await h.share(PEOPLE.maya, id, PEOPLE.client, 'VIEWER')

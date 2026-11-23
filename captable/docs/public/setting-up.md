@@ -10,7 +10,7 @@ spreadsheet template column by column, Pulley's reports, the preview and its pro
 
 ## Before you start
 
-1. **Create an account and an organization** at `https://insulinapps.com`, if you haven't yet. See
+1. **Create an account and an organization** at `https://insulin-apps.com`, if you haven't yet. See
    [Getting started](/docs/platform/getting-started).
 2. **Make sure you can record changes.** You need to be an organization Owner, Admin or Editor, an Admin or Editor of
    Cap Table, or have a custom role with **Record changes**. Your profile also needs an e-mail address, so that every
@@ -25,7 +25,7 @@ spreadsheet template column by column, Pulley's reports, the preview and its pro
 
 ## Choose how to start
 
-Open `https://captable.insulinapps.com`. The first person in your organization who can record changes sees **Set up
+Open `https://captable.insulin-apps.com`. The first person in your organization who can record changes sees **Set up
 your company**, with three ways to start:
 
 - **Start with an empty company.** Enter the company's details yourself. You can still import into it later, as long as

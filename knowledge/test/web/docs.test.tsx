@@ -156,7 +156,7 @@ describe('what the Docs say', () => {
     for (const topic of DOC_TOPICS) {
       const text = textOf(topic.slug)
       expect({ topic: topic.slug, address: /[\w.+-]+@[\w-]+\.[\w.-]+/.exec(text)?.[0] ?? null }).toEqual({ topic: topic.slug, address: null })
-      for (const host of text.match(/\b[a-z0-9-]+(?:\.[a-z0-9-]+)*\.(?:com|net|org|io|dev|app)\b/gi) ?? []) expect(host.toLowerCase()).toMatch(/(^|\.)insulinapps\.com$/)
+      for (const host of text.match(/\b[a-z0-9-]+(?:\.[a-z0-9-]+)*\.(?:com|net|org|io|dev|app)\b/gi) ?? []) expect(host.toLowerCase()).toMatch(/(^|\.)insulin-apps\.com$/)
     }
   })
 

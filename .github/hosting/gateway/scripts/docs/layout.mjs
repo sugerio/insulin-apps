@@ -216,7 +216,7 @@ export function DocsIndex({ site, next }) {
           h('p', { className: 'flex items-center gap-2 text-sm font-medium text-muted-foreground' }, h(BookOpen, { className: 'size-4', 'aria-hidden': 'true' }), 'Documentation'),
           h('div', { className: 'text-3xl font-semibold tracking-tight text-balance sm:text-4xl' }, h('h1', null, 'Insulin Apps documentation')),
           h('p', { className: 'max-w-2xl text-lg text-muted-foreground text-balance' },
-            'How to set up your organization on insulinapps.com, sign in, give people the right access, connect AI agents and call the API, and how to use each app.')),
+            'How to set up your organization on insulin-apps.com, sign in, give people the right access, connect AI agents and call the API, and how to use each app.')),
         h('section', { 'aria-labelledby': 'start-here', className: 'mb-12' },
           h('div', { className: 'mb-4 text-xl font-semibold tracking-tight' }, h('h2', { id: 'start-here' }, 'Start here')),
           h('div', { className: 'grid gap-4 sm:grid-cols-3' },

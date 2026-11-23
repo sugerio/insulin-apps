@@ -62,7 +62,7 @@ export const yourData: DocTopic = {
             with that name was deleted, by whom and when.
           </p>
           <p>
-            Nobody deletes collections in bulk. When an organization is deleted on insulinapps.com, everything Knowledge kept for
+            Nobody deletes collections in bulk. When an organization is deleted on insulin-apps.com, everything Knowledge kept for
             it is deleted too, the activity log included: only a note that its data was removed, with no names, stays.
           </p>
         </>

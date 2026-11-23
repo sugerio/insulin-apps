@@ -25,20 +25,20 @@ and is Admin in every app. Also an app role: everything in that app, including i
 **AI agent**: a program such as Claude Code, Codex, Gemini CLI or opencode that uses an app for you through its MCP
 server, with your role. See [AI agents](/docs/platform/ai-agents).
 
-**API access**: an app's settings page, at `insulinapps.com/apps/<app>/settings/api`, with its OAuth clients and how a
+**API access**: an app's settings page, at `insulin-apps.com/apps/<app>/settings/api`, with its OAuth clients and how a
 program gets a token.
 
 **API catalog**: the list of an app's API endpoints at `GET /api/catalog`, showing only what the caller may use.
 
 **App**: one of the business applications on Insulin Apps, such as Cap Table or Esign, at its own address
-`<app>.insulinapps.com`.
+`<app>.insulin-apps.com`.
 
 **App admin**: someone who manages an app's people and stored credentials: an organization owner or admin, or someone
 whose role in that app is Admin. A custom role never makes someone an app admin.
 
 **App role**: the role someone has in one app: Admin, Editor, Viewer or a custom role.
 
-**Assertion consumer service (ACS) URL**: the address on `insulinapps.com` where your identity provider posts a SAML
+**Assertion consumer service (ACS) URL**: the address on `insulin-apps.com` where your identity provider posts a SAML
 sign-in response.
 
 **Client credentials**: the OAuth way an OAuth client gets a token, with its client id and client secret and no person
@@ -46,7 +46,7 @@ involved.
 
 **Client id and client secret**: an OAuth client's user name and password for getting tokens. The secret is shown once.
 
-**Connect AI**: an app's settings page, at `insulinapps.com/apps/<app>/settings/connect-ai`, with its MCP server, the
+**Connect AI**: an app's settings page, at `insulin-apps.com/apps/<app>/settings/connect-ai`, with its MCP server, the
 setup for each AI client and the agents connected to it.
 
 **Consent page**: the page where you choose **Allow** or **Deny** when an AI agent asks to use an app as you.
@@ -72,12 +72,12 @@ for single sign-on.
 the app never holds the secret.
 
 **Integrations page**: an app's settings page for its stored credentials, at
-`insulinapps.com/apps/<app>/settings/integrations`.
+`insulin-apps.com/apps/<app>/settings/integrations`.
 
 **Invitation**: an e-mailed link to join an organization with given access, valid for 7 days.
 
 **MCP (Model Context Protocol)**: the open protocol AI agents use to call tools. Each Insulin app is an MCP server at
-`https://<app>.insulinapps.com/mcp`.
+`https://<app>.insulin-apps.com/mcp`.
 
 **OAuth**: the standard Insulin Apps uses to give AI agents and OAuth clients tokens without sharing passwords.
 

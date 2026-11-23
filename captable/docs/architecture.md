@@ -83,7 +83,7 @@ hash they were reviewed against (see [Commands](#commands)).
   `x-suger-access-via: schedule` (the platform's tick) has no identity on any route, not even the preview's. `x-suger-app-permissions` (space-separated permission keys) narrows the role:
   the effective permissions are the role's own intersected with the header, so a forged header can only take access
   away. `x-suger-access-via` is `browser`, `mcp` (an AI agent) or `api` (an API client with its own credentials). The
-  Insulin console sends neither: the role's full set, in the browser. Behind insulinapps.com, org owners arrive as
+  Insulin console sends neither: the role's full set, in the browser. Behind insulin-apps.com, org owners arrive as
   `ADMIN`; for MCP and API calls the platform sets `Origin` and `Sec-Fetch-Site: same-origin` itself, so the same-origin
   check applies unchanged.
 - **The preview identity.** With no console user and `import.meta.env.DEV` true (the Vite dev server: local
@@ -402,7 +402,7 @@ A new company is set up by importing Pulley's standard reports or the app's own 
 - The console shows the app in a sandboxed iframe, so the UI never uses `window.open`, `target="_blank"`, `alert`,
   `confirm`, `prompt`, `print` or top-level navigation. Downloads use a blob URL and `<a download>`. Fonts and images ship
   with the app (no CDNs), and `localStorage` holds only disposable preferences (tables, the navigation's collapse).
-  Switching organization and signing out navigate the page, so they exist only outside a frame, on insulinapps.com.
+  Switching organization and signing out navigate the page, so they exist only outside a frame, on insulin-apps.com.
 - Writes follow the review pattern: a dry run shows exactly what will change, the user confirms, and the real request
   carries the reviewed sequence number and diff hash, under one idempotency key per intent so that a lost answer can be
   retried safely. While an outcome is unknown, an in-app guard holds navigation (no `beforeunload` prompt).

@@ -30,7 +30,7 @@ const writerSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('builtin') }).strict(),
   z.object({
     kind: z.literal('own'),
-    integrationKey: z.string().regex(/^[A-Za-z0-9_.-]{1,64}$/, 'use the key of an integration your organization stored on insulinapps.com'),
+    integrationKey: z.string().regex(/^[A-Za-z0-9_.-]{1,64}$/, 'use the key of an integration your organization stored on insulin-apps.com'),
     url: z.string().url().max(500).refine((value) => value.startsWith('https://'), 'use an https address'),
     model: z.string().trim().min(1).max(200),
   }).strict(),

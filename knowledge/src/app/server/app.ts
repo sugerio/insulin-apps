@@ -84,7 +84,7 @@ export function createApp(options: { enforceSameOrigin?: boolean } = {}) {
     const caller = readCaller(c.req.raw, { preview: c.env.PREVIEW === true, trustOrgRole: c.env.TRUST_ORG_ROLE === true })
     // Without an identity, /api/health says only that the app answers (for uptime checks); everything else is 401.
     if (!caller && c.req.path === '/api/health' && c.req.method === 'GET') return c.json({ status: 'ok', service: 'knowledge' })
-    if (!caller) return new ApiError('unauthorized', 'Sign in on insulinapps.com to use Knowledge.').toResponse()
+    if (!caller) return new ApiError('unauthorized', 'Sign in on insulin-apps.com to use Knowledge.').toResponse()
     if (!can(caller, 'knowledge.use') && c.req.path !== '/api/me' && c.req.path !== '/api/catalog') {
       throw forbidden("Your role doesn't include Knowledge. Ask an admin of your organization for access.")
     }

@@ -56,7 +56,7 @@ export function MemberSearch({ onPick, label, filter, placeholder = 'Search peop
       <Input id={inputId} type="search" autoComplete="off" placeholder={placeholder} value={q} onChange={(event) => setQ(event.target.value)} />
       {!q.trim() ? <Note>Type a name or an e-mail address to find someone.</Note> : null}
       {error ? <ActionError error={error} kept={null} /> : null}
-      {found && list.length === 0 ? <Note>No one found who can use Knowledge. People are invited on insulinapps.com, in Settings › People.</Note> : null}
+      {found && list.length === 0 ? <Note>No one found who can use Knowledge. People are invited on insulin-apps.com, in Settings › People.</Note> : null}
       {list.length ? (
         <ul className="flex max-h-56 flex-col divide-y overflow-y-auto rounded-lg border" aria-label="People">
           {list.map((member) => (

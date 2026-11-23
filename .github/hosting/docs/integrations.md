@@ -10,9 +10,9 @@ secrets). The first part is for app admins; the last part is for people who buil
 
 ## The Integrations page
 
-Each app has an **Integrations** page on the apex: `https://insulinapps.com/apps/<app>/settings/integrations`, for
-example `https://insulinapps.com/apps/esign/settings/integrations`. The app's own
-`https://<app>.insulinapps.com/settings/integrations` leads there, and so does **Settings** → **Integrations** in the
+Each app has an **Integrations** page on the apex: `https://insulin-apps.com/apps/<app>/settings/integrations`, for
+example `https://insulin-apps.com/apps/esign/settings/integrations`. The app's own
+`https://<app>.insulin-apps.com/settings/integrations` leads there, and so does **Settings** → **Integrations** in the
 app's navigation.
 
 It holds the app's **stored credentials**: secrets for outside services that the app calls, such as another company's
@@ -29,7 +29,7 @@ which the page links to under **API clients**. See [API access with OAuth client
 | Everyone else who can use the app | See names, kinds, hosts and when each was last used. Never a secret. |
 | AI agents and OAuth clients | Nothing: tokens never reach this page |
 
-The page lives on `insulinapps.com`, not on the app's own address, so no code an app serves can read it or post its forms.
+The page lives on `insulin-apps.com`, not on the app's own address, so no code an app serves can read it or post its forms.
 Secrets are shown once, right after they are made, and never again.
 
 ## Stored credentials
@@ -66,7 +66,7 @@ can send a stored secret to a new place to read it. **Delete** removes the crede
 
 For app builders: the app calls the outside service with `integrationFetch(key)` from `@fours/app/server`, passing the
 request's `x-suger-organization-id`, so the organization it is serving is the one whose credential is used. The call goes
-through the platform's integration proxy, `https://insulinapps.com/__insulin/integrations/<key>/proxy/<host>/<path>`,
+through the platform's integration proxy, `https://insulin-apps.com/__insulin/integrations/<key>/proxy/<host>/<path>`,
 which:
 
 - accepts only the app's own platform token (`SUGER_APP_TOKEN`), and uses the credential stored under that key for that
@@ -117,7 +117,7 @@ A public path is never a way around sign-in for members.
 
 ### Mail
 
-Apps send e-mail through the platform's mail relay, one message per request, to `POST https://insulinapps.com/__insulin/mail`
+Apps send e-mail through the platform's mail relay, one message per request, to `POST https://insulin-apps.com/__insulin/mail`
 with the app's platform token and the organization it is serving. Messages come from Insulin Apps' address, named
 "*app name* via Insulin Apps", with the app's reply-to address if it gives one. Limits keep apps from flooding anyone:
 ten messages an hour per recipient across all apps, 500 a day per organization and app, and 5,000 a day per app.

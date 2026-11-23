@@ -313,7 +313,7 @@ export async function applyRoleChanged(env: Bindings, org: string, type: Princip
   if (type === 'person' && actsAsViewer(appRole, permissions)) await moveOwnership(env, org, id, 'viewer', now)
 }
 
-/** The organization was deleted on insulinapps.com: everything of it in the engine is purged, and its records here go. */
+/** The organization was deleted on insulin-apps.com: everything of it in the engine is purged, and its records here go. */
 export async function applyOrgDeleted(env: Bindings, org: string, now: number): Promise<void> {
   const db = env.DB
   // Its engine data is purged by the tick (org_purges); everything Knowledge kept for it here goes now.

@@ -105,7 +105,7 @@ A custom role is a role you build from an app's permissions, for when Admin, Edi
 
 - **Only apps with a permission catalog have custom roles.** An app lists its permissions in its code, and the platform
   reads them when the app is deployed.
-- **Owners create, edit and delete custom roles**, one app at a time, on `https://insulinapps.com/settings/roles`.
+- **Owners create, edit and delete custom roles**, one app at a time, on `https://insulin-apps.com/settings/roles`.
 - **Owners and admins give them**, and so do each app's admins for their app: when inviting someone with **Specific
   apps**, when changing their access, or on the app's people page. Owners and admins also give them to OAuth clients.
 - **A custom role can't be deleted while it is in use** by anyone, by a pending invitation or by an OAuth client. The
@@ -138,7 +138,7 @@ Permissions can only narrow a role, never widen it.
 
 ### Create a custom role
 
-1. Go to **Roles** (`https://insulinapps.com/settings/roles`). You must be an owner to see the forms.
+1. Go to **Roles** (`https://insulin-apps.com/settings/roles`). You must be an owner to see the forms.
 2. Find the app's card. It shows each permission and which built-in roles have it, then the app's custom roles.
 3. Under **New custom role for** the app, enter a **Name** and, if you want, a **Description (optional)**.
 4. Tick the **Permissions** the role should have.
@@ -151,11 +151,11 @@ Changes apply to everyone who has the role at their next request. **Delete** is 
 
 ## The people pages
 
-People are managed on `insulinapps.com`, never inside an app, so that no app can read or change these pages.
+People are managed on `insulin-apps.com`, never inside an app, so that no app can read or change these pages.
 
 ### The organization's People page
 
-`https://insulinapps.com/settings/users` shows your active organization (add `?org=<id>` for another one). The settings
+`https://insulin-apps.com/settings/users` shows your active organization (add `?org=<id>` for another one). The settings
 have four pages, under **Settings** in the navigation: **People**, **Roles** (for everyone with an organization role),
 **Organization** and, for owners, **Single sign-on**.
 
@@ -171,19 +171,19 @@ People with specific-apps access see **Your apps** instead of the member list.
 
 ### The Roles page
 
-`https://insulinapps.com/settings/roles` describes the organization roles and the app roles, and for each app with a
+`https://insulin-apps.com/settings/roles` describes the organization roles and the app roles, and for each app with a
 permission catalog, which built-in roles have each permission and the organization's custom roles. Everyone with an
 organization role can open it; only owners see the forms to create, edit and delete custom roles.
 
 ### An app's People page
 
-Each app has its own people page on the apex: `https://insulinapps.com/apps/<app>/settings/users`, for example
-`https://insulinapps.com/apps/captable/settings/users`. The app's own address `https://<app>.insulinapps.com/settings/users`
+Each app has its own people page on the apex: `https://insulin-apps.com/apps/<app>/settings/users`, for example
+`https://insulin-apps.com/apps/captable/settings/users`. The app's own address `https://<app>.insulin-apps.com/settings/users`
 leads there too, and so does **Settings** in the app's navigation. It is the first of the app's settings pages, which
 the second column of the navigation lists: **People**, **Integrations** (stored credentials, see
 [Integrations](/docs/platform/integrations)), **API access** (OAuth clients, see
 [API access with OAuth clients](/docs/platform/api-and-service-accounts)) and **Connect AI** (see
-[AI agents](/docs/platform/ai-agents#the-connect-ai-page)). These pages are on `insulinapps.com`, but the
+[AI agents](/docs/platform/ai-agents#the-connect-ai-page)). These pages are on `insulin-apps.com`, but the
 navigation's first column is the app's own, so they read as part of the app.
 
 It lists everyone who can use the app in your active organization:
@@ -222,7 +222,7 @@ By default, owners and admins can invite anyone, at any e-mail address. An owner
 organization's **verified domains**: the e-mail domains it has proved it owns, under **Single sign-on** (see
 [Sign-in and security](/docs/platform/sign-in-and-security#step-1-verify-your-domain)). It is off by default.
 
-The setting is under **Invitations** on the **Organization** page (`https://insulinapps.com/settings/organization`), for
+The setting is under **Invitations** on the **Organization** page (`https://insulin-apps.com/settings/organization`), for
 owners only:
 
 - Until the organization has a verified domain, the card explains that you can limit invitations to your own e-mail
@@ -246,7 +246,7 @@ SCIM provisioning and single sign-on already work only for addresses in verified
 
 ## Leaving an organization
 
-Go to the **Organization** page (`https://insulinapps.com/settings/organization`) and choose **Leave this
+Go to the **Organization** page (`https://insulin-apps.com/settings/organization`) and choose **Leave this
 organization**. You lose access to it in every app, and your AI agents' access there ends. A member who manages the
 organization can invite you again. The only owner can't leave: make another member an owner first, or delete the
 organization.

@@ -1,6 +1,6 @@
 // How Taxi reaches the platform's gateway (the hourly usage report, lib/usage-metrics.ts). The deploy binds the
 // gateway Worker to the app as SUGER_GATEWAY: a Worker can't fetch another Worker of the same zone through its public
-// URL, so a plain fetch of https://insulinapps.com/__insulin/metrics from taxi.insulinapps.com never reaches the
+// URL, so a plain fetch of https://insulin-apps.com/__insulin/metrics from taxi.insulin-apps.com never reaches the
 // gateway. Nitro on Workers puts the invocation's env on the request it passes on (request.runtime.cloudflare.env), so
 // no cloudflare: import is needed. Without the binding (the local preview, tests) the caller uses the global fetch.
 

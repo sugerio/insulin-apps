@@ -15,7 +15,7 @@ export const aiAssistantsAndApi: DocTopic = {
       body: (
         <>
           <p>
-            Connect your AI assistant once in <b>Settings › Connect AI</b>, Insulin Apps' page for Knowledge on insulinapps.com.
+            Connect your AI assistant once in <b>Settings › Connect AI</b>, Insulin Apps' page for Knowledge on insulin-apps.com.
             It has the setup for Claude Code, Codex, Gemini CLI, opencode, Claude.ai and ChatGPT, and lists the assistants you
             connected, so you can disconnect one.
           </p>
@@ -35,7 +35,7 @@ export const aiAssistantsAndApi: DocTopic = {
       body: (
         <p>
           Your organization's owners and admins create API clients for other programs in <b>Settings › API access</b> on
-          insulinapps.com, each with a role in Knowledge. A program gets a token with its client's secret and calls Knowledge's
+          insulin-apps.com, each with a role in Knowledge. A program gets a token with its client's secret and calls Knowledge's
           API. An API client has access of its own, not a person's: it reaches a collection only when the collection's owner or an admin shares
           it with that client by name, never through general access, and it can't start collections.
         </p>

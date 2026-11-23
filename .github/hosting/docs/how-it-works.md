@@ -10,22 +10,22 @@ security reviewers, people who build apps, and AI agents that need the exact con
 
 ## The big picture
 
-Every address on `insulinapps.com` is served by one Cloudflare Worker, the **gateway**. It signs people in, keeps
+Every address on `insulin-apps.com` is served by one Cloudflare Worker, the **gateway**. It signs people in, keeps
 accounts, organizations and roles in its own database, and forwards each request for an app to that app's Worker over a
 private service binding, with the caller's identity in request headers. Each app is a separate Worker with its own
 D1 database, and has no public address of its own: the gateway is the only way in.
 
 ```diagram
 title: How a request reaches an app
-description: People, AI agents, OAuth clients and signers all reach Insulin Apps through one gateway Worker. On insulinapps.com it signs people in and keeps accounts, organizations and roles in its own D1 database; on each app's host it checks the session or token, works out the caller's role and forwards the request with the x-suger-* identity headers over a private service binding to the app's Worker, which has its own D1 database. Signers on an app's public paths reach it with no identity.
+description: People, AI agents, OAuth clients and signers all reach Insulin Apps through one gateway Worker. On insulin-apps.com it signs people in and keeps accounts, organizations and roles in its own D1 database; on each app's host it checks the session or token, works out the caller's role and forwards the request with the x-suger-* identity headers over a private service binding to the app's Worker, which has its own D1 database. Signers on an app's public paths reach it with no identity.
 size: 740 x 545
 box people 20 20 160 60 "People" "web browser"
 box agents 200 20 160 60 "AI agents" "MCP clients"
 box services 380 20 160 60 "OAuth clients" "programs, API"
 box signers 560 20 160 60 dashed "Signers" "no account"
 group gateway 20 130 700 230 "Gateway Worker"
-box apex 40 170 320 76 accent "insulinapps.com" "sign-in, organizations, roles, docs" "OAuth server, SCIM, mail relay"
-box apphosts 380 170 320 76 accent "<app>.insulinapps.com" "checks the session or token, works out" "the role and adds the identity headers"
+box apex 40 170 320 76 accent "insulin-apps.com" "sign-in, organizations, roles, docs" "OAuth server, SCIM, mail relay"
+box apphosts 380 170 320 76 accent "<app>.insulin-apps.com" "checks the session or token, works out" "the role and adds the identity headers"
 box gwdb 40 268 150 76 db "Gateway D1" "accounts, roles," "grants, tokens"
 box cron 210 268 150 76 muted "Crons" "five-minute tick" "daily cleanup"
 group apps 20 400 700 125 "App Workers, private"
@@ -55,12 +55,12 @@ arrow esign.r -> esdb.l
 
 | Host | Serves |
 |---|---|
-| `insulinapps.com` | Everything that isn't an app: the landing page, these docs (with their search and the docs' MCP server, see [Searching the docs](/docs/platform/searching-the-docs)), privacy and terms; sign-up, sign-in, two-step sign-in, Google and enterprise SSO; your account and organizations; the organization's people, roles, settings, OAuth clients and single sign-on; each app's settings at `/apps/<app>/settings/...` (people, integrations, API access and Connect AI); the OAuth authorization server for AI agents and OAuth clients; SCIM at `/scim/v2`. |
-| `<app>.insulinapps.com` | The app itself, plus the gateway's endpoints there: `/mcp` and its OAuth metadata, and `/settings/users`, `/settings/integrations`, `/settings/api` and `/settings/connect-ai`, which only redirect to the app's settings on the apex. |
-| `www.insulinapps.com` | A permanent redirect to `insulinapps.com`. |
-| `auth.insulinapps.com` | A redirect to the same path on `insulinapps.com`, where sign-in used to live, so links in older e-mails keep working. |
+| `insulin-apps.com` | Everything that isn't an app: the landing page, these docs (with their search and the docs' MCP server, see [Searching the docs](/docs/platform/searching-the-docs)), privacy and terms; sign-up, sign-in, two-step sign-in, Google and enterprise SSO; your account and organizations; the organization's people, roles, settings, OAuth clients and single sign-on; each app's settings at `/apps/<app>/settings/...` (people, integrations, API access and Connect AI); the OAuth authorization server for AI agents and OAuth clients; SCIM at `/scim/v2`. |
+| `<app>.insulin-apps.com` | The app itself, plus the gateway's endpoints there: `/mcp` and its OAuth metadata, and `/settings/users`, `/settings/integrations`, `/settings/api` and `/settings/connect-ai`, which only redirect to the app's settings on the apex. |
+| `www.insulin-apps.com` | A permanent redirect to `insulin-apps.com`. |
+| `auth.insulin-apps.com` | A redirect to the same path on `insulin-apps.com`, where sign-in used to live, so links in older e-mails keep working. |
 
-An app's settings pages (people, integrations, API access and Connect AI) are served on `insulinapps.com`, never on the
+An app's settings pages (people, integrations, API access and Connect AI) are served on `insulin-apps.com`, never on the
 app's own host.
 The session cookie also reaches app hosts, so code an app serves could otherwise read those pages (including secrets shown
 once) or post their forms as you.
@@ -70,7 +70,7 @@ once) or post their forms as you.
 Apps can't use these paths, because the gateway answers them first:
 
 - `/__insulin/*`: the gateway's stylesheet, icon, account bar, and its sign-out and organization switch (and, on
-  `insulinapps.com`, what apps call with their platform token: mail, usage reports, limits and members);
+  `insulin-apps.com`, what apps call with their platform token: mail, usage reports, limits and members);
 - `/settings/users`, `/settings/integrations`, `/settings/api` and `/settings/connect-ai` (and everything below them);
 - `/mcp` and `/.well-known/oauth-*`.
 
@@ -132,12 +132,12 @@ There are three kinds of caller, and all of them end up with the same identity h
 
 ```diagram
 title: Three kinds of caller, one set of headers
-description: A person signs in on insulinapps.com with a password, Google or single sign-on (and a two-step code if it is on) and gets a session cookie for every app host. An AI agent registers with the OAuth server, sends the person through sign-in and consent, and gets an hour-long token for one app's /mcp, where it acts as that person. An OAuth client, created by an owner or admin of the organization, trades its client id and secret for a token and calls the app's /api/*. The app receives the same identity headers in every case, with x-suger-access-via set to browser, mcp or api.
+description: A person signs in on insulin-apps.com with a password, Google or single sign-on (and a two-step code if it is on) and gets a session cookie for every app host. An AI agent registers with the OAuth server, sends the person through sign-in and consent, and gets an hour-long token for one app's /mcp, where it acts as that person. An OAuth client, created by an owner or admin of the organization, trades its client id and secret for a token and calls the app's /api/*. The app receives the same identity headers in every case, with x-suger-access-via set to browser, mcp or api.
 size: 740 x 490
 box person 20 20 220 56 "Person" "web browser"
 box agent 260 20 220 56 "AI agent" "MCP client"
 box account 500 20 220 56 "OAuth client" "a program"
-group auth 10 100 720 118 "insulinapps.com"
+group auth 10 100 720 118 "insulin-apps.com"
 box signin 20 134 220 72 accent "Sign-in" "password, Google or SSO," "then a two-step code if on"
 box consent 260 134 220 72 accent "Authorize and allow" "register, sign in, choose" "the organization, Allow"
 box token 500 134 220 72 accent "Token endpoint" "client id and secret," "client credentials"
@@ -158,9 +158,9 @@ arrow api.b -> app.t:0.843 "api"
 text 370 478 small muted "Every request checks the person's or the account's current role in that app again."
 ```
 
-- **People** sign in at `insulinapps.com` with a password, Google or their company's SSO, plus two-step sign-in if they
+- **People** sign in at `insulin-apps.com` with a password, Google or their company's SSO, plus two-step sign-in if they
   turned it on. The session cookie works on every app host. See [Sign-in and security](/docs/platform/sign-in-and-security).
-- **AI agents** (MCP clients) register with the authorization server on `insulinapps.com`, send the person through
+- **AI agents** (MCP clients) register with the authorization server on `insulin-apps.com`, send the person through
   sign-in and consent, and get tokens for one app's `/mcp`. They act as that person. See
   [AI agents](/docs/platform/ai-agents).
 - **OAuth clients** (once called service accounts) get a token with their client id and secret (`client_credentials`)
@@ -169,8 +169,8 @@ text 370 478 small muted "Every request checks the person's or the account's cur
 
 ### Tokens for agents and programs
 
-- Each app is its own OAuth protected resource: `https://<app>.insulinapps.com/mcp` for agents and
-  `https://<app>.insulinapps.com` for OAuth clients. `insulinapps.com` is the one authorization server for all of them.
+- Each app is its own OAuth protected resource: `https://<app>.insulin-apps.com/mcp` for agents and
+  `https://<app>.insulin-apps.com` for OAuth clients. `insulin-apps.com` is the one authorization server for all of them.
 - Tokens are 32 random bytes; only their SHA-256 is stored. Access tokens last an hour.
 - Every call re-checks the grant or the OAuth client and the caller's current role, so a removed or demoted person's
   agent loses access or power at once.
@@ -209,7 +209,7 @@ mail records.
 
 ## Mail relay
 
-Apps have no e-mail of their own. An app sends one message per request to `POST https://insulinapps.com/__insulin/mail`
+Apps have no e-mail of their own. An app sends one message per request to `POST https://insulin-apps.com/__insulin/mail`
 with its platform token and the organization it serves:
 
 ```json
@@ -225,7 +225,7 @@ organization and app, and 5,000 a day per app. The relay answers `202 { "status"
 
 Insulin Apps watches its own usage, to keep the service fair and to add capacity before it runs out, without reading
 any app's data. Each app reports a few numbers instead, once an hour, from its scheduled work: `POST
-https://insulinapps.com/__insulin/metrics` with its platform token, holding gauges for the app as a whole (its
+https://insulin-apps.com/__insulin/metrics` with its platform token, holding gauges for the app as a whole (its
 database's size) and for each organization (how many records of each kind, how many bytes of files):
 
 ```json
@@ -244,7 +244,7 @@ An app with real running costs may limit how much each organization uses. It lis
 that list to the gateway's database, and Insulin Apps staff set the limits in the [operator console](#the-operator-console):
 a default for everyone, or an override for one organization (a number or unlimited, with an optional last day).
 
-The app reads them on its scheduled work with its platform token: `GET https://insulinapps.com/__insulin/limits?since=<cursor>`
+The app reads them on its scheduled work with its platform token: `GET https://insulin-apps.com/__insulin/limits?since=<cursor>`
 answers
 
 ```json
@@ -273,21 +273,21 @@ who is in the organization: an app has no directory of its own. Three endpoints,
 token over the gateway's service binding, answer only about organizations where the app is used: where someone opened
 it or called it (an OAuth client, a grant or a usage report alone isn't use):
 
-- **Member lookup**, `GET https://insulinapps.com/__insulin/members?q=<text>` with the `x-suger-member-lookup` header of
+- **Member lookup**, `GET https://insulin-apps.com/__insulin/members?q=<text>` with the `x-suger-member-lookup` header of
   the browser request the app is serving: at most 20 people who can use the app (id, name, e-mail address and role in
   the app) and the app's OAuth clients (id and name) whose name or address contains the text, in any case, someone
   whose address is the text first. The organization and the person come from the signed header, never from the app,
   and the person must still be able to use the app. It fills a sharing dialog (or checks the people someone typed, as
   Esign does for an OAuth client's people), and is limited per person. Requests from AI agents and OAuth clients carry
   no header, so there an app uses the people it has seen.
-- **Member status**, `POST https://insulinapps.com/__insulin/members/status` with `{ "org", "ids" }` (at most 100):
+- **Member status**, `POST https://insulin-apps.com/__insulin/members/status` with `{ "org", "ids" }` (at most 100):
   for each person or OAuth client, whether it can still use the app (`member`, with its roles), has left (`left`, or
   `revoked` for an OAuth client) or no longer exists (`gone`), and the organization's owners and since when; `404
   org_deleted` for a deleted organization. No names or addresses. A suspended account or organization still counts as a
   member: suspension isn't a departure. But each member's `standing` (`active`, `suspended` or `disabled`) and the
   organization's are given, so an app acting for someone later can hold back: Esign sends a scheduled envelope only
   while whoever scheduled it may still send, with an active account in an active organization.
-- **Member events**, `GET https://insulinapps.com/__insulin/member-events?since=<cursor>`: what changed, oldest first, at
+- **Member events**, `GET https://insulin-apps.com/__insulin/member-events?since=<cursor>`: what changed, oldest first, at
   most 1,000 a page with `cursor` and `more`. `left` (removed from the organization or the app, or the account deleted),
   `returned` (joined or given the app), `role_changed` (with the new app and organization roles), `owners` (the owners
   and since when), `client_revoked` (an OAuth client revoked, deleted, or revoked with its organization disabled) and
@@ -298,7 +298,7 @@ it or called it (an OAuth client, a grant or a usage report alone isn't use):
 
 ## The operator console
 
-A few Insulin Apps staff use an operator console at `insulinapps.com/super`, separate from everything customers use.
+A few Insulin Apps staff use an operator console at `insulin-apps.com/super`, separate from everything customers use.
 They sign in through Insulin Apps' own company Google account, and only members of one group get in; everything they
 do is recorded with the reason they give.
 
@@ -329,7 +329,7 @@ do is recorded with the reason they give.
 - **Pages without scripts.** The gateway's pages, these docs included, are rendered on the server and run no JavaScript
   (the bot check on sign-in forms is the one exception, from Cloudflare). The content security policy allows no inline
   script or style.
-- **Forms come from the site itself.** Every form post to `insulinapps.com` must come from its own origin.
+- **Forms come from the site itself.** Every form post to `insulin-apps.com` must come from its own origin.
 - **Secrets are hashed or sealed.** Passwords are salted PBKDF2 hashes; session ids, tokens, client secrets and SCIM
   tokens are stored as SHA-256 hashes; authenticator secrets, stored credentials and OIDC client secrets are encrypted
   with AES-256-GCM.

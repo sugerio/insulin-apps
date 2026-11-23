@@ -8,16 +8,16 @@ D1 database.
 |---|---|
 | [`captable/`](captable/) | Cap table and equity management: stakeholders, share classes, equity plans, option grants, vesting, exercises, terminations, 409A valuations, documents and a holder view, set up by importing Pulley's reports or a spreadsheet template. |
 | [`esign/`](esign/) | Electronic signatures: templates, envelopes signed in order on a public signing page after an emailed code, an embeddable template editor, hash-chained evidence, a signed and timestamped seal, and certificates of completion. Experimental: synthetic documents only. |
-| [`knowledge/`](knowledge/) | A team's knowledge, answered with sources: collections of files, web pages and notes, shared with people and AI assistants, answers that cite their passages or say they won't guess, facts to check, corrections that apply everywhere and a restore point after every change. Each collection is learned by its own engine in a Cloudflare Container, so it runs on insulinapps.com rather than in the Insulin console. |
+| [`knowledge/`](knowledge/) | A team's knowledge, answered with sources: collections of files, web pages and notes, shared with people and AI assistants, answers that cite their passages or say they won't guess, facts to check, corrections that apply everywhere and a restore point after every change. Each collection is learned by its own engine in a Cloudflare Container, so it runs on insulin-apps.com rather than in the Insulin console. |
 | [`taxi/`](taxi/) | Canadian personal income tax: your profile (you, your spouse, your dependants), AI-read slips, deductions and credits in every province and territory, and the CRA's and Revenu Québec's own forms filled in to sign and mail. Early: built in parts. |
 
 ## Use the apps online
 
-Every app here also runs at its own address on insulinapps.com, for example [Cap Table](https://captable.insulinapps.com).
+Every app here also runs at its own address on insulin-apps.com, for example [Cap Table](https://captable.insulin-apps.com).
 Sign up with an e-mail address, Google or your company's single sign-on, create an organization and invite your
 team, with a role in every app or in the apps each person needs. Connect AI agents such as Claude or Codex to an app
 over MCP, or call its API with a service account. **The documentation is at
-[insulinapps.com/docs](https://insulinapps.com/docs/)**: getting started, organizations and roles, sign-in and security,
+[insulin-apps.com/docs](https://insulin-apps.com/docs/)**: getting started, organizations and roles, sign-in and security,
 AI agents, the API and each app, for people and for AI agents (`/docs/llms.txt`). Its pages are Markdown in this
 repository, next to what they describe: [`.github/hosting/docs/`](.github/hosting/docs/) for the platform and each
 app's `docs/public/`. Maintainers run the site with the [hosting runbook](.github/hosting/README.md).
@@ -49,7 +49,7 @@ Each app is a top-level directory with its own `README.md` and `AGENTS.md`, and 
   for its domain. Cap Table's `src/app/pages/docs/` shows the pattern: one static page per topic, describing only what
   the app does, updated in the same change as the behaviour it describes, and covered by tests;
 - ship **public docs** in `docs/public/`, which become its section of
-  [insulinapps.com/docs](https://insulinapps.com/docs/) (run `npm run build:docs` in `.github/hosting/gateway/`), updated
+  [insulin-apps.com/docs](https://insulin-apps.com/docs/) (run `npm run build:docs` in `.github/hosting/gateway/`), updated
   in the same change as the behaviour they describe;
 - leave sign-in, people and roles to the platform, and map the roles (and any custom-role permissions) to its own
   functions, as [`AGENTS.md`](AGENTS.md) describes under "Accounts, roles and access";

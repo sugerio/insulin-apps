@@ -48,7 +48,7 @@ export function Framed({ children }: { children: ReactNode }) {
         <h1 className="text-2xl font-semibold tracking-tight">Knowledge</h1>
         <Banner kind="danger" title="Knowledge can't open right now">{describeError(meError)}</Banner>
         <p className="text-sm text-muted-foreground">
-          Sign in on insulinapps.com and open Knowledge from there. If you have just been invited, ask an admin of your organization to give you a role in Knowledge.
+          Sign in on insulin-apps.com and open Knowledge from there. If you have just been invited, ask an admin of your organization to give you a role in Knowledge.
         </p>
       </main>
     )

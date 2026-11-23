@@ -4,7 +4,7 @@
 // the collapsed or expanded state of each level, remembered in this browser (localStorage `insulin-nav`).
 import packageJson from '../../../package.json' with { type: 'json' }
 
-/** The app's name on the platform: its directory, its host (esign.insulinapps.com) and its settings pages' path. */
+/** The app's name on the platform: its directory, its host (esign.insulin-apps.com) and its settings pages' path. */
 export const APP_NAME = 'esign'
 
 /** The Lucide icons a manifest item may name: the ones the gateway bundles. */
@@ -164,7 +164,7 @@ export function httpUrl(value: unknown): URL | null {
   } catch { return null }
 }
 
-/** The apex's origin (https://insulinapps.com), from /__insulin/me: its `apex`, else the origin of its apex links. */
+/** The apex's origin (https://insulin-apps.com), from /__insulin/me: its `apex`, else the origin of its apex links. */
 export function apexOrigin(me: PlatformMe | null): string | null {
   if (!me) return null
   for (const value of [me.apex, me.links?.apps, me.links?.organizations, me.links?.account]) {

@@ -8,11 +8,11 @@ This page takes you from nothing to a working organization: an account, an organ
 the right access, and your first app open. It is written for whoever sets up Insulin Apps for a team, usually a founder
 or an operations, finance or IT lead. Each step takes a minute or two.
 
-Insulin Apps is one place to sign in for every app on `insulinapps.com`. You sign in once at `https://insulinapps.com`,
+Insulin Apps is one place to sign in for every app on `insulin-apps.com`. You sign in once at `https://insulin-apps.com`,
 and the same account, organization and teammates work in every app, such as [Cap Table](/docs/captable/overview) and
-[Esign](/docs/esign/overview). Each app runs at its own address, like `https://captable.insulinapps.com`.
+[Esign](/docs/esign/overview). Each app runs at its own address, like `https://captable.insulin-apps.com`.
 
-![The Insulin Apps landing page, with Create an account and Sign in buttons above the list of apps](/docs/assets/screenshots/platform-landing.png "The landing page at insulinapps.com")
+![The Insulin Apps landing page, with Create an account and Sign in buttons above the list of apps](/docs/assets/screenshots/platform-landing.png "The landing page at insulin-apps.com")
 
 ## The words you need
 
@@ -29,7 +29,7 @@ You can create an account in three ways. Use the one your company prefers.
 
 ### With your e-mail address and a password
 
-1. Go to `https://insulinapps.com` and choose **Create an account**.
+1. Go to `https://insulin-apps.com` and choose **Create an account**.
 2. Enter your **Name**, your **Email address** and a **Password** of at least 10 characters.
 3. Complete the security check, then choose **Create account**.
 4. You see **Check your inbox**. Open the e-mail from Insulin Apps and follow its link.
@@ -67,7 +67,7 @@ If someone has already invited you, skip to [Step 4](#step-4-accept-an-invitatio
 1. When you are signed in, choose **Create an organization**. Before you belong to any organization, your home page
    offers it. It is also in the organization menu at the top of the navigation (see [Your home page and the
    organization menu](#your-home-page-and-the-organization-menu)). You can also go to
-   `https://insulinapps.com/orgs/new`.
+   `https://insulin-apps.com/orgs/new`.
 2. Enter the **Organization name**, for example "Northwind Robotics". You can rename it later.
 3. Choose **Create organization**.
 
@@ -97,9 +97,9 @@ who to contact instead.
 
 ## Step 3: Invite your team
 
-Owners and admins invite people from the organization's **People** page, at `https://insulinapps.com/settings/users`.
+Owners and admins invite people from the organization's **People** page, at `https://insulin-apps.com/settings/users`.
 
-1. Open **People**, under **Settings** in the navigation on the left of `insulinapps.com`.
+1. Open **People**, under **Settings** in the navigation on the left of `insulin-apps.com`.
 2. Under **Invite people**, enter the person's **Email address**.
 3. Choose their **Access**:
    - an organization role, **Owner**, **Admin**, **Editor** or **Viewer**, which applies in every app; or
@@ -148,9 +148,9 @@ company's e-mail domains: ask them about it.
 
 ## Step 5: Open an app
 
-Your home page at `https://insulinapps.com`, **Apps in** your active organization, shows the apps you can use there.
+Your home page at `https://insulin-apps.com`, **Apps in** your active organization, shows the apps you can use there.
 Choose the app's **Open** button on its card (for example **Open Cap Table**), or go straight to its address, such as
-`https://captable.insulinapps.com`.
+`https://captable.insulin-apps.com`.
 
 ![The signed-in home page, Apps in Northwind Robotics, with a card for Cap Table and one for Esign](/docs/assets/screenshots/platform-home.png "Your home page")
 
@@ -168,7 +168,7 @@ isn't one of them. Ask one of the organization's owners or admins.
 
 ## Your home page and the organization menu
 
-Once you are signed in, `https://insulinapps.com` is your home page. It shows:
+Once you are signed in, `https://insulin-apps.com` is your home page. It shows:
 
 - **Apps in** your active organization: a card for each app you can use there, with a button to open it. With access
   to specific apps, you see only those apps.
@@ -198,7 +198,7 @@ button at the top opens the whole navigation.
 
 Every app opens in your **active organization**. If you belong to more than one:
 
-- open the organization menu at the top of the navigation, on `insulinapps.com` or inside an app, and choose another
+- open the organization menu at the top of the navigation, on `insulin-apps.com` or inside an app, and choose another
   organization; or
 - inside an app with the account bar instead, use its **Organization** list and choose **Switch**.
 

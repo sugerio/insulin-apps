@@ -33,7 +33,7 @@ import { CrumbSlotContext } from "./Page.tsx";
 // The shell around every page: the two-level navigation every Insulin app shares (DESIGN.md §3.2 at the repository's
 // root), built from shadcn/ui's Sidebar. Level 1 has the organization switcher, the app's sections from the navigation
 // manifest (`insulin.navigation` in package.json) for the person's role, then Docs and Settings, and the person at the
-// bottom. Level 2 opens for Settings, whose pages are Insulin Apps' own pages on insulinapps.com. Each level collapses
+// bottom. Level 2 opens for Settings, whose pages are Insulin Apps' own pages on insulin-apps.com. Each level collapses
 // to its icons (a collapsed item's label is its `title` and `aria-label`), remembered in this browser (`insulin-nav`).
 // On a narrow screen both levels open stacked in a sheet from the menu button beside the breadcrumb.
 
@@ -253,7 +253,7 @@ function CollapseToggle({ collapsed, controls, name, menu = false, onToggle }: {
   );
 }
 
-/** Settings' level 2: Insulin Apps' pages for this app, on insulinapps.com, which the app only links to. */
+/** Settings' level 2: Insulin Apps' pages for this app, on insulin-apps.com, which the app only links to. */
 function SettingsItems({ platform, collapsed }: { platform: PlatformAccount | null | undefined; collapsed: boolean }) {
   const links = settingsLinks(platform);
   const reachable = links.some((link) => link.href);
@@ -283,7 +283,7 @@ function SettingsItems({ platform, collapsed }: { platform: PlatformAccount | nu
       </SidebarMenu>
       {reachable ? null : (
         <p className="mt-2 px-2 text-xs text-muted-foreground group-data-[collapsible=icon]:hidden">
-          People, integrations, API access and Connect AI are managed on Insulin Apps (insulinapps.com) when Taxi is used there.
+          People, integrations, API access and Connect AI are managed on Insulin Apps (insulin-apps.com) when Taxi is used there.
         </p>
       )}
     </SidebarGroup>

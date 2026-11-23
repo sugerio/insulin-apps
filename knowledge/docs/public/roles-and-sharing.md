@@ -12,7 +12,7 @@ and for AI agents working out what their connection allows.
 
 | Kind | Values | Set where | What it decides in Knowledge |
 |---|---|---|---|
-| Organization role | Owner, Admin, Editor, Viewer, or specific apps | Settings › People, on insulinapps.com | Organization owners see every collection's basic information (owner, created, last used, size and how it is shared) and can delete any collection, one at a time. Without a collection role they can't open, ask, export or change it. The organization role also sets the role in Knowledge. |
+| Organization role | Owner, Admin, Editor, Viewer, or specific apps | Settings › People, on insulin-apps.com | Organization owners see every collection's basic information (owner, created, last used, size and how it is shared) and can delete any collection, one at a time. Without a collection role they can't open, ask, export or change it. The organization role also sets the role in Knowledge. |
 | Role in Knowledge | Admin, Editor, Viewer, or a custom role | From the organization role (owners and admins are Admins here), or given for Knowledge only | Admins and Editors start collections; Viewers can't. Admins also see Rules and data and Health. Being an Admin gives no access to any collection's content. |
 | Collection role | Owner, Admin, Editor, Viewer | Each collection's Sharing | Everything inside one collection. Nobody gets into a collection without one. |
 
@@ -92,7 +92,7 @@ its name, and its owner gets an e-mail. Organization admins don't see this list.
 - **An owner returns.** A former owner who comes back gets their other shares back, but not ownership; the new owner
   can transfer it back.
 - **Checking who is still here.** If Knowledge has missed news of people leaving for a long time (more than 90 days), or
-  starts for the first time, it checks everyone it knows with insulinapps.com. Until someone is checked, which takes a
+  starts for the first time, it checks everyone it knows with insulin-apps.com. Until someone is checked, which takes a
   moment, they count as away (Sharing says "checking"). Someone using Knowledge meanwhile is checked by using it:
-  insulinapps.com says who they are with every request. Each check also moves collections whose owner can now only
+  insulin-apps.com says who they are with every request. Each check also moves collections whose owner can now only
   read to the longest-standing owner of the organization.

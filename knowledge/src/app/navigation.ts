@@ -1,6 +1,6 @@
 // What the navigation shows, as data (App.tsx draws it): the sections of the navigation manifest (package.json
 // `insulin.navigation`, DESIGN.md §3.2, which the gateway renders level 1 from too), filtered by the person's role in
-// Knowledge, then Docs and Settings. Settings' pages live on insulinapps.com; the same paths on the app's host redirect
+// Knowledge, then Docs and Settings. Settings' pages live on insulin-apps.com; the same paths on the app's host redirect
 // there. Level 2 under Collections lists the person's collections, which the app draws itself.
 import packageJson from '../../package.json' with { type: 'json' }
 
@@ -24,7 +24,7 @@ export function visibleItems(role: AppRole): NavItem[] {
   return NAVIGATION.filter((item) => RANK[role] >= RANK[item.role ?? 'VIEWER'] && RANK[role] <= RANK[item.maxRole ?? 'ADMIN'])
 }
 
-/** The platform's pages, on insulinapps.com (the app's host redirects these paths there). */
+/** The platform's pages, on insulin-apps.com (the app's host redirects these paths there). */
 export const SETTINGS_LINKS = [
   { key: 'people', label: 'People', path: '/settings/users' },
   { key: 'integrations', label: 'Integrations', path: '/settings/integrations' },

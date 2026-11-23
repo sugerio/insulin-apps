@@ -1,4 +1,4 @@
-# Accounts, roles and access on insulinapps.com
+# Accounts, roles and access on insulin-apps.com
 
 This is the design of everything the hosting gateway (`.github/hosting/gateway/`) decides about people and machines:
 who may sign in and how, which organization they act in, what role they have in each app, and how AI agents and API
@@ -11,10 +11,10 @@ are in the repository's [AGENTS.md](../../AGENTS.md).
 
 | Host | Serves |
 |---|---|
-| `insulinapps.com` | The single entry for everything that is not an app: landing, privacy and terms; the public docs at `/docs/` (generated from `.github/hosting/docs/` and each app's `docs/public/`, with `/docs/llms.txt` for AI agents and the images at `/docs/assets/*` from the static-assets binding), searchable at `/docs/search` and `/docs/search.json` and through the docs' own MCP server at `/docs/mcp`, all public with no sign-in and limited per IP; `/robots.txt` (every crawler, AI crawlers included, may read all but the search results), `/sitemap.xml` (the landing page, privacy, terms and every docs page) and `/llms.txt`; sign-up, sign-in, MFA, Google and enterprise SSO; account and organizations; `/settings/users` and `/settings/roles` (the organization's people and roles); `/settings/organization` (name, who can be invited, leave, delete); `/settings/oauth-clients` (every OAuth client of the organization, §5.4); `/settings/sso` (SAML or OIDC and SCIM); each app's settings: people, integrations, API access and Connect AI at `/apps/<app>/settings/users`, `/integrations`, `/api` and `/connect-ai`; the OAuth authorization server for MCP clients and OAuth clients (service accounts); SCIM; the operator console at `/super` (§11), for Insulin Apps staff only; and what app Workers call with their own token: their hourly usage reports at `/__insulin/metrics` (§8.6), their limits at `/__insulin/limits` (§8.8) and their organizations' members at `/__insulin/members`, `/__insulin/members/status` and `/__insulin/member-events` (§8.9). |
-| `auth.insulinapps.com` | A 308 redirect to the same path on the apex, so links in e-mails already sent keep working. |
-| `www.insulinapps.com` | A 301 redirect to the apex. |
-| `<app>.insulinapps.com` | The app, plus the gateway's endpoints on that host: `/mcp` and its OAuth metadata, and `/settings/users`, `/settings/integrations`, `/settings/api` and `/settings/connect-ai`, which only redirect (GET) to the app's settings on the apex. Everything else goes to the app Worker: after sign-in, or, on the paths the app declares public (§8.1), for anyone, with no identity. |
+| `insulin-apps.com` | The single entry for everything that is not an app: landing, privacy and terms; the public docs at `/docs/` (generated from `.github/hosting/docs/` and each app's `docs/public/`, with `/docs/llms.txt` for AI agents and the images at `/docs/assets/*` from the static-assets binding), searchable at `/docs/search` and `/docs/search.json` and through the docs' own MCP server at `/docs/mcp`, all public with no sign-in and limited per IP; `/robots.txt` (every crawler, AI crawlers included, may read all but the search results), `/sitemap.xml` (the landing page, privacy, terms and every docs page) and `/llms.txt`; sign-up, sign-in, MFA, Google and enterprise SSO; account and organizations; `/settings/users` and `/settings/roles` (the organization's people and roles); `/settings/organization` (name, who can be invited, leave, delete); `/settings/oauth-clients` (every OAuth client of the organization, §5.4); `/settings/sso` (SAML or OIDC and SCIM); each app's settings: people, integrations, API access and Connect AI at `/apps/<app>/settings/users`, `/integrations`, `/api` and `/connect-ai`; the OAuth authorization server for MCP clients and OAuth clients (service accounts); SCIM; the operator console at `/super` (§11), for Insulin Apps staff only; and what app Workers call with their own token: their hourly usage reports at `/__insulin/metrics` (§8.6), their limits at `/__insulin/limits` (§8.8) and their organizations' members at `/__insulin/members`, `/__insulin/members/status` and `/__insulin/member-events` (§8.9). |
+| `auth.insulin-apps.com` | A 308 redirect to the same path on the apex, so links in e-mails already sent keep working. |
+| `www.insulin-apps.com` | A 301 redirect to the apex. |
+| `<app>.insulin-apps.com` | The app, plus the gateway's endpoints on that host: `/mcp` and its OAuth metadata, and `/settings/users`, `/settings/integrations`, `/settings/api` and `/settings/connect-ai`, which only redirect (GET) to the app's settings on the apex. Everything else goes to the app Worker: after sign-in, or, on the paths the app declares public (§8.1), for anyone, with no identity. |
 
 Paths the gateway keeps on every app host, so apps must not use them: `/__insulin/*`, `/settings/users`,
 `/settings/integrations`, `/settings/api`, `/settings/connect-ai` (and everything below each), `/mcp`, and
@@ -133,21 +133,21 @@ and deleting to §4's browser-only actions. Every app with resource roles keeps 
 
 ## 3. Organization and app people pages
 
-- `insulinapps.com/settings/users` shows the active organization (or `?org=<id>`): every member with their access,
+- `insulin-apps.com/settings/users` shows the active organization (or `?org=<id>`): every member with their access,
   pending invitations, and for owners and admins the forms to invite (organization role or specific apps with a role per
   app), change access, resend or revoke invitations, and remove people. Everyone with an organization role can open it;
   people with specific-apps access are told where to go instead.
-- `insulinapps.com/settings/roles` lists the built-in roles and each app's custom roles with their permissions; owners
+- `insulin-apps.com/settings/roles` lists the built-in roles and each app's custom roles with their permissions; owners
   add, edit and delete custom roles there.
-- `insulinapps.com/apps/<app>/settings/users` (where `<app>.insulinapps.com/settings/users` leads) lists everyone who
+- `insulin-apps.com/apps/<app>/settings/users` (where `<app>.insulin-apps.com/settings/users` leads) lists everyone who
   can use the app in the active organization: people whose
   access comes from their organization role (marked *from organization role*, not editable here) and people with access
   to this app. App admins invite people to this app (Admin, Editor, Viewer or one of the app's custom roles), change
   their role in this app and remove them from it. Removing someone's last app removes them from the organization.
   Inviting someone who already has specific-apps access adds the app at once; inviting a member with an organization
   role is refused (they already have access).
-- `insulinapps.com/apps/<app>/settings/integrations` (where `<app>.insulinapps.com/settings/integrations` leads): §6.
-- `insulinapps.com/settings/organization` has the name, leaving and deleting and, for owners, **who can be invited**.
+- `insulin-apps.com/apps/<app>/settings/integrations` (where `<app>.insulin-apps.com/settings/integrations` leads): §6.
+- `insulin-apps.com/settings/organization` has the name, leaving and deleting and, for owners, **who can be invited**.
   Once the organization has a verified domain (§7), an owner can invite only people with an address in its verified
   domains; it is off by default. While it is on, every new invitation, from the people page or an app's, must be for an
   address in one of the domains verified now (compared in lower case and punycode), and resending and accepting check
@@ -157,9 +157,9 @@ and deleting to §4's browser-only actions. Every app with resource roles keeps 
   members already keep their access, and an app admin can still give an existing specific-apps member another app.
   With no verified domain left, nobody can be invited until an owner verifies one or turns the setting off. SCIM keeps
   its own rule (§7).
-- `insulinapps.com/apps/<app>/settings/api` (API access; `<app>.insulinapps.com/settings/api` leads there): the app's
+- `insulin-apps.com/apps/<app>/settings/api` (API access; `<app>.insulin-apps.com/settings/api` leads there): the app's
   OAuth clients, §5.3.
-- `insulinapps.com/apps/<app>/settings/connect-ai` (Connect AI; `<app>.insulinapps.com/settings/connect-ai` leads
+- `insulin-apps.com/apps/<app>/settings/connect-ai` (Connect AI; `<app>.insulin-apps.com/settings/connect-ai` leads
   there): the app's MCP server and AI agents, §5.2.
 
 Every change re-checks the actor's role inside the same SQL statement as the change, so a member who was demoted or
@@ -219,7 +219,7 @@ section open in it).
   - the app's sections, from its navigation manifest (below), each an icon and a label, under optional group headings;
   - then the platform's items, in every app: **Docs** (the app's in-app Docs) and **Settings**, whose level 2 is
     People, Integrations, API access and Connect AI. Those four stay the gateway's pages on the apex
-    (`insulinapps.com/apps/<app>/settings/...`, §3), so an app's code can never read or submit them; the app links to
+    (`insulin-apps.com/apps/<app>/settings/...`, §3), so an app's code can never read or submit them; the app links to
     them (`/__insulin/me` gives their addresses as `settings: { users, integrations, api, connectAi }`, null where the
     person can't use the app, and the apex's origin as `apex`), and they render with that app's own level 1, so they
     read as part of the app;
@@ -253,7 +253,7 @@ pages (landing, sign-in, the docs), invitations, the consent page and the messag
 - **The account pages**: the organization's level 1, and **Account** in level 2: Profile, Security, AI agents.
 - **An app's settings pages**: the app's level 1 with the items the person's role in that app reaches (a custom role
   counts as the built-in role it is sent as, §2.4), consecutive items of one `group` under one heading, and no
-  children (they are the app's own level 2); then Docs (`https://<app>.insulinapps.com/docs`) and Settings. The
+  children (they are the app's own level 2); then Docs (`https://<app>.insulin-apps.com/docs`) and Settings. The
   breadcrumb starts with the app: Cap Table › Settings › People.
 - The open level-1 item whose level 2 holds the page has `aria-current="true"`; the page's own item `"page"`.
 - The organization switcher also links **All apps** (the home page). Switching from a page opened with `?org=` comes
@@ -317,7 +317,7 @@ rule is the app's to enforce, for its own roles, not owner- or admin-only.
 ### 5.1 People
 
 - **E-mail and password**, with the existing confirmation, reset, Turnstile, rate limits and credential versions.
-- **Google** (the platform's OAuth client), callback `https://insulinapps.com/auth/google/callback`.
+- **Google** (the platform's OAuth client), callback `https://insulin-apps.com/auth/google/callback`.
 - **MFA with an authenticator app (TOTP).** Turned on under Account → Security with a QR code and a code from the app;
   ten single-use recovery codes are shown once. Turning it on needs the current password (or, for an account without
   one, a sign-in in the last ten minutes), so a stolen session can't put the thief's authenticator on the account. While
@@ -331,17 +331,17 @@ rule is the app's to enforce, for its own roles, not owner- or admin-only.
 
 ### 5.2 MCP clients (Claude, Codex, Gemini, opencode, …)
 
-Each app is its own OAuth protected resource, `https://<app>.insulinapps.com/mcp`, and the apex is the one
+Each app is its own OAuth protected resource, `https://<app>.insulin-apps.com/mcp`, and the apex is the one
 authorization server for all of them, so a client registers and is authorized separately for each app.
 
 ```
-client ──► https://captable.insulinapps.com/mcp           401 + resource_metadata
-   ├─► /.well-known/oauth-protected-resource/mcp            (app host) authorization_servers: [https://insulinapps.com]
-   ├─► https://insulinapps.com/.well-known/oauth-authorization-server
+client ──► https://captable.insulin-apps.com/mcp           401 + resource_metadata
+   ├─► /.well-known/oauth-protected-resource/mcp            (app host) authorization_servers: [https://insulin-apps.com]
+   ├─► https://insulin-apps.com/.well-known/oauth-authorization-server
    ├─► POST /oauth/register                                 dynamic registration (public client, PKCE)
    ├─► GET  /oauth/authorize?resource=https://captable…/mcp sign in, choose the organization, Allow
    ├─► POST /oauth/token                                    code + verifier → access (1 h) + refresh (rotating)
-   └─► POST https://captable.insulinapps.com/mcp            Bearer token, JSON-RPC (stateless Streamable HTTP)
+   └─► POST https://captable.insulin-apps.com/mcp            Bearer token, JSON-RPC (stateless Streamable HTTP)
 ```
 
 - **Registration** accepts only public clients whose redirect URIs are loopback (`http://localhost`, `127.0.0.1` or
@@ -373,9 +373,9 @@ client ──► https://captable.insulinapps.com/mcp           401 + resource_m
 - People see and disconnect their own agents under Account → AI agents, for every app and organization, and on each
   app's Connect AI page.
 
-**Connect AI.** Every app has a Connect AI page, `insulinapps.com/apps/<app>/settings/connect-ai` (in the level 2 of
+**Connect AI.** Every app has a Connect AI page, `insulin-apps.com/apps/<app>/settings/connect-ai` (in the level 2 of
 the app's Settings, §3.2, and a link in the account bar on an app host without the navigation;
-`<app>.insulinapps.com/settings/connect-ai` leads there), which everyone who can use the app opens: Viewers and
+`<app>.insulin-apps.com/settings/connect-ai` leads there), which everyone who can use the app opens: Viewers and
 specific-apps members included.
 
 - **The server.** The app's MCP server URL, and in plain words what connecting does: the agent signs in at the apex,
@@ -395,7 +395,7 @@ specific-apps members included.
 ### 5.3 OAuth clients (API access)
 
 An app's OAuth clients (OAuth 2.0 client credentials; stored as `service_accounts`) are on its API access page,
-`insulinapps.com/apps/<app>/settings/api` (`<app>.insulinapps.com/settings/api` leads there). Each has a name and a
+`insulin-apps.com/apps/<app>/settings/api` (`<app>.insulin-apps.com/settings/api` leads there). Each has a name and a
 role in that app (Admin, Editor, Viewer or a custom role).
 
 - **Who manages them.** Only the organization's owners and admins create, rename, change the role of, rotate and
@@ -403,7 +403,7 @@ role in that app (Admin, Editor, Viewer or a custom role).
   secret outlives the person who made it, so it is the organization's to manage.
 - **Who sees them.** Everyone who can use the app sees the list: name, role, client id, created, last used and when the
   secret was rotated. A secret is shown once, right after it is made, and never again.
-- **Getting a token.** A program posts `grant_type=client_credentials` to `https://insulinapps.com/oauth/token` with
+- **Getting a token.** A program posts `grant_type=client_credentials` to `https://insulin-apps.com/oauth/token` with
   its client id and secret as HTTP Basic (or `client_id` and `client_secret` in the body), optionally with
   `resource=https://<app host>`, and calls `https://<app host>/api/...` with the access token, which lasts an hour.
   The page shows a curl example with placeholder credentials. The app receives the client's id, the name, and the
@@ -442,7 +442,7 @@ line). That is all the gateway does: it neither reads nor stores the settings, a
 
 ### 5.4 OAuth clients across the organization
 
-`insulinapps.com/settings/oauth-clients` (Settings › OAuth clients, §3.2) lists every OAuth client of the organization in
+`insulin-apps.com/settings/oauth-clients` (Settings › OAuth clients, §3.2) lists every OAuth client of the organization in
 one table, for its owners and admins only: each app's clients for API access (§5.3) and every member's AI agents
 (§5.2, a grant each), of every app.
 
@@ -473,7 +473,7 @@ one table, for its owners and admins only: each app's clients for API access (§
 
 ## 6. Integrations
 
-An app's integrations page, `insulinapps.com/apps/<app>/settings/integrations` (`<app>.insulinapps.com/settings/
+An app's integrations page, `insulin-apps.com/apps/<app>/settings/integrations` (`<app>.insulin-apps.com/settings/
 integrations` leads there), holds its stored credentials. Only the app's admins (§2.2) create, edit and delete them;
 everyone else who can use the app sees names, kinds, hosts and status, never a secret, and tokens never reach it (§4).
 The app's API clients are no longer here: they are OAuth clients on the API access page (§5.3), managed by the
@@ -482,7 +482,7 @@ organization's owners and admins, and the integrations page links there.
 - **Stored credentials** for outside services the app calls through `integrationFetch(key)` of `@fours/app`: a key, a
   name, the base URL, the allowed hosts, and how to send the secret (a bearer token, a named header, or basic auth). The
   secret is encrypted with `GATEWAY_SECRET_KEY` and never shown again. The gateway's proxy,
-  `https://insulinapps.com/__insulin/integrations/<key>/proxy/<host>/<path>`, accepts the app's token
+  `https://insulin-apps.com/__insulin/integrations/<key>/proxy/<host>/<path>`, accepts the app's token
   (`SUGER_APP_TOKEN`, an HMAC of the app's name with `GATEWAY_SECRET_KEY`, which the deploy gives each app Worker)
   and the organization in `x-suger-organization-id`, which the app sets from `getCurrentUser()` on the request it is
   serving. It sends the request on only to an allowed `https` host, with the credential added and every `x-suger-*`,
@@ -495,7 +495,7 @@ organization's owners and admins, and the integrations page links there.
 
 ## 7. Enterprise SSO and SCIM
 
-An organization's owners set this up under `insulinapps.com/settings/sso`.
+An organization's owners set this up under `insulin-apps.com/settings/sso`.
 
 - **Domains.** An owner claims an e-mail domain and proves it with a DNS TXT record (`_insulin-apps.<domain>`, value
   `insulin-apps-verification=<token>`), checked over DNS-over-HTTPS. One organization at a time can hold a verified
@@ -524,7 +524,7 @@ An organization's owners set this up under `insulinapps.com/settings/sso`.
   "require SSO", password sign-in, sign-up, password resets, confirmation links and Google are refused for those
   addresses before any credential is looked at, and again where every sign-in finishes, against the account's stored
   address, so a Google account matched by its subject can't get around it. Domains are compared in punycode.
-- **SCIM 2.0** at `https://insulinapps.com/scim/v2` with a bearer token the owner creates (shown once): `Users`
+- **SCIM 2.0** at `https://insulin-apps.com/scim/v2` with a bearer token the owner creates (shown once): `Users`
   (list with `userName eq`, create, read, replace, patch, delete), `ServiceProviderConfig`, `ResourceTypes`, `Schemas`.
   Only addresses in a currently verified domain, for every read and write; joining checks that in the same statement.
   Creating adds the person with the default role; `active: false` or delete removes them from the organization (never
@@ -581,7 +581,7 @@ for the app's members.
 ### 8.2 Mail relay
 
 Apps have no e-mail binding. An app Worker that must write to someone (a one-time code, a link to a signed copy)
-sends one message per request to `POST https://insulinapps.com/__insulin/mail`, with its `SUGER_APP_TOKEN` as a bearer
+sends one message per request to `POST https://insulin-apps.com/__insulin/mail`, with its `SUGER_APP_TOKEN` as a bearer
 token and the organization it serves in `x-suger-organization-id`:
 
 ```json
@@ -659,7 +659,7 @@ of each kind and the bytes of files stored. Counts and sizes only: never a name,
   hour's report. It keeps which hours it sent in its own D1 (a table like `metrics_reports`), claims the hour with one
   conditional statement so two overlapping ticks never both send, marks it sent once every request got 202, and
   releases the claim on anything else so the next tick tries again.
-- **The request.** `POST https://insulinapps.com/__insulin/metrics` (`SUGER_METRICS_URL`), over the `SUGER_GATEWAY`
+- **The request.** `POST https://insulin-apps.com/__insulin/metrics` (`SUGER_METRICS_URL`), over the `SUGER_GATEWAY`
   binding, with `SUGER_APP_TOKEN` as a bearer token, and at most 512 KB of JSON:
 
   ```json
@@ -752,7 +752,7 @@ app enforces them.
   writes them there: the apps' jobs run first. An app held back, or whose deploy failed, keeps the catalog of the
   version it still runs. So the console manages the limits the running app enforces, after every deploy that changes an
   app, a rollback or a deploy of apps alone included, and whether or not the gateway Worker is deployed too.
-- **Delivery.** On its tick the app calls `GET https://insulinapps.com/__insulin/limits?since=<cursor>`
+- **Delivery.** On its tick the app calls `GET https://insulin-apps.com/__insulin/limits?since=<cursor>`
   (`SUGER_LIMITS_URL`), one of the app endpoints of §8.9 (its token, over `SUGER_GATEWAY`), and gets
   `{ "defaults": { key: value }, "organizations": [ { "id", "limits": { key: { "value", "until" } } } ], "cursor", "more" }`.
   - `defaults` holds every key's default in force: the console admins', where they set one, else the catalog's.
@@ -804,7 +804,7 @@ on three endpoints, which, with the limits of §8.8, are the **app endpoints**:
   waits for the organization to be confirmed. Opening Esign, to look at the draft or anything else, confirms it, and
   they are sent at the next try, oldest first. Each try asks about the organization once and rests all its due drafts
   together, so they never hold up another organization's.
-- **Member lookup.** `GET https://insulinapps.com/__insulin/members?q=<text>` (`SUGER_MEMBERS_URL`), with the
+- **Member lookup.** `GET https://insulin-apps.com/__insulin/members?q=<text>` (`SUGER_MEMBERS_URL`), with the
   `x-suger-member-lookup` header of the browser request the app is serving. The gateway adds that header to every
   request with `x-suger-access-via: browser`: `v1.<organization>.<person>.<expiry>.<signature>`, the expiry five
   minutes ahead and the signature an HMAC-SHA256 over the version, the app, the organization, the person and the expiry,
@@ -825,7 +825,7 @@ on three endpoints, which, with the limits of §8.8, are the **app endpoints**:
   address answered with up to 500 of the organization's people for the app's token and an organization the app named
   in `x-suger-organization-id`; the lookup replaced that answer, and an app calling it so now gets 403
   `invalid_member_lookup`.)
-- **Member status.** `POST https://insulinapps.com/__insulin/members/status` (`SUGER_MEMBER_STATUS_URL`) with
+- **Member status.** `POST https://insulin-apps.com/__insulin/members/status` (`SUGER_MEMBER_STATUS_URL`) with
   `{ "org", "ids" }`, at most 100 people or API clients the app already holds, returns
   `{ "org", "standing", "owners", "members" }`.
   Each id comes back with its `type` and `status`: `member`, with its app role (and, for a person, organization role;
@@ -839,7 +839,7 @@ on three endpoints, which, with the limits of §8.8, are the **app endpoints**:
   when, the time their membership last changed role. An organization that no longer exists answers 404 `org_deleted`,
   and one where the app isn't used 404 `unknown_organization`. It returns no names or addresses. Apps use it to resync
   and to check someone they hold, never to search.
-- **Member events.** `GET https://insulinapps.com/__insulin/member-events?since=<cursor>` (`SUGER_MEMBER_EVENTS_URL`)
+- **Member events.** `GET https://insulin-apps.com/__insulin/member-events?since=<cursor>` (`SUGER_MEMBER_EVENTS_URL`)
   returns `{ "events": [ { "id", "type", "org", "at", … } ], "cursor", "more" }`, oldest first, at most 1,000 a page:
   - `left` (`user`): removed from the organization or from the app, moved to specific apps without this one, or the
     account deleted;
@@ -907,7 +907,7 @@ All in the gateway's D1 database; migrations are forward-only.
 | App secrets | GitHub environment | Each app's `insulin.secrets`, by name (§8.3) |
 | `nodejs_compat` | flag | For SAML's XML signature library |
 
-Changing the domain of sign-in means registering `https://insulinapps.com/auth/google/callback` with Google (the
+Changing the domain of sign-in means registering `https://insulin-apps.com/auth/google/callback` with Google (the
 runbook says so); the old `auth.` callback redirects there but Google checks the exact URI it was given.
 
 ### 10.1 Deploying an app's engine
@@ -969,7 +969,7 @@ stub engine and without a gateway.
 
 ## 11. The operator console
 
-`insulinapps.com/super` is for a few Insulin Apps staff: they watch how Insulin Apps is used, catch abuse, suspend or
+`insulin-apps.com/super` is for a few Insulin Apps staff: they watch how Insulin Apps is used, catch abuse, suspend or
 disable organizations and accounts that break the rules, see a Cloudflare limit coming before it is hit, and see which
 apps people use, to decide what to build next. It is part of the gateway, on the apex only, and isn't there (every
 path 404) unless it is configured. Customers never see it, and it never sees their data: organizations' and people's
@@ -983,7 +983,7 @@ basic facts, and numbers.
   browser by the host-only `__Host-insulin_super_flow` cookie (`SameSite=None`, because Google posts the answer
   from its own site). Google posts the signed response to `POST /super/saml/acs`, the console's one form exempt from
   the Origin check, which checks it as §7 does: signed with `SUPER_SAML_IDP_CERT` (RSA-SHA256, the signature covering
-  what is read), issued by `SUPER_SAML_IDP_ENTITY_ID`, for the audience `https://insulinapps.com/super` and the ACS,
+  what is read), issued by `SUPER_SAML_IDP_ENTITY_ID`, for the audience `https://insulin-apps.com/super` and the ACS,
   within its validity window, answering the request this browser started. `GET /super/saml/metadata` is the
   console's SP metadata.
 - **The operators' group.** The signed assertion's `groups` attribute must list `SUPER_GOOGLE_GROUP`, the group's

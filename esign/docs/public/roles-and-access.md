@@ -49,12 +49,12 @@ A change applies at once, to what the client created before too. Nothing in Esig
 **Ownership** (`/ownership`, not in the navigation), for organization owners: **Owners** lists everyone who owns
 templates or envelopes. **Take over** makes you the owner of everything someone owns, for someone who left or a client
 no longer used; the people it is shared with keep their roles. An API client's page links to it; otherwise open
-`https://esign.insulinapps.com/ownership`. Organization owners and admins here are those with that organization role:
+`https://esign.insulin-apps.com/ownership`. Organization owners and admins here are those with that organization role:
 someone given Esign as Admin through **Specific apps** is an Admin of Esign, not of the organization, and can't.
 
 ## Who can do what
 
-People get access on insulinapps.com in one of two ways: an organization role, which reaches every app, or access to
+People get access on insulin-apps.com in one of two ways: an organization role, which reaches every app, or access to
 specific apps, with a role in each. See [Organizations and roles](/docs/platform/organizations-and-roles).
 
 Every role works on the templates and envelopes it owns or that are shared with it (above), organization owners and
@@ -83,18 +83,18 @@ In the Insulin console, the older Owner role works like Admin and the User role 
 Esign has no people, role, integration, API client or AI agent settings of its own. They are Esign's settings tabs on
 the platform, which **Settings** in Esign's navigation links to:
 
-- **People**: `https://insulinapps.com/apps/esign/settings/users` (or `https://esign.insulinapps.com/settings/users`,
+- **People**: `https://insulin-apps.com/apps/esign/settings/users` (or `https://esign.insulin-apps.com/settings/users`,
   which leads there): Esign's app admins invite someone to Esign with a role, change it, or remove them from Esign.
-- **Integrations**: `https://insulinapps.com/apps/esign/settings/integrations`: stored credentials for outside services,
+- **Integrations**: `https://insulin-apps.com/apps/esign/settings/integrations`: stored credentials for outside services,
   managed by Esign's app admins. See [Integrations](/docs/platform/integrations).
-- **API access**: `https://insulinapps.com/apps/esign/settings/api`: OAuth clients for host products, managed by the
+- **API access**: `https://insulin-apps.com/apps/esign/settings/api`: OAuth clients for host products, managed by the
   organization's owners and admins only. See [API access with OAuth clients](/docs/platform/api-and-service-accounts).
-- **Connect AI**: `https://insulinapps.com/apps/esign/settings/connect-ai`: Esign's MCP server and the setup for each
+- **Connect AI**: `https://insulin-apps.com/apps/esign/settings/connect-ai`: Esign's MCP server and the setup for each
   AI client, open to everyone who can use Esign. See [AI agents](/docs/platform/ai-agents).
 
 ## Custom roles
 
-Organization owners can create custom roles for Esign on `https://insulinapps.com/settings/roles`, built from Esign's
+Organization owners can create custom roles for Esign on `https://insulin-apps.com/settings/roles`, built from Esign's
 two permissions. Owners and admins, and Esign's app admins, give them to people with specific-apps access; owners and
 admins also give them to OAuth clients.
 
@@ -120,7 +120,7 @@ working.
 ## AI agents
 
 Anyone who can use Esign can connect an AI agent (Claude Code, Codex, Gemini CLI, opencode, Claude.ai, ChatGPT or
-another MCP client) to Esign at `https://esign.insulinapps.com/mcp`. Esign's **Connect AI** page, from **Connect AI**
+another MCP client) to Esign at `https://esign.insulin-apps.com/mcp`. Esign's **Connect AI** page, from **Connect AI**
 in the account bar, has the setup for each client and lists your agents. See [AI agents](/docs/platform/ai-agents).
 
 - The agent acts with that person's current role and permissions in the organization they chose, and no more. If their

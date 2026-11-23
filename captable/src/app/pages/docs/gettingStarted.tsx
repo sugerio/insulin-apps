@@ -38,7 +38,7 @@ export const gettingStarted: DocTopic = {
           </ul>
           <h3 id="usage-counts" tabIndex={-1}>Usage counts for Insulin Apps</h3>
           <p>
-            On insulinapps.com, Cap Table sends Insulin Apps a few counts every hour, so that Insulin Apps can watch how the app
+            On insulin-apps.com, Cap Table sends Insulin Apps a few counts every hour, so that Insulin Apps can watch how the app
             is used and plan its capacity. For each organization: whether its company is set up, and how many stakeholders,
             share classes, equity plans, securities, ledger transactions, documents, valuations and exercise requests it has,
             with how much space its documents take. Cap Table also sends the size of its database and how many organizations
@@ -77,7 +77,7 @@ export const gettingStarted: DocTopic = {
           </ul>
           <h3 id="custom-roles" tabIndex={-1}>Access to Cap Table only, and custom roles</h3>
           <p>
-            On insulinapps.com, your organization's owners and admins can give someone access to Cap Table alone, as an Admin,
+            On insulin-apps.com, your organization's owners and admins can give someone access to Cap Table alone, as an Admin,
             Editor or Viewer of the app, instead of a role across the whole organization: <b>Settings › People</b> in Cap Table's
             navigation opens that page. The organization's owner can also make custom roles for Cap Table from three permissions:
           </p>
@@ -96,7 +96,7 @@ export const gettingStarted: DocTopic = {
           </p>
           <h3 id="ai-agents" tabIndex={-1}>AI agents and API clients</h3>
           <p>
-            On insulinapps.com, people can connect an AI agent, such as Claude or Codex, to Cap Table (<b>Settings › Connect AI</b>),
+            On insulin-apps.com, people can connect an AI agent, such as Claude or Codex, to Cap Table (<b>Settings › Connect AI</b>),
             and your organization's owners and admins can set up API clients for other systems (<b>Settings › API access</b>). An
             AI agent acts with the role and permissions of the person who connected it, and an API client with the role it was
             given: neither can do anything that role can't. Their changes appear in the history under the person's or the
@@ -119,7 +119,7 @@ export const gettingStarted: DocTopic = {
         <>
           <p>
             Cap Table keeps one company's cap table for each Insulin organization. Switching organizations (with the switcher at
-            the top of the navigation on insulinapps.com, or in the Insulin console) switches the company Cap Table opens; each
+            the top of the navigation on insulin-apps.com, or in the Insulin console) switches the company Cap Table opens; each
             organization sets up or imports its own company independently.
           </p>
           <p>The first owner, admin or editor of each organization to open the published app chooses how to start:</p>
@@ -174,10 +174,10 @@ export const gettingStarted: DocTopic = {
           </p>
           <ul>
             <li><b>+ New</b>, at the top for everyone who records changes, to record an approved option grant, signed or awaiting signatures.</li>
-            <li><b>Docs:</b> these pages, for everyone. On insulinapps.com their topic list ends with <b>Public docs</b>, Cap Table's documentation on the web.</li>
-            <li><b>Settings:</b> Cap Table's pages on Insulin Apps: <b>People</b> (who can use Cap Table, with their roles), <b>Integrations</b>, <b>API access</b> (API clients for other systems) and <b>Connect AI</b> (connecting an AI agent). They open on insulinapps.com, where your role there decides what you can change. In the console's preview they are listed without links.</li>
-            <li><b>The organization switcher</b> at the top, with your organization's name. On insulinapps.com it lists your other organizations, opens Cap Table in the one you choose, and links to <b>All apps</b> (your home page there) and to creating an organization.</li>
-            <li><b>You</b>, at the bottom: your name and role ("Custom role" when your organization narrowed it). Its menu has your e-mail address, <b>Switch theme</b> and, on insulinapps.com, <b>Account</b> and <b>Sign out</b>.</li>
+            <li><b>Docs:</b> these pages, for everyone. On insulin-apps.com their topic list ends with <b>Public docs</b>, Cap Table's documentation on the web.</li>
+            <li><b>Settings:</b> Cap Table's pages on Insulin Apps: <b>People</b> (who can use Cap Table, with their roles), <b>Integrations</b>, <b>API access</b> (API clients for other systems) and <b>Connect AI</b> (connecting an AI agent). They open on insulin-apps.com, where your role there decides what you can change. In the console's preview they are listed without links.</li>
+            <li><b>The organization switcher</b> at the top, with your organization's name. On insulin-apps.com it lists your other organizations, opens Cap Table in the one you choose, and links to <b>All apps</b> (your home page there) and to creating an organization.</li>
+            <li><b>You</b>, at the bottom: your name and role ("Custom role" when your organization narrowed it). Its menu has your e-mail address, <b>Switch theme</b> and, on insulin-apps.com, <b>Account</b> and <b>Sign out</b>.</li>
           </ul>
           <p>
             Each column folds down to its icons with the button at its edge (point at an icon to see its name), and Cap Table remembers

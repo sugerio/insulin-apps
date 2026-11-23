@@ -9,7 +9,7 @@ Knowledge for the first time, and for AI agents working out what a person can do
 
 ## Before you start
 
-Sign up on insulinapps.com with an e-mail address, Google or your company's single sign-on, then create or join an
+Sign up on insulin-apps.com with an e-mail address, Google or your company's single sign-on, then create or join an
 organization. Owners and admins invite the team and give each person a role: Admin, Editor or Viewer. See
 [Organizations and roles](/docs/platform/organizations-and-roles). Then open Knowledge from your apps.
 
@@ -44,7 +44,7 @@ and ask. Below are your collections and, for Editors and Admins, what needs atte
 
 ## What each role sees
 
-Knowledge uses each person's role in Knowledge from insulinapps.com: from their organization role (organization owners
+Knowledge uses each person's role in Knowledge from insulin-apps.com: from their organization role (organization owners
 and admins are Admins here), or a role given for Knowledge alone.
 
 | Role in Knowledge | Navigation | What they can do |
@@ -57,7 +57,7 @@ Being an Admin in Knowledge gives no access to any collection's content: inside 
 comes from their collection role. Owners of the organization also see the basic information of every collection and
 can delete one at a time. See [Roles and sharing](/docs/knowledge/roles-and-sharing).
 
-**Settings** in Knowledge's navigation opens Insulin Apps' pages for Knowledge on insulinapps.com: People,
+**Settings** in Knowledge's navigation opens Insulin Apps' pages for Knowledge on insulin-apps.com: People,
 Integrations, API access and Connect AI.
 
 ## A collection's tabs

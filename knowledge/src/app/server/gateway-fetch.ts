@@ -1,6 +1,6 @@
 // How Esign reaches the platform's gateway (the mail relay, the usage reports). The deploy binds the gateway Worker to
 // the app as SUGER_GATEWAY: a Worker can't fetch another Worker of the same zone through its public URL, so a plain
-// fetch of https://insulinapps.com/__insulin/mail from esign.insulinapps.com never reaches the gateway. Nitro on Workers
+// fetch of https://insulin-apps.com/__insulin/mail from esign.insulin-apps.com never reaches the gateway. Nitro on Workers
 // puts the invocation's env on the request it passes on (request.runtime.cloudflare.env), as it does waitUntil
 // (wait-until.ts), so no cloudflare: import is needed. Without the binding (the local preview, tests) the caller uses
 // the global fetch.

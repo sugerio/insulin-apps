@@ -1,6 +1,6 @@
 /*
  * Esign's stylesheet: Tailwind CSS v4 with shadcn/ui's theme (MIT), the new-york style with the neutral base colour,
- * as on insulinapps.com. Dark mode follows prefers-color-scheme (Tailwind's default `dark:` variant). --ring is the
+ * as on insulin-apps.com. Dark mode follows prefers-color-scheme (Tailwind's default `dark:` variant). --ring is the
  * primary colour, so focus rings keep a 3:1 contrast. Tailwind scans this folder (src/app) for classes. The --sidebar-*
  * tokens are shadcn/ui's sidebar colours, for the members' navigation (member/Shell.ts); --sidebar-ring is --ring, for
  * the same contrast.

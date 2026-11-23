@@ -73,9 +73,9 @@ Cap Table is a record, not a full equity platform. Knowing its limits up front s
 
 ## How it runs on Insulin Apps
 
-Cap Table runs at `https://captable.insulinapps.com`. It has no sign-in screens, passwords or accounts of its own.
+Cap Table runs at `https://captable.insulin-apps.com`. It has no sign-in screens, passwords or accounts of its own.
 
-1. You create an account and an organization at `https://insulinapps.com`, and invite your team there. See
+1. You create an account and an organization at `https://insulin-apps.com`, and invite your team there. See
    [Getting started](/docs/platform/getting-started).
 2. Each person gets a role: an organization role (Owner, Admin, Editor or Viewer) that reaches every app, or access to
    Cap Table alone with a role in it. An organization owner can also make custom roles for Cap Table. See
@@ -83,8 +83,8 @@ Cap Table runs at `https://captable.insulinapps.com`. It has no sign-in screens,
    [Roles and access in Cap Table](/docs/captable/roles-and-access).
 3. When someone opens Cap Table, the platform signs them in and tells Cap Table who they are, which organization they
    act in and what their role allows. Cap Table keeps each organization's company apart from every other one.
-4. AI agents connect to `https://captable.insulinapps.com/mcp`, set up from Cap Table's **Connect AI** page, and other
-   systems call `https://captable.insulinapps.com/api/...` with an OAuth client from its **API access** tab. Both act
+4. AI agents connect to `https://captable.insulin-apps.com/mcp`, set up from Cap Table's **Connect AI** page, and other
+   systems call `https://captable.insulin-apps.com/api/...` with an OAuth client from its **API access** tab. Both act
    with a role, exactly like a person. See [AI agents](/docs/platform/ai-agents),
    [API access with OAuth clients](/docs/platform/api-and-service-accounts) and
    [Cap Table's API](/docs/captable/api).

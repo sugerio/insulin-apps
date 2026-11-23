@@ -72,7 +72,7 @@ Claude, ChatGPT, Codex and Gemini, which ask Knowledge as their person.
 
 ## How it runs on Insulin Apps
 
-Knowledge runs at `https://knowledge.insulinapps.com` and is free within limits for each organization (see
+Knowledge runs at `https://knowledge.insulin-apps.com` and is free within limits for each organization (see
 [Limits](/docs/knowledge/limits)). Sign-in, organizations, people and roles, AI assistant connections, API clients and
 mail are Insulin Apps' own, as for every Insulin app (see [Organizations and roles](/docs/platform/organizations-and-roles)).
 Knowledge has no accounts or passwords of its own.

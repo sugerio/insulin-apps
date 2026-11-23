@@ -9,7 +9,7 @@ who sends documents for signature.
 
 ## Before you start
 
-- **An account and an organization.** Sign up at `https://insulinapps.com`, create an organization or accept an
+- **An account and an organization.** Sign up at `https://insulin-apps.com`, create an organization or accept an
   invitation to one. See [Getting started with Insulin Apps](/docs/platform/getting-started).
 - **A role that can send.** Organization owners, admins and editors can send and manage envelopes. Someone with access
   to specific apps needs Esign's Admin or Editor role, or a custom role with **Send and manage envelopes**. Viewers can
@@ -18,7 +18,7 @@ who sends documents for signature.
   yet". You can still upload templates and send envelopes, but nobody can sign until whoever runs Esign adds its
   settings.
 
-Open Esign at `https://esign.insulinapps.com`, or from your organization's apps on the Insulin Apps home page. The
+Open Esign at `https://esign.insulin-apps.com`, or from your organization's apps on the Insulin Apps home page. The
 navigation on the left shows your organization at the top and your name and role at the bottom; see
 [The navigation](/docs/esign/overview#the-navigation).
 

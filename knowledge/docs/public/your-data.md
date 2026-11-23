@@ -20,7 +20,7 @@ size: 760 x 600
 box people 20 20 230 50 "People" "in a web browser"
 box assistants 265 20 230 50 "AI assistants" "over MCP, as their person"
 box programs 510 20 230 50 "Programs" "the API, with an OAuth client"
-box gateway 20 100 720 60 accent "Insulin Apps (insulinapps.com)" "signs people in; keeps organizations, people and roles"
+box gateway 20 100 720 60 accent "Insulin Apps (insulin-apps.com)" "signs people in; keeps organizations, people and roles"
 group app 20 190 720 104 "Knowledge app"
 box check 36 224 420 54 "Checks every request" "your role, the collection's sharing, the limits"
 box appdb 480 220 244 62 db "Knowledge's database" "sharing, lists, questions, logs"
@@ -75,7 +75,7 @@ Knowledge's own records of it go too: the questions asked of it, its reports and
 its history and who it was shared with. What stays is a line in the organization's activity log: that a collection with
 that name was deleted, by whom and when.
 
-Nobody deletes collections in bulk. When an organization is deleted on insulinapps.com, everything Knowledge kept for
+Nobody deletes collections in bulk. When an organization is deleted on insulin-apps.com, everything Knowledge kept for
 it is deleted too, the activity log included: only a note that its data was removed, with no names, stays.
 
 ## What Knowledge keeps

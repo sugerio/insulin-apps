@@ -423,7 +423,7 @@ describe("Settings", () => {
     const section = await openSettings();
     expect(within(section).queryAllByRole("link")).toEqual([]);
     expect(within(section).getByText("People").closest("[aria-disabled='true']")).toBeTruthy();
-    expect(within(section).getByText(/managed on Insulin Apps \(insulinapps\.com\)/)).toBeTruthy();
+    expect(within(section).getByText(/managed on Insulin Apps \(insulin-apps\.com\)/)).toBeTruthy();
   });
 
   it("uses the gateway's links, and the app's own people page over the organization's", () => {

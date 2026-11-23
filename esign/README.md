@@ -42,7 +42,7 @@ Members open Esign from their organization's Insulin apps:
   on electronic signatures (general information, not legal advice) and a glossary. Every role can
   open them.
 - **Settings**: People, Integrations, API access and Connect AI, the platform's pages for Esign on
-  `insulinapps.com/apps/esign/settings/`.
+  `insulin-apps.com/apps/esign/settings/`.
 
 They are in the two-level navigation every Insulin app has: the organization switcher, these
 sections (Envelopes, Templates and Contacts from `insulin.navigation` in `package.json`) and the person

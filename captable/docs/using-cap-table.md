@@ -53,11 +53,11 @@ Holders see **Portfolio**, **How to exercise** and **Documents**, under **My equ
 - **Docs:** how to use Cap Table, what holders see, and the basics of equity (vesting, ISOs and NSOs, 409A valuations,
   SAFEs, dilution and more), with a glossary. The setup page links to it as **Learn about cap tables**.
 - **Settings:** **People**, **Integrations**, **API access** and **Connect AI**, which are Insulin Apps' pages for Cap
-  Table on insulinapps.com (`/apps/captable/settings/...`). In the console's preview they are listed without links.
-- **The organization switcher** at the top. On insulinapps.com it lists your organizations (choosing one opens Cap
+  Table on insulin-apps.com (`/apps/captable/settings/...`). In the console's preview they are listed without links.
+- **The organization switcher** at the top. On insulin-apps.com it lists your organizations (choosing one opens Cap
   Table in it) and links to creating one.
 - **You**, at the bottom: your name and role ("Custom role" when your organization narrowed it), with **Switch theme**
-  and, on insulinapps.com, **Account** and **Sign out**.
+  and, on insulin-apps.com, **Account** and **Sign out**.
 
 Each column collapses to its icons (the names show as tooltips), remembered in your browser; on a narrow screen, the
 menu button in the top bar opens both. Each section also has an address on Cap Table's host that leads to the page in
@@ -389,7 +389,7 @@ can't change once the first record is in.
 - **You can't record changes to your own holdings.** If you hold equity, someone else who manages the cap table records
   changes to it, so nobody approves their own transactions.
 - **Making changes needs an e-mail address** on your profile.
-- **AI agents and API clients** (on insulinapps.com) act with the role and permissions of the person who connected
+- **AI agents and API clients** (on insulin-apps.com) act with the role and permissions of the person who connected
   them, or the role the client was given; their changes are in the history like anyone else's.
 - **Numbers are exact.** Quantities and amounts are never rounded behind your back; percentages and money are rounded
   only for display.

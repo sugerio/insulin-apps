@@ -22,7 +22,7 @@ both before changing anything.
    Cap Table is the reference: `captable/src/app/pages/docs/` and `captable/src/app/components/Docs.tsx`. Repeat this
    rule in the app's own `AGENTS.md`, because the Insulin console copies only the app's directory into a new app.
 
-   **Public docs, too.** An app's public documentation at `https://insulinapps.com/docs/<app>/` lives in
+   **Public docs, too.** An app's public documentation at `https://insulin-apps.com/docs/<app>/` lives in
    `<app>/docs/public/`, one Markdown page per topic with front matter (`title`, `description`, `order`), written for
    people and AI agents: what the app does, setting it up, the main tasks, what each role sees, its API (as
    `GET /api/catalog` publishes it) and its domain background, labelled general information, not advice. It is updated
@@ -30,7 +30,7 @@ both before changing anything.
    `npm run build:docs` in `.github/hosting/gateway/` and commit the regenerated `src/assets/docs-content.ts`
    (`npm run check:docs` fails while it is stale), which also rebuilds the docs' search: the pages are open to search
    engines and AI crawlers (`robots.txt`, `sitemap.xml`, `llms.txt`), searchable at `/docs/search`, and readable by
-   agents through the docs' MCP server at `https://insulinapps.com/docs/mcp`, so headings that name the task help people
+   agents through the docs' MCP server at `https://insulin-apps.com/docs/mcp`, so headings that name the task help people
    and agents find it. The platform's own pages are in `.github/hosting/docs/`; the format is in the gateway's README
    under "The public docs".
 3. **UI.** New UI uses [shadcn/ui](https://ui.shadcn.com) components and its default theme (the hosting gateway in
@@ -48,14 +48,14 @@ both before changing anything.
 ## Accounts, roles and access
 
 **One place signs people in.** Sign-up, sign-in, MFA, Google and enterprise SSO (SAML, OIDC, SCIM), OAuth for AI agents
-(MCP) and for API clients (service accounts) all live at `https://insulinapps.com/`, in the gateway
+(MCP) and for API clients (service accounts) all live at `https://insulin-apps.com/`, in the gateway
 (`.github/hosting/gateway/`). An app never adds sign-in screens, sessions, passwords, cookies or OAuth endpoints of its
 own: it reads who is calling with `getCurrentUser(request)` from `@fours/app/server`.
 
 **People and roles are managed in one place.** An organization's people, roles and custom roles are at
-`insulinapps.com/settings/users` and `/settings/roles`; each app's settings are under
-`insulinapps.com/apps/<app>/settings/`: `users` (people), `integrations` (stored credentials), `api` (API access: OAuth
-clients) and `connect-ai` (Connect AI), which the same paths on `<app>.insulinapps.com` (`/settings/users`,
+`insulin-apps.com/settings/users` and `/settings/roles`; each app's settings are under
+`insulin-apps.com/apps/<app>/settings/`: `users` (people), `integrations` (stored credentials), `api` (API access: OAuth
+clients) and `connect-ai` (Connect AI), which the same paths on `<app>.insulin-apps.com` (`/settings/users`,
 `/settings/integrations`, `/settings/api`, `/settings/connect-ai`) redirect to. They are on the apex so that code an
 app serves can never read them or post their forms. Apps don't build their own people, role, integration, API client
 or AI agent management.
@@ -96,11 +96,11 @@ or `APPS` for specific apps), and a browser's `x-suger-member-lookup` (DESIGN.md
   app's Docs what happens to someone's records and shares when they leave and when they return.
 - **Enforce on the server.** Hiding a button isn't access control.
 
-**AI agents and API clients.** Each app is its own MCP server at `https://<app>.insulinapps.com/mcp`, with its own OAuth
+**AI agents and API clients.** Each app is its own MCP server at `https://<app>.insulin-apps.com/mcp`, with its own OAuth
 client registration per agent, and API clients (OAuth clients, stored as service accounts) call
-`https://<app>.insulinapps.com/api/...` with a client-credentials token.
+`https://<app>.insulin-apps.com/api/...` with a client-credentials token.
 
-- **Connect AI.** Every app's Connect AI page (`insulinapps.com/apps/<app>/settings/connect-ai`, open to everyone who
+- **Connect AI.** Every app's Connect AI page (`insulin-apps.com/apps/<app>/settings/connect-ai`, open to everyone who
   can use the app) gives the MCP server and the setup for Claude Code, Codex, Gemini CLI, opencode, Claude.ai and
   ChatGPT, and lists the person's agents; the organization's owners and admins see and disconnect everyone's there.
 - **API clients are the organization's.** Only the organization's Owners and Admins create, rename, change the role of,
@@ -108,7 +108,7 @@ client registration per agent, and API clients (OAuth clients, stored as service
   grant can't. Everyone who can use the app sees the list, never a secret. Rotating keeps the previous secret valid for
   24 hours. Stored credentials stay with the app's admins, on the integrations page.
 - **The organization's OAuth clients.** Its Owners and Admins, and no one else, see every app's OAuth clients and
-  everyone's AI agents at `insulinapps.com/settings/oauth-clients`, with who created each, when and when it was last
+  everyone's AI agents at `insulin-apps.com/settings/oauth-clients`, with who created each, when and when it was last
   used. They revoke one there (its access ends at once and it stays listed, marked revoked) or delete it; nobody sees
   or rotates a secret there. A secret is shown once, when it is made or rotated on the app's API access page.
 - **Same role as the person.** An agent acts with its person's current role; an API client has the role an owner or

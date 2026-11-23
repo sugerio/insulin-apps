@@ -52,7 +52,7 @@ export function RulesPage() {
   if (!allowed) return <NoPermissionPage title="Rules and data" message="Rules and data is for Admins in Knowledge. Ask an admin of your organization if something here needs changing." />
   return (
     <Page title="Rules and data" crumbs={[['Admin'], ['Rules and data']]}>
-      <PageHead title="Rules and data" sub="Set these once and every collection in your organization follows them. People, roles, integrations and AI connections are in Settings, on insulinapps.com." />
+      <PageHead title="Rules and data" sub="Set these once and every collection in your organization follows them. People, roles, integrations and AI connections are in Settings, on insulin-apps.com." />
       {rules.loading ? <Loading /> : rules.error || !rules.data ? <ErrorState error={rules.error} onRetry={() => void rules.reload()} /> : (
         <div className="@container"><div className="grid items-start gap-4 @4xl:grid-cols-2">
           <HidingCard rules={rules.data} onSaved={rules.set} />
@@ -63,7 +63,7 @@ export function RulesPage() {
             <Card title="Your data">
               <p className="text-sm">Exports are per collection: a collection's owner or admins export it from its Sharing tab. Nobody, not even an owner of the organization, can export or delete every collection at once.</p>
               <p className="text-sm">Owners of the organization see every collection's basic information on the Collections page and can delete one at a time.</p>
-              <Note>Deleting the whole organization is done in the organization's settings on insulinapps.com; every collection's data is then removed.</Note>
+              <Note>Deleting the whole organization is done in the organization's settings on insulin-apps.com; every collection's data is then removed.</Note>
             </Card>
           </div>
         </div></div>
@@ -332,7 +332,7 @@ function TimeZoneCard({ rules, onSaved }: { rules: Rules; onSaved: (rules: Rules
     }
   }
   return (
-    <Card title="Time zone" description="Keep-ready windows follow this time zone, until insulinapps.com keeps one for the organization.">
+    <Card title="Time zone" description="Keep-ready windows follow this time zone, until insulin-apps.com keeps one for the organization.">
       <div className="flex flex-wrap items-end gap-2">
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="time-zone">Time zone</Label>

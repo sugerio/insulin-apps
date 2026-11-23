@@ -17,9 +17,9 @@ People, roles and invitations are managed on Insulin Apps, not in Cap Table:
 - **Access to specific apps** gives someone a role in Cap Table alone: Admin, Editor, Viewer or one of Cap Table's
   custom roles.
 
-The organization's people and roles are at `https://insulinapps.com/settings/users` and `/settings/roles`. Cap Table's
-own people page is at `https://insulinapps.com/apps/captable/settings/users`: **Settings › People** in Cap Table's
-navigation opens it, and `https://captable.insulinapps.com/settings/users` leads there too. See
+The organization's people and roles are at `https://insulin-apps.com/settings/users` and `/settings/roles`. Cap Table's
+own people page is at `https://insulin-apps.com/apps/captable/settings/users`: **Settings › People** in Cap Table's
+navigation opens it, and `https://captable.insulin-apps.com/settings/users` leads there too. See
 [Organizations and roles](/docs/platform/organizations-and-roles).
 
 ## What each role sees in the navigation
@@ -56,7 +56,7 @@ Some rules apply to everyone who records changes:
 
 ## Custom roles
 
-An organization's owner can make custom roles for Cap Table on `https://insulinapps.com/settings/roles`, from the three
+An organization's owner can make custom roles for Cap Table on `https://insulin-apps.com/settings/roles`, from the three
 permissions Cap Table declares:
 
 | Permission | Key | Least built-in role that has it | What it allows |
@@ -127,7 +127,7 @@ Cap Table doesn't e-mail holders. Tell them yourself when something changes for 
 ## AI agents and API clients
 
 On Insulin Apps, anyone who can use Cap Table can connect an AI agent, such as Claude Code or Codex, to
-`https://captable.insulinapps.com/mcp`, with the setup on Cap Table's **Connect AI** page. The organization's owners and
+`https://captable.insulin-apps.com/mcp`, with the setup on Cap Table's **Connect AI** page. The organization's owners and
 admins can create OAuth clients for other systems on Cap Table's **API access** tab.
 
 - **An AI agent acts with the role and permissions of the person who connected it**, re-checked on every request. If

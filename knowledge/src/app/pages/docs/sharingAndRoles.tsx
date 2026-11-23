@@ -20,7 +20,7 @@ export const sharingAndRoles: DocTopic = {
             label="The three kinds of roles"
             columns={['Kind', 'Values', 'Set where', 'What it decides in Knowledge']}
             rows={[
-              ['Organization role', 'Owner, Admin, Editor, Viewer, or specific apps', 'Settings › People, on insulinapps.com', "Organization owners see every collection's basic information (owner, created, last used, size and how it is shared) and can delete any collection, one at a time. Without a collection role they can't open, ask, export or change it. The organization role also sets the role in Knowledge."],
+              ['Organization role', 'Owner, Admin, Editor, Viewer, or specific apps', 'Settings › People, on insulin-apps.com', "Organization owners see every collection's basic information (owner, created, last used, size and how it is shared) and can delete any collection, one at a time. Without a collection role they can't open, ask, export or change it. The organization role also sets the role in Knowledge."],
               ['Role in Knowledge', 'Admin, Editor, Viewer, or a custom role', 'From the organization role (owners and admins are Admins here), or given for Knowledge only', 'Admins and Editors start collections; Viewers can\'t. Admins also see Rules and data and Health. Being an Admin gives no access to any collection\'s content.'],
               ['Collection role', 'Owner, Admin, Editor, Viewer', "Each collection's Sharing", 'Everything inside one collection, below. Nobody gets into a collection without one.'],
             ]}
@@ -82,7 +82,7 @@ export const sharingAndRoles: DocTopic = {
           </p>
           <ul>
             <li>An <b>AI assistant</b> acts as its person, with that person's collection roles and no more.</li>
-            <li>An <b>API client</b> (a program your organization's owners or admins set up on insulinapps.com) reaches a collection only when it is shared with that client by name, never through general access.</li>
+            <li>An <b>API client</b> (a program your organization's owners or admins set up on insulin-apps.com) reaches a collection only when it is shared with that client by name, never through general access.</li>
           </ul>
           <p>See <DocLink to="ai-assistants-and-api">AI assistants and the API</DocLink>.</p>
         </>
@@ -135,7 +135,7 @@ export const sharingAndRoles: DocTopic = {
           <li><b>Returning.</b> If they are invited again, the shares on hold come back, and they get a "Welcome back" e-mail.</li>
           <li><b>An owner leaves.</b> When a collection's owner leaves, or can only read from then on (a Viewer in Knowledge, or a custom role without "Change content"), the longest-standing owner of the organization becomes its owner and gets an e-mail. An owner who can only read keeps Viewer access.</li>
           <li><b>An owner returns.</b> A former owner who comes back gets their other shares back, but not ownership; the new owner can transfer it back.</li>
-          <li><b>Checking who is still here.</b> If Knowledge has missed news of people leaving for a long time (more than 90 days), or starts for the first time, it checks everyone it knows with insulinapps.com. Until someone is checked, which takes a moment, they count as away (Sharing says “checking”). Someone using Knowledge meanwhile is checked by using it: insulinapps.com says who they are with every request. Each check also moves collections whose owner can now only read to the longest-standing owner of the organization.</li>
+          <li><b>Checking who is still here.</b> If Knowledge has missed news of people leaving for a long time (more than 90 days), or starts for the first time, it checks everyone it knows with insulin-apps.com. Until someone is checked, which takes a moment, they count as away (Sharing says “checking”). Someone using Knowledge meanwhile is checked by using it: insulin-apps.com says who they are with every request. Each check also moves collections whose owner can now only read to the longest-standing owner of the organization.</li>
         </ul>
       ),
     },

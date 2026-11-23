@@ -7,7 +7,7 @@ import { anchorId, DocLink, type DocSection, type DocTopic } from './parts.tsx'
 const TERMS: readonly (readonly [term: string, definition: ReactNode])[] = [
   ['AI assistant', <>Claude, ChatGPT, Codex, Gemini and others, connected once in Settings › Connect AI, asking as you, with your access and no more. See <DocLink to="ai-assistants-and-api">AI assistants and the API</DocLink>.</>],
   ['Already here', 'You added files with the same content as files the collection had already learned; nothing changed.'],
-  ['API client', 'A program your organization set up on insulinapps.com to call Knowledge. It reaches a collection only when the collection is shared with it by name.'],
+  ['API client', 'A program your organization set up on insulin-apps.com to call Knowledge. It reaches a collection only when the collection is shared with it by name.'],
   ['Asleep', 'A collection nobody asked for a while sleeps, to keep Knowledge free. The first question wakes it up, in about a minute.'],
   ['Awake hours', 'The time collections are awake: while people ask and shortly after, while learning, while exporting and while kept ready. Each organization has a limit a month.'],
   ['Backup', "A daily copy of a collection, kept for your organization's days of daily backups (30 by default); the latest is kept as long as the collection exists."],

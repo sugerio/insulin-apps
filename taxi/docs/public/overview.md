@@ -76,7 +76,7 @@ and address printed on it are in the file until you delete it or upload a new ve
 
 ## On Insulin Apps
 
-Taxi runs at `https://taxi.insulinapps.com`. Sign in to Insulin Apps, create an organization (a
+Taxi runs at `https://taxi.insulin-apps.com`. Sign in to Insulin Apps, create an organization (a
 family can be an organization of one), and open the app. People and roles are managed on Insulin Apps; see
 [Roles and access](/docs/taxi/roles-and-access). AI agents connect over MCP, and API clients call the same API
 as the browser; see [Taxi API](/docs/taxi/api).

@@ -500,7 +500,7 @@ same-origin GETs, so the signing API then takes the origin from `Sec-Fetch-Site:
 **The pages' headers.** Nitro serves the same `index.html` for every page path; a middleware it
 reads from `nitro.config.ts` (`src/app/server/page-headers.ts`, policy in `page-policy.ts`) gives
 each page its Content-Security-Policy: scripts, styles, workers and requests only from this origin,
-no `eval`, `object-src 'none'`, `base-uri 'none'`. Behind insulinapps.com's gateway (the request
+no `eval`, `object-src 'none'`, `base-uri 'none'`. Behind insulin-apps.com's gateway (the request
 has `x-suger-access-via`) it adds who may frame the page: the signing page this origin and the one
 its link names in `?host=` (at most one, an origin only; the page keeps `?host=` in its address when
 it takes the code out, so reloaded in the host's frame it is framed as before and says it has no code),
@@ -595,7 +595,7 @@ due work for envelopes created in the last seven days.
 
 ## API
 
-Management routes take the Insulin platform identity (the console, insulinapps.com, an MCP client
+Management routes take the Insulin platform identity (the console, insulin-apps.com, an MCP client
 or a service-account token, all through the gateway) and see only the caller's organization, and in
 it only what the caller owns or is shared with (any other id answers 404). Reading needs `esign.view`,
 anything else `esign.manage` (but setting one's own tags); a template or an envelope also needs the

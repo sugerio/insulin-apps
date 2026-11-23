@@ -8,7 +8,7 @@
 // - the embedded editor (/editor/page/<id>): this origin and its session's parent;
 // - the signed-copy page (/copy) and the members' pages: nobody, so a page elsewhere can't frame them and trick a
 //   signed-in member into sending or voiding (clickjacking).
-// frame-ancestors is sent only when the request came through insulinapps.com's gateway (it sets x-suger-access-via):
+// frame-ancestors is sent only when the request came through insulin-apps.com's gateway (it sets x-suger-access-via):
 // the Insulin console frames the app in its own preview, and decides that itself.
 import { validEditorOrigin } from './esign/access.ts'
 
@@ -49,7 +49,7 @@ export type PageContext = {
   signingHost: string | null
   /** The parent origin an editor session was opened for, or null. */
   editorParent: (pageId: string) => Promise<string | null>
-  /** Whether the request came through insulinapps.com's gateway (x-suger-access-via is set). */
+  /** Whether the request came through insulin-apps.com's gateway (x-suger-access-via is set). */
   viaGateway: boolean
 }
 

@@ -48,7 +48,7 @@ Then, for everyone:
 
 - **Docs:** how to use Cap Table, what holders see, and the basics of equity.
 - **Settings:** Cap Table's **People**, **Integrations**, **API access** and **Connect AI** pages. They are Insulin
-  Apps' pages (`https://insulinapps.com/apps/captable/settings/...`), which open with Cap Table's navigation beside
+  Apps' pages (`https://insulin-apps.com/apps/captable/settings/...`), which open with Cap Table's navigation beside
   them; what you can change there follows your role.
 - **The organization switcher** at the top: your organization, the others you belong to (choosing one opens Cap Table
   in it, with that organization's company), **All apps** (your home page on Insulin Apps) and a link to create one.
@@ -59,7 +59,7 @@ Each column collapses to its icons with the button at its edge, and the item nam
 remembers the choice in your browser. On a narrow screen, the menu button in the top bar opens both columns.
 
 Each section also has an address of its own on Cap Table's host, which leads to that page of your organization's
-company: `https://captable.insulinapps.com/vesting` opens **Vesting**, and `/portfolio/documents` a holder's
+company: `https://captable.insulin-apps.com/vesting` opens **Vesting**, and `/portfolio/documents` a holder's
 **Documents**.
 
 ## See the cap table as of a date

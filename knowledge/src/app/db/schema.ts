@@ -438,7 +438,7 @@ export const orgHolds = sqliteTable('org_holds', {
   held_at: integer('held_at').notNull(),
 })
 
-/** Organizations deleted on insulinapps.com whose engine data must be purged; the tick retries until the engine agrees. */
+/** Organizations deleted on insulin-apps.com whose engine data must be purged; the tick retries until the engine agrees. */
 export const orgPurges = sqliteTable('org_purges', {
   org_id: text('org_id').primaryKey().notNull(),
   requested_at: integer('requested_at').notNull(),

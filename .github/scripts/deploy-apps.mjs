@@ -98,7 +98,7 @@ export function readSettings(environment = process.env, { gateway = true } = {})
     skip: false,
     cloudflareApiToken: token,
     cloudflareAccountId: environment.CLOUDFLARE_ACCOUNT_ID.trim(),
-    siteDomain: environment.SITE_DOMAIN?.trim() || 'insulinapps.com',
+    siteDomain: environment.SITE_DOMAIN?.trim() || 'insulin-apps.com',
     gatewaySecretKey,
     // The contact the landing pages show, and the support address an app's limit messages name (SUGER_SUPPORT_EMAIL,
     // DESIGN.md §8.8). Optional.

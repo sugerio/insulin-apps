@@ -103,8 +103,8 @@ function Years({ data, reload }: { data: YearList; reload: () => void }) {
             <p>Quebec residents get both returns: the federal T1 and Revenu Québec's TP-1, worked out from their RL slips.</p>
             <p>Nothing is sent to the CRA. You get the CRA's own forms, filled in, to sign and mail.</p>
             <p>
-              United States: the federal Form 1040 for wages and interest, filing single, jointly or separately. Dependants and printing come in
-              later versions.
+              United States: the federal Form 1040 for wages and interest, in every filing status, with dependants and the child tax credit. The
+              earned income credit and printing come in later versions.
             </p>
           </CardContent>
         </Card>

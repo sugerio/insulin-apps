@@ -1,0 +1,281 @@
+# Dependants: who qualifies, worked out for each dependant in the year (`each: dependant`), and the credits for them
+# on Schedule 8812. "Instructions" is the 2025 Instructions for Form 1040; "8812 instructions" the 2025 Instructions
+# for Schedule 8812. A dependant's questions are asked on Personal info, under their name.
+
+params:
+  relativeIncomeLimit:
+    label: Gross income a qualifying relative must stay under
+    source: "Instructions, Who Qualifies as Your Dependent, Qualifying relative: gross income less than $5,200"
+    value: 5200
+  childTaxCredit:
+    label: Child tax credit for each qualifying child
+    source: "8812 instructions, What's New: the maximum CTC for each qualifying child is $2,200"
+    value: 2200
+  otherDependentCredit:
+    label: Credit for each other dependent
+    source: "Schedule 8812, line 7: $500 for each dependent who isn't a qualifying child for the CTC"
+    value: 500
+  ctcPhaseOutJoint:
+    label: Modified AGI over which the child tax credit is reduced, Married filing jointly
+    source: "8812 instructions, line 9: $400,000 if married filing jointly"
+    value: 400000
+  ctcPhaseOut:
+    label: Modified AGI over which the child tax credit is reduced, other filing statuses
+    source: "8812 instructions, line 9: $200,000 for all other filing statuses"
+    value: 200000
+  ctcPhaseOutRate:
+    label: Reduction of the credits for each $1,000 of modified AGI over the threshold
+    source: "Schedule 8812, line 11: 5% of line 10 ($50 for each $1,000)"
+    value: 5%
+  actcPerChild:
+    label: Most additional child tax credit for each qualifying child
+    source: "8812 instructions: the maximum amount of ACTC for each qualifying child is $1,700"
+    value: 1700
+  actcEarnedFloor:
+    label: Earned income over which the additional child tax credit is 15%
+    source: "Schedule 8812, line 19: earned income over $2,500"
+    value: 2500
+  actcRate:
+    label: Additional child tax credit rate on earned income over $2,500
+    source: "Schedule 8812, line 20: 15%"
+    value: 15%
+  actcThreeChildren:
+    label: Line 16b at which Part II-B can give more (three or more qualifying children)
+    source: "8812 instructions, Part II-A: if line 16b is $5,100 or more, see Part II-B"
+    value: 5100
+
+questions:
+  # Asked about each dependant
+  relationship:
+    type: choice
+    module: about
+    dependant: true
+    ask: Their relationship to you
+    options: [child, foster, sibling, descendant, parent, relative, none]
+    optionLabels:
+      child: Son, daughter, stepchild or adopted child
+      foster: Foster child placed with you
+      sibling: Brother, sister, half or step sibling
+      descendant: Grandchild, niece or nephew
+      parent: Parent, grandparent or stepparent
+      relative: Other relative (aunt, uncle, in-law)
+      none: Not related, lived with you all year
+  monthsWithYou:
+    type: count
+    module: about
+    dependant: true
+    max: 12
+    ask: Months they lived with you in 2025
+    help: Count time away at school, in hospital or on vacation as time with you. For a child born or who died in 2025, count the months they were alive.
+  fullTimeStudent:
+    type: boolean
+    module: about
+    dependant: true
+    ask: A full-time student in at least 5 months of 2025
+  disabled:
+    type: boolean
+    module: about
+    dependant: true
+    ask: Permanently and totally disabled
+  paidOwnSupport:
+    type: boolean
+    module: about
+    dependant: true
+    ask: Paid over half of their own support in 2025
+    default: false
+  filedJointReturn:
+    type: boolean
+    module: about
+    dependant: true
+    ask: Files a joint return for 2025
+    help: Answer no if they file jointly only to get back tax withheld.
+    default: false
+  citizenOrResident:
+    type: boolean
+    module: about
+    dependant: true
+    ask: A U.S. citizen, U.S. national or U.S. resident alien
+    default: true
+  grossIncome:
+    type: money
+    module: about
+    dependant: true
+    ask: Their gross income in 2025
+    help: Income that isn't exempt from tax, such as wages and interest; not social security benefits.
+  supportedByYou:
+    type: boolean
+    module: about
+    dependant: true
+    ask: You paid over half of their support in 2025
+  hasSSN:
+    type: boolean
+    module: about
+    dependant: true
+    ask: Has a social security number valid for employment
+    help: Issued by the due date of the return. The child tax credit needs one; without it, the credit for other dependents may apply.
+  claimedBy:
+    type: choice
+    module: about
+    dependant: true
+    ask: Claimed on whose return
+    help: Filing separately, each dependant is claimed on one spouse's return.
+    options: [self, spouse]
+    optionLabels:
+      self: Yours
+      spouse: Your spouse's
+
+  # Asked about you
+  hasValidSSN:
+    type: boolean
+    module: about
+    ask: You have a social security number valid for employment
+    help: From 2025 the child tax credit needs one, issued by the due date of the return. Filing jointly, one spouse's is enough.
+  paidHalfOfHome:
+    type: boolean
+    module: about
+    ask: You paid over half the cost of keeping up your home in 2025
+    help: Rent or mortgage interest, property tax, utilities, repairs and food eaten at home. Head of household and qualifying surviving spouse need it.
+  spouseDiedIn2023Or2024:
+    type: boolean
+    module: about
+    ask: Your spouse died in 2023 or 2024
+    help: With a dependent child who lived with you all year, you may file as a qualifying surviving spouse.
+
+lines:
+  # Who qualifies, for each dependant. Not checked here: the tie-breaker when the child is someone else's qualifying
+  # child too, and a parent's release of the claim (Form 8332).
+  DEP.relatedChild:
+    each: dependant
+    label: Related as a qualifying child can be (1 for yes)
+    formula: >-
+      if(dependant.answer.relationship == "child" or dependant.answer.relationship == "foster"
+      or dependant.answer.relationship == "sibling" or dependant.answer.relationship == "descendant", 1, 0)
+    source: "Instructions, Qualifying child: your son, daughter, stepchild, foster child, brother, sister, or a descendant of any of them"
+  DEP.ageTest:
+    each: dependant
+    label: Meets the qualifying child's age test (1 for yes)
+    formula: >-
+      if(dependant.age < 19, 1, if(dependant.age < 24, if(dependant.answer.fullTimeStudent, 1, if(dependant.answer.disabled, 1, 0)),
+      if(dependant.answer.disabled, 1, 0)))
+    source: "Instructions, Qualifying child: under 19 at the end of 2025, or under 24 and a full-time student, or any age and permanently and totally disabled"
+  DEP.qualifyingChild:
+    each: dependant
+    label: A qualifying child (1 for yes)
+    formula: >-
+      if(line.DEP.relatedChild == 1 and dependant.answer.monthsWithYou >= 7 and line.DEP.ageTest == 1
+      and not dependant.answer.paidOwnSupport and not dependant.answer.filedJointReturn and dependant.answer.citizenOrResident, 1, 0)
+    source: "Instructions, Who Qualifies as Your Dependent: lived with you more than half of 2025, didn't pay over half of their own support, files no joint return"
+  DEP.qualifyingRelative:
+    each: dependant
+    label: A qualifying relative (1 for yes)
+    formula: >-
+      if(line.DEP.qualifyingChild == 1, 0, if(dependant.answer.relationship == "none" and dependant.answer.monthsWithYou < 12, 0,
+      if(dependant.answer.grossIncome < param.relativeIncomeLimit and dependant.answer.supportedByYou
+      and dependant.answer.citizenOrResident and not dependant.answer.filedJointReturn, 1, 0)))
+    source: "Instructions, Qualifying relative: related to you or lived with you all year, gross income under $5,200, and you paid over half of their support"
+  DEP.dependent:
+    each: dependant
+    label: Your dependent (1 for yes)
+    formula: "line.DEP.qualifyingChild + line.DEP.qualifyingRelative"
+  DEP.ctcChild:
+    each: dependant
+    label: A qualifying child for the child tax credit (1 for yes)
+    formula: "if(line.DEP.qualifyingChild == 1 and dependant.age < 17, if(dependant.answer.hasSSN, 1, 0), 0)"
+    source: "8812 instructions: a qualifying child under 17 at the end of 2025 with a social security number valid for employment"
+  DEP.hohQualifying:
+    each: dependant
+    label: Lets you file as head of household (1 for yes)
+    formula: >-
+      if(line.DEP.qualifyingChild == 1, 1, if(line.DEP.qualifyingRelative == 1, if(dependant.answer.relationship == "parent", 1,
+      if(dependant.answer.relationship == "none", 0, if(dependant.answer.monthsWithYou >= 7, 1, 0))), 0))
+    source: "Instructions, Head of Household: a qualifying child, a related qualifying relative who lived with you more than half the year, or a parent who didn't have to live with you"
+  DEP.qssChild:
+    each: dependant
+    label: Lets a widow or widower file as a qualifying surviving spouse (1 for yes)
+    formula: 'if(dependant.answer.relationship == "child" and line.DEP.dependent == 1 and dependant.answer.monthsWithYou == 12, 1, 0)'
+    source: "Instructions, Qualifying Surviving Spouse: a child or stepchild (not a foster child) you can claim, who lived in your home all year"
+  DEP.eicChild:
+    each: dependant
+    label: A qualifying child for the earned income credit, as far as this app checks (1 for yes)
+    formula: "if(line.DEP.qualifyingChild == 1, if(dependant.answer.hasSSN, 1, 0), 0)"
+
+  # Schedule 8812: the child tax credit, the credit for other dependents, and the additional child tax credit. Someone
+  # who can be claimed as a dependent claims no one.
+  US.claimsDependants:
+    label: This return can claim dependants (1 for yes)
+    formula: "if(line.US.claimable == 1, 0, 1)"
+    source: "Instructions, Dependents: if someone can claim you (or your spouse on a joint return) as a dependent, you can't claim anyone"
+  US.filerSSN:
+    label: You, or your spouse on a joint return, have a social security number valid for employment (1 for yes)
+    formula: "if(answer.hasValidSSN, 1, if(line.US.joint == 1, if(spouse.answer.hasValidSSN, 1, 0), 0))"
+    source: "8812 instructions: from 2025 you need a valid SSN to claim the CTC or ACTC; filing jointly, one spouse's is enough"
+  S8812.3:
+    label: Modified adjusted gross income
+    formula: "line.F1040.11a"
+    source: "Schedule 8812, line 3: line 11b, plus income excluded from Puerto Rico or abroad (not handled)"
+  S8812.4:
+    label: Qualifying children for the child tax credit
+    formula: >-
+      if(line.US.claimsDependants == 0, 0, if(sum(dependants.DEP.ctcChild) == 0, 0,
+      if(line.US.filerSSN == 1, sum(dependants.DEP.ctcChild), 0)))
+  S8812.5:
+    label: Child tax credit before the reduction
+    formula: "line.S8812.4 * param.childTaxCredit"
+  S8812.6:
+    label: Other dependents
+    formula: "if(line.US.claimsDependants == 0, 0, sum(dependants.DEP.dependent) - line.S8812.4)"
+    source: "Schedule 8812, line 6: each dependent who isn't counted on line 4, including a child the CTC can't be claimed for without a valid SSN"
+  S8812.7:
+    label: Credit for other dependents before the reduction
+    formula: "line.S8812.6 * param.otherDependentCredit"
+  S8812.8:
+    label: Child tax credit and credit for other dependents
+    formula: "line.S8812.5 + line.S8812.7"
+  S8812.9:
+    label: Modified AGI over which the credits are reduced
+    formula: "if(line.US.joint == 1, param.ctcPhaseOutJoint, param.ctcPhaseOut)"
+  S8812.10:
+    label: Modified AGI over the threshold, rounded up to the next $1,000
+    formula: "max(0, 0 - floor(line.S8812.9 - line.S8812.3, 1000))"
+    source: "Schedule 8812, line 10: line 3 less line 9; more than zero and not a multiple of $1,000, the next multiple of $1,000"
+  S8812.11:
+    label: Reduction of the credits
+    formula: "line.S8812.10 * param.ctcPhaseOutRate"
+  S8812.12:
+    label: Credits after the reduction
+    formula: "max(0, line.S8812.8 - line.S8812.11)"
+  S8812.13:
+    label: Credit limit
+    formula: "line.F1040.18"
+    source: "8812 instructions, Credit Limit Worksheet A: Form 1040 line 18, less credits on Schedule 3 that this app doesn't work out yet"
+  S8812.14:
+    label: Child tax credit and credit for other dependents
+    formula: "min(line.S8812.12, line.S8812.13)"
+  S8812.16a:
+    label: Credits more than the tax
+    formula: "max(0, line.S8812.12 - line.S8812.14)"
+  S8812.16b:
+    label: Most additional child tax credit
+    formula: "line.S8812.4 * param.actcPerChild"
+  S8812.17:
+    label: The smaller of line 16a and line 16b
+    formula: "min(line.S8812.16a, line.S8812.16b)"
+  S8812.18a:
+    label: Earned income
+    formula: "line.F1040.1z"
+    source: "8812 instructions, Earned Income Chart: wages on Form 1040 line 1z (no nontaxable combat pay or self-employment yet)"
+  S8812.19:
+    label: Earned income over $2,500
+    formula: "max(0, line.S8812.18a - param.actcEarnedFloor)"
+  S8812.20:
+    label: 15% of earned income over $2,500
+    formula: "round(line.S8812.19 * param.actcRate, 2)"
+  S8812.27:
+    label: Additional child tax credit
+    formula: "if(line.S8812.16a == 0, 0, min(line.S8812.17, line.S8812.20))"
+    source: "Schedule 8812, Part II-A, lines 16a to 20 and 27"
+  SCOPE.actc:
+    label: Part II-B of Schedule 8812, for three or more children
+    formula: >-
+      if(line.S8812.16a > 0 and line.S8812.16b >= param.actcThreeChildren and line.S8812.20 < line.S8812.17,
+      unsupported("With three or more qualifying children, Part II-B of Schedule 8812 may give a larger additional child tax credit, which this app doesn't work out yet"), 0)

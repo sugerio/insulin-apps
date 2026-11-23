@@ -22,6 +22,15 @@ export const estimateSchema = z.strictObject({
         questions: z.array(z.string()),
       }),
     ),
+    /** What the returns ask about each dependant in the year. */
+    dependants: z.array(
+      z.strictObject({
+        dependantId: z.string(),
+        missing: z.array(z.strictObject({ question: z.string(), ask: z.string() })),
+        estimates: z.array(z.strictObject({ question: z.string(), ask: z.string(), assumed: z.union([z.string(), z.boolean()]) })),
+        questions: z.array(z.string()),
+      }),
+    ),
   }),
 });
 export type Estimate = z.infer<typeof estimateSchema>;

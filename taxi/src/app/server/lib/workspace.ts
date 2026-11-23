@@ -103,13 +103,33 @@ export function engineInputOf(facts: YearFacts, workspace: Workspace): EngineInp
       ...(facts.country === "us" ? { filingStatus: facts.filingStatus } : {}),
       dependants: facts.people
         .filter((person) => facts.members.includes(person.id) && (person.relationship === "child" || person.relationship === "other_dependant"))
-        .map((person) => ({ id: person.id, name: person.name, birthDate: person.birthDate })),
+        .map((person) => {
+          const answers = workspace.answers[person.id] ?? {};
+          const claimedBy = claimerOf(facts, answers);
+          return {
+            id: person.id,
+            name: person.name,
+            birthDate: person.birthDate,
+            ...(Object.keys(answers).length > 0 ? { answers } : {}),
+            ...(claimedBy ? { claimedBy } : {}),
+          };
+        }),
     },
     answers: Object.fromEntries(Object.entries(workspace.answers).filter(([personId]) => adults.has(personId))),
     slips: workspace.slips
       .filter((slip) => adults.has(slip.personId))
       .map((slip) => ({ id: slip.id, person: slip.personId, type: slip.type, issuer: slip.issuer, boxes: slip.boxes })),
   };
+}
+
+/**
+ * Whose return claims a dependant: the person preparing's (left out), except when a married couple on a US return
+ * files separately and the dependant's `claimedBy` answer is the spouse.
+ */
+function claimerOf(facts: YearFacts, answers: Record<string, string | boolean>): string | undefined {
+  const separate = facts.country === "us" && facts.maritalStatus === "married" && facts.filingStatus === "separate" && facts.adults.length === 2;
+  if (!separate || answers.claimedBy !== "spouse") return undefined;
+  return facts.adults.find((adult) => facts.people.find((person) => person.id === adult.personId)?.relationship === "spouse")?.personId;
 }
 
 /** The engine's result for a year, or null when the rules can't read what is stored (logged). */
@@ -149,7 +169,10 @@ export function stepStatuses(facts: YearFacts, issues: Issue[], workspace: Works
         const reached = evaluation.result.people.find((person) => person.personId === member)?.questions ?? [];
         const theirs = workspace.slips.filter((slip) => slip.personId === member);
         return leftInModule(rules, module, workspace.answers[member] ?? {}, theirs, reached).length === 0;
-      });
+      }) &&
+      // Personal info also asks about the dependants this return claims.
+      (module !== "about" ||
+        dependantsOf(evaluation, members).every((dependant) => leftInModule(rules, "about", workspace.answers[dependant.dependantId] ?? {}, [], dependant.questions).length === 0));
     const state = (done: boolean) => (done ? "done" : "todo");
     const status: StepStatuses = {
       personal: state(!issues.some((issue) => issue.kind === "blocking" && members.some((member) => isIssueOf(issue, member))) && answered("about")),
@@ -161,12 +184,25 @@ export function stepStatuses(facts: YearFacts, issues: Issue[], workspace: Works
       finish: state(
         rules !== undefined &&
           result !== undefined &&
-          printBlockers(printYear(rules, issues, workspace), result, spouseResult(facts, evaluation?.result.people ?? [], personId)).length === 0,
+          printBlockers(
+            printYear(rules, issues, workspace),
+            result,
+            spouseResult(facts, evaluation?.result.people ?? [], personId),
+            evaluation ? dependantsOf(evaluation, members).map((dependant) => ({ name: nameOf(facts, dependant.dependantId), result: dependant })) : [],
+          ).length === 0,
       ),
     };
     return { personId, members, steps: Object.fromEntries(STEPS.map((step) => [step, status[step]])) as StepStatuses };
   });
 }
+
+/** The dependants a return claims (its members'), with what the rules asked about each. */
+function dependantsOf(evaluation: { input: EngineInput; result: EvaluationResult }, members: string[]) {
+  const claimer = new Map(evaluation.input.family.dependants.map((each) => [each.id, each.claimedBy ?? evaluation.input.people.find((person) => person.role === "self")!.id]));
+  return evaluation.result.dependants.filter((dependant) => members.includes(claimer.get(dependant.dependantId) ?? ""));
+}
+
+const nameOf = (facts: YearFacts, personId: string) => facts.people.find((person) => person.id === personId)?.name ?? "A dependant";
 
 /** What printBlockers reads of a year, as stored. */
 export function printYear(rules: RuleSet, issues: Issue[], workspace: Workspace): PrintYear {

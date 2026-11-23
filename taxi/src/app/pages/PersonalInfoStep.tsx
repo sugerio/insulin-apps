@@ -117,12 +117,18 @@ function UsTaxNotes() {
       <CardContent className="flex flex-col gap-3 text-sm text-muted-foreground">
         <p>
           <b className="text-foreground">Filing status.</b> It follows the marital status on December 31. Unmarried (single, divorced, legally
-          separated under a decree, or widowed) files Single. A married couple chooses: jointly, one return with both incomes, which usually
-          costs less; or separately, a return each.
+          separated under a decree, or widowed) files Single, or Head of household with a qualifying child or relative, or Qualifying surviving
+          spouse when the spouse died in 2023 or 2024 and a child lived with you all year. A married couple chooses: jointly, one return with
+          both incomes, which usually costs less; or separately, a return each.
         </p>
         <p>
           <b className="text-foreground">Standard deduction.</b> $15,750, plus $2,000 ($1,600 if married) for being 65 or older and again for being
           blind. Someone who can be claimed as a dependent gets less. Itemized deductions aren't handled yet.
+        </p>
+        <p>
+          <b className="text-foreground">Dependants.</b> Each dependant in the year is asked a few questions below. They decide who is a
+          qualifying child or relative: the child tax credit ($2,200 for each child under 17 with a social security number) or the credit for
+          other dependents ($500).
         </p>
         <p>
           <b className="text-foreground">Residency.</b> This is the federal return of a U.S. citizen or resident alien for the whole year. A
@@ -219,12 +225,26 @@ function YearFacts({
   // The questions about each person on the return that it reads, once the estimate says which.
   const estimate = useEstimate();
   const rules = rulesFor(year.country, year.year)!;
-  const givenOf = (personId: string) => (estimate.status === "ready" ? (estimate.data.input.answers[personId] ?? {}) : {});
+  // The year's dependants, as the engine had them: their answers, and whose return claims each (the person preparing's
+  // unless said).
+  const yearDependants = estimate.status === "ready" ? estimate.data.input.family.dependants : [];
+  const selfId = year.people.find((person) => person.relationship === "self")?.id;
+  const givenOf = (personId: string) =>
+    estimate.status === "ready"
+      ? (estimate.data.input.answers[personId] ?? yearDependants.find((each) => each.id === personId)?.answers ?? {})
+      : {};
   const aboutOf = (personId: string) => {
-    const reached = new Set(estimate.status === "ready" ? (estimate.data.result.people.find((each) => each.personId === personId)?.questions ?? []) : []);
+    const result = estimate.status === "ready" ? estimate.data.result : null;
+    const questions = result?.people.find((each) => each.personId === personId)?.questions ?? result?.dependants.find((each) => each.dependantId === personId)?.questions ?? [];
+    const reached = new Set(questions);
     const given = givenOf(personId);
-    return [...rules.questions.values()].filter((question) => question.module === "about" && (reached.has(question.id) || question.id in given));
+    return [...rules.questions.values()].filter((question) => question.module === "about" && question.id !== "claimedBy" && (reached.has(question.id) || question.id in given));
   };
+  // Filing separately, each dependant is claimed on one spouse's return, which the person preparing chooses here.
+  const choosesClaimer = year.country === "us" && year.filingStatus === "separate" && year.adults.length === 2;
+  const dependantsHere = yearDependants.filter((each) => members.some((member) => member.id === (each.claimedBy ?? selfId)));
+  const dependantsShown = choosesClaimer ? yearDependants : dependantsHere;
+  const claimedByQuestion = rules.questions.get("claimedBy");
   const about = aboutOf(owner.id);
   const storedAmount = (id: string, personId = owner.id) => (typeof givenOf(personId)[id] === "string" ? (givenOf(personId)[id] as string) : "");
   const amountOf = (id: string, personId = owner.id) => valueOf(keyOf(personId, `answers.${id}`), storedAmount(id, personId));
@@ -232,7 +252,12 @@ function YearFacts({
   const storedChoice = (id: string, personId = owner.id) => (typeof givenOf(personId)[id] === "boolean" ? (givenOf(personId)[id] as boolean) : null);
   const choiceOf = (id: string, personId = owner.id) => valueOf<boolean | null>(keyOf(personId, `answers.${id}`), storedChoice(id, personId));
   const answerOf = (question: (typeof about)[number], personId = owner.id) =>
-    question.type === "boolean" ? choiceOf(question.id, personId) : cleanAmount(amountOf(question.id, personId));
+    question.type === "boolean" ? choiceOf(question.id, personId) : question.type === "choice" ? amountOf(question.id, personId) || null : cleanAmount(amountOf(question.id, personId));
+  /** The questions shown about a dependant: whose return claims them when the couple files separately, then the rules'. */
+  const questionsOfDependant = (dependantId: string) => [
+    ...(choosesClaimer && claimedByQuestion ? [claimedByQuestion] : []),
+    ...(dependantsHere.some((each) => each.id === dependantId) ? aboutOf(dependantId) : []),
+  ];
   // What was typed over a stored value that has changed since (someone else's save) has given way to it for good: it is
   // dropped, so it can't come back if the stored value later returns to what it was typed over. Answers are checked
   // once the estimate, which holds them, is loaded for this year.
@@ -243,9 +268,9 @@ function YearFacts({
     const personId = colon >= 0 ? full.slice(0, colon) : owner.id;
     const key = colon >= 0 ? full.slice(colon + 1) : full;
     const adult = year.adults.find((each) => each.personId === personId);
-    if (!adult) return { value: null };
-    if (key === "province") return { value: adult.province };
-    if (key === "residentAllYear") return { value: adult.residentAllYear };
+    if (adult && key === "province") return { value: adult.province };
+    if (adult && key === "residentAllYear") return { value: adult.residentAllYear };
+    if (!adult && !yearDependants.some((each) => each.id === personId)) return { value: null };
     if (estimate.status !== "ready") return null;
     const id = key.slice("answers.".length);
     return { value: rules.questions.get(id)?.type === "boolean" ? storedChoice(id, personId) : storedAmount(id, personId) };
@@ -269,6 +294,11 @@ function YearFacts({
         .filter((question) => answerOf(question, member.id) === null || answerOf(question, member.id) === "")
         .map((question) => ({ ...question, ask: `${member.name}: ${question.ask}` })),
     ),
+    ...dependantsShown.flatMap((dependant) =>
+      questionsOfDependant(dependant.id)
+        .filter((question) => answerOf(question, dependant.id) === null || answerOf(question, dependant.id) === "")
+        .map((question) => ({ ...question, ask: `${dependant.name}: ${question.ask}` })),
+    ),
   ];
   // The spouse's questions (spouseNetIncome and the like) are asked under the spouse; the others are about where this
   // person lived.
@@ -276,10 +306,25 @@ function YearFacts({
   const fields = new Set([
     ...about.map((question) => `answers.${question.id}`),
     ...others.flatMap((member) => aboutOf(member.id).map((question) => keyOf(member.id, `answers.${question.id}`))),
+    ...dependantsShown.flatMap((dependant) => questionsOfDependant(dependant.id).map((question) => keyOf(dependant.id, `answers.${question.id}`))),
   ]);
   const { issueFor, unshown, inBanner } = fieldIssues(error, (path) => fields.has(path), requests.edited);
   const field = (question: (typeof about)[number], personId = owner.id) => {
     const key = keyOf(personId, `answers.${question.id}`);
+    if (question.type === "choice") {
+      return (
+        <ChoiceField
+          key={key}
+          label={question.ask}
+          help={question.help}
+          options={(question.options ?? []).map((option) => ({ value: option, label: question.optionLabels?.[option] ?? option }))}
+          value={amountOf(question.id, personId)}
+          disabled={locked}
+          issue={issueFor(key)}
+          onChange={(value) => type(key, storedAmount(question.id, personId), value)}
+        />
+      );
+    }
     return question.type === "boolean" ? (
       <YesNoField
         key={key}
@@ -317,7 +362,18 @@ function YearFacts({
           return keyOf(personId, `answers.${question.id}`) in draft ? [[question.id, null]] : [];
         }),
       );
-    const byPerson = Object.fromEntries(members.map((member) => [member.id, answersOf(member.id)]));
+    const answersOfDependant = (dependantId: string) =>
+      Object.fromEntries(
+        questionsOfDependant(dependantId).flatMap((question): [string, string | boolean | null][] => {
+          const value = answerOf(question, dependantId);
+          if (value !== null && value !== "") return [[question.id, value]];
+          return keyOf(dependantId, `answers.${question.id}`) in draft ? [[question.id, null]] : [];
+        }),
+      );
+    const byPerson = Object.fromEntries([
+      ...members.map((member) => [member.id, answersOf(member.id)] as const),
+      ...dependantsShown.map((dependant) => [dependant.id, answersOfDependant(dependant.id)] as const),
+    ]);
     await requests.run(async (answered) => {
       const body = {
         revision: year.revision,
@@ -436,6 +492,22 @@ function YearFacts({
             .map((question) => field({ ...question, ask: askedOf(question.ask, member.name), help: question.help && askedOf(question.help, member.name) }, member.id))}
         </AdultCard>
       ))}
+
+      {/* The dependants this return claims (all of them when a couple filing separately chooses whose return claims each). */}
+      {dependantsShown.map((dependant) => {
+        const questions = questionsOfDependant(dependant.id);
+        if (questions.length === 0) return null;
+        return (
+          <Card key={dependant.id}>
+            <CardHeader>
+              <CardTitle>
+                <h2 className="text-base font-semibold wrap-anywhere">Dependant: {dependant.name}</h2>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-4">{questions.map((question) => field(question, dependant.id))}</CardContent>
+          </Card>
+        );
+      })}
 
       {spouseQuestions.length > 0 ? (
         <Card>
@@ -630,6 +702,42 @@ function YesNoField({
         <Choice value="yes" label="Yes" />
         <Choice value="no" label="No" />
       </RadioGroup>
+      {issue ? <p className="text-xs text-destructive">{issue}</p> : null}
+    </div>
+  );
+}
+
+/** A question with options (a dependant's relationship), answered from a list; empty until one is chosen. */
+function ChoiceField({
+  label,
+  help,
+  options,
+  value,
+  onChange,
+  disabled,
+  issue,
+}: {
+  label: string;
+  help?: string;
+  options: { value: string; label: string }[];
+  value: string;
+  onChange: (value: string) => void;
+  disabled: boolean;
+  issue?: string;
+}) {
+  const id = useId();
+  return (
+    <div className="flex flex-col gap-1.5">
+      <Label htmlFor={id}>{label}</Label>
+      {help ? <p className="text-xs text-muted-foreground">{help}</p> : null}
+      <NativeSelect id={id} value={value} onChange={(event) => onChange(event.target.value)} disabled={disabled} aria-invalid={issue ? true : undefined}>
+        <NativeSelectOption value="">Choose…</NativeSelectOption>
+        {options.map((option) => (
+          <NativeSelectOption key={option.value} value={option.value}>
+            {option.label}
+          </NativeSelectOption>
+        ))}
+      </NativeSelect>
       {issue ? <p className="text-xs text-destructive">{issue}</p> : null}
     </div>
   );

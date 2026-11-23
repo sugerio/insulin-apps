@@ -27,6 +27,13 @@ import { parseFormula, references, type Formula } from "./formula.ts";
 //   family.childMonthsUnder6      for each dependant under 18, the months on whose first day they were born and under 6
 //                                 (a list: sum, min)
 //   spouse.<any of the above but param>   the same, for the spouse
+//   dependants.<line>             a line with `each: dependant`, worked out for each dependant claimed on this return
+//                                 (a list: sum, count, max, min)
+// A line with `each: dependant` is worked out once for each dependant in the year and reads:
+//   dependant.age                 the dependant's age on December 31
+//   dependant.answer.<question>   an answer about the dependant (a question with `dependant: true`)
+//   line.<form>.<line>            another line worked out for the same dependant
+//   param.<name>, family.<fact>   as above
 
 export const STATUSES = ["complete", "estimate", "missing"] as const;
 /** How sure a value is: `estimate` when a question's default stood in for an answer, `missing` when nothing could. */
@@ -67,6 +74,8 @@ export interface Line {
   source?: string;
   /** A line worked out from slips, shown in this module so people see what their slips already claim. */
   module?: Module;
+  /** `dependant`: worked out once for each dependant in the year, reading dependant.<…> (rules.ts header). */
+  each?: "dependant";
 }
 export type QuestionType = "money" | "percent" | "count" | "boolean" | "choice";
 /** A question whose answer is a number: an amount, a percent or a count. */
@@ -101,6 +110,8 @@ export interface Question {
   default?: string | boolean;
   /** The default is the app's choice, not a guess: the result is complete without an answer (a hint may change it). */
   decision?: boolean;
+  /** Asked about each dependant in the year (dependant.answer.<id>), not about an adult. */
+  dependant?: boolean;
   options?: string[];
   /** For a count: the most it can be, where the year sets one (12 months, 365 days). */
   max?: number;
@@ -290,7 +301,16 @@ export const compiledRulesSchema = z.strictObject({
   result: z.array(z.string()),
   resultWhen: z.record(z.string(), z.string()),
   params: z.record(z.string(), z.strictObject({ label: z.string(), value: z.union([decimalText, z.array(bracketRowSchema).min(1)]), source: z.string() })),
-  lines: z.record(z.string(), z.strictObject({ label: z.string(), formula: z.string(), source: z.string().optional(), module: z.enum(MODULES).optional() })),
+  lines: z.record(
+    z.string(),
+    z.strictObject({
+      label: z.string(),
+      formula: z.string(),
+      source: z.string().optional(),
+      module: z.enum(MODULES).optional(),
+      each: z.literal("dependant").optional(),
+    }),
+  ),
   questions: z.record(
     z.string(),
     z.strictObject({
@@ -303,6 +323,7 @@ export const compiledRulesSchema = z.strictObject({
       suggest: z.string().optional(),
       default: z.union([z.string(), z.boolean()]).optional(),
       decision: z.boolean().optional(),
+      dependant: z.boolean().optional(),
       options: z.array(z.string()).optional(),
       parent: z.string().optional(),
       askedWhen: z.strictObject({ question: z.string(), options: z.array(z.string()) }).optional(),
@@ -434,6 +455,7 @@ export function loadRuleSet(json: unknown, where: (entry: string) => string = ()
       formula,
       ...(line.source === undefined ? {} : { source: line.source }),
       ...(line.module === undefined ? {} : { module: line.module }),
+      ...(line.each === undefined ? {} : { each: line.each }),
     });
   }
   const questions = new Map(Object.entries(compiled.questions).map(([id, question]) => [id, { id, ...question } satisfies Question]));
@@ -687,7 +709,7 @@ function checkRuleSet(ruleSet: RuleSet, fail: (entry: string, message: string, c
   for (const line of ruleSet.lines.values()) {
     const entry = `lines.${line.id}`;
     const reads = new Set<string>();
-    if (formulaType(ruleSet, line.formula, (message, column) => fail(entry, message, column), reads) !== "number") fail(entry, "A line must be a number");
+    if (formulaType(ruleSet, line.formula, (message, column) => fail(entry, message, column), reads, line.each ?? "person") !== "number") fail(entry, "A line must be a number");
     edges.set(line.id, reads);
   }
 
@@ -758,8 +780,11 @@ function checkRuleSet(ruleSet: RuleSet, fail: (entry: string, message: string, c
 }
 
 /** The type of a formula, checking every name and function in it. Lines it reads are added to `reads`. */
-function formulaType(ruleSet: RuleSet, formula: Formula, fail: (message: string, column?: number) => never, reads: Set<string>): Type {
-  const typeOf = (inner: Formula) => formulaType(ruleSet, inner, fail, reads);
+/** Where a formula is worked out: for an adult's return, or for each dependant (a line with `each: dependant`). */
+type Scope = "person" | "dependant";
+
+function formulaType(ruleSet: RuleSet, formula: Formula, fail: (message: string, column?: number) => never, reads: Set<string>, scope: Scope = "person"): Type {
+  const typeOf = (inner: Formula) => formulaType(ruleSet, inner, fail, reads, scope);
   switch (formula.kind) {
     case "number":
       return "number";
@@ -768,7 +793,7 @@ function formulaType(ruleSet: RuleSet, formula: Formula, fail: (message: string,
     case "boolean":
       return "boolean";
     case "ref":
-      return refType(ruleSet, formula.path, (message) => fail(message, formula.column), reads);
+      return refType(ruleSet, formula.path, (message) => fail(message, formula.column), reads, false, scope);
     case "unary": {
       const operand = typeOf(formula.operand);
       const want = formula.op === "-" ? "number" : "boolean";
@@ -823,10 +848,35 @@ function binaryType(formula: Extract<Formula, { kind: "binary" }>, left: Type, r
 }
 
 /** The type of a name, checking that it exists. Lines it reads are added to `reads`. */
-function refType(ruleSet: RuleSet, path: string[], fail: (message: string) => never, reads: Set<string>, spouse = false): Type {
+function refType(ruleSet: RuleSet, path: string[], fail: (message: string) => never, reads: Set<string>, spouse = false, scope: Scope = "person"): Type {
   const name = path.join(".");
   const [head, ...rest] = path;
+  // A dependant's line reads the dependant, its other lines, the params and the family facts; nothing of an adult's.
+  if (scope === "dependant" && !["dependant", "line", "param", "family"].includes(head ?? "")) {
+    return fail(`${name}: a line for each dependant reads dependant.<…>, its own lines, params and family facts`);
+  }
   switch (head) {
+    case "dependant": {
+      if (scope !== "dependant") return fail(`${name}: only a line with each: dependant reads dependant.<…>; a return reads dependants.<line>`);
+      if (rest.length === 1 && rest[0] === "age") return "number";
+      if (rest.length === 2 && rest[0] === "answer") {
+        const question = ruleSet.questions.get(rest[1]!);
+        if (!question) return fail(`No question ${rest[1]}`);
+        if (!question.dependant) return fail(`${name}: ${question.id} is asked about an adult (add dependant: true to ask it about each dependant)`);
+        return isNumberQuestion(question.type) ? "number" : question.type === "boolean" ? "boolean" : "string";
+      }
+      return fail(`${name}: a dependant has age and answer.<question>`);
+    }
+    case "dependants": {
+      // One value per dependant claimed on this return: a list, like a slip box.
+      if (spouse) return fail(`${name}: a return reads its own dependants`);
+      const id = rest.join(".");
+      const line = ruleSet.lines.get(id);
+      if (rest.length !== 2 || !line) return fail(`No line ${id}`);
+      if (line.each !== "dependant") return fail(`${name}: ${id} isn't worked out for each dependant`);
+      reads.add(id);
+      return "list";
+    }
     case "spouse":
       if (spouse) return fail(`${name}: spouse. can't be repeated`);
       if (rest[0] === "param") return fail(`${name}: params are the same for both spouses; write param.${rest.slice(1).join(".")}`);
@@ -838,13 +888,18 @@ function refType(ruleSet: RuleSet, path: string[], fail: (message: string) => ne
     }
     case "line": {
       const id = rest.join(".");
-      if (rest.length !== 2 || !ruleSet.lines.has(id)) return fail(`No line ${id}`);
+      const line = ruleSet.lines.get(id);
+      if (rest.length !== 2 || !line) return fail(`No line ${id}`);
+      if ((line.each === "dependant") !== (scope === "dependant")) {
+        return fail(scope === "dependant" ? `${name}: a dependant's line reads only lines worked out for each dependant` : `${name}: read a dependant's line through dependants.${id}`);
+      }
       reads.add(id);
       return "number";
     }
     case "answer": {
       const question = rest.length === 1 ? ruleSet.questions.get(rest[0]!) : undefined;
       if (!question) return fail(`No question ${rest.join(".")}`);
+      if (question.dependant) return fail(`${name}: ${question.id} is asked about each dependant; read it in a line with each: dependant`);
       return isNumberQuestion(question.type) ? "number" : question.type === "boolean" ? "boolean" : "string";
     }
     case "family":
@@ -873,7 +928,7 @@ function refType(ruleSet: RuleSet, path: string[], fail: (message: string) => ne
 /** `answer.x == "text"`: the text must be one of the question's options. */
 function checkChoice(ruleSet: RuleSet, ref: Formula, other: Formula, fail: (message: string) => never) {
   if (ref.kind !== "ref" || other.kind !== "string") return;
-  const path = ref.path[0] === "spouse" ? ref.path.slice(1) : ref.path;
+  const path = ref.path[0] === "spouse" || ref.path[0] === "dependant" ? ref.path.slice(1) : ref.path;
   const question = path[0] === "answer" ? ruleSet.questions.get(path[1] ?? "") : undefined;
   if (question?.options && !question.options.includes(other.value)) {
     fail(`"${other.value}" isn't an option of ${question.id}: ${question.options.join(", ")}`);

@@ -14,6 +14,10 @@ params:
     label: Standard deduction, Married filing jointly
     source: "Form 1040, line 12e: $31,500 for Married filing jointly or Qualifying surviving spouse"
     value: 31500
+  standardHead:
+    label: Standard deduction, Head of household
+    source: "Form 1040, line 12e: $23,625 for Head of household"
+    value: 23625
   additionalUnmarried:
     label: Additional standard deduction for each box on line 12d, unmarried
     source: "Instructions, Standard Deduction Chart for People Who Were Born Before January 2, 1961, or Were Blind: Single, 1 box $17,750, 2 boxes $19,750"
@@ -62,6 +66,17 @@ params:
       - { upTo: 394600, rate: 24% }
       - { upTo: 501050, rate: 32% }
       - { upTo: 751600, rate: 35% }
+      - { rate: 37% }
+  bracketsHead:
+    label: Tax brackets, Head of household
+    source: "Instructions, 2025 Tax Computation Worksheet, Section D (22% less $6,825.00 from $100,000; 24% less $8,892.00 over $103,350; 32% less $24,676.00 over $197,300; 35% less $32,191.00 over $250,500; 37% less $44,718.00 over $626,350)"
+    value:
+      - { upTo: 17000, rate: 10% }
+      - { upTo: 64850, rate: 12% }
+      - { upTo: 103350, rate: 22% }
+      - { upTo: 197300, rate: 24% }
+      - { upTo: 250500, rate: 32% }
+      - { upTo: 626350, rate: 35% }
       - { rate: 37% }
   taxTableLimit:
     label: Taxable income from which the Tax Computation Worksheet is used instead of the Tax Table
@@ -131,6 +146,30 @@ params:
     label: AGI below which a couple without a qualifying child can get the earned income credit, Married filing jointly
     source: "Instructions, line 27a, Step 1: less than $26,214 if married filing jointly, with no children"
     value: 26214
+  eicLimitThreeChildren:
+    label: AGI below which someone with three or more qualifying children can get the earned income credit
+    source: "Instructions, line 27a, Step 1: less than $61,555 with three or more children who have valid SSNs"
+    value: 61555
+  eicLimitThreeChildrenJoint:
+    label: AGI below which a couple with three or more qualifying children can get the earned income credit, Married filing jointly
+    source: "Instructions, line 27a, Step 1: less than $68,675 if married filing jointly"
+    value: 68675
+  eicLimitTwoChildren:
+    label: AGI below which someone with two qualifying children can get the earned income credit
+    source: "Instructions, line 27a, Step 1: less than $57,310 with two children who have valid SSNs"
+    value: 57310
+  eicLimitTwoChildrenJoint:
+    label: AGI below which a couple with two qualifying children can get the earned income credit, Married filing jointly
+    source: "Instructions, line 27a, Step 1: less than $64,430 if married filing jointly"
+    value: 64430
+  eicLimitOneChild:
+    label: AGI below which someone with one qualifying child can get the earned income credit
+    source: "Instructions, line 27a, Step 1: less than $50,434 with one child who have valid SSNs"
+    value: 50434
+  eicLimitOneChildJoint:
+    label: AGI below which a couple with one qualifying child can get the earned income credit, Married filing jointly
+    source: "Instructions, line 27a, Step 1: less than $57,554 if married filing jointly"
+    value: 57554
   eicInvestmentLimit:
     label: Most investment income someone can have and get the earned income credit
     source: "Instructions, line 27a, Investment Income: more than $11,950 and you can't take the credit"
@@ -148,8 +187,23 @@ lines:
   # spouse possible: those come with dependants (SCOPE.dependants).
   US.single:
     label: Filing status is Single (1 for yes)
-    formula: 'if(family.maritalStatus == "married", 0, 1)'
+    formula: 'if(family.maritalStatus == "married", 0, if(line.US.qss == 1, 0, if(line.US.hoh == 1, 0, 1)))'
     source: "Instructions, Filing Status"
+  US.hoh:
+    label: Filing status is Head of household (1 for yes)
+    formula: >-
+      if(family.maritalStatus == "married", 0, if(line.US.qss == 1, 0, if(line.US.claimsDependants == 0, 0,
+      if(sum(dependants.DEP.hohQualifying) == 0, 0, if(answer.paidHalfOfHome, 1, 0)))))
+    source: "Instructions, Head of Household: unmarried, paid over half the cost of keeping up a home, with a qualifying person; it is never worse than Single"
+  US.qss:
+    label: Filing status is Qualifying surviving spouse (1 for yes)
+    formula: >-
+      if(family.maritalStatus == "widowed", if(answer.spouseDiedIn2025, 0, if(answer.spouseDiedIn2023Or2024,
+      if(line.US.claimsDependants == 0, 0, if(sum(dependants.DEP.qssChild) == 0, 0, if(answer.paidHalfOfHome, 1, 0))), 0)), 0)
+    source: "Instructions, Qualifying Surviving Spouse: spouse died in 2023 or 2024, a dependent child who lived with you all year, and you paid over half the cost of the home"
+  US.jointRates:
+    label: Joint return rates, Married filing jointly or Qualifying surviving spouse (1 for yes)
+    formula: "if(line.US.joint == 1, 1, line.US.qss)"
   US.joint:
     label: Filing status is Married filing jointly (1 for yes)
     formula: 'if(family.maritalStatus == "married", if(family.filingStatus == "joint", 1, 0), 0)'
@@ -230,7 +284,7 @@ lines:
     source: "Form 1040, line 12a"
   US.basicStandard:
     label: Standard deduction for the filing status
-    formula: "if(line.US.joint == 1, param.standardJoint, if(line.US.single == 1, param.standardSingle, param.standardSeparate))"
+    formula: "if(line.US.jointRates == 1, param.standardJoint, if(line.US.hoh == 1, param.standardHead, if(line.US.single == 1, param.standardSingle, param.standardSeparate)))"
   US.dependentStandard:
     label: Standard deduction for someone who can be claimed as a dependent, before line 12d's boxes
     formula: "min(line.US.basicStandard, max(param.dependentMinimum, line.F1040.1z + param.dependentEarnedAdd))"
@@ -239,7 +293,7 @@ lines:
     label: Standard deduction with line 12d's boxes
     formula: >-
       if(line.US.claimable == 1, line.US.dependentStandard, line.US.basicStandard)
-      + line.US.boxes * if(line.US.single == 1, param.additionalUnmarried, param.additionalMarried)
+      + line.US.boxes * if(line.US.single == 1 or line.US.hoh == 1, param.additionalUnmarried, param.additionalMarried)
   # `if`, not `and`: until the filing status is known, a separate return's question isn't asked.
   F1040.12e:
     label: Standard deduction
@@ -290,13 +344,13 @@ lines:
   US.tableTax:
     label: Tax from the Tax Table
     formula: >-
-      round(if(line.US.joint == 1, bracket(param.bracketsJoint, line.US.tableRow),
-      if(line.US.single == 1, bracket(param.bracketsSingle, line.US.tableRow), bracket(param.bracketsSeparate, line.US.tableRow))), 0)
+      round(if(line.US.jointRates == 1, bracket(param.bracketsJoint, line.US.tableRow), if(line.US.hoh == 1, bracket(param.bracketsHead, line.US.tableRow),
+      if(line.US.single == 1, bracket(param.bracketsSingle, line.US.tableRow), bracket(param.bracketsSeparate, line.US.tableRow)))), 0)
   US.worksheetTax:
     label: Tax from the Tax Computation Worksheet
     formula: >-
-      round(if(line.US.joint == 1, bracket(param.bracketsJoint, line.F1040.15),
-      if(line.US.single == 1, bracket(param.bracketsSingle, line.F1040.15), bracket(param.bracketsSeparate, line.F1040.15))), 2)
+      round(if(line.US.jointRates == 1, bracket(param.bracketsJoint, line.F1040.15), if(line.US.hoh == 1, bracket(param.bracketsHead, line.F1040.15),
+      if(line.US.single == 1, bracket(param.bracketsSingle, line.F1040.15), bracket(param.bracketsSeparate, line.F1040.15)))), 2)
   F1040.16:
     label: Tax
     formula: "if(line.F1040.15 < param.taxTableLimit, line.US.tableTax, line.US.worksheetTax)"
@@ -307,10 +361,17 @@ lines:
   F1040.18:
     label: Tax and the alternative minimum tax
     formula: "line.F1040.16"
+  F1040.19:
+    label: Child tax credit and credit for other dependents
+    formula: "line.S8812.14"
+    source: "Schedule 8812, line 14"
+  F1040.21:
+    label: Total nonrefundable credits
+    formula: "line.F1040.19"
+    source: "Form 1040, lines 19 and 20; no credit on Schedule 3 is worked out yet"
   F1040.22:
     label: Tax after nonrefundable credits
-    formula: "line.F1040.18"
-    source: "Form 1040, line 22: no credit on lines 19 and 20 is worked out yet"
+    formula: "max(0, line.F1040.18 - line.F1040.21)"
 
   # Schedule 2: other taxes
   F8959.1:
@@ -319,7 +380,8 @@ lines:
     source: "Form 8959, line 1: Form W-2, box 5 (both spouses' on a joint return)"
   F8959.5:
     label: Threshold for Additional Medicare Tax
-    formula: "if(line.US.joint == 1, param.medicareThresholdJoint, if(line.US.single == 1, param.medicareThresholdSingle, param.medicareThresholdSeparate))"
+    formula: "if(line.US.joint == 1, param.medicareThresholdJoint, if(line.US.separate == 1, param.medicareThresholdSeparate, param.medicareThresholdSingle))"
+    source: "Instructions, Schedule 2, line 11: $200,000 for single, head of household or qualifying surviving spouse"
   F8959.7:
     label: Additional Medicare Tax on Medicare wages
     formula: "round(max(0, line.F8959.1 - line.F8959.5) * param.additionalMedicareRate, 2)"
@@ -329,7 +391,8 @@ lines:
     formula: "line.F1040.11a"
   F8960.14:
     label: Threshold for the net investment income tax
-    formula: "if(line.US.joint == 1, param.niitThresholdJoint, if(line.US.single == 1, param.niitThresholdSingle, param.niitThresholdSeparate))"
+    formula: "if(line.US.jointRates == 1, param.niitThresholdJoint, if(line.US.separate == 1, param.niitThresholdSeparate, param.niitThresholdSingle))"
+    source: "Instructions, Schedule 2, line 12: $250,000 married filing jointly or qualifying surviving spouse; $200,000 single or head of household"
   F8960.17:
     label: Net investment income tax
     formula: "round(min(line.F1040.2b, max(0, line.F8960.13 - line.F8960.14)) * param.niitRate, 2)"
@@ -376,12 +439,19 @@ lines:
     label: Excess social security tax withheld
     formula: "line.US.ownExcessSocialSecurity + if(line.US.joint == 1, spouse.line.US.ownExcessSocialSecurity, 0)"
     source: "Instructions, Schedule 3, line 11: figured separately for you and your spouse, then added"
+  F1040.28:
+    label: Additional child tax credit
+    formula: "line.S8812.27"
   F1040.31:
     label: Credits and payments from Schedule 3
     formula: "line.S3.11"
+  F1040.32:
+    label: Other payments and refundable credits
+    formula: "line.F1040.28 + line.F1040.31"
+    source: "Form 1040, line 32: lines 27a (not worked out yet), 28 and 31"
   F1040.33:
     label: Total payments
-    formula: "line.F1040.25d + line.F1040.26 + line.F1040.31"
+    formula: "line.F1040.25d + line.F1040.26 + line.F1040.32"
   F1040.34:
     label: Refund
     formula: "max(0, line.F1040.33 - line.F1040.24)"
@@ -397,16 +467,13 @@ lines:
   SCOPE.return:
     label: Situations this app doesn't handle yet
     formula: >-
-      line.SCOPE.residency + line.SCOPE.dependants + line.SCOPE.widowed + line.SCOPE.tips + line.SCOPE.kiddie + line.SCOPE.eic
+      line.SCOPE.residency + line.SCOPE.widowed + line.SCOPE.tips + line.SCOPE.kiddie + line.SCOPE.eic + line.SCOPE.actc
   SCOPE.residency:
     label: A nonresident or dual-status alien
     formula: >-
       if(person.residentAllYear, 0, unsupported("A nonresident or dual-status alien files Form 1040-NR or a dual-status return, which this app doesn't prepare"))
       + if(line.US.joint == 1, if(spouse.person.residentAllYear, 0,
       unsupported("Your spouse wasn't a U.S. citizen or resident alien all year: filing jointly then takes an election to treat them as a resident, which this app doesn't handle")), 0)
-  SCOPE.dependants:
-    label: Dependants
-    formula: 'if(family.dependants > 0, unsupported("Dependants (the child tax credit, head of household and the earned income credit with children) aren''t handled by this app yet"), 0)'
   SCOPE.widowed:
     label: A spouse who died in 2025
     formula: 'if(family.maritalStatus == "widowed", if(answer.spouseDiedIn2025, unsupported("Your spouse died in 2025, so you can file jointly for 2025; this app doesn''t prepare that return yet"), 0), 0)'
@@ -423,10 +490,19 @@ lines:
   US.eicAge:
     label: People on the return 25 to 64 at the end of 2025
     formula: "if(person.age >= 25 and person.age < 65, 1, 0) + if(line.US.joint == 1, if(spouse.person.age >= 25 and spouse.person.age < 65, 1, 0), 0)"
-  SCOPE.eic:
-    label: The earned income credit without a qualifying child
+  US.eicChildren:
+    label: Qualifying children for the earned income credit, as far as this app checks
+    formula: "if(line.US.claimsDependants == 0, 0, sum(dependants.DEP.eicChild))"
+  US.eicLimit:
+    label: AGI below which the earned income credit may apply
     formula: >-
-      if(line.US.separate == 1, 0, if(line.US.claimable == 0 and line.US.eicAge > 0 and line.F1040.1z > 0
-      and line.F1040.11a < if(line.US.joint == 1, param.eicNoChildLimitJoint, param.eicNoChildLimit)
-      and line.F1040.2a + line.F1040.2b <= param.eicInvestmentLimit,
+      if(line.US.eicChildren == 0, if(line.US.joint == 1, param.eicNoChildLimitJoint, param.eicNoChildLimit),
+      if(line.US.eicChildren == 1, if(line.US.joint == 1, param.eicLimitOneChildJoint, param.eicLimitOneChild),
+      if(line.US.eicChildren == 2, if(line.US.joint == 1, param.eicLimitTwoChildrenJoint, param.eicLimitTwoChildren),
+      if(line.US.joint == 1, param.eicLimitThreeChildrenJoint, param.eicLimitThreeChildren))))
+  SCOPE.eic:
+    label: The earned income credit
+    formula: >-
+      if(line.US.separate == 1, 0, if((line.US.eicChildren > 0 or (line.US.claimable == 0 and line.US.eicAge > 0)) and line.F1040.1z > 0
+      and line.F1040.11a < line.US.eicLimit and line.F1040.2a + line.F1040.2b <= param.eicInvestmentLimit,
       unsupported("You may get the earned income credit, which this app doesn't work out yet (Form 1040, line 27a)"), 0))

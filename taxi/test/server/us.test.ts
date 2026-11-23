@@ -193,3 +193,69 @@ describe("a joint return", () => {
     expect(theirs!.lines).toEqual([]);
   });
 });
+
+describe("dependants on a US return", () => {
+  const childAnswers = { relationship: "child", monthsWithYou: "12", hasSSN: true, paidOwnSupport: false, filedJointReturn: false, citizenOrResident: true };
+
+  /** Alex, single, with a child of 8 in a US 2025 year, the facts saved; `spouse` adds Sam, married. */
+  async function family(spouse = false) {
+    const alex = await addPerson("Alex Rivera", "self", "1985-02-02");
+    const sam = spouse ? await addPerson("Sam Rivera", "spouse", "1986-06-06") : undefined;
+    const ava = await addPerson("Ava Rivera", "child", "2017-05-05");
+    const people = [alex, ...(sam ? [sam] : []), ava];
+    let year = await json<TaxYear>(server.call("POST", "/api/years", { body: { year: 2025, country: "us", people: people.map((each) => each.id) } }), 201);
+    year = await json<TaxYear>(
+      server.call("PUT", "/api/years/2025/personal-info", {
+        body: {
+          revision: year.revision,
+          maritalStatus: sam ? "married" : "single",
+          ...(sam ? { filingStatus: "separate" } : {}),
+          adults: [alex, ...(sam ? [sam] : [])].map((each) => ({ personId: each.id, province: null, residentAllYear: true })),
+        },
+      }),
+    );
+    return { alex, sam, ava, year };
+  }
+  const save = (revision: number, personId: string, answers: Record<string, unknown>) =>
+    server.call("PUT", "/api/years/2025/answers", { body: { revision, personId, answers } });
+
+  it("keeps answers about a dependant apart from an adult's", async () => {
+    const { alex, ava, year } = await family();
+    const adultQuestion = await json<{ error: { issues: { path: string; message: string }[] } }>(save(year.revision, ava.id, { isBlind: false }), 400);
+    expect(adultQuestion.error.issues).toEqual([{ path: "answers.isBlind", message: "Not a question about a dependant" }]);
+    const dependantQuestion = await json<{ error: { issues: { path: string; message: string }[] } }>(save(year.revision, alex.id, { relationship: "child" }), 400);
+    expect(dependantQuestion.error.issues).toEqual([{ path: "answers.relationship", message: "A question about a dependant" }]);
+    await json<TaxYear>(save(year.revision, ava.id, childAnswers));
+    const estimate = await json<Estimate>(server.call("GET", "/api/years/2025/estimate"));
+    expect(estimate.input.family.dependants[0]!.answers).toMatchObject({ relationship: "child", monthsWithYou: "12" });
+  });
+
+  it("makes a single parent head of household with the child tax credit, once the child's questions are answered", async () => {
+    const { alex, ava, year } = await family();
+    let current = await json<TaxYear>(
+      server.call("POST", "/api/years/2025/slips", {
+        body: { revision: year.revision, personId: alex.id, type: "W2", issuer: "City Clinic", boxes: { 1: "58000", 2: "1500", 4: "3596", 5: "58000", 6: "841" } },
+      }),
+      201,
+    );
+    current = await json<TaxYear>(save(current.revision, alex.id, { hasWages: true, hasInterest: false, hasTipsOrOvertime: false, canBeClaimed: false, isBlind: false, estimatedPayments: "0", paidHalfOfHome: true, hasValidSSN: true }));
+    // The child's questions are still to answer: Personal info isn't done.
+    expect(current.returns[0]!.steps.personal).toBe("todo");
+    current = await json<TaxYear>(save(current.revision, ava.id, childAnswers));
+    expect(current.returns[0]!.steps.personal).toBe("done");
+    const estimate = await json<Estimate>(server.call("GET", "/api/years/2025/estimate"));
+    const line = (id: string) => estimate.result.people[0]!.lines.find((each) => each.id === id)?.value;
+    // $58,000 less $23,625: $34,375, the Tax Table's head of household row ($3,785); one child tax credit of $2,200.
+    expect([line("F1040.15"), line("F1040.16"), line("F1040.19"), line("F1040.24")]).toEqual(["34375", "3785", "2200", "1585"]);
+  });
+
+  it("puts a dependant on the spouse's return when a couple filing separately says so", async () => {
+    const { sam, ava, year } = await family(true);
+    const current = await json<TaxYear>(save(year.revision, ava.id, { ...childAnswers, claimedBy: "spouse" }));
+    let estimate = await json<Estimate>(server.call("GET", "/api/years/2025/estimate"));
+    expect(estimate.input.family.dependants[0]!.claimedBy).toBe(sam!.id);
+    await json<TaxYear>(save(current.revision, ava.id, { claimedBy: "self" }));
+    estimate = await json<Estimate>(server.call("GET", "/api/years/2025/estimate"));
+    expect(estimate.input.family.dependants[0]!.claimedBy).toBeUndefined();
+  });
+});

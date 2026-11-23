@@ -133,3 +133,63 @@ describe("a joint return in the browser", () => {
     });
   });
 });
+
+describe("dependants in the browser", () => {
+  it("asks about each dependant on Personal info, and shows the child tax credit on Finish", async () => {
+    let ids: { alex: string; ava: string } | undefined;
+    const { router, server } = await renderApp("/returns", {
+      seed: async (s) => {
+        const add = async (name: string, relationship: string, birthDate: string) =>
+          (await (await s.call("POST", "/api/people", { body: { name, relationship, birthDate } })).json()) as Person;
+        const alex = await add("Alex Rivera", "self", "1985-02-02");
+        const ava = await add("Ava Rivera", "child", "2017-05-05");
+        ids = { alex: alex.id, ava: ava.id };
+        const call = async (method: string, path: string, body: object) => (await (await s.call(method, path, { body })).json()) as TaxYear;
+        let year = await call("POST", "/api/years", { year: 2025, country: "us", people: [alex.id, ava.id] });
+        year = await call("PUT", "/api/years/2025/personal-info", { revision: year.revision, maritalStatus: "single", adults: [{ personId: alex.id, province: null, residentAllYear: true }] });
+        year = await call("POST", "/api/years/2025/slips", {
+          revision: year.revision,
+          personId: alex.id,
+          type: "W2",
+          issuer: "City Clinic",
+          boxes: { 1: "58000", 2: "1500", 4: "3596", 5: "58000", 6: "841" },
+        });
+        await call("PUT", "/api/years/2025/answers", {
+          revision: year.revision,
+          personId: alex.id,
+          answers: { hasWages: true, hasInterest: false, hasTipsOrOvertime: false, canBeClaimed: false, isBlind: false, estimatedPayments: "0", paidHalfOfHome: true, hasValidSSN: true },
+        });
+      },
+    });
+    await screen.findByText("United States. File by April 15, 2026.");
+    await router.navigate(`/returns/2025/${ids!.alex}/personal`);
+    const card = (await screen.findByRole("heading", { name: "Dependant: Ava Rivera" })).closest<HTMLElement>("[data-slot=card]")!;
+    const relationship = within(card).getByRole("combobox", { name: "Their relationship to you" }) as HTMLSelectElement;
+    expect([...relationship.options].map((option) => option.textContent)).toContain("Son, daughter, stepchild or adopted child");
+    fireEvent.change(relationship, { target: { value: "child" } });
+    fireEvent.change(within(card).getByRole("textbox", { name: "Months they lived with you in 2025" }), { target: { value: "12" } });
+    // The rest of the child's questions, once the relationship and months are saved, appear with them.
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(async () => {
+      const estimate = (await (await server.call("GET", "/api/years/2025/estimate")).json()) as { input: { family: { dependants: { answers?: Record<string, unknown> }[] } } };
+      expect(estimate.input.family.dependants[0]!.answers).toMatchObject({ relationship: "child", monthsWithYou: "12" });
+    });
+    // The rest of the child's questions appear once the relationship and months are saved: answer them on the page.
+    const again = (await screen.findByRole("heading", { name: "Dependant: Ava Rivera" })).closest<HTMLElement>("[data-slot=card]")!;
+    const answer = (question: string, choice: "Yes" | "No") =>
+      fireEvent.click(within(within(again).getByRole("radiogroup", { name: question })).getByRole("radio", { name: choice }));
+    await within(again).findByRole("radiogroup", { name: "Has a social security number valid for employment" });
+    answer("Has a social security number valid for employment", "Yes");
+    answer("Paid over half of their own support in 2025", "No");
+    answer("Files a joint return for 2025", "No");
+    answer("A U.S. citizen, U.S. national or U.S. resident alien", "Yes");
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(async () => {
+      const estimate = (await (await server.call("GET", "/api/years/2025/estimate")).json()) as { input: { family: { dependants: { answers?: Record<string, unknown> }[] } } };
+      expect(estimate.input.family.dependants[0]!.answers).toMatchObject({ hasSSN: true, citizenOrResident: true });
+    });
+    await router.navigate(`/returns/2025/${ids!.alex}/finish?r=1`);
+    const keyLines = await screen.findByRole("list", { name: "Key lines" });
+    expect(within(keyLines).getByText("Child tax credit and credit for other dependents").closest("li")?.textContent).toMatch(/\$2,200\.00/);
+  });
+});

@@ -1,0 +1,86 @@
+{
+  "about": "Single, with a nephew of 30 who earned $9,000: not a dependent, so no credit and no head of household",
+  "input": {
+    "country": "us",
+    "year": 2025,
+    "people": [
+      {
+        "id": "p1",
+        "name": "Pat Kim",
+        "role": "self",
+        "birthDate": "1975-02-02",
+        "province": null,
+        "residentAllYear": true
+      }
+    ],
+    "family": {
+      "maritalStatus": "single",
+      "dependants": [
+        {
+          "id": "d1",
+          "name": "Jo Kim",
+          "birthDate": "1995-03-03",
+          "answers": {
+            "relationship": "descendant",
+            "monthsWithYou": "12",
+            "grossIncome": "9000",
+            "supportedByYou": true,
+            "paidOwnSupport": false,
+            "filedJointReturn": false,
+            "citizenOrResident": true,
+            "disabled": false
+          }
+        }
+      ]
+    },
+    "answers": {
+      "p1": {
+        "hasWages": true,
+        "hasInterest": false,
+        "hasTipsOrOvertime": false,
+        "canBeClaimed": false,
+        "isBlind": false,
+        "estimatedPayments": "0"
+      }
+    },
+    "slips": [
+      {
+        "id": "p1-w2-0",
+        "person": "p1",
+        "type": "W2",
+        "issuer": "Library Co",
+        "boxes": {
+          "1": "61000",
+          "2": "6500",
+          "4": "3782",
+          "5": "61000",
+          "6": "884.50"
+        }
+      }
+    ]
+  },
+  "expected": {
+    "p1": {
+      "F1040.19": "0",
+      "F1040.28": "0",
+      "S8812.12": "0",
+      "F1040.1a": "61000",
+      "F1040.2a": "0",
+      "F1040.2b": "0",
+      "F1040.9": "61000",
+      "F1040.11a": "61000",
+      "F1040.12e": "15750",
+      "F1040.13b": "0",
+      "F1040.15": "45250",
+      "F1040.16": "5195",
+      "F8959.7": "0",
+      "F8960.17": "0",
+      "F1040.24": "5195",
+      "F1040.25c": "0",
+      "S3.11": "0",
+      "F1040.33": "6500",
+      "F1040.34": "1305",
+      "F1040.37": "0"
+    }
+  }
+}

@@ -37,7 +37,7 @@ export function FinishStep() {
 
 function Results({ estimate, slips }: { estimate: Estimate; slips: SlipList }) {
   const { year } = useYear();
-  const { person: owner } = useReturn();
+  const { person: owner, members } = useReturn();
   const rules = rulesFor(year.country, year.year)!;
   const evaluation = useMemo(() => new Evaluation(rules, estimate.input), [rules, estimate.input]);
   const person = estimate.result.people.find((each) => each.personId === owner.id);
@@ -51,11 +51,19 @@ function Results({ estimate, slips }: { estimate: Estimate; slips: SlipList }) {
     return module === "income" || module === "deductions" || module === "credits" ? module : "personal";
   };
   const other = spouseOf(estimate.result.people, owner.id);
+  // The dependants this return claims (the person preparing's unless said), with what is still unanswered about each.
+  const selfId = year.people.find((each) => each.relationship === "self")?.id;
+  const dependantsOfReturn = estimate.input.family.dependants
+    .filter((dependant) => members.some((member) => member.id === (dependant.claimedBy ?? selfId)))
+    .flatMap((dependant) => {
+      const result = estimate.result.dependants.find((each) => each.dependantId === dependant.id);
+      return result ? [{ name: dependant.name, result }] : [];
+    });
   // On a joint return the spouse's items are this return's, named by person rather than by return.
   const joint = filesJointly(year);
   const spouse = other ? { name: year.people.find((each) => each.id === other.personId)?.name ?? "Your spouse", result: other, joint } : undefined;
   const checks = groupUnanswered(
-    printBlockers({ rules, issues: year.issues, answers: estimate.input.answers, slips: slips.slips }, person, spouse).map((blocker) => ({
+    printBlockers({ rules, issues: year.issues, answers: estimate.input.answers, slips: slips.slips }, person, spouse, dependantsOfReturn).map((blocker) => ({
       text: blocker.text,
       personId: blocker.personId ?? owner.id,
       step: blocker.confirm ? ("confirm" as const) : blocker.issue ? ("personal" as const) : blocker.question ? stepOfQuestion(blocker.question) : null,

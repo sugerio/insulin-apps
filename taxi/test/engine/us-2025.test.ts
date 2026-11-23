@@ -16,6 +16,8 @@ function oneW2(options: {
   wages?: string;
   married?: boolean;
   joint?: boolean;
+  /** Head of household: one child of 10 lives with you. */
+  hoh?: boolean;
   birthDate?: string;
   answers?: Record<string, string | boolean>;
   interest?: string;
@@ -25,7 +27,7 @@ function oneW2(options: {
   maritalStatus?: string;
 }): EngineInput {
   const married = options.married || options.joint;
-  const wages = options.wages ?? (Number(options.taxable ?? "0") + (options.joint ? 31500 : 15750)).toFixed(2);
+  const wages = options.wages ?? (Number(options.taxable ?? "0") + (options.joint ? 31500 : options.hoh ? 23625 : 15750)).toFixed(2);
   return {
     country: "us",
     year: 2025,
@@ -37,10 +39,16 @@ function oneW2(options: {
     family: {
       maritalStatus: options.maritalStatus === undefined ? (married ? "married" : "single") : options.maritalStatus,
       ...(married ? { filingStatus: options.joint ? "joint" : "separate" } : {}),
-      dependants: Array.from({ length: options.dependants ?? 0 }, (_, index) => ({ id: `d${index}`, name: "Kid", birthDate: "2015-01-01" })),
+      // Children of 10 who lived with you all year, each with a social security number.
+      dependants: Array.from({ length: options.dependants ?? (options.hoh ? 1 : 0) }, (_, index) => ({
+        id: `d${index}`,
+        name: `Kid ${index + 1}`,
+        birthDate: "2015-01-01",
+        answers: { relationship: "child", monthsWithYou: "12", hasSSN: true, paidOwnSupport: false, filedJointReturn: false, citizenOrResident: true },
+      })),
     },
     answers: {
-      p1: { hasTipsOrOvertime: false, spouseItemizes: false, ...options.answers },
+      p1: { hasTipsOrOvertime: false, spouseItemizes: false, hasValidSSN: true, paidHalfOfHome: true, ...options.answers },
       ...(options.joint ? { p2: { hasTipsOrOvertime: false } } : {}),
     },
     slips: [
@@ -51,14 +59,15 @@ function oneW2(options: {
 }
 
 describe("the 2025 US rules", () => {
-  it("give the Tax Table's tax for every row, at both ends, single, jointly and separately", () => {
+  it("give the Tax Table's tax for every row, at both ends, single, jointly, separately and head of household", () => {
     const wrong: string[] = [];
-    for (const [from, to, single, joint, separate] of table.rows as [number, number, number, number, number, number][]) {
+    for (const [from, to, single, joint, separate, head] of table.rows as [number, number, number, number, number, number][]) {
       for (const taxable of [String(from), (to - 0.01).toFixed(2)]) {
         const statuses = [
           ["single", {}, single],
           ["jointly", { joint: true }, joint],
           ["separately", { married: true }, separate],
+          ["head of household", { hoh: true }, head],
         ] as const;
         for (const [name, status, expected] of statuses) {
           const evaluation = new Evaluation(rules, oneW2({ taxable, ...status }));
@@ -84,6 +93,10 @@ describe("the 2025 US rules", () => {
     const joint = (taxable: string) => new Evaluation(rules, oneW2({ taxable, joint: true })).line("p1", "F1040.16").value?.toString();
     expect(joint("100000")).toBe("11828");
     expect(joint("800000")).toBe("220062.5");
+    // Section D: head of household, 22% less $6,825.00 at $100,000 and 37% less $44,718.00 over $626,350.
+    const head = (taxable: string) => new Evaluation(rules, oneW2({ taxable, hoh: true })).line("p1", "F1040.16").value?.toString();
+    expect(head("100000")).toBe("15175");
+    expect(head("700000")).toBe("214282");
   });
 
   it("refuse to evaluate a US input with Canada's rules", () => {
@@ -97,7 +110,7 @@ describe("the 2025 US rules", () => {
     };
     const cases: [string, EngineInput, RegExp][] = [
       ["a dual-status alien", oneW2({ taxable: "30000", resident: false }), /Form 1040-NR/],
-      ["dependants", oneW2({ taxable: "30000", dependants: 1 }), /Dependants/],
+      ["three children whose credit Part II-B may raise", oneW2({ wages: "30000", dependants: 3 }), /Part II-B of Schedule 8812/],
       ["a spouse who died in 2025", oneW2({ taxable: "30000", maritalStatus: "widowed", answers: { spouseDiedIn2025: true } }), /file jointly for 2025/],
       ["tips or overtime", oneW2({ taxable: "30000", answers: { hasTipsOrOvertime: true } }), /tips and overtime/],
       ["a child's interest over $2,700", oneW2({ wages: "1000", birthDate: "2010-01-01", interest: "3000", answers: { canBeClaimed: true } }), /Form 8615/],
@@ -110,7 +123,7 @@ describe("the 2025 US rules", () => {
       expect(unhandled.join(" "), what).toMatch(message);
     }
     // Widowed before 2025, the earned income credit's age and income limits, and a claimed dependent's small interest: handled.
-    expect(notHandled(oneW2({ taxable: "30000", maritalStatus: "widowed", answers: { spouseDiedIn2025: false } })).total).not.toBeNull();
+    expect(notHandled(oneW2({ taxable: "30000", maritalStatus: "widowed", answers: { spouseDiedIn2025: false, spouseDiedIn2023Or2024: false } })).total).not.toBeNull();
     expect(notHandled(oneW2({ wages: "15000", birthDate: "2002-01-01" })).total).not.toBeNull();
     expect(notHandled(oneW2({ wages: "25000" })).total).not.toBeNull();
     expect(notHandled(oneW2({ wages: "1000", birthDate: "2010-01-01", interest: "2700", answers: { canBeClaimed: true } })).total).not.toBeNull();
@@ -147,6 +160,37 @@ describe("the 2025 US rules", () => {
     const undecided = new Evaluation(rules, { ...input, family: { maritalStatus: "married", dependants: [] } }).result().people[0]!;
     expect(undecided.lines.find((line) => line.id === "F1040.15")?.value).toBeNull();
     expect(undecided.questions).not.toContain("spouseItemizes");
+  });
+
+  it("ask about each dependant only what decides whether they qualify", () => {
+    const withChild = (birthDate: string, answers: Record<string, string | boolean>) => {
+      const input = oneW2({ taxable: "40000", hoh: true });
+      input.family.dependants[0] = { ...input.family.dependants[0]!, birthDate, answers };
+      return new Evaluation(rules, input).result().dependants[0]!;
+    };
+    const base = { relationship: "child", monthsWithYou: "12", hasSSN: true, paidOwnSupport: false, filedJointReturn: false, citizenOrResident: true };
+    // A child of 10: no question about school or disability.
+    const young = withChild("2015-01-01", base);
+    expect(young.questions).toEqual(expect.arrayContaining(["relationship", "monthsWithYou", "hasSSN"]));
+    expect(young.questions).not.toContain("fullTimeStudent");
+    expect(young.questions).not.toContain("disabled");
+    expect(young.missing).toEqual([]);
+    // At 20, being a full-time student decides; until it is answered, it is missing.
+    const student = withChild("2005-01-01", base);
+    expect(student.missing.map((item) => item.question)).toEqual(["fullTimeStudent"]);
+    // A parent: their income and who supported them decide.
+    const parent = withChild("1950-01-01", { relationship: "parent", monthsWithYou: "0", paidOwnSupport: false, filedJointReturn: false, citizenOrResident: true });
+    // Not related as a child can be, so the age test (and disability) is never asked.
+    expect(parent.missing.map((item) => item.question).sort()).toEqual(["grossIncome", "supportedByYou"]);
+  });
+
+  it("name each dependant in the explanation of a credit", () => {
+    const evaluation = new Evaluation(rules, oneW2({ taxable: "40000", dependants: 2, answers: { paidHalfOfHome: true } }));
+    expect(evaluation.line("p1", "S8812.4").value?.toString()).toBe("2");
+    const why = evaluation.explain("p1", "line.S8812.4");
+    const names = JSON.stringify(why);
+    expect(names).toContain("Kid 1: A qualifying child for the child tax credit");
+    expect(names).toContain("Kid 2: A qualifying child for the child tax credit");
   });
 
   it("show one federal refund or amount owed", () => {

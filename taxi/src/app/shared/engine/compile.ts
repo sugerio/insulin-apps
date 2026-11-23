@@ -35,7 +35,14 @@ const sourceParam = z.strictObject({
   value: z.union([sourceNumber, z.array(z.strictObject({ upTo: sourceNumber.optional(), rate: sourceNumber, base: sourceNumber.optional() }))]),
   source: z.string().min(1, "Every param names its source"),
 });
-const sourceLine = z.strictObject({ label: z.string().min(1), formula: z.string().min(1), source: z.string().min(1).optional(), module: z.enum(MODULES).optional() });
+const sourceLine = z.strictObject({
+  label: z.string().min(1),
+  formula: z.string().min(1),
+  source: z.string().min(1).optional(),
+  module: z.enum(MODULES).optional(),
+  /** `dependant`: worked out once for each dependant in the year (rules.ts). */
+  each: z.literal("dependant").optional(),
+});
 const sourceQuestion = z.strictObject({
   type: z.enum(["money", "percent", "count", "boolean", "choice"]),
   ask: z.string().min(1),
@@ -46,6 +53,8 @@ const sourceQuestion = z.strictObject({
   suggest: z.string().min(1).optional(),
   default: z.union([sourceNumber, z.boolean()]).optional(),
   decision: z.boolean().optional(),
+  /** Asked about each dependant (read as dependant.answer.<id>), not about an adult. */
+  dependant: z.boolean().optional(),
   parent: z.string().min(1).optional(),
   askedWhen: z.strictObject({ question: z.string().min(1), options: z.array(z.string().min(1)).min(1) }).optional(),
   note: z.string().min(1).optional(),

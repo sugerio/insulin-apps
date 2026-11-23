@@ -75,6 +75,13 @@ married, and it is cleared when the status changes to one that isn't married. Un
 `no_filing_status` issue. On a joint return, send both spouses in `adults`, and each spouse's answers under their own
 `personId`.
 
+On a US year, each dependant in the year has answers too: `PUT /api/years/{year}/answers` with the dependant's
+`personId` and the questions asked about dependants (`relationship`, `monthsWithYou`, `hasSSN` and the others); an
+adult's question is refused for a dependant, and the other way round. When a couple files separately, a dependant's
+`claimedBy` answer (`self` or `spouse`) says whose return claims them. The estimate's `input.family.dependants` holds
+each dependant's answers and `claimedBy`, and `result.dependants` lists what the rules asked about each one
+(`questions`), with what is still `missing` or assumed (`estimates`).
+
 A year's answer lists `issues`. Those of kind `blocking` keep the step from being done; those of kind `unsupported` say
 what the app can't prepare. Every province and territory is prepared, so today no issue is of that kind.
 

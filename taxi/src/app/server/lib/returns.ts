@@ -1,4 +1,4 @@
-import { unreadBoxes, type ConfirmSlips, type CreateSlip, type SaveAnswers, type SlipList, type TaxYear, type UpdateSlip } from "#shared";
+import { isAdult, unreadBoxes, type ConfirmSlips, type CreateSlip, type SaveAnswers, type SlipList, type TaxYear, type UpdateSlip } from "#shared";
 import { Dec } from "../../shared/engine/decimal.ts";
 import { documentName } from "../../shared/engine/rules.ts";
 import { rulesFor } from "../../shared/rules/index.ts";
@@ -33,13 +33,16 @@ export async function listSlips(db: Db, orgId: string, year: number): Promise<Sl
 /** Saves answers to the year's questions, each checked against its question; null clears one. */
 export async function saveAnswers(db: Db, caller: Caller, year: number, input: SaveAnswers, now: number): Promise<TaxYear> {
   const { row, view } = await openYear(db, caller.orgId, year);
-  checkAdult(view, input.personId, "personId");
+  // An adult answers about themselves; a dependant in the year has answers too, to the questions asked about dependants.
+  const dependant = view.members.includes(input.personId) && view.people.some((person) => person.id === input.personId && !isAdult(person.relationship));
+  if (!dependant) checkAdult(view, input.personId, "personId");
   const rules = rulesFor(view.country, year)!;
   const issues: { path: string; message: string }[] = [];
   for (const [id, value] of Object.entries(input.answers)) {
     const question = rules.questions.get(id);
     const path = `answers.${id}`;
     if (!question) issues.push({ path, message: "Not a question of this year" });
+    else if (Boolean(question.dependant) !== dependant) issues.push({ path, message: dependant ? "Not a question about a dependant" : "A question about a dependant" });
     else if (value === null) continue;
     else if (question.type === "money" && !(typeof value === "string" && /^\d{1,9}(\.\d{1,2})?$/.test(value))) {
       issues.push({ path, message: "Enter an amount like 1234.56" });

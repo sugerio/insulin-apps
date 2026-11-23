@@ -1,0 +1,141 @@
+{
+  "about": "Married filing jointly with children of 5 and 12 and a 17-year-old: two child tax credits and a credit for other dependents",
+  "input": {
+    "country": "us",
+    "year": 2025,
+    "people": [
+      {
+        "id": "p1",
+        "name": "Chris Patel",
+        "role": "self",
+        "birthDate": "1985-01-01",
+        "province": null,
+        "residentAllYear": true
+      },
+      {
+        "id": "p2",
+        "name": "Riya Patel",
+        "role": "spouse",
+        "birthDate": "1987-02-02",
+        "province": null,
+        "residentAllYear": true
+      }
+    ],
+    "family": {
+      "maritalStatus": "married",
+      "dependants": [
+        {
+          "id": "d1",
+          "name": "Asha Patel",
+          "birthDate": "2020-06-06",
+          "answers": {
+            "relationship": "child",
+            "monthsWithYou": "12",
+            "hasSSN": true,
+            "paidOwnSupport": false,
+            "filedJointReturn": false,
+            "citizenOrResident": true
+          }
+        },
+        {
+          "id": "d2",
+          "name": "Dev Patel",
+          "birthDate": "2013-07-07",
+          "answers": {
+            "relationship": "child",
+            "monthsWithYou": "12",
+            "hasSSN": true,
+            "paidOwnSupport": false,
+            "filedJointReturn": false,
+            "citizenOrResident": true
+          }
+        },
+        {
+          "id": "d3",
+          "name": "Mira Patel",
+          "birthDate": "2008-08-08",
+          "answers": {
+            "relationship": "child",
+            "monthsWithYou": "12",
+            "hasSSN": true,
+            "paidOwnSupport": false,
+            "filedJointReturn": false,
+            "citizenOrResident": true
+          }
+        }
+      ],
+      "filingStatus": "joint"
+    },
+    "answers": {
+      "p1": {
+        "hasWages": true,
+        "hasInterest": false,
+        "hasTipsOrOvertime": false,
+        "canBeClaimed": false,
+        "isBlind": false,
+        "estimatedPayments": "0",
+        "hasValidSSN": true
+      },
+      "p2": {
+        "hasWages": true,
+        "hasInterest": false,
+        "hasTipsOrOvertime": false,
+        "canBeClaimed": false,
+        "isBlind": false,
+        "estimatedPayments": "0"
+      }
+    },
+    "slips": [
+      {
+        "id": "p1-w2-0",
+        "person": "p1",
+        "type": "W2",
+        "issuer": "Northwind",
+        "boxes": {
+          "1": "90000",
+          "2": "8000",
+          "4": "5580",
+          "5": "90000",
+          "6": "1305"
+        }
+      },
+      {
+        "id": "p2-w2-0",
+        "person": "p2",
+        "type": "W2",
+        "issuer": "Contoso",
+        "boxes": {
+          "1": "30000",
+          "2": "2000",
+          "4": "1860",
+          "5": "30000",
+          "6": "435"
+        }
+      }
+    ]
+  },
+  "expected": {
+    "p1": {
+      "F1040.19": "4900",
+      "F1040.28": "0",
+      "S8812.12": "4900",
+      "F1040.1a": "120000",
+      "F1040.2a": "0",
+      "F1040.2b": "0",
+      "F1040.9": "120000",
+      "F1040.11a": "120000",
+      "F1040.12e": "31500",
+      "F1040.13b": "0",
+      "F1040.15": "88500",
+      "F1040.16": "10146",
+      "F8959.7": "0",
+      "F8960.17": "0",
+      "F1040.24": "5246",
+      "F1040.25c": "0",
+      "S3.11": "0",
+      "F1040.33": "10000",
+      "F1040.34": "4754",
+      "F1040.37": "0"
+    }
+  }
+}

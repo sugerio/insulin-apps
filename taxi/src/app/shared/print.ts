@@ -38,9 +38,20 @@ export interface PrintYear {
   slips: Slip[];
 }
 
+/** What the rules asked about a dependant and is still unanswered. */
+export interface DependantAnswers {
+  missing: { question: string; ask: string }[];
+  estimates: { question: string; ask: string; assumed: string | boolean }[];
+}
+
 const SLIP_MODULES = ["income", "deductions", "credits"] as const;
 
-export function printBlockers(year: PrintYear, person: PersonResult, spouse?: { name: string; result: PersonResult; joint?: boolean }): PrintBlocker[] {
+export function printBlockers(
+  year: PrintYear,
+  person: PersonResult,
+  spouse?: { name: string; result: PersonResult; joint?: boolean },
+  dependants: { name: string; result: DependantAnswers }[] = [],
+): PrintBlocker[] {
   const own = slipsLeft(year, person);
   const blockers: PrintBlocker[] = [
     ...year.issues.filter((issue) => isIssueOf(issue, person.personId)).map((issue) => ({ text: issue.message, issue: issue.code })),
@@ -72,6 +83,13 @@ export function printBlockers(year: PrintYear, person: PersonResult, spouse?: { 
         ...spouse.result.estimates.map((item) => ({ text: `${on} not answered yet: ${item.ask}.`, question: item.question, unanswered: true as const, personId: theirs })),
       );
     }
+  }
+  // The questions about the dependants this return claims, by the dependant (asked on Personal info).
+  for (const { name, result } of dependants) {
+    blockers.push(
+      ...result.missing.map((item) => ({ text: `${name}: needed: ${item.ask}.`, question: item.question })),
+      ...result.estimates.map((item) => ({ text: `${name}: not answered yet: ${item.ask}.`, question: item.question, unanswered: true as const })),
+    );
   }
   // A line can still be incomplete without a reason above (a value the rules can't work out): never print it.
   if (blockers.length === 0 && incomplete) blockers.push({ text: "Some lines of the return can't be worked out yet." });

@@ -2,19 +2,83 @@
   "country": "us",
   "year": 2025,
   "filingUnit": "person",
-  "result": ["F1040.9","F1040.11a","F1040.12e","F1040.15","F1040.16","F1040.24","F1040.33","F1040.34","F1040.37"],
+  "result": [
+    "F1040.9",
+    "F1040.11a",
+    "F1040.12e",
+    "F1040.15",
+    "F1040.16",
+    "F1040.19",
+    "F1040.24",
+    "F1040.28",
+    "F1040.33",
+    "F1040.34",
+    "F1040.37"
+  ],
   "resultWhen": {
     "F1040.9": "person.role == \"self\" or line.US.joint == 0",
     "F1040.11a": "person.role == \"self\" or line.US.joint == 0",
     "F1040.12e": "person.role == \"self\" or line.US.joint == 0",
     "F1040.15": "person.role == \"self\" or line.US.joint == 0",
     "F1040.16": "person.role == \"self\" or line.US.joint == 0",
+    "F1040.19": "person.role == \"self\" or line.US.joint == 0",
     "F1040.24": "person.role == \"self\" or line.US.joint == 0",
+    "F1040.28": "person.role == \"self\" or line.US.joint == 0",
     "F1040.33": "person.role == \"self\" or line.US.joint == 0",
     "F1040.34": "person.role == \"self\" or line.US.joint == 0",
     "F1040.37": "person.role == \"self\" or line.US.joint == 0"
   },
   "params": {
+    "relativeIncomeLimit": {
+      "label": "Gross income a qualifying relative must stay under",
+      "value": "5200",
+      "source": "Instructions, Who Qualifies as Your Dependent, Qualifying relative: gross income less than $5,200"
+    },
+    "childTaxCredit": {
+      "label": "Child tax credit for each qualifying child",
+      "value": "2200",
+      "source": "8812 instructions, What's New: the maximum CTC for each qualifying child is $2,200"
+    },
+    "otherDependentCredit": {
+      "label": "Credit for each other dependent",
+      "value": "500",
+      "source": "Schedule 8812, line 7: $500 for each dependent who isn't a qualifying child for the CTC"
+    },
+    "ctcPhaseOutJoint": {
+      "label": "Modified AGI over which the child tax credit is reduced, Married filing jointly",
+      "value": "400000",
+      "source": "8812 instructions, line 9: $400,000 if married filing jointly"
+    },
+    "ctcPhaseOut": {
+      "label": "Modified AGI over which the child tax credit is reduced, other filing statuses",
+      "value": "200000",
+      "source": "8812 instructions, line 9: $200,000 for all other filing statuses"
+    },
+    "ctcPhaseOutRate": {
+      "label": "Reduction of the credits for each $1,000 of modified AGI over the threshold",
+      "value": "0.05",
+      "source": "Schedule 8812, line 11: 5% of line 10 ($50 for each $1,000)"
+    },
+    "actcPerChild": {
+      "label": "Most additional child tax credit for each qualifying child",
+      "value": "1700",
+      "source": "8812 instructions: the maximum amount of ACTC for each qualifying child is $1,700"
+    },
+    "actcEarnedFloor": {
+      "label": "Earned income over which the additional child tax credit is 15%",
+      "value": "2500",
+      "source": "Schedule 8812, line 19: earned income over $2,500"
+    },
+    "actcRate": {
+      "label": "Additional child tax credit rate on earned income over $2,500",
+      "value": "0.15",
+      "source": "Schedule 8812, line 20: 15%"
+    },
+    "actcThreeChildren": {
+      "label": "Line 16b at which Part II-B can give more (three or more qualifying children)",
+      "value": "5100",
+      "source": "8812 instructions, Part II-A: if line 16b is $5,100 or more, see Part II-B"
+    },
     "standardSingle": {
       "label": "Standard deduction, Single",
       "value": "15750",
@@ -29,6 +93,11 @@
       "label": "Standard deduction, Married filing jointly",
       "value": "31500",
       "source": "Form 1040, line 12e: $31,500 for Married filing jointly or Qualifying surviving spouse"
+    },
+    "standardHead": {
+      "label": "Standard deduction, Head of household",
+      "value": "23625",
+      "source": "Form 1040, line 12e: $23,625 for Head of household"
     },
     "additionalUnmarried": {
       "label": "Additional standard deduction for each box on line 12d, unmarried",
@@ -88,6 +157,19 @@
         {"upTo":null,"rate":"0.37"}
       ],
       "source": "Instructions, 2025 Tax Computation Worksheet, Section B (22% less $10,172.00 from $100,000; 24% less $14,306.00 over $206,700; 32% less $45,874.00 over $394,600; 35% less $60,905.50 over $501,050; 37% less $75,937.50 over $751,600)"
+    },
+    "bracketsHead": {
+      "label": "Tax brackets, Head of household",
+      "value": [
+        {"upTo":"17000","rate":"0.1"},
+        {"upTo":"64850","rate":"0.12"},
+        {"upTo":"103350","rate":"0.22"},
+        {"upTo":"197300","rate":"0.24"},
+        {"upTo":"250500","rate":"0.32"},
+        {"upTo":"626350","rate":"0.35"},
+        {"upTo":null,"rate":"0.37"}
+      ],
+      "source": "Instructions, 2025 Tax Computation Worksheet, Section D (22% less $6,825.00 from $100,000; 24% less $8,892.00 over $103,350; 32% less $24,676.00 over $197,300; 35% less $32,191.00 over $250,500; 37% less $44,718.00 over $626,350)"
     },
     "taxTableLimit": {
       "label": "Taxable income from which the Tax Computation Worksheet is used instead of the Tax Table",
@@ -158,6 +240,36 @@
       "value": "26214",
       "source": "Instructions, line 27a, Step 1: less than $26,214 if married filing jointly, with no children"
     },
+    "eicLimitThreeChildren": {
+      "label": "AGI below which someone with three or more qualifying children can get the earned income credit",
+      "value": "61555",
+      "source": "Instructions, line 27a, Step 1: less than $61,555 with three or more children who have valid SSNs"
+    },
+    "eicLimitThreeChildrenJoint": {
+      "label": "AGI below which a couple with three or more qualifying children can get the earned income credit, Married filing jointly",
+      "value": "68675",
+      "source": "Instructions, line 27a, Step 1: less than $68,675 if married filing jointly"
+    },
+    "eicLimitTwoChildren": {
+      "label": "AGI below which someone with two qualifying children can get the earned income credit",
+      "value": "57310",
+      "source": "Instructions, line 27a, Step 1: less than $57,310 with two children who have valid SSNs"
+    },
+    "eicLimitTwoChildrenJoint": {
+      "label": "AGI below which a couple with two qualifying children can get the earned income credit, Married filing jointly",
+      "value": "64430",
+      "source": "Instructions, line 27a, Step 1: less than $64,430 if married filing jointly"
+    },
+    "eicLimitOneChild": {
+      "label": "AGI below which someone with one qualifying child can get the earned income credit",
+      "value": "50434",
+      "source": "Instructions, line 27a, Step 1: less than $50,434 with one child who have valid SSNs"
+    },
+    "eicLimitOneChildJoint": {
+      "label": "AGI below which a couple with one qualifying child can get the earned income credit, Married filing jointly",
+      "value": "57554",
+      "source": "Instructions, line 27a, Step 1: less than $57,554 if married filing jointly"
+    },
     "eicInvestmentLimit": {
       "label": "Most investment income someone can have and get the earned income credit",
       "value": "11950",
@@ -170,10 +282,139 @@
     }
   },
   "lines": {
+    "DEP.relatedChild": {
+      "label": "Related as a qualifying child can be (1 for yes)",
+      "formula": "if(dependant.answer.relationship == \"child\" or dependant.answer.relationship == \"foster\" or dependant.answer.relationship == \"sibling\" or dependant.answer.relationship == \"descendant\", 1, 0)",
+      "source": "Instructions, Qualifying child: your son, daughter, stepchild, foster child, brother, sister, or a descendant of any of them",
+      "each": "dependant"
+    },
+    "DEP.ageTest": {
+      "label": "Meets the qualifying child's age test (1 for yes)",
+      "formula": "if(dependant.age < 19, 1, if(dependant.age < 24, if(dependant.answer.fullTimeStudent, 1, if(dependant.answer.disabled, 1, 0)), if(dependant.answer.disabled, 1, 0)))",
+      "source": "Instructions, Qualifying child: under 19 at the end of 2025, or under 24 and a full-time student, or any age and permanently and totally disabled",
+      "each": "dependant"
+    },
+    "DEP.qualifyingChild": {
+      "label": "A qualifying child (1 for yes)",
+      "formula": "if(line.DEP.relatedChild == 1 and dependant.answer.monthsWithYou >= 7 and line.DEP.ageTest == 1 and not dependant.answer.paidOwnSupport and not dependant.answer.filedJointReturn and dependant.answer.citizenOrResident, 1, 0)",
+      "source": "Instructions, Who Qualifies as Your Dependent: lived with you more than half of 2025, didn't pay over half of their own support, files no joint return",
+      "each": "dependant"
+    },
+    "DEP.qualifyingRelative": {
+      "label": "A qualifying relative (1 for yes)",
+      "formula": "if(line.DEP.qualifyingChild == 1, 0, if(dependant.answer.relationship == \"none\" and dependant.answer.monthsWithYou < 12, 0, if(dependant.answer.grossIncome < param.relativeIncomeLimit and dependant.answer.supportedByYou and dependant.answer.citizenOrResident and not dependant.answer.filedJointReturn, 1, 0)))",
+      "source": "Instructions, Qualifying relative: related to you or lived with you all year, gross income under $5,200, and you paid over half of their support",
+      "each": "dependant"
+    },
+    "DEP.dependent": {
+      "label": "Your dependent (1 for yes)",
+      "formula": "line.DEP.qualifyingChild + line.DEP.qualifyingRelative",
+      "each": "dependant"
+    },
+    "DEP.ctcChild": {
+      "label": "A qualifying child for the child tax credit (1 for yes)",
+      "formula": "if(line.DEP.qualifyingChild == 1 and dependant.age < 17, if(dependant.answer.hasSSN, 1, 0), 0)",
+      "source": "8812 instructions: a qualifying child under 17 at the end of 2025 with a social security number valid for employment",
+      "each": "dependant"
+    },
+    "DEP.hohQualifying": {
+      "label": "Lets you file as head of household (1 for yes)",
+      "formula": "if(line.DEP.qualifyingChild == 1, 1, if(line.DEP.qualifyingRelative == 1, if(dependant.answer.relationship == \"parent\", 1, if(dependant.answer.relationship == \"none\", 0, if(dependant.answer.monthsWithYou >= 7, 1, 0))), 0))",
+      "source": "Instructions, Head of Household: a qualifying child, a related qualifying relative who lived with you more than half the year, or a parent who didn't have to live with you",
+      "each": "dependant"
+    },
+    "DEP.qssChild": {
+      "label": "Lets a widow or widower file as a qualifying surviving spouse (1 for yes)",
+      "formula": "if(dependant.answer.relationship == \"child\" and line.DEP.dependent == 1 and dependant.answer.monthsWithYou == 12, 1, 0)",
+      "source": "Instructions, Qualifying Surviving Spouse: a child or stepchild (not a foster child) you can claim, who lived in your home all year",
+      "each": "dependant"
+    },
+    "DEP.eicChild": {
+      "label": "A qualifying child for the earned income credit, as far as this app checks (1 for yes)",
+      "formula": "if(line.DEP.qualifyingChild == 1, if(dependant.answer.hasSSN, 1, 0), 0)",
+      "each": "dependant"
+    },
+    "US.claimsDependants": {
+      "label": "This return can claim dependants (1 for yes)",
+      "formula": "if(line.US.claimable == 1, 0, 1)",
+      "source": "Instructions, Dependents: if someone can claim you (or your spouse on a joint return) as a dependent, you can't claim anyone"
+    },
+    "US.filerSSN": {
+      "label": "You, or your spouse on a joint return, have a social security number valid for employment (1 for yes)",
+      "formula": "if(answer.hasValidSSN, 1, if(line.US.joint == 1, if(spouse.answer.hasValidSSN, 1, 0), 0))",
+      "source": "8812 instructions: from 2025 you need a valid SSN to claim the CTC or ACTC; filing jointly, one spouse's is enough"
+    },
+    "S8812.3": {
+      "label": "Modified adjusted gross income",
+      "formula": "line.F1040.11a",
+      "source": "Schedule 8812, line 3: line 11b, plus income excluded from Puerto Rico or abroad (not handled)"
+    },
+    "S8812.4": {
+      "label": "Qualifying children for the child tax credit",
+      "formula": "if(line.US.claimsDependants == 0, 0, if(sum(dependants.DEP.ctcChild) == 0, 0, if(line.US.filerSSN == 1, sum(dependants.DEP.ctcChild), 0)))"
+    },
+    "S8812.5": {"label":"Child tax credit before the reduction","formula":"line.S8812.4 * param.childTaxCredit"},
+    "S8812.6": {
+      "label": "Other dependents",
+      "formula": "if(line.US.claimsDependants == 0, 0, sum(dependants.DEP.dependent) - line.S8812.4)",
+      "source": "Schedule 8812, line 6: each dependent who isn't counted on line 4, including a child the CTC can't be claimed for without a valid SSN"
+    },
+    "S8812.7": {"label":"Credit for other dependents before the reduction","formula":"line.S8812.6 * param.otherDependentCredit"},
+    "S8812.8": {"label":"Child tax credit and credit for other dependents","formula":"line.S8812.5 + line.S8812.7"},
+    "S8812.9": {
+      "label": "Modified AGI over which the credits are reduced",
+      "formula": "if(line.US.joint == 1, param.ctcPhaseOutJoint, param.ctcPhaseOut)"
+    },
+    "S8812.10": {
+      "label": "Modified AGI over the threshold, rounded up to the next $1,000",
+      "formula": "max(0, 0 - floor(line.S8812.9 - line.S8812.3, 1000))",
+      "source": "Schedule 8812, line 10: line 3 less line 9; more than zero and not a multiple of $1,000, the next multiple of $1,000"
+    },
+    "S8812.11": {"label":"Reduction of the credits","formula":"line.S8812.10 * param.ctcPhaseOutRate"},
+    "S8812.12": {"label":"Credits after the reduction","formula":"max(0, line.S8812.8 - line.S8812.11)"},
+    "S8812.13": {
+      "label": "Credit limit",
+      "formula": "line.F1040.18",
+      "source": "8812 instructions, Credit Limit Worksheet A: Form 1040 line 18, less credits on Schedule 3 that this app doesn't work out yet"
+    },
+    "S8812.14": {"label":"Child tax credit and credit for other dependents","formula":"min(line.S8812.12, line.S8812.13)"},
+    "S8812.16a": {"label":"Credits more than the tax","formula":"max(0, line.S8812.12 - line.S8812.14)"},
+    "S8812.16b": {"label":"Most additional child tax credit","formula":"line.S8812.4 * param.actcPerChild"},
+    "S8812.17": {"label":"The smaller of line 16a and line 16b","formula":"min(line.S8812.16a, line.S8812.16b)"},
+    "S8812.18a": {
+      "label": "Earned income",
+      "formula": "line.F1040.1z",
+      "source": "8812 instructions, Earned Income Chart: wages on Form 1040 line 1z (no nontaxable combat pay or self-employment yet)"
+    },
+    "S8812.19": {"label":"Earned income over $2,500","formula":"max(0, line.S8812.18a - param.actcEarnedFloor)"},
+    "S8812.20": {"label":"15% of earned income over $2,500","formula":"round(line.S8812.19 * param.actcRate, 2)"},
+    "S8812.27": {
+      "label": "Additional child tax credit",
+      "formula": "if(line.S8812.16a == 0, 0, min(line.S8812.17, line.S8812.20))",
+      "source": "Schedule 8812, Part II-A, lines 16a to 20 and 27"
+    },
+    "SCOPE.actc": {
+      "label": "Part II-B of Schedule 8812, for three or more children",
+      "formula": "if(line.S8812.16a > 0 and line.S8812.16b >= param.actcThreeChildren and line.S8812.20 < line.S8812.17, unsupported(\"With three or more qualifying children, Part II-B of Schedule 8812 may give a larger additional child tax credit, which this app doesn't work out yet\"), 0)"
+    },
     "US.single": {
       "label": "Filing status is Single (1 for yes)",
-      "formula": "if(family.maritalStatus == \"married\", 0, 1)",
+      "formula": "if(family.maritalStatus == \"married\", 0, if(line.US.qss == 1, 0, if(line.US.hoh == 1, 0, 1)))",
       "source": "Instructions, Filing Status"
+    },
+    "US.hoh": {
+      "label": "Filing status is Head of household (1 for yes)",
+      "formula": "if(family.maritalStatus == \"married\", 0, if(line.US.qss == 1, 0, if(line.US.claimsDependants == 0, 0, if(sum(dependants.DEP.hohQualifying) == 0, 0, if(answer.paidHalfOfHome, 1, 0)))))",
+      "source": "Instructions, Head of Household: unmarried, paid over half the cost of keeping up a home, with a qualifying person; it is never worse than Single"
+    },
+    "US.qss": {
+      "label": "Filing status is Qualifying surviving spouse (1 for yes)",
+      "formula": "if(family.maritalStatus == \"widowed\", if(answer.spouseDiedIn2025, 0, if(answer.spouseDiedIn2023Or2024, if(line.US.claimsDependants == 0, 0, if(sum(dependants.DEP.qssChild) == 0, 0, if(answer.paidHalfOfHome, 1, 0))), 0)), 0)",
+      "source": "Instructions, Qualifying Surviving Spouse: spouse died in 2023 or 2024, a dependent child who lived with you all year, and you paid over half the cost of the home"
+    },
+    "US.jointRates": {
+      "label": "Joint return rates, Married filing jointly or Qualifying surviving spouse (1 for yes)",
+      "formula": "if(line.US.joint == 1, 1, line.US.qss)"
     },
     "US.joint": {
       "label": "Filing status is Married filing jointly (1 for yes)",
@@ -233,7 +474,7 @@
     },
     "US.basicStandard": {
       "label": "Standard deduction for the filing status",
-      "formula": "if(line.US.joint == 1, param.standardJoint, if(line.US.single == 1, param.standardSingle, param.standardSeparate))"
+      "formula": "if(line.US.jointRates == 1, param.standardJoint, if(line.US.hoh == 1, param.standardHead, if(line.US.single == 1, param.standardSingle, param.standardSeparate)))"
     },
     "US.dependentStandard": {
       "label": "Standard deduction for someone who can be claimed as a dependent, before line 12d's boxes",
@@ -242,7 +483,7 @@
     },
     "US.standard": {
       "label": "Standard deduction with line 12d's boxes",
-      "formula": "if(line.US.claimable == 1, line.US.dependentStandard, line.US.basicStandard) + line.US.boxes * if(line.US.single == 1, param.additionalUnmarried, param.additionalMarried)"
+      "formula": "if(line.US.claimable == 1, line.US.dependentStandard, line.US.basicStandard) + line.US.boxes * if(line.US.single == 1 or line.US.hoh == 1, param.additionalUnmarried, param.additionalMarried)"
     },
     "F1040.12e": {
       "label": "Standard deduction",
@@ -281,11 +522,11 @@
     },
     "US.tableTax": {
       "label": "Tax from the Tax Table",
-      "formula": "round(if(line.US.joint == 1, bracket(param.bracketsJoint, line.US.tableRow), if(line.US.single == 1, bracket(param.bracketsSingle, line.US.tableRow), bracket(param.bracketsSeparate, line.US.tableRow))), 0)"
+      "formula": "round(if(line.US.jointRates == 1, bracket(param.bracketsJoint, line.US.tableRow), if(line.US.hoh == 1, bracket(param.bracketsHead, line.US.tableRow), if(line.US.single == 1, bracket(param.bracketsSingle, line.US.tableRow), bracket(param.bracketsSeparate, line.US.tableRow)))), 0)"
     },
     "US.worksheetTax": {
       "label": "Tax from the Tax Computation Worksheet",
-      "formula": "round(if(line.US.joint == 1, bracket(param.bracketsJoint, line.F1040.15), if(line.US.single == 1, bracket(param.bracketsSingle, line.F1040.15), bracket(param.bracketsSeparate, line.F1040.15))), 2)"
+      "formula": "round(if(line.US.jointRates == 1, bracket(param.bracketsJoint, line.F1040.15), if(line.US.hoh == 1, bracket(param.bracketsHead, line.F1040.15), if(line.US.single == 1, bracket(param.bracketsSingle, line.F1040.15), bracket(param.bracketsSeparate, line.F1040.15)))), 2)"
     },
     "F1040.16": {
       "label": "Tax",
@@ -293,11 +534,17 @@
       "source": "Instructions, line 16: the Tax Table under $100,000, the Tax Computation Worksheet from $100,000. Line 17 (the alternative minimum tax, Schedule 2 line 3) is 0 here: with only wages, interest and the standard deduction, the tentative minimum tax of Form 6251 stays below this tax"
     },
     "F1040.18": {"label":"Tax and the alternative minimum tax","formula":"line.F1040.16"},
-    "F1040.22": {
-      "label": "Tax after nonrefundable credits",
-      "formula": "line.F1040.18",
-      "source": "Form 1040, line 22: no credit on lines 19 and 20 is worked out yet"
+    "F1040.19": {
+      "label": "Child tax credit and credit for other dependents",
+      "formula": "line.S8812.14",
+      "source": "Schedule 8812, line 14"
     },
+    "F1040.21": {
+      "label": "Total nonrefundable credits",
+      "formula": "line.F1040.19",
+      "source": "Form 1040, lines 19 and 20; no credit on Schedule 3 is worked out yet"
+    },
+    "F1040.22": {"label":"Tax after nonrefundable credits","formula":"max(0, line.F1040.18 - line.F1040.21)"},
     "F8959.1": {
       "label": "Medicare wages and tips",
       "formula": "line.US.ownMedicareWages + if(line.US.joint == 1, spouse.line.US.ownMedicareWages, 0)",
@@ -305,7 +552,8 @@
     },
     "F8959.5": {
       "label": "Threshold for Additional Medicare Tax",
-      "formula": "if(line.US.joint == 1, param.medicareThresholdJoint, if(line.US.single == 1, param.medicareThresholdSingle, param.medicareThresholdSeparate))"
+      "formula": "if(line.US.joint == 1, param.medicareThresholdJoint, if(line.US.separate == 1, param.medicareThresholdSeparate, param.medicareThresholdSingle))",
+      "source": "Instructions, Schedule 2, line 11: $200,000 for single, head of household or qualifying surviving spouse"
     },
     "F8959.7": {
       "label": "Additional Medicare Tax on Medicare wages",
@@ -315,7 +563,8 @@
     "F8960.13": {"label":"Modified adjusted gross income","formula":"line.F1040.11a"},
     "F8960.14": {
       "label": "Threshold for the net investment income tax",
-      "formula": "if(line.US.joint == 1, param.niitThresholdJoint, if(line.US.single == 1, param.niitThresholdSingle, param.niitThresholdSeparate))"
+      "formula": "if(line.US.jointRates == 1, param.niitThresholdJoint, if(line.US.separate == 1, param.niitThresholdSeparate, param.niitThresholdSingle))",
+      "source": "Instructions, Schedule 2, line 12: $250,000 married filing jointly or qualifying surviving spouse; $200,000 single or head of household"
     },
     "F8960.17": {
       "label": "Net investment income tax",
@@ -365,8 +614,14 @@
       "formula": "line.US.ownExcessSocialSecurity + if(line.US.joint == 1, spouse.line.US.ownExcessSocialSecurity, 0)",
       "source": "Instructions, Schedule 3, line 11: figured separately for you and your spouse, then added"
     },
+    "F1040.28": {"label":"Additional child tax credit","formula":"line.S8812.27"},
     "F1040.31": {"label":"Credits and payments from Schedule 3","formula":"line.S3.11"},
-    "F1040.33": {"label":"Total payments","formula":"line.F1040.25d + line.F1040.26 + line.F1040.31"},
+    "F1040.32": {
+      "label": "Other payments and refundable credits",
+      "formula": "line.F1040.28 + line.F1040.31",
+      "source": "Form 1040, line 32: lines 27a (not worked out yet), 28 and 31"
+    },
+    "F1040.33": {"label":"Total payments","formula":"line.F1040.25d + line.F1040.26 + line.F1040.32"},
     "F1040.34": {
       "label": "Refund",
       "formula": "max(0, line.F1040.33 - line.F1040.24)",
@@ -376,15 +631,11 @@
     "RESULT.net": {"label":"Refund, less the amount owed","formula":"line.F1040.34 - line.F1040.37"},
     "SCOPE.return": {
       "label": "Situations this app doesn't handle yet",
-      "formula": "line.SCOPE.residency + line.SCOPE.dependants + line.SCOPE.widowed + line.SCOPE.tips + line.SCOPE.kiddie + line.SCOPE.eic"
+      "formula": "line.SCOPE.residency + line.SCOPE.widowed + line.SCOPE.tips + line.SCOPE.kiddie + line.SCOPE.eic + line.SCOPE.actc"
     },
     "SCOPE.residency": {
       "label": "A nonresident or dual-status alien",
       "formula": "if(person.residentAllYear, 0, unsupported(\"A nonresident or dual-status alien files Form 1040-NR or a dual-status return, which this app doesn't prepare\")) + if(line.US.joint == 1, if(spouse.person.residentAllYear, 0, unsupported(\"Your spouse wasn't a U.S. citizen or resident alien all year: filing jointly then takes an election to treat them as a resident, which this app doesn't handle\")), 0)"
-    },
-    "SCOPE.dependants": {
-      "label": "Dependants",
-      "formula": "if(family.dependants > 0, unsupported(\"Dependants (the child tax credit, head of household and the earned income credit with children) aren't handled by this app yet\"), 0)"
     },
     "SCOPE.widowed": {
       "label": "A spouse who died in 2025",
@@ -403,12 +654,110 @@
       "label": "People on the return 25 to 64 at the end of 2025",
       "formula": "if(person.age >= 25 and person.age < 65, 1, 0) + if(line.US.joint == 1, if(spouse.person.age >= 25 and spouse.person.age < 65, 1, 0), 0)"
     },
+    "US.eicChildren": {
+      "label": "Qualifying children for the earned income credit, as far as this app checks",
+      "formula": "if(line.US.claimsDependants == 0, 0, sum(dependants.DEP.eicChild))"
+    },
+    "US.eicLimit": {
+      "label": "AGI below which the earned income credit may apply",
+      "formula": "if(line.US.eicChildren == 0, if(line.US.joint == 1, param.eicNoChildLimitJoint, param.eicNoChildLimit), if(line.US.eicChildren == 1, if(line.US.joint == 1, param.eicLimitOneChildJoint, param.eicLimitOneChild), if(line.US.eicChildren == 2, if(line.US.joint == 1, param.eicLimitTwoChildrenJoint, param.eicLimitTwoChildren), if(line.US.joint == 1, param.eicLimitThreeChildrenJoint, param.eicLimitThreeChildren))))"
+    },
     "SCOPE.eic": {
-      "label": "The earned income credit without a qualifying child",
-      "formula": "if(line.US.separate == 1, 0, if(line.US.claimable == 0 and line.US.eicAge > 0 and line.F1040.1z > 0 and line.F1040.11a < if(line.US.joint == 1, param.eicNoChildLimitJoint, param.eicNoChildLimit) and line.F1040.2a + line.F1040.2b <= param.eicInvestmentLimit, unsupported(\"You may get the earned income credit, which this app doesn't work out yet (Form 1040, line 27a)\"), 0))"
+      "label": "The earned income credit",
+      "formula": "if(line.US.separate == 1, 0, if((line.US.eicChildren > 0 or (line.US.claimable == 0 and line.US.eicAge > 0)) and line.F1040.1z > 0 and line.F1040.11a < line.US.eicLimit and line.F1040.2a + line.F1040.2b <= param.eicInvestmentLimit, unsupported(\"You may get the earned income credit, which this app doesn't work out yet (Form 1040, line 27a)\"), 0))"
     }
   },
   "questions": {
+    "relationship": {
+      "type": "choice",
+      "ask": "Their relationship to you",
+      "module": "about",
+      "dependant": true,
+      "optionLabels": {
+        "child": "Son, daughter, stepchild or adopted child",
+        "foster": "Foster child placed with you",
+        "sibling": "Brother, sister, half or step sibling",
+        "descendant": "Grandchild, niece or nephew",
+        "parent": "Parent, grandparent or stepparent",
+        "relative": "Other relative (aunt, uncle, in-law)",
+        "none": "Not related, lived with you all year"
+      },
+      "options": ["child","foster","sibling","descendant","parent","relative","none"]
+    },
+    "monthsWithYou": {
+      "type": "count",
+      "ask": "Months they lived with you in 2025",
+      "module": "about",
+      "help": "Count time away at school, in hospital or on vacation as time with you. For a child born or who died in 2025, count the months they were alive.",
+      "dependant": true,
+      "max": 12
+    },
+    "fullTimeStudent": {"type":"boolean","ask":"A full-time student in at least 5 months of 2025","module":"about","dependant":true},
+    "disabled": {"type":"boolean","ask":"Permanently and totally disabled","module":"about","dependant":true},
+    "paidOwnSupport": {
+      "type": "boolean",
+      "ask": "Paid over half of their own support in 2025",
+      "module": "about",
+      "dependant": true,
+      "default": false
+    },
+    "filedJointReturn": {
+      "type": "boolean",
+      "ask": "Files a joint return for 2025",
+      "module": "about",
+      "help": "Answer no if they file jointly only to get back tax withheld.",
+      "dependant": true,
+      "default": false
+    },
+    "citizenOrResident": {
+      "type": "boolean",
+      "ask": "A U.S. citizen, U.S. national or U.S. resident alien",
+      "module": "about",
+      "dependant": true,
+      "default": true
+    },
+    "grossIncome": {
+      "type": "money",
+      "ask": "Their gross income in 2025",
+      "module": "about",
+      "help": "Income that isn't exempt from tax, such as wages and interest; not social security benefits.",
+      "dependant": true
+    },
+    "supportedByYou": {"type":"boolean","ask":"You paid over half of their support in 2025","module":"about","dependant":true},
+    "hasSSN": {
+      "type": "boolean",
+      "ask": "Has a social security number valid for employment",
+      "module": "about",
+      "help": "Issued by the due date of the return. The child tax credit needs one; without it, the credit for other dependents may apply.",
+      "dependant": true
+    },
+    "claimedBy": {
+      "type": "choice",
+      "ask": "Claimed on whose return",
+      "module": "about",
+      "help": "Filing separately, each dependant is claimed on one spouse's return.",
+      "dependant": true,
+      "optionLabels": {"self":"Yours","spouse":"Your spouse's"},
+      "options": ["self","spouse"]
+    },
+    "hasValidSSN": {
+      "type": "boolean",
+      "ask": "You have a social security number valid for employment",
+      "module": "about",
+      "help": "From 2025 the child tax credit needs one, issued by the due date of the return. Filing jointly, one spouse's is enough."
+    },
+    "paidHalfOfHome": {
+      "type": "boolean",
+      "ask": "You paid over half the cost of keeping up your home in 2025",
+      "module": "about",
+      "help": "Rent or mortgage interest, property tax, utilities, repairs and food eaten at home. Head of household and qualifying surviving spouse need it."
+    },
+    "spouseDiedIn2023Or2024": {
+      "type": "boolean",
+      "ask": "Your spouse died in 2023 or 2024",
+      "module": "about",
+      "help": "With a dependent child who lived with you all year, you may file as a qualifying surviving spouse."
+    },
     "canBeClaimed": {
       "type": "boolean",
       "ask": "Someone can claim you as a dependent",
@@ -513,5 +862,5 @@
   "outcome": "RESULT.net",
   "balances": [{"name":"Federal","refund":"F1040.34","owing":"F1040.37"}],
   "residency": "A U.S. citizen or resident alien all year",
-  "version": "4dd32fbeb64f5377"
+  "version": "1016aa9fab82f10a"
 }

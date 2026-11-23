@@ -1,0 +1,99 @@
+{
+  "about": "Head of household with children of 8 and 4, over the earned income credit's limit: the Tax Table's head of household column, the child tax credits limited to the tax, and the rest as additional child tax credit",
+  "input": {
+    "country": "us",
+    "year": 2025,
+    "people": [
+      {
+        "id": "p1",
+        "name": "Morgan Diaz",
+        "role": "self",
+        "birthDate": "1988-03-03",
+        "province": null,
+        "residentAllYear": true
+      }
+    ],
+    "family": {
+      "maritalStatus": "single",
+      "dependants": [
+        {
+          "id": "d1",
+          "name": "Ava Diaz",
+          "birthDate": "2017-05-05",
+          "answers": {
+            "relationship": "child",
+            "monthsWithYou": "12",
+            "hasSSN": true,
+            "paidOwnSupport": false,
+            "filedJointReturn": false,
+            "citizenOrResident": true
+          }
+        },
+        {
+          "id": "d2",
+          "name": "Ben Diaz",
+          "birthDate": "2021-02-02",
+          "answers": {
+            "relationship": "child",
+            "monthsWithYou": "12",
+            "hasSSN": true,
+            "paidOwnSupport": false,
+            "filedJointReturn": false,
+            "citizenOrResident": true
+          }
+        }
+      ]
+    },
+    "answers": {
+      "p1": {
+        "hasWages": true,
+        "hasInterest": false,
+        "hasTipsOrOvertime": false,
+        "canBeClaimed": false,
+        "isBlind": false,
+        "estimatedPayments": "0",
+        "paidHalfOfHome": true,
+        "hasValidSSN": true
+      }
+    },
+    "slips": [
+      {
+        "id": "p1-w2-0",
+        "person": "p1",
+        "type": "W2",
+        "issuer": "City Clinic",
+        "boxes": {
+          "1": "58000",
+          "2": "1500",
+          "4": "3596",
+          "5": "58000",
+          "6": "841"
+        }
+      }
+    ]
+  },
+  "expected": {
+    "p1": {
+      "F1040.19": "3785",
+      "F1040.28": "615",
+      "S8812.12": "4400",
+      "F1040.1a": "58000",
+      "F1040.2a": "0",
+      "F1040.2b": "0",
+      "F1040.9": "58000",
+      "F1040.11a": "58000",
+      "F1040.12e": "23625",
+      "F1040.13b": "0",
+      "F1040.15": "34375",
+      "F1040.16": "3785",
+      "F8959.7": "0",
+      "F8960.17": "0",
+      "F1040.24": "0",
+      "F1040.25c": "0",
+      "S3.11": "0",
+      "F1040.33": "2115",
+      "F1040.34": "2115",
+      "F1040.37": "0"
+    }
+  }
+}

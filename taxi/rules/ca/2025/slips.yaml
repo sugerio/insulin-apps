@@ -1,0 +1,338 @@
+# Slip types: what each one is, for the screens and for AI reading, and its boxes as printed. `informational` boxes
+# never change a return; `counts` boxes hold a number (months), not money. Any other box no formula reads is kept on the slip and, unless it holds 0, shown as not handled by this app.
+
+slips:
+  T4:
+    title: T4 Statement of Remuneration Paid
+    about: Employment income an employer paid, and the tax, CPP or QPP, EI, PPIP and dues it withheld
+    boxes:
+      14: Employment income
+      16: Employee's CPP contributions
+      16A: Employee's second CPP contributions
+      17: Employee's QPP contributions
+      17A: Employee's second QPP contributions
+      18: Employee's EI premiums
+      20: RPP contributions
+      22: Income tax deducted
+      24: EI insurable earnings
+      26: CPP pensionable earnings
+      39: Security options deduction under 110(1)(d)
+      41: Security options deduction under 110(1)(d.1)
+      42: Employment commissions
+      43: Canadian Armed Forces personnel and police deduction
+      44: Union dues
+      46: Charitable donations
+      52: Pension adjustment
+      55: Employee's PPIP premiums
+      56: PPIP insurable earnings
+    informational: [52]   # for next year's RRSP limit
+
+  T5:
+    title: T5 Statement of Investment Income
+    about: Interest, dividends and capital gains dividends from a bank, broker or corporation
+    boxes:
+      10: Actual amount of dividends other than eligible dividends
+      11: Taxable amount of dividends other than eligible dividends
+      12: Dividend tax credit for dividends other than eligible dividends
+      13: Interest from Canadian sources
+      14: Other income from Canadian sources   # 14 to 17: no formula reads them, so an amount in them says so
+      15: Foreign income
+      16: Foreign tax paid
+      17: Royalties from Canadian sources
+      18: Capital gains dividends
+      24: Actual amount of eligible dividends
+      25: Taxable amount of eligible dividends
+      26: Dividend tax credit for eligible dividends
+    informational: [10, 24]   # the actual amounts; the return uses the taxable amounts
+
+  T3:
+    title: T3 Statement of Trust Income Allocations and Designations
+    about: Income a trust or mutual fund allocated to you, such as capital gains, dividends and other income
+    boxes:
+      21: Capital gains
+      23: Actual amount of dividends other than eligible dividends
+      25: Foreign non-business income
+      26: Other income
+      32: Taxable amount of dividends other than eligible dividends
+      38: Part XII.2 tax credit
+      39: Dividend tax credit for dividends other than eligible dividends
+      49: Actual amount of eligible dividends
+      50: Taxable amount of eligible dividends
+      51: Dividend tax credit for eligible dividends
+    informational: [23, 49]
+
+  T5008:
+    title: T5008 Statement of Securities Transactions
+    about: A sale of shares, bonds or fund units through a broker, with the proceeds and, when the broker knows it, the cost
+    boxes:
+      20: Cost or book value
+      21: Proceeds of disposition or settlement amount
+
+  T2202:
+    title: T2202 Tuition and Enrolment Certificate
+    about: Eligible tuition fees a college or university received, and the months of study
+    boxes:
+      24: Number of months part-time
+      25: Number of months full-time
+      26: Eligible tuition fees
+    counts: [24, 25]       # months, not dollars; some provinces' education amounts count them
+
+  # Pensions and government benefits. An id is a name formulas can use; `name` is how the slip is printed.
+  T4AOAS:
+    name: T4A(OAS)
+    title: T4A(OAS) Statement of Old Age Security
+    about: Old Age Security pension paid in the year by Service Canada, and the tax deducted from it
+    boxes:
+      18: Taxable pension paid
+      19: Gross pension paid
+      20: Overpayment recovered
+      21: Net supplements paid
+      22: Income tax deducted
+    informational: [19]          # 18 is the taxable part of it
+  T4AP:
+    name: T4A(P)
+    title: T4A(P) Statement of Canada Pension Plan Benefits
+    about: Canada Pension Plan benefits paid in the year (retirement, survivor, disability), and the tax deducted from them
+    boxes:
+      14: Retirement benefit
+      15: Survivor benefit
+      16: Disability benefit
+      17: Child benefit
+      18: Death benefit
+      20: Taxable CPP benefits
+      22: Income tax deducted
+    informational: [14, 15, 16, 17, 18]   # parts of box 20, which holds the taxable total
+  T4A:
+    title: T4A Statement of Pension, Retirement, Annuity, and Other Income
+    about: A workplace pension, an annuity, a scholarship or bursary, an RDSP payment or other income from a payer, and the tax deducted from it
+    boxes:
+      "016": Pension or superannuation
+      "018": Lump-sum payments
+      "020": Self-employed commissions
+      "022": Income tax deducted
+      "024": Annuities
+      "028": Other income
+      "048": Fees for services                  # no formula reads it, so an amount in it says so
+      "105": Scholarships, bursaries, fellowships, artists' project grants and prizes
+      "131": Registered disability savings plan
+  T4RIF:
+    title: T4RIF Statement of Income from a Registered Retirement Income Fund
+    about: Payments from a registered retirement income fund (RRIF), and the tax deducted from them
+    boxes:
+      16: Taxable amounts
+      18: Amounts deemed received on death
+      24: Excess amount
+      28: Income tax deducted
+  T4RSP:
+    title: T4RSP Statement of RRSP Income
+    about: Withdrawals and other income from a registered retirement savings plan (RRSP), and the tax deducted from them
+    boxes:
+      16: Annuity payments
+      18: Refund of premiums
+      20: Refund of excess contributions
+      22: Withdrawal and commutation payments
+      25: Lifelong Learning Plan withdrawal
+      26: Amounts deemed received on deregistration
+      27: Home Buyers' Plan withdrawal
+      28: Other income or deductions
+      30: Income tax deducted
+      34: Amounts deemed received on death
+    informational: [25, 27]   # withdrawals under the two plans aren't income; repaying them isn't handled yet
+  T4FHSA:
+    title: T4FHSA First Home Savings Account Statement
+    about: Contributions to and withdrawals from a first home savings account (FHSA) in the year, and the tax deducted from them
+    boxes:
+      18: Contributions
+      20: Qualifying withdrawals
+      22: Taxable withdrawals
+      24: FHSA beneficiary distributions received
+      26: Amount deemed received on FHSA cessation
+      30: Income tax deducted
+      32: RRSP transfers in
+      34: Spousal RRSP transfers in
+    informational: [20, 32, 34]   # a withdrawal for a first home isn't income; a transfer from an RRSP isn't deductible
+  T5007:
+    title: T5007 Statement of Benefits
+    about: Workers' compensation benefits or social assistance payments received in the year
+    boxes:
+      10: Workers' compensation benefits
+      11: Social assistance payments
+  RC210:
+    title: RC210 Advanced Canada Workers Benefit Statement
+    about: The Canada workers benefit paid in advance during the year, by the CRA
+    boxes:
+      10: Basic advanced Canada workers benefit
+      11: Advanced Canada workers benefit disability supplement
+  T4E:
+    title: T4E Statement of Employment Insurance and Other Benefits
+    about: Employment insurance benefits paid in the year, and the tax deducted from them
+    boxes:
+      7: Repayment rate
+      14: Total benefits paid
+      15: Regular and other benefits paid
+      22: Income tax deducted
+      30: Total repayment
+    counts: [7]                  # a rate, not dollars
+
+  # Quebec RL slips (Revenu Québec relevés), which a payer in Quebec issues besides the federal T-slip. The TP-1 reads
+  # them; the federal return reads the T-slips. A box is keyed by its letter as printed, with an underscore for the
+  # point or dash of a sub-box (box B.A is B_A, box D-1 would be D_1), since a formula names a box as RL1.boxB_A. Box C
+  # of the RL-2 is split by the source of income printed beside it: C_QPP for QPP benefits (source RRQ), C for the rest.
+  RL1:
+    name: RL-1
+    title: RL-1 slip, Employment and Other Income (Revenu Québec)
+    about: >-
+      Employment income an employer in Quebec paid, with the Quebec tax, QPP contributions, QPIP premium and dues it
+      withheld. Issued with the employer's T4; boxes are letters (A, B.A, B.B, C …) and some numbers (201, 211, 235)
+    boxes:
+      A: Employment income before source deductions
+      B_A: QPP contribution (box B.A)
+      B_B: Additional QPP contribution (box B.B)
+      C: Employment Insurance premium
+      D: Registered pension plan (RPP) contribution
+      E: Québec income tax withheld at source
+      F: Union dues
+      G: Pensionable salary or wages under the QPP
+      H: QPIP premium
+      I: Eligible salary or wages under the QPIP
+      J: Amount paid by the employer to a private health services plan
+      L: Other benefits
+      M: Commissions included in box A or box R
+      N: Charitable donations and gifts
+      "201": Allowance for childcare expenses
+      "211": Benefit related to previous employment
+      "235": Premium paid to a private health services plan
+    informational: [C, L, M]   # C is on the federal return (T4 box 18); L and M are already in box A
+  RL2:
+    name: RL-2
+    title: RL-2 slip, Retirement and Annuity Income (Revenu Québec)
+    about: >-
+      Pension, RRSP, RRIF and annuity payments, and QPP benefits from Retraite Québec, with the Quebec tax withheld.
+      Box C holds other payments: when the source of income printed on the slip ("Provenance des revenus") is RRQ, they
+      are QPP benefits, reported as C_QPP; any other source, as C
+    boxes:
+      A: Payments from a registered pension plan (RPP)
+      B: Payments from an RRSP, a RRIF, a DPSP, a PRPP or a VRSP, or annuities
+      C: Other payments (box C, a source other than RRQ)
+      C_QPP: QPP benefits (box C, source RRQ)
+      J: Québec income tax withheld at source
+      "210": Charitable donations
+      "235": Premium paid to a private health services plan
+  RL3:
+    name: RL-3
+    title: RL-3 slip, Investment Income (Revenu Québec)
+    about: Interest, dividends and capital gains dividends from a bank, broker or corporation, issued with the T5
+    boxes:
+      A1: Actual amount of eligible dividends
+      A2: Actual amount of ordinary dividends
+      B: Taxable amount of eligible and ordinary dividends
+      C: Dividend tax credit
+      D: Interest from Canadian sources
+      E: Other income from Canadian sources
+      F: Gross foreign investment income
+      I: Capital gains dividends
+  RL5:
+    name: RL-5
+    title: RL-5 slip, Benefits and Indemnities (Revenu Québec)
+    about: Social assistance and similar financial assistance paid by the Quebec government, issued with the T5007
+    boxes:
+      A: Social assistance payments
+      B: Other government financial assistance similar to social assistance
+      J: Allowance for childcare expenses
+  RL6:
+    name: RL-6
+    title: RL-6 slip, Québec Parental Insurance Plan Benefits (Revenu Québec)
+    about: Maternity, paternity, parental and adoption benefits paid under the Québec parental insurance plan (QPIP)
+    boxes:
+      A: Maternity, paternity, parental and adoption benefits
+      G: Québec income tax withheld at source
+  RL8:
+    name: RL-8
+    title: RL-8 slip, Amount for Post-Secondary Studies (Revenu Québec)
+    about: Tuition or examination fees a college or university in Quebec received, issued with the T2202
+    boxes:
+      A: Amount for post-secondary studies
+      B: Tuition or examination fees
+      C: Charitable donations
+    informational: [A]   # a student transfers it to a parent on Schedule S, which the parent's return enters
+  RL16:
+    name: RL-16
+    title: RL-16 slip, Trust Income (Revenu Québec)
+    about: Income a trust or mutual fund allocated to you, such as capital gains, dividends and other income, issued with the T3
+    boxes:
+      A: Capital gains
+      C1: Actual amount of eligible dividends
+      C2: Actual amount of ordinary dividends
+      E: Foreign business income
+      F: Foreign investment income
+      G: Other income
+      I: Taxable amount of eligible and ordinary dividends
+      J: Dividend tax credit
+  RL19:
+    name: RL-19
+    title: RL-19 slip, Advance Payments of Tax Credits (Revenu Québec)
+    about: Quebec tax credits paid in advance during the year, such as the work premium, childcare or home-support credits
+    boxes:
+      A: Advance payments of the work premium or adapted work premium
+      B: Advance payments of the supplement to the work premium
+      C: Advance payments of the tax credit for childcare expenses
+      D: Advance payments of the tax credit for home-support services for seniors
+      G: Advance payments of the tax credit for the treatment of infertility
+      H: Advance payments of the tax credit for caregivers
+  RL24:
+    name: RL-24
+    title: RL-24 slip, Childcare Expenses (Revenu Québec)
+    about: Childcare expenses paid to a daycare or childcare provider in Quebec, one slip for each child
+    boxes:
+      C: Total childcare expenses paid
+      D: Childcare expenses that do not qualify for the tax credit
+      E: Childcare expenses that qualify for the tax credit
+    informational: [C, D]   # E is the part that counts
+  RL31:
+    name: RL-31
+    title: RL-31 slip, Information About a Leased Dwelling (Revenu Québec)
+    about: >-
+      From the landlord of the home you rented on December 31, for the solidarity tax credit (Schedule D). Only box B,
+      a number of people, is read; the dwelling number (box A) and the address are copied onto Schedule D by hand
+    boxes:
+      B: Total number of tenants and subtenants who signed the lease
+    counts: [B]
+
+  # Receipts and notices: amounts with no box number printed beside them. The numbers below are this app's, so the
+  # amounts can be read and stored like a slip's boxes.
+  RRSP:
+    title: RRSP contribution receipt
+    about: Contributions to a registered retirement savings plan, from the plan's issuer, for March 4, 2025 to March 2, 2026 (contributions from January 1 to March 3, 2025 belong to the 2024 return)
+    receipt: true
+    printedYears: [0, 1]
+    boxes:
+      1: Contributions from March 4 to December 31, 2025
+      2: Contributions from January 1 to March 2, 2026
+  DONATION:
+    title: Official donation receipt
+    about: A receipt for income tax purposes from a registered charity or other qualified donee, for a gift made in 2025
+    receipt: true
+    boxes:
+      1: Eligible amount of the gift
+  CHILDCARE:
+    title: Child care receipt
+    about: A receipt from a daycare, day camp, school program or caregiver for looking after a child in 2025
+    receipt: true
+    boxes:
+      1: Amount paid
+  MEDICAL:
+    title: Medical expense receipt
+    about: A receipt for medical or dental care, prescriptions or devices paid for in 2025, for you, your spouse or your children
+    receipt: true
+    boxes:
+      1: Amount paid
+  NOA:
+    title: Notice of assessment for 2024
+    about: The CRA's notice of assessment for last year's (2024) return, which carries the RRSP deduction limit and the amounts to carry forward to 2025
+    receipt: true
+    printedYears: [-1]
+    boxes:
+      1: RRSP deduction limit for 2025
+      2: Unused RRSP contributions available to deduct for 2025
+      3: Unused federal tuition, education and textbook amounts available for 2025
+      4: Canada training credit limit for 2025

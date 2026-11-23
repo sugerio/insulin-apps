@@ -1,0 +1,312 @@
+# Alberta tax: Form AB428 and Schedule AB(S2). Line ids are the line numbers in the form's right margin. Every number
+# below was checked against the 2025 AB428 (5009-C), Worksheet AB428 (5009-D), AB(S2) (5009-S2) and the Alberta tax
+# information page (5009-PC). For 2025 Alberta added an 8% bracket and a supplemental tax credit that keeps credit
+# amounts above $60,000 at 10%. Alberta has no Form AB479: the 2025 Alberta package has only the AB428, its worksheet,
+# AB(S2) and AB(S11).
+
+params:
+  abTaxBrackets:
+    label: Alberta tax brackets
+    source: "AB428 Part A, bases as printed on the form"
+    value:
+      - { upTo: 60000, rate: 8%, base: 0 }
+      - { upTo: 151234, rate: 10%, base: 4800 }
+      - { upTo: 181481, rate: 12%, base: 13923.40 }
+      - { upTo: 241974, rate: 13%, base: 17553.04 }
+      - { upTo: 362961, rate: 14%, base: 25417.13 }
+      - { rate: 15%, base: 42355.31 }
+  abCreditRate:
+    label: Alberta credit rate
+    source: "AB428 line 53: 8%"
+    value: 8%
+  abBasicPersonalAmount:
+    label: Alberta basic personal amount
+    source: "AB428 line 58040: claim $22,323"
+    value: 22323
+  abAgeAmountMax:
+    label: Alberta age amount, full
+    source: "Worksheet AB428, line 58080: $6,221"
+    value: 6221
+  abAgeAmountThreshold:
+    label: Net income where the Alberta age amount starts to go down
+    source: "Worksheet AB428, line 58080: income threshold"
+    value: 46308
+  abAgeAmountRate:
+    label: Alberta age amount reduction rate
+    source: "Worksheet AB428, line 58080: applicable rate"
+    value: 15%
+  abSpouseBase:
+    label: Alberta spouse and eligible dependant amount, base
+    source: "AB428 lines 18 and 21: $22,323"
+    value: 22323
+  abMedicalThresholdMax:
+    label: Alberta medical expense threshold, most
+    source: "AB428 line 48: whichever is less, $2,884 or 3% of net income"
+    value: 2884
+  abDonationLowRate:
+    label: Alberta donation credit rate on the first $200
+    source: "AB428 line 55: 60%"
+    value: 60%
+  abDonationHighRate:
+    label: Alberta donation credit rate above $200
+    source: "AB428 line 56: 21%"
+    value: 21%
+  abDividendEligibleRate:
+    label: Alberta dividend tax credit rate, eligible dividends
+    source: "Worksheet AB428, line 61520: 8.12% of the taxable amount"
+    value: 8.12%
+  abDividendOtherRate:
+    label: Alberta dividend tax credit rate, other dividends
+    source: "Worksheet AB428, line 61520: 2.18% of the taxable amount"
+    value: 2.18%
+  abSupplementalBase:
+    label: Alberta supplemental tax credit, base amount
+    source: "Worksheet AB428, line 61545, line 6: $4,800"
+    value: 4800
+  abSupplementalRate:
+    label: Alberta supplemental tax credit rate
+    source: "Worksheet AB428, line 61545, line 8: 25%"
+    value: 25%
+  abFirstBracketTop:
+    label: Top of the lowest Alberta tax bracket
+    source: "AB(S2) line 5: $60,000"
+    value: 60000
+  abPensionAmountMax:
+    label: Most Alberta pension income amount
+    source: "AB428 line 34 (58360): maximum $1,719"
+    value: 1719
+  abInfirmDependantBase:
+    label: Alberta amount for infirm dependants age 18 or older, base
+    source: "Worksheet AB428, line 58200, line 1: $21,458"
+    value: 21458
+  abCaregiverBase:
+    label: Alberta caregiver amount, base
+    source: "Worksheet AB428, line 58400, line 1: $33,467"
+    value: 33467
+  abCaregiverMax:
+    label: Most Alberta infirm dependant or caregiver amount for one dependant
+    source: "Worksheet AB428, lines 58200 and 58400, line 3: maximum $12,922 per dependant"
+    value: 12922
+  abAdoptionMax:
+    label: Most Alberta adoption expenses for each child
+    source: "Alberta tax information (5009-PC), line 58330: up to $19,354 for each child"
+    value: 19354
+  abDisabilityAmount:
+    label: Alberta disability amount
+    source: "AB428 line 37 (58440) and Worksheet AB428, line 58480, line 1: $17,219"
+    value: 17219
+  abDisabilitySupplementMax:
+    label: Alberta disability supplement for a person under 18
+    source: "Worksheet AB428, lines 58440 and 58480, line 2: $12,922"
+    value: 12922
+  abDisabilityCareThreshold:
+    label: Child care and attendant care that the Alberta disability supplement allows
+    source: "Worksheet AB428, lines 58440 and 58480, line 4: $3,524"
+    value: 3524
+  abPoliticalCreditRates:
+    label: Alberta political contributions tax credit
+    source: "Worksheet AB428, line 72: 75% of the first $200, 50% of the next $900 and 33.33% of the rest"
+    value:
+      - { upTo: 200, rate: 75%, base: 0 }
+      - { upTo: 1100, rate: 50%, base: 150 }
+      - { rate: 33.33%, base: 600 }
+  abPoliticalCreditMaxContributions:
+    label: Alberta political contributions above which the credit is the most
+    source: "Worksheet AB428, line 72: more than $2,300"
+    value: 2300
+  abPoliticalCreditMax:
+    label: Most Alberta political contributions tax credit
+    source: "AB428 line 72: maximum $1,000"
+    value: 1000
+
+lines:
+  # Part A – Alberta tax on taxable income
+  AB428.8:
+    label: Alberta tax on taxable income
+    formula: "round(bracket(param.abTaxBrackets, line.T1.26000), 2)"
+
+  # Part B – Alberta non-refundable tax credits
+  AB428.16:
+    label: Alberta basic personal amount
+    formula: >-
+      round((param.abBasicPersonalAmount) * line.RES.factor, 2)
+
+  AB428.17:
+    label: Alberta age amount
+    formula: >-
+      if(person.age >= 65, max(0, round(param.abAgeAmountMax * line.RES.factor, 2)
+      - round(max(0, line.T1.23600 - round(param.abAgeAmountThreshold * line.RES.factor, 2)) * param.abAgeAmountRate, 2)), 0)
+    source: "Worksheet AB428, line 58080: for people born in 1960 or earlier, $6,221 less 15% of net income over $46,308 (both amounts prorated for a part-year resident: canada.ca, Completing your return for newcomers, Example 2)"
+  # For a part-year resident, the base is prorated, and then the net income is subtracted, not prorated (canada.ca,
+  # completing a return for newcomers, Example 3 for line 30300).
+  AB428.20:
+    label: Alberta spouse or common-law partner amount
+    formula: >-
+      round(if(line.HH.partner == 1, max(0, round(param.abSpouseBase * line.RES.factor, 2) - line.HH.spouseIncomeForCredits), 0), 2)
+
+  AB428.23:
+    label: Alberta amount for an eligible dependant
+    formula: >-
+      round(if(line.HH.partner == 0 and family.childrenUnder18 > 0, max(0, round(param.abSpouseBase * line.RES.factor, 2) - answer.dependantNetIncome), 0), 2)
+    source: "AB428 lines 21 to 23: the base minus their net income"
+  # Lines 24 and 35: Alberta kept the infirm dependant and caregiver amounts that the Canada caregiver amount replaced
+  # federally. A dependant who lived in your home gets the caregiver amount, one who didn't the infirm dependant amount;
+  # never both for the same dependant (5009-PC). Federal line 30450 refuses more than one adult dependant, so these read
+  # one. The app's eligible dependant (line 23) is a child under 18, so line 4 of the worksheet is zero.
+  AB428.24:
+    label: Alberta amount for infirm dependants age 18 or older
+    formula: >-
+      if(answer.hasInfirmDependant, if(answer.infirmDependants == 1, if(answer.infirmDependantHome == "elsewhere",
+      min(round(param.abCaregiverMax * line.RES.factor, 2), max(0, round(param.abInfirmDependantBase * line.RES.factor, 2) - answer.infirmDependantIncome)), 0), 0), 0)
+    source: "Worksheet AB428, line 58200: $21,458 less the dependant's net income, up to $12,922 (both prorated for a part-year resident before the income comes off)"
+  AB428.25:
+    label: Alberta basic, age, spouse and dependant amounts
+    formula: "line.AB428.16 + line.AB428.17 + line.AB428.20 + line.AB428.23 + line.AB428.24"
+    source: "AB428 line 25: lines 16, 17, 20, 23 and 24"
+  AB428.31:
+    label: Alberta adoption expenses
+    formula: >-
+      if(answer.hasAdoption, if(answer.adoptedChildren > 1 and answer.adoptionExpenses > param.abAdoptionMax,
+      unsupported("Alberta adoption expenses over $19,354 for more than one child are claimed child by child, which this app doesn't handle yet"),
+      min(answer.adoptionExpenses, param.abAdoptionMax)), 0)
+    source: "AB428 line 31 (58330) and 5009-PC: the line 31300 expenses, up to $19,354 for each child"
+  AB428.32:
+    label: CPP, EI and adoption credit amounts
+    formula: "line.T1.30800 + line.T1.31000 + line.T1.31200 + line.AB428.31"
+    source: "AB428 lines 27 to 32: lines 30800, 31000 and 31200 of your return, and adoption expenses. Line 31217 (EI on self-employment) isn't handled"
+  AB428.33:
+    label: Alberta credit amounts so far
+    formula: "line.AB428.25 + line.AB428.32"
+    source: "AB428 line 33: line 26 (line 25) plus line 32"
+  AB428.34:
+    label: Alberta pension income amount
+    formula: "min(param.abPensionAmountMax, line.PEN.creditBase)"
+    source: "AB428 line 34 (58360): eligible pension income, up to $1,719"
+  AB428.35:
+    label: Alberta caregiver amount
+    formula: >-
+      if(answer.hasInfirmDependant, if(answer.infirmDependants == 1, if(answer.infirmDependantHome == "with_you",
+      min(round(param.abCaregiverMax * line.RES.factor, 2), max(0, round(param.abCaregiverBase * line.RES.factor, 2) - answer.infirmDependantIncome)), 0), 0), 0)
+    source: "Worksheet AB428, line 58400: $33,467 less the dependant's net income, up to $12,922 (both prorated for a part-year resident before the income comes off), for a dependant who lived with you"
+  AB428.36:
+    label: Alberta credit amounts with pension and caregiver amounts
+    formula: "line.AB428.33 + line.AB428.34 + line.AB428.35"
+    source: "AB428 line 36: lines 33 to 35"
+  AB428.37:
+    label: Alberta disability amount for self
+    formula: >-
+      round((if(answer.hasDisability, param.abDisabilityAmount, 0)) * line.RES.factor, 2)
+    source: "AB428 line 37 (58440): $17,219 at 18 or older, with an approved Form T2201"
+  AB428.38:
+    label: Alberta disability amount transferred from a dependant
+    formula: >-
+      round((if(answer.hasDisabledDependant, if(answer.disabledChildren > 1 and answer.disabledChildCare > 0, unsupported("Child care for more than one child with a disability is worked out child by child, which this app doesn't handle yet"), answer.disabledChildren * (param.abDisabilityAmount + param.abDisabilitySupplementMax) - min(answer.disabledChildren * param.abDisabilitySupplementMax, max(0, answer.disabledChildCare - param.abDisabilityCareThreshold)) + answer.disabledAdults * param.abDisabilityAmount), 0)) * line.RES.factor, 2)
+    source: "Worksheet AB428, line 58480: $17,219, plus up to $12,922 for a child under 18, less care over $3,524. The app assumes the dependant had no income, so lines 8 to 11 don't limit it"
+  AB428.39:
+    label: Alberta credit amounts with disability amounts
+    formula: "line.AB428.36 + line.AB428.37 + line.AB428.38"
+    source: "AB428 line 39: lines 36 to 38"
+  AB428.40:
+    label: Interest paid on your student loans
+    formula: "line.T1.31900"
+    source: "AB428 line 40 (58520): line 31900 of your return"
+  AB428.42:
+    label: Amounts transferred from your spouse or common-law partner
+    formula: "if(line.HH.partner == 1 and family.partnerInYear, if(line.ABS2.4 == 0, 0, round(line.ABS2.11 * line.RES.factor, 2)), 0)"
+    source: >-
+      Schedule AB(S2): their unused Alberta age, pension income and disability amounts. Prorated for a part-year
+      resident (RC4018, Appendix K: line 58640); the schedule shows the whole transfer
+  AB428.43:
+    label: Alberta credit amounts before medical expenses
+    formula: "line.AB428.39 + line.AB428.40 + line.AB428.42"
+    source: "AB428 line 43: lines 39 to 42. Unused Alberta tuition (line 41, Schedule AB(S11)) isn't handled"
+  AB428.49:
+    label: Allowable medical expenses
+    formula: "max(0, line.T1.33099 - min(param.abMedicalThresholdMax, round(line.T1.23600 * param.medicalThresholdRate, 2)))"
+    source: "AB428 lines 44 to 49: expenses over whichever is less, $2,884 or 3% of net income"
+  AB428.50:
+    label: Allowable amount of medical expenses for other dependants
+    formula: >-
+      if(answer.hasOtherDependantMedical, max(0, answer.otherDependantMedical
+      - min(param.abMedicalThresholdMax, round(answer.otherDependantIncome * param.medicalThresholdRate, 2))), 0)
+    source: "Worksheet AB428, line 58729: their expenses over line 48 of their AB428 (whichever is less, $2,884 or 3% of their net income)"
+  AB428.51:
+    label: Alberta medical expense amounts
+    formula: "line.AB428.49 + line.AB428.50"
+    source: "AB428 line 51 (58769): line 49 plus line 50"
+  AB428.52:
+    label: Alberta credit amounts
+    formula: "line.AB428.43 + line.AB428.51"
+    source: "AB428 line 52 (58800): line 43 plus line 51"
+  AB428.54:
+    label: Alberta credit amounts at the credit rate
+    formula: "round(line.AB428.52 * param.abCreditRate, 2)"
+  AB428.57:
+    label: Alberta donations credit
+    formula: "round(line.S9.13 * param.abDonationLowRate, 2) + round(line.S9.14 * param.abDonationHighRate, 2)"
+    source: "AB428 lines 55 to 57: Schedule 9 lines 13 and 14 at 60% and 21%"
+  AB428.58:
+    label: Alberta non-refundable tax credits
+    formula: "line.AB428.54 + line.AB428.57"
+
+  # Part C – Alberta tax
+  AB428.63:
+    label: Alberta dividend tax credit
+    formula: "round(line.T1.12010 * param.abDividendOtherRate, 2) + round((line.T1.12000 - line.T1.12010) * param.abDividendEligibleRate, 2)"
+    source: "Worksheet AB428, line 61520"
+  AB428.66:
+    label: Alberta tax after credits
+    formula: "max(0, line.AB428.8 - line.AB428.58 - line.AB428.63)"
+  AB428.74:
+    label: Alberta supplemental tax credit
+    formula: "round(max(0, round(line.AB428.52 * param.abCreditRate, 2) - param.abSupplementalBase) * param.abSupplementalRate, 2)"
+    source: "Worksheet AB428, line 61545: credit amounts (less unused tuition) at 8%, over $4,800, at 25%"
+  # Form T2036 – the provincial foreign tax credit: the foreign tax left after the federal credit, up to the share of
+  # the province's tax otherwise payable on the foreign income.
+  AB.taxOtherwise:
+    label: Alberta tax otherwise payable, for the foreign tax credit
+    formula: "line.AB428.63 + line.AB428.66"
+    source: "Form T2036, note 4: AB428 line 63 plus line 68"
+  AB428.69:
+    label: Provincial foreign tax credit
+    formula: >-
+      if(line.FTC.left > 0 and line.T1.23600 > 0, min(line.FTC.left,
+      round(min(line.FTC.netForeign, line.T1.23600) * line.AB.taxOtherwise / line.T1.23600, 2), line.AB.taxOtherwise), 0)
+    source: "Form T2036, line 5"
+  AB428.70:
+    label: Alberta tax after the foreign tax credit
+    formula: "max(0, line.AB428.66 - line.AB428.69)"
+  AB428.71:
+    label: Alberta political contributions made in 2025
+    formula: "answer.provincialPoliticalContributions"
+    source: "AB428 line 71 (60030)"
+  AB428.72:
+    label: Alberta political contributions tax credit
+    formula: "if(line.AB428.71 > param.abPoliticalCreditMaxContributions, param.abPoliticalCreditMax, round(bracket(param.abPoliticalCreditRates, line.AB428.71), 2))"
+    source: "Worksheet AB428, line 72: $1,000 above $2,300 of contributions"
+  AB428.73:
+    label: Alberta tax after the political contributions credit
+    formula: "max(0, line.AB428.70 - line.AB428.72)"
+  AB428.75:
+    label: Alberta tax
+    formula: "max(0, line.AB428.73 - line.AB428.74)"
+
+  # Schedule AB(S2) – Alberta amounts transferred from your spouse (read from their AB428). A spouse living in another
+  # province is read as if they lived in Alberta, as the schedule asks. Unused provincial tuition (line 8) isn't carried
+  # here.
+  ABS2.4:
+    label: Their Alberta age, pension income and disability amounts
+    formula: "spouse.line.AB428.17 + spouse.line.AB428.34 + spouse.line.AB428.37"
+    source: "AB(S2) lines 1 to 4: lines 58080, 58360 and 58440 of their AB428"
+  ABS2.5:
+    label: Their taxable income, for the transfer
+    formula: "if(spouse.line.T1.26000 <= param.abFirstBracketTop, spouse.line.T1.26000, round(spouse.line.AB428.8 / param.abCreditRate, 2))"
+    source: "AB(S2) line 5: line 26000 if it is $60,000 or less, else their Alberta tax on taxable income ÷ 8%"
+  ABS2.10:
+    label: Their adjusted taxable income
+    formula: "max(0, line.ABS2.5 - spouse.line.AB428.16 - spouse.line.AB428.32)"
+    source: "AB(S2) lines 6 to 10: their basic personal amount and line 32 (CPP, EI and adoption amounts)"
+  ABS2.11:
+    label: Alberta amounts transferred from your spouse
+    formula: "max(0, line.ABS2.4 - line.ABS2.10)"
+    source: "AB(S2) line 11: line 4 minus line 10"

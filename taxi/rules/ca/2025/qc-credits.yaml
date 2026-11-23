@@ -1,0 +1,786 @@
+# Quebec: the TP-1's schedules (TP-1.D.<X>-V, 2025-12) and its refundable credits. Line ids are each schedule's own
+# line numbers: QCB is Schedule B, QCC Schedule C, and so on; a line the app works out with no number of its own has a
+# name instead (QCC.own). The couple: Revenu Québec lets spouses share several amounts as they wish; here each one is
+# claimed on one return, and the other's line says so, so the two returns never read each other's same line:
+# - the age, living-alone and retirement amounts (Schedule B, line 33) and the senior assistance credit: the person
+#   preparing. Non-refundable credits a spouse can't use go to the other on line 431, so nothing is lost;
+# - medical expenses (Schedule B, Part C): the spouse with the higher work income, who can also get the refundable
+#   medical credit (Part D);
+# - child care (Schedule C, line 96): the spouse who paid more of it;
+# - the work premium (Schedule P, line 86): the spouse with the higher work income;
+# - home-support services for seniors (Schedule J): the spouse who enters them (only one may).
+
+params:
+  # Schedule B
+  qcAgeIncomeThreshold:
+    label: Family income above which the Schedule B amounts go down
+    source: "Schedule B, line 16: $42,090"
+    value: 42090
+  qcLivingAloneAmount:
+    label: Amount for a person living alone
+    source: "Schedule B, line 20: $2,128"
+    value: 2128
+  qcAgeAmount:
+    label: Age amount, for each spouse born before 1961
+    source: "Schedule B, lines 22 and 23: $3,906"
+    value: 3906
+  qcRetirementFactor:
+    label: Retirement income multiplier
+    source: "Schedule B, work chart, line 9: line 8 × 1.25"
+    value: 1.25
+  qcRetirementMax:
+    label: Most amount for retirement income
+    source: "Schedule B, work chart, line 9: maximum $3,470"
+    value: 3470
+  qcAgeReductionRate:
+    label: Reduction rate of the Schedule B amounts
+    source: "Schedule B, line 31: line 18 × 18.75%"
+    value: 18.75%
+  qcMedicalThresholdRate:
+    label: Share of family income medical expenses must exceed
+    source: "Schedule B, line 39: family income × 3%"
+    value: 3%
+  qcMedicalRefundRate:
+    label: Refundable medical credit rate
+    source: "Schedule B, line 44: line 43 × 25%"
+    value: 25%
+  qcMedicalRefundMax:
+    label: Most refundable medical credit
+    source: "Schedule B, line 44: maximum $1,466"
+    value: 1466
+  qcMedicalRefundThreshold:
+    label: Family income above which the refundable medical credit goes down
+    source: "Schedule B, line 46: $28,335"
+    value: 28335
+  qcMedicalRefundReductionRate:
+    label: Refundable medical credit reduction rate
+    source: "Schedule B, line 48: line 47 × 5%"
+    value: 5%
+  qcMedicalRefundMinWork:
+    label: Work income needed for the refundable medical credit
+    source: "Schedule B, Part D: work income of $3,750 or more"
+    value: 3750
+
+  # Schedule C
+  qcChildCareUnder7:
+    label: Childcare expense limit for a child born after 2018
+    source: "Schedule C, line 45: × $12,275"
+    value: 12275
+  qcChildCare7to16:
+    label: Childcare expense limit for a child born after 2008
+    source: "Schedule C, line 47: × $6,180"
+    value: 6180
+  qcChildCareRates:
+    label: Childcare credit rate by family income
+    source: "Schedule C, table of tax credit rates: 78% up to $24,795, then 75%, 74%, 73%, 72%, 71%, 70% up to $119,835, and 67%"
+    value:
+      - { upTo: 24795, rate: 78% }
+      - { upTo: 43725, rate: 75% }
+      - { upTo: 45340, rate: 74% }
+      - { upTo: 46970, rate: 73% }
+      - { upTo: 48570, rate: 72% }
+      - { upTo: 50195, rate: 71% }
+      - { upTo: 119835, rate: 70% }
+      - { rate: 67% }
+
+  # Schedule F
+  hsfThreshold:
+    label: Health services fund, income with no contribution
+    source: "Schedule F, lines 70 and 77: $18,130 or less"
+    value: 18130
+  hsfSecondThreshold:
+    label: Health services fund, top of the first column
+    source: "Schedule F, line 77: $63,060"
+    value: 63060
+  hsfRate:
+    label: Health services fund contribution rate
+    source: "Schedule F, line 80: 1%"
+    value: 1%
+  hsfFirstMax:
+    label: Health services fund, most in the first column
+    source: "Schedule F, line 82: maximum $150 (and $150 on line 81 of the second column)"
+    value: 150
+  hsfMax:
+    label: Health services fund, most
+    source: "Schedule F, line 82: maximum $1,000"
+    value: 1000
+
+  # Schedule J and Work Chart 458
+  homeSupportRate:
+    label: Home-support credit rate
+    source: "Schedule J, line 88: line 87 × 39%"
+    value: 39%
+  homeSupportRentShare:
+    label: Share of the monthly rent that counts
+    source: "Schedule J, line 31: line 30 × 5%"
+    value: 5%
+  homeSupportRentMin:
+    label: Lowest monthly rent counted
+    source: "Schedule J, line 30: minimum $600"
+    value: 600
+  homeSupportRentMax:
+    label: Highest monthly rent counted
+    source: "Schedule J, line 30: maximum $1,200"
+    value: 1200
+  homeSupportMaxSingle:
+    label: Most expenses for a single non-dependent senior
+    source: "Guide, line 458, annual limit on eligible expenses: $19,500"
+    value: 19500
+  homeSupportMaxCouple:
+    label: Most expenses for a couple of non-dependent seniors
+    source: "Guide, line 458, annual limit on eligible expenses: $39,000"
+    value: 39000
+  homeSupportThreshold:
+    label: Family income above which the home-support credit goes down
+    source: "Work Chart 458, lines 11 and 13: $71,010"
+    value: 71010
+  homeSupportSecondThreshold:
+    label: Family income above which the home-support credit goes down faster
+    source: "Work Chart 458, lines 10 and 14: $115,035"
+    value: 115035
+  homeSupportReductionRate:
+    label: Home-support credit reduction rate
+    source: "Work Chart 458, line 12: 3%"
+    value: 3%
+  homeSupportSecondReductionRate:
+    label: Home-support credit reduction rate above the second threshold
+    source: "Work Chart 458, line 15: 7%"
+    value: 7%
+  seniorCreditAge:
+    label: Age for the home-support and senior assistance credits
+    source: "Guide, lines 458 and 463: 70 or older on December 31, 2025"
+    value: 70
+
+  # Schedule K
+  drugIncomeSingle:
+    label: Drug insurance income deduction without a spouse
+    source: "Schedule K, line 41 and situation 32: $19,890"
+    value: 19890
+  drugIncomeCouple:
+    label: Drug insurance income deduction with a spouse
+    source: "Schedule K, line 41 and situation 34: $32,240"
+    value: 32240
+  drugChildCouple:
+    label: Drug insurance deduction for one dependent child, with a spouse
+    source: "Schedule K, line 42: $4,220"
+    value: 4220
+  drugChildrenCouple:
+    label: Drug insurance deduction for more than one dependent child, with a spouse
+    source: "Schedule K, line 42: $8,120"
+    value: 8120
+  drugChildSingle:
+    label: Drug insurance deduction for one dependent child, without a spouse
+    source: "Schedule K, line 44: $12,350"
+    value: 12350
+  drugChildrenSingle:
+    label: Drug insurance deduction for more than one dependent child, without a spouse
+    source: "Schedule K, line 44: $16,570"
+    value: 16570
+  drugTableBreak:
+    label: Income where the drug premium rate changes
+    source: "Schedule K, Part C, line 78: $5,000"
+    value: 5000
+  drugTableTop:
+    label: Income above which the drug premium is the most
+    source: "Schedule K, Part C: more than $14,669, enter $766"
+    value: 14669
+  drugPremiumMax:
+    label: Most drug insurance premium for a year
+    source: "Schedule K, Part C, line 83: maximum $766"
+    value: 766
+  drugRateSingleLow:
+    label: Drug premium rate without a spouse, column A
+    source: "Schedule K, line 80: 7.84%"
+    value: 7.84%
+  drugRateSingleHigh:
+    label: Drug premium rate without a spouse, column B
+    source: "Schedule K, line 80: 11.76%"
+    value: 11.76%
+  drugBaseSingle:
+    label: Drug premium without a spouse at $5,000
+    source: "Schedule K, line 82: $392"
+    value: 392
+  drugRateCoupleLow:
+    label: Drug premium rate with a spouse, column A
+    source: "Schedule K, line 80: 3.93%"
+    value: 3.93%
+  drugRateCoupleHigh:
+    label: Drug premium rate with a spouse, column B
+    source: "Schedule K, line 80: 5.89%"
+    value: 5.89%
+  drugBaseCouple:
+    label: Drug premium with a spouse at $5,000
+    source: "Schedule K, line 82: $196.50"
+    value: 196.50
+  drugMax2025:
+    label: Most drug insurance premium for 2025
+    source: "Schedule K, line 87: $755"
+    value: 755
+  drugMonthlyFirstHalf:
+    label: Drug premium for each month from January to June
+    source: "Schedule K, line 88: × $62.00"
+    value: 62.00
+  drugMonthlySecondHalf:
+    label: Drug premium for each month from July to December
+    source: "Schedule K, line 88: × $63.83"
+    value: 63.83
+
+  # Schedule P
+  workPremiumCapCouple:
+    label: Work premium, most work income counted for a couple
+    source: "Schedule P, Part E, section 1, line 66: $19,534"
+    value: 19534
+  workPremiumCapSingle:
+    label: Work premium, most work income counted without a spouse
+    source: "Schedule P, Part E, section 2, line 66: $12,620"
+    value: 12620
+  workPremiumExclusionCouple:
+    label: Work premium, work income left out for a couple
+    source: "Schedule P, Part E, section 1, line 70: $3,600"
+    value: 3600
+  workPremiumExclusionSingle:
+    label: Work premium, work income left out without a spouse
+    source: "Schedule P, Part E, section 2, line 70: $2,400"
+    value: 2400
+  workPremiumRateChildCouple:
+    label: Work premium rate, couple with a designated child
+    source: "Schedule P, Part E, section 1, line 74: 25%"
+    value: 25%
+  workPremiumRateChildSingle:
+    label: Work premium rate, single parent
+    source: "Schedule P, Part E, section 2, line 74: 30%"
+    value: 30%
+  workPremiumRate:
+    label: Work premium rate without a designated child
+    source: "Schedule P, Part E, line 74: 11.6%"
+    value: 11.6%
+  workPremiumReductionRate:
+    label: Work premium reduction rate
+    source: "Schedule P, Part E, line 83: line 82 × 10%"
+    value: 10%
+  adaptedWorkPremiumCapCouple:
+    label: Adapted work premium, most work income counted for a couple
+    source: "Schedule P, Part E, section 1, column 2, line 66: $26,946"
+    value: 26946
+  adaptedWorkPremiumCapSingle:
+    label: Adapted work premium, most work income counted without a spouse
+    source: "Schedule P, Part E, section 2, column 2, line 66: $17,798"
+    value: 17798
+  adaptedWorkPremiumExclusion:
+    label: Adapted work premium, work income left out
+    source: "Schedule P, Part E, column 2, line 70: $1,200"
+    value: 1200
+  adaptedWorkPremiumRateChildCouple:
+    label: Adapted work premium rate, couple with a designated child
+    source: "Schedule P, Part E, section 1, line 75: 20%"
+    value: 20%
+  adaptedWorkPremiumRateChildSingle:
+    label: Adapted work premium rate, single parent
+    source: "Schedule P, Part E, section 2, line 75: 25%"
+    value: 25%
+  adaptedWorkPremiumRate:
+    label: Adapted work premium rate without a designated child
+    source: "Schedule P, Part E, line 75: 13.6%"
+    value: 13.6%
+  workPremiumMaxFamilyCouple:
+    label: Family income from which a couple gets no work premium
+    source: "Guide, line 456, maximum family income: $59,369 for a couple with one or more children"
+    value: 59369
+
+  # Line 462, point 25, and line 463
+  childActivitiesRate:
+    label: Children's activities credit rate
+    source: "Guide, line 462, point 25, work chart line 4: line 3 × 20%"
+    value: 20%
+  childActivitiesMaxFees:
+    label: Most fees counted for each child
+    source: "Guide, line 462, point 25, work chart line 1: maximum $500"
+    value: 500
+  childActivitiesMaxIncome:
+    label: Most family income for the children's activities credit
+    source: "Guide, line 462, point 25: family income of $168,470 or less"
+    value: 168470
+  seniorAssistanceMax:
+    label: Senior assistance credit for each eligible person 70 or older
+    source: "Guide, line 463: maximum $2,000 ($4,000 when both spouses were 70 or over)"
+    value: 2000
+  seniorAssistanceRate:
+    label: Senior assistance credit reduction rate
+    source: "Guide, line 463: 5.40% of family income over the threshold"
+    value: 5.40%
+  seniorAssistanceThresholdCouple:
+    label: Family income above which the senior assistance credit goes down, with a spouse
+    source: "Guide, line 463: $45,270 if you had a spouse on December 31"
+    value: 45270
+  seniorAssistanceThresholdSingle:
+    label: Family income above which the senior assistance credit goes down, without a spouse
+    source: "Guide, line 463: $27,835 if you did not have a spouse on December 31"
+    value: 27835
+
+lines:
+  # Schedule B – age amount, amount for a person living alone and amount for retirement income (Parts A and B)
+  QCB.18:
+    label: Family income over the threshold
+    formula: "max(0, line.QC.family - param.qcAgeIncomeThreshold)"
+    source: "Schedule B, lines 14 to 18"
+  QCB.20:
+    label: Amount for a person living alone
+    formula: "if(line.HH.partner == 0, if(answer.qcLivedAlone, param.qcLivingAloneAmount, 0), 0)"
+    source: "Schedule B, line 20: living all year in a dwelling alone, or only with people under 18 or student children"
+  QCB.22:
+    label: Age amount
+    formula: "if(person.age >= 65, param.qcAgeAmount, 0)"
+    source: "Schedule B, line 22: born before January 1, 1961"
+  QCB.23:
+    label: Age amount of your spouse
+    formula: "if(line.HH.partner == 1 and family.partnerInYear, if(spouse.person.age >= 65, param.qcAgeAmount, 0), 0)"
+    source: "Schedule B, line 23: your spouse born before January 1, 1961"
+  QCB.27:
+    label: Amount for retirement income
+    formula: "min(param.qcRetirementMax, round(max(0, line.TP1.122 + line.TP1.123 - line.TP1.245) * param.qcRetirementFactor, 2))"
+    source: "Schedule B, work chart, lines 1 to 9: lines 122 and 123 less line 245, × 1.25, maximum $3,470"
+  QCB.28:
+    label: Amount for your spouse's retirement income
+    formula: "if(line.QC.couple == 1, spouse.line.QCB.27, 0)"
+    source: "Schedule B, line 28: the work chart for your spouse"
+  QCB.30:
+    label: Schedule B amounts
+    formula: "line.QCB.20 + line.QCB.22 + line.QCB.23 + line.QCB.27 + line.QCB.28"
+    source: "Schedule B, line 30: lines 20 through 28 (line 21 isn't handled)"
+  QCB.31:
+    label: Reduction based on family income
+    formula: "round(line.QCB.18 * param.qcAgeReductionRate, 2)"
+    source: "Schedule B, line 31: line 18 × 18.75%"
+  QCB.32:
+    label: Amount to which you or your spouse is entitled
+    formula: "max(0, line.QCB.30 - line.QCB.31)"
+    source: "Schedule B, line 32"
+
+  # Schedule B, Parts C and D – medical expenses and the refundable medical credit
+  QC.ownMedical:
+    label: Medical expenses on this return's receipts and Quebec slips
+    formula: "line.OWN.medical + sum(RL1.boxJ) + sum(RL1.box235) + sum(RL2.box235)"
+    source: "Guide, line 381: receipts, and the private health plan premiums of box J and box 235 of the RL-1 and box 235 of the RL-2"
+  QC.claimsMedical:
+    label: This return claims the couple's medical expenses (1 for yes)
+    formula: >-
+      if(line.QC.couple == 1, if(line.QC.work > spouse.line.QC.work or (line.QC.work == spouse.line.QC.work and person.role == "self"), 1, 0), 1)
+    source: "Guide, line 381: either spouse may claim the couple's expenses, less 3% of family income either way; the one with the higher work income can also get the refundable credit"
+  QCB.36:
+    label: Medical expenses
+    formula: "if(line.QC.couple == 1, if(line.QC.claimsMedical == 1, line.QC.ownMedical + spouse.line.QC.ownMedical, 0), line.QC.ownMedical)"
+    source: "Schedule B, line 36"
+  QCB.39:
+    label: 3% of family income
+    formula: "round(line.QC.family * param.qcMedicalThresholdRate, 2)"
+    source: "Schedule B, lines 37 to 39"
+  QCB.44:
+    label: Refundable medical credit before reduction
+    formula: "min(param.qcMedicalRefundMax, round((line.TP1.381 + line.T1.21500) * param.qcMedicalRefundRate, 2))"
+    source: "Schedule B, lines 41 to 44: line 40 and the disability supports deduction (as on federal line 21500), × 25%, maximum $1,466"
+  QCB.48:
+    label: Reduction of the refundable medical credit
+    formula: "round(max(0, line.QC.family - param.qcMedicalRefundThreshold) * param.qcMedicalRefundReductionRate, 2)"
+    source: "Schedule B, lines 45 to 48: 5% of family income over $28,335"
+  QCB.50:
+    label: Refundable tax credit for medical expenses
+    formula: "if(person.residentAllYear and person.age >= 18 and line.QC.work >= param.qcMedicalRefundMinWork, max(0, line.QCB.44 - line.QCB.48), 0)"
+    source: "Schedule B, Part D, line 50: resident all year, 18 or older, with work income of $3,750 or more"
+
+  # Schedule C – childcare expenses
+  QCC.own:
+    label: Childcare expenses this return paid
+    formula: >-
+      if(family.childrenUnder17 > 0, max(0, sum(RL24.boxE) + answer.qcChildCareReceipts - sum(RL1.box201) - sum(RL5.boxJ)), 0)
+    source: "Schedule C, lines 26.1 to 41: box E of the RL-24 slips and the receipts without one, less the allowance in box 201 of the RL-1 or box J of the RL-5"
+  QCC.41:
+    label: Childcare expenses qualifying for the tax credit
+    formula: "line.QCC.own + if(line.QC.couple == 1, spouse.line.QCC.own, 0)"
+    source: "Schedule C, line 41: the couple's expenses"
+  QCC.50:
+    label: Childcare expense limit
+    formula: "param.qcChildCareUnder7 * family.childrenUnder7 + param.qcChildCare7to16 * (family.childrenUnder17 - family.childrenUnder7)"
+    source: "Schedule C, lines 44 to 50: $12,275 for each child born after 2018 and $6,180 for each child born after 2008 (the $16,800 limit for a child with an impairment isn't handled)"
+  QCC.85:
+    label: Childcare expenses counted
+    formula: "min(line.QCC.41, line.QCC.50)"
+    source: "Schedule C, line 85: line 41 or line 50, whichever is less"
+  QCC.92:
+    label: Childcare credit rate
+    formula: "step(param.qcChildCareRates, line.QC.family)"
+    source: "Schedule C, line 92: the rate for the family income"
+  QCC.94:
+    label: Couple's tax credit for childcare expenses
+    formula: "round(line.QCC.85 * line.QCC.92, 2)"
+    source: "Schedule C, line 94: line 85 × line 92"
+  QCC.claims:
+    label: This return claims the couple's childcare credit (1 for yes)
+    formula: >-
+      if(line.QC.couple == 1, if(line.QCC.own > spouse.line.QCC.own or (line.QCC.own == spouse.line.QCC.own and person.role == "self"), 1, 0), 1)
+
+  # Schedule D – the solidarity tax credit. It has no amounts: Revenu Québec works out the credit. These lines hold
+  # what is printed on it; the dwelling number (RL-31 box A) and the roll number are copied onto the paper form and
+  # never stored, like an address.
+  QCD.12:
+    label: Lived alone in a dwelling throughout 2025 (1 for yes)
+    formula: "if(line.HH.partner == 0 and answer.qcLivedAlone, 1, 0)"
+    source: "Schedule D, line 12"
+  QCD.33:
+    label: Tenants who signed the lease (RL-31 box B)
+    formula: "sum(RL31.boxB)"
+    source: "Schedule D, line 33: box B of the RL-31 slip issued in your name"
+  QCD.36:
+    label: Owners living in your dwelling
+    formula: "if(answer.qcHomeOwner, answer.qcHomeOwners, 0)"
+    source: "Schedule D, line 36"
+  QCD.check:
+    label: Schedule D answers that don't fit together
+    formula: >-
+      if(count(RL31.boxB) > 0 and answer.qcHomeOwner,
+      unsupported("Schedule D takes a tenant's RL-31 or an owner's roll number, not both: remove the RL-31 or say you didn't own your home"),
+      if(answer.qcHomeOwner and answer.qcHomeOwners < 1, unsupported("Enter how many owners live in the home you own (Schedule D, line 36)"), 0))
+    source: "Schedule D, Part A: lines 32 and 33 for a tenant, lines 35 and 36 for an owner"
+
+  # Schedule F – contribution to the health services fund
+  QCF.18:
+    label: Total income other than employment income
+    formula: "max(0, line.TP1.199 - line.TP1.101)"
+    source: "Schedule F, lines 10 to 18"
+  QCF.34:
+    label: Income not subject to the contribution
+    formula: "line.TP1.114 + max(0, line.TP1.128 - line.TP1.166 - line.TP1.167) + line.TP1.142 + line.TP1.147"
+    source: "Schedule F, lines 20 to 34: the OAS pension, the dividend gross-up, taxable support and social assistance"
+  QCF.36:
+    label: Income
+    formula: "max(0, line.QCF.18 - line.QCF.34)"
+    source: "Schedule F, line 36"
+  QCF.68:
+    label: Deductions
+    formula: >-
+      line.QCR.26 + line.QCU.101 + line.QCU.103 + if(line.QCU.33 > 0, min(line.QCU.94 - line.QCU.48, line.QCU.99), 0)
+      + line.TP1.246 + line.EI.repayment + line.TP1.245 + line.TP1.225 + line.TP1.231
+    source: "Schedule F, lines 41 to 68: line 246 (EI benefits repaid, line 41), Schedule R line 26, Schedule U lines 101, 103 and 115, the EI benefits to repay on the federal return (line 44: the EI part of line 250, point 3; the OAS part is left out with line 114), and lines 245, 225 and 231"
+  QCF.70:
+    label: Income subject to the contribution
+    formula: "max(0, line.QCF.36 - line.QCF.68)"
+    source: "Schedule F, line 70"
+
+  # Schedule J – home-support services for seniors (a non-dependent senior; a dependent senior's higher limits and
+  # Work Chart 466 aren't handled)
+  QCJ.34:
+    label: Home-support services included in your rent
+    formula: >-
+      if(person.age >= param.seniorCreditAge, if(answer.hasHomeSupport, if(answer.homeSupportRent > 0,
+      round(clamp(answer.homeSupportRent, param.homeSupportRentMin, param.homeSupportRentMax) * param.homeSupportRentShare, 2)
+      * answer.homeSupportRentMonths, 0), 0), 0)
+    source: "Schedule J, Part A, section 2, lines 30 to 34: 5% of the monthly rent (at least $600, at most $1,200) times the months"
+  QCJ.74:
+    label: Home-support services you paid
+    formula: "if(person.age >= param.seniorCreditAge, if(answer.hasHomeSupport, answer.homeSupportServices, 0), 0)"
+    source: "Schedule J, Part B, lines 50 to 74"
+  QCJ.75:
+    label: Cost of home-support services
+    formula: >-
+      min(if(line.QC.couple == 1, if(spouse.person.age >= param.seniorCreditAge, param.homeSupportMaxCouple, param.homeSupportMaxSingle),
+      param.homeSupportMaxSingle), line.QCJ.34 + line.QCJ.74)
+    source: "Schedule J, line 75, and guide, line 458: at most $19,500, or $39,000 for a couple of seniors"
+  QCJ.88:
+    label: Home-support credit before reduction
+    formula: "round(line.QCJ.75 * param.homeSupportRate, 2)"
+    source: "Schedule J, line 88: line 87 × 39%"
+  QCJ.89:
+    label: Reduction based on family income
+    formula: >-
+      round(max(0, min(line.QC.family, param.homeSupportSecondThreshold) - param.homeSupportThreshold) * param.homeSupportReductionRate, 2)
+      + round(max(0, line.QC.family - param.homeSupportSecondThreshold) * param.homeSupportSecondReductionRate, 2)
+    source: "Work Chart 458, lines 10 to 16: 3% of family income from $71,010 to $115,035, and 7% above"
+  QCJ.90:
+    label: Tax credit for home-support services for seniors
+    formula: >-
+      if(line.QC.couple == 1 and person.age >= param.seniorCreditAge and answer.hasHomeSupport and spouse.person.age >= param.seniorCreditAge
+      and spouse.answer.hasHomeSupport,
+      unsupported("Only one spouse claims the home-support credit for the couple: enter the services on one return"),
+      max(0, line.QCJ.88 - line.QCJ.89))
+    source: "Schedule J, line 90"
+
+  # Schedule K – prescription drug insurance premium
+  QCK.40:
+    label: Family income for the drug premium
+    formula: "line.QC.family"
+    source: "Schedule K, line 40"
+  QCK.46:
+    label: Income not subject to the premium
+    formula: >-
+      if(line.HH.partner == 1, param.drugIncomeCouple + if(family.childrenUnder18 >= 2, param.drugChildrenCouple,
+      if(family.childrenUnder18 == 1, param.drugChildCouple, 0)), param.drugIncomeSingle + if(family.childrenUnder18 >= 2,
+      param.drugChildrenSingle, if(family.childrenUnder18 == 1, param.drugChildSingle, 0)))
+    source: "Schedule K, lines 41 to 46 (a dependent child: under 18 at the end of the year)"
+  QCK.48:
+    label: Income used to calculate the premium
+    formula: "max(0, line.QCK.40 - line.QCK.46)"
+    source: "Schedule K, line 48"
+  QCK.84:
+    label: Premium for a full year
+    formula: >-
+      if(line.QCK.48 > param.drugTableTop, param.drugPremiumMax,
+      if(line.HH.partner == 1,
+      if(line.QCK.48 <= param.drugTableBreak, round(line.QCK.48 * param.drugRateCoupleLow, 2),
+      min(param.drugPremiumMax, param.drugBaseCouple + round((line.QCK.48 - param.drugTableBreak) * param.drugRateCoupleHigh, 2))),
+      if(line.QCK.48 <= param.drugTableBreak, round(line.QCK.48 * param.drugRateSingleLow, 2),
+      min(param.drugPremiumMax, param.drugBaseSingle + round((line.QCK.48 - param.drugTableBreak) * param.drugRateSingleHigh, 2)))))
+    source: "Schedule K, Part C, lines 77 to 84"
+  QCK.60:
+    label: Months from January to June covered by a group plan
+    formula: "if(answer.qcGroupDrugPlan, answer.qcDrugMonthsJanJun, 0)"
+    source: "Schedule K, box 60"
+  QCK.61:
+    label: Months from July to December covered by a group plan
+    formula: "if(answer.qcGroupDrugPlan, answer.qcDrugMonthsJulDec, 0)"
+    source: "Schedule K, box 61"
+  QCK.62:
+    label: Months with no premium to pay
+    formula: >-
+      if(line.QCK.60 > 6 or line.QCK.61 > 6, unsupported("Each half of the year has 6 months: check the months your group drug plan covered you"),
+      line.QCK.60 + line.QCK.61)
+    source: "Schedule K, box 62: boxes 60 and 61"
+  QCK.86:
+    label: Premium for the months without a group plan
+    formula: "line.QCK.84 - round(line.QCK.84 * line.QCK.62 / 12, 2)"
+    source: "Schedule K, lines 85 and 86"
+  QCK.89:
+    label: Most premium for those months
+    formula: "param.drugMax2025 - round(param.drugMonthlyFirstHalf * line.QCK.60, 2) - round(param.drugMonthlySecondHalf * line.QCK.61, 2)"
+    source: "Schedule K, lines 87 to 89: $755 less $62.00 a month from January to June and $63.83 a month from July to December"
+  QCK.90:
+    label: Drug insurance premium
+    formula: "max(0, min(line.QCK.86, line.QCK.89))"
+    source: "Schedule K, line 90: line 86 or line 89, whichever is less"
+
+  # Schedule P – work premium (column 1; the adapted work premium and Part D aren't handled)
+  QCP.49:
+    label: Your spouse's work income
+    formula: >-
+      if(line.HH.partner == 1, if(family.partnerInYear, if(spouse.person.province == "QC", spouse.line.QC.work, spouse.line.CWB.working),
+      if(line.QC.family < param.workPremiumMaxFamilyCouple,
+      unsupported("The work premium for a couple needs your spouse's work income: prepare their return here too"), 0)), 0)
+    source: "Schedule P, line 49; a couple whose family income is over the most can't get the premium, so the spouse's income isn't needed"
+  QCP.64:
+    label: Work income
+    formula: "line.QC.work + line.QCP.49"
+    source: "Schedule P, line 64: lines 29 and 49"
+  QCP.72:
+    label: Work income counted
+    formula: >-
+      max(0, min(line.QCP.64, if(line.HH.partner == 1, param.workPremiumCapCouple, param.workPremiumCapSingle))
+      - if(line.HH.partner == 1, param.workPremiumExclusionCouple, param.workPremiumExclusionSingle))
+    source: "Schedule P, Part E, lines 66 to 72"
+  QCP.76:
+    label: Work premium before reduction
+    formula: >-
+      round(line.QCP.72 * if(family.childrenUnder18 > 0, if(line.HH.partner == 1, param.workPremiumRateChildCouple,
+      param.workPremiumRateChildSingle), param.workPremiumRate), 2)
+    source: "Schedule P, lines 74 and 76: 25% (couple) or 30% (single parent) with a designated dependent child (a child under 18 who lived with you), else 11.6%"
+  QCP.83:
+    label: Reduction based on family income
+    formula: "round(max(0, line.QC.family - if(line.HH.partner == 1, param.workPremiumCapCouple, param.workPremiumCapSingle)) * param.workPremiumReductionRate, 2)"
+    source: "Schedule P, lines 78 to 83"
+  QCP.84:
+    label: Work premium
+    formula: "max(0, line.QCP.76 - line.QCP.83)"
+    source: "Schedule P, line 84"
+  # Column 2, the adapted work premium: for someone (or their spouse) entitled to the amount for a severe and
+  # prolonged impairment (line 376). An allowance under the Social Solidarity or Basic Income Program isn't asked.
+  QCP.adapted:
+    label: Column 2 (adapted work premium) applies (1 for yes)
+    formula: "if(line.TP1.376 > 0 or (line.QC.couple == 1 and spouse.line.TP1.376 > 0), 1, 0)"
+    source: "Schedule P, Part E: column 2 when you or your spouse were entitled to the amount on line 376"
+  QCP.72_2:
+    label: Work income counted, adapted work premium
+    formula: >-
+      max(0, min(line.QCP.64, if(line.HH.partner == 1, param.adaptedWorkPremiumCapCouple, param.adaptedWorkPremiumCapSingle))
+      - param.adaptedWorkPremiumExclusion)
+    source: "Schedule P, Part E, column 2, lines 66 to 72"
+  QCP.76_2:
+    label: Adapted work premium before reduction
+    formula: >-
+      round(line.QCP.72_2 * if(family.childrenUnder18 > 0, if(line.HH.partner == 1, param.adaptedWorkPremiumRateChildCouple,
+      param.adaptedWorkPremiumRateChildSingle), param.adaptedWorkPremiumRate), 2)
+    source: "Schedule P, Part E, column 2, lines 75 and 76"
+  QCP.83_2:
+    label: Reduction based on family income, adapted work premium
+    formula: >-
+      round(max(0, line.QC.family - if(line.HH.partner == 1, param.adaptedWorkPremiumCapCouple, param.adaptedWorkPremiumCapSingle))
+      * param.workPremiumReductionRate, 2)
+    source: "Schedule P, Part E, column 2, lines 78 to 83"
+  QCP.84_2:
+    label: Adapted work premium
+    formula: "if(line.QCP.adapted == 1, max(0, line.QCP.76_2 - line.QCP.83_2), 0)"
+    source: "Schedule P, Part E, column 2, line 84"
+  QCP.87:
+    label: Work premium or adapted work premium, whichever is greater
+    formula: "max(line.QCP.84, line.QCP.84_2)"
+    source: "Schedule P, lines 85 and 87"
+  QCP.90:
+    label: Tax credits respecting the work premium
+    formula: >-
+      if(line.QC.couple == 1, if(line.QC.work > spouse.line.QC.work or (line.QC.work == spouse.line.QC.work and person.role == "self"),
+      line.QCP.87, 0), line.QCP.87)
+    source: "Schedule P, lines 85 to 90: a couple's premium, claimed by the spouse with the higher work income (line 86 is the other's line 89)"
+
+  # Schedule Q – retirement income transferred to your spouse
+  QCQ.20:
+    label: Eligible retirement income
+    formula: "line.TP1.122"
+    source: "Schedule Q, lines 10 to 20: line 122 (no amount transferred to a plan or deducted)"
+  QCQ.58:
+    label: Quebec income tax withholding transferred to your spouse
+    formula: "if(line.TP1.245 > 0, round(sum(RL2.boxJ) * line.TP1.245 / line.QCQ.20, 2), 0)"
+    source: "Schedule Q, lines 50 to 58: the tax withheld on the RL-2 (box J) × line 22 ÷ line 20"
+
+  # Schedule R – QPIP premium on self-employment (Part A)
+  QCR.12:
+    label: Net business income for QPIP
+    formula: "max(0, line.SE.net)"
+    source: "Schedule R, lines 10 to 12"
+  QCR.14:
+    label: Employment income subject to QPIP
+    formula: >-
+      if(count(RL1.boxI) == 0, sum(RL1.boxA), if(count(RL1.boxI) >= count(RL1.boxA), sum(RL1.boxI),
+      unsupported("Some of your RL-1 slips show box I and some don't. Enter box I on each slip: the amount from box A when box I is blank")))
+    source: "Schedule R, line 14: box I of the RL-1 slips (box A if blank)"
+  QCR.20:
+    label: Insurable earnings left
+    formula: "max(0, param.qpipMaxInsurable - line.QCR.14)"
+    source: "Schedule R, lines 13 to 20"
+  QCR.24:
+    label: QPIP premium on self-employment
+    formula: >-
+      if(line.QCR.12 + line.QCR.14 < param.qpipMinimum, 0,
+      min(param.qpipMaxSelfEmployed, round(min(line.QCR.12, line.QCR.20) * param.qpipSelfEmployedRate, 2)))
+    source: "Schedule R, lines 22 and 24: 0.878%, maximum $860.44; none when business and employment income are less than $2,000"
+  QCR.26:
+    label: Deduction for the QPIP premium
+    formula: "round(line.QCR.24 * param.qpipDeductionRate, 2)"
+    source: "Schedule R, line 26: line 24 × 43.736%"
+
+  # Schedule T – tuition or examination fees (the student's own; 2012 and earlier fees at 20% aren't handled)
+  QCT.41:
+    label: Tuition fees for 2025
+    formula: "if(sum(RL8.boxB) > param.qcTuitionMinimum, max(0, sum(RL8.boxB) - line.T1.45350), 0)"
+    source: "Schedule T, lines 40.6 to 41: box B of the RL-8 slips, if more than $100, less the Canada training credit (federal line 45350)"
+  QCT.44_1:
+    label: Tuition fees for the 8% credit
+    formula: "line.QCT.41 + answer.unusedProvincialTuition"
+    source: "Schedule T, lines 43 to 44.1: with the unused fees of earlier years"
+  QCT.45:
+    label: Tax credit for tuition or examination fees available
+    formula: "round(line.QCT.44_1 * param.qcTuitionRate, 2)"
+    source: "Schedule T, line 45: line 44.1 × 8%"
+
+  # Schedule U – QPP. Part B (employees): the deduction. Part C (self-employed): the contribution and the deduction,
+  # its lines 30 to 124 in short: an employee's over-contribution (line 73) isn't handled with self-employment, so
+  # line 74 is 0, and lines 81, 84 and 91 come to the forms below.
+  QCU.11:
+    label: First additional part of the QPP contribution
+    formula: "round(min(line.TP1.98, param.qppMaxEmployee) * param.qppFirstShare, 2)"
+    source: "Schedule U, lines 10 and 11: line 98 (maximum $4,339.20) × 0.156250"
+  QCU.14_4:
+    label: Pensionable salary over the exemption
+    formula: "min(max(0, min(line.TP1.98_1, param.qppMaxPensionable) - param.qppExemption), param.qppMaxPensionable - param.qppExemption)"
+    source: "Schedule U, lines 12 to 14.4"
+  QCU.16:
+    label: Deduction for first additional contributions
+    formula: "min(line.QCU.11, round(line.QCU.14_4 * param.qppFirstRate, 2))"
+    source: "Schedule U, lines 15 and 16"
+  QCU.17_5:
+    label: QPP contributions over those required, and the additional contribution
+    formula: "max(0, line.TP1.98 - round(line.QCU.14_4 * param.qppEmployeeRate, 2)) + line.TP1.98_2"
+    source: "Schedule U, lines 17 to 17.5"
+  QCU.21:
+    label: Second additional contributions required
+    formula: "round(min(max(0, line.TP1.98_1 - param.qppMaxPensionable), param.qppAdditionalMaxPensionable - param.qppMaxPensionable) * param.qppSecondRate, 2)"
+    source: "Schedule U, lines 18.5 to 21: 4% of pensionable salary between $71,300 and $81,200"
+  QCU.23:
+    label: Deduction for QPP contributions on employment income
+    formula: "min(line.QCU.17_5, line.QCU.21) + line.QCU.16"
+    source: "Schedule U, lines 22 to 23"
+  QCU.33:
+    label: Net business income for QPP
+    formula: "if(person.age >= 18 and person.age <= 72, max(0, line.SE.net), 0)"
+    source: "Schedule U, lines 30 to 33: line 27 of Schedule L, 0 if negative. QPP is paid from 18 until the year you turn 73 (Schedule U, instructions)"
+  QCU.40:
+    label: Earnings your employee contributions cover, with the exemption
+    formula: "round((line.TP1.98 + line.TP1.98_2) / param.qppEmployeeRate, 2) + param.qppExemption"
+    source: "Schedule U, lines 34 to 40: lines 98 and 98.2 ÷ 6.4%, plus $3,500"
+  QCU.43:
+    label: Self-employment earnings subject to contributions
+    formula: "max(0, line.QCU.33 - max(0, line.QCU.40 - line.TP1.98_1))"
+    source: "Schedule U, lines 41 to 43"
+  QCU.48:
+    label: QPP base and first additional contribution on self-employment
+    formula: "round(min(line.QCU.43, max(0, param.qppMaxPensionable - line.QCU.40)) * param.qppSelfEmployedRate, 2)"
+    source: "Schedule U, lines 44 to 48: 12.8%, up to the maximum pensionable earnings the employee contributions leave"
+  QCU.71:
+    label: Base and first additional contributions required on all earnings
+    formula: "min(param.qppMaxEmployee, round(max(0, min(param.qppMaxPensionable, line.QCU.33 + line.TP1.98_1) - param.qppExemption) * param.qppEmployeeRate, 2))"
+    source: "Schedule U, lines 67 to 71"
+  QCU.94:
+    label: QPP contribution on self-employment, before the limit
+    formula: >-
+      line.QCU.48 + round(min(max(0, line.QCU.33 + min(line.TP1.98_1, line.QCU.40) - param.qppMaxPensionable),
+      param.qppAdditionalMaxPensionable - param.qppMaxPensionable, line.QCU.33) * param.qppSecondSelfEmployedRate, 2)
+    source: "Schedule U, lines 75 to 94: line 48 plus 8% of the self-employment earnings between $71,300 and $81,200 (line 92)"
+  QCU.95:
+    label: Contributions required on all earnings, employee share
+    formula: "line.QCU.71 + round(max(0, min(param.qppAdditionalMaxPensionable, line.TP1.98_1 + line.QCU.33) - param.qppMaxPensionable) * param.qppSecondRate, 2)"
+    source: "Schedule U, lines 95.1 to 95"
+  QCU.98:
+    label: Limit on the self-employment contribution
+    formula: "2 * max(0, line.QCU.95 - line.TP1.98 - line.TP1.98_2)"
+    source: "Schedule U, lines 96 to 98"
+  QCU.99:
+    label: QPP contribution on income from self-employment
+    formula: >-
+      if(line.QCU.33 > 0 and line.TP1.98 > line.QCU.71,
+      unsupported("QPP contributions deducted by employers over the maximum, with self-employment income (Schedule U, lines 72 to 74), aren't handled by this app yet"),
+      min(line.QCU.94, line.QCU.98))
+    source: "Schedule U, line 99: line 94 or line 98, whichever is less"
+  QCU.101:
+    label: Deduction for half the base contribution on self-employment
+    formula: "round(line.QCU.48 * param.qppHalfBaseShare, 2)"
+    source: "Schedule U, lines 100 and 101: line 48 × 0.421875"
+  QCU.103:
+    label: Deduction for the first additional contribution on self-employment
+    formula: "round(line.QCU.48 * param.qppFirstShare, 2)"
+    source: "Schedule U, lines 102 and 103: line 48 × 0.156250"
+  QCU.111:
+    label: All pensionable earnings over the exemption
+    formula: "min(param.qppMaxPensionable - param.qppExemption, max(0, line.QCU.33 + line.TP1.98_1 - param.qppExemption))"
+    source: "Schedule U, lines 106 to 111"
+  QCU.124:
+    label: QPP deduction
+    formula: >-
+      line.QCU.101 + line.QCU.103 + min(round(line.TP1.98 * param.qppFirstShare, 2), round(line.QCU.111 * param.qppFirstRate, 2))
+      + min(line.QCU.94 - line.QCU.48, line.QCU.99)
+      + min(max(0, line.TP1.98 - round(line.QCU.111 * param.qppEmployeeRate, 2)) + line.TP1.98_2,
+      round(min(max(0, line.TP1.98_1 + line.QCU.33 - param.qppMaxPensionable), param.qppAdditionalMaxPensionable - param.qppMaxPensionable) * param.qppSecondRate, 2))
+    source: "Schedule U, lines 100 to 124: lines 114 (101, 103 and 113), 115 and 123"
+
+  # Line 462, point 25 – children's activities, and line 463 – senior assistance
+  QC.childActivities:
+    label: Tax credit for children's activities
+    formula: >-
+      if(family.childrenUnder17 - family.childrenUnder6 > 0 and line.QC.family <= param.childActivitiesMaxIncome,
+      round(min(answer.childActivityFees, param.childActivitiesMaxFees * (family.childrenUnder17 - family.childrenUnder6))
+      * param.childActivitiesRate, 2), 0)
+    source: "Guide, line 462, point 25: 20% of fees up to $500 for each child born from 2009 to 2019, with family income of $168,470 or less (the extra for a child with an impairment isn't handled)"
+  QC.seniorAssistance:
+    label: Senior assistance tax credit
+    formula: >-
+      if(line.QC.couple == 1 and person.role == "spouse", 0,
+      max(0, param.seniorAssistanceMax * (if(person.age >= param.seniorCreditAge, 1, 0) + if(line.QC.couple == 1,
+      if(spouse.person.age >= param.seniorCreditAge, 1, 0), 0))
+      - if(person.age >= param.seniorCreditAge or (line.QC.couple == 1 and spouse.person.age >= param.seniorCreditAge),
+      round(max(0, line.QC.family - if(line.HH.partner == 1, param.seniorAssistanceThresholdCouple, param.seniorAssistanceThresholdSingle))
+      * param.seniorAssistanceRate, 2), 0)))
+    source: "Guide, line 463: $2,000 for each eligible person 70 or older, less 5.40% of family income over $45,270 (with a spouse) or $27,835. A couple's credit is claimed on the return of the person preparing"

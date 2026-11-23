@@ -90,7 +90,7 @@ The deploy pipeline generates the production wrangler config from this list; kee
 | crons | trigger | `*/5 * * * *` (the apps' tick, `src/scheduled.ts`) and `17 3 * * *` (the daily cleanup) |
 | `APP_<APP>` | service | one per app, e.g. `APP_CAPTABLE` → `insulin-apps-captable` |
 | `SITE_DOMAIN` | var | e.g. `insulinapps.com` |
-| `SITE_APPS` | var | JSON list (a string, or an already-parsed array): `[{ "name", "title", "summary", "binding", "source", "permissions", "publicPaths", "scheduled", "navigation", "clientSettings" }]`; `permissions` is the app's catalog from its `package.json` (`insulin.permissions`), `publicPaths` its paths for people without an account (`insulin.publicPaths`), `scheduled` the path its tick goes to, or null (`insulin.scheduled`), `navigation` its level 1, which the app's settings pages show (`insulin.navigation`, DESIGN.md §3.2; missing in an older list, it is empty), and `clientSettings` its page for each OAuth client, `{path, description?}` or null (`insulin.clientSettings`, DESIGN.md §5.3.1), which the API access page links for owners and admins; a malformed list fails closed. The deploy leaves out `binding` (the gateway takes `APP_<APP>` from the name; one given must match) and every field that is null or empty, so the list fits Cloudflare's 5 KB a variable |
+| `SITE_APP_<APP>` | var | one per app, named like its binding (`SITE_APP_CAPTABLE`): JSON (a string, or an already-parsed object) `{ "name", "title", "summary", "binding", "source", "permissions", "publicPaths", "scheduled", "navigation", "clientSettings" }`; `permissions` is the app's catalog from its `package.json` (`insulin.permissions`), `publicPaths` its paths for people without an account (`insulin.publicPaths`), `scheduled` the path its tick goes to, or null (`insulin.scheduled`), `navigation` its level 1, which the app's settings pages show (`insulin.navigation`, DESIGN.md §3.2; missing in an older list, it is empty), and `clientSettings` its page for each OAuth client, `{path, description?}` or null (`insulin.clientSettings`, DESIGN.md §5.3.1), which the API access page links for owners and admins; a malformed list fails closed. The deploy leaves out `binding` (the gateway takes `APP_<APP>` from the name; one given must match) and every field that is null or empty, so the list fits Cloudflare's 5 KB a variable |
 | `GOOGLE_CLIENT_ID` | var | optional; empty hides Google sign-in |
 | `GOOGLE_CLIENT_SECRET` | secret | required when `GOOGLE_CLIENT_ID` is set |
 | `TURNSTILE_SITE_KEY` | var | required |
@@ -104,14 +104,12 @@ The deploy pipeline generates the production wrangler config from this list; kee
 | `SUPER_ADMIN_EMAILS` | var | optional; the console's admins, addresses separated by commas or whitespace; an entry that isn't an address is ignored and logged |
 | `SUPER_CLOUDFLARE_API_TOKEN`, `SUPER_CLOUDFLARE_ACCOUNT_ID` | secret, var | optional; a Cloudflare API token with Workers Scripts: Read, Account Analytics: Read and Containers: Read only (never D1, which could query the apps' databases, nor R2, which could read every object in the engines' buckets) and the 32-hex account it reads, for the console's hourly resource snapshot (DESIGN.md §11.5). Both, or none |
 
-**`SITE_APPS` is nearly full.** Cloudflare holds a variable to 5 KB, and `deploy-apps.test.mjs` checks every gateway
-variable for this repository's apps against 5,000 bytes. With Cap Table, Esign and Knowledge, `SITE_APPS` is 4,968
-bytes: about 32 left, so a fourth app, or a longer navigation, permission description or summary, fails that test (and
-could fail the deploy). Most of it is the permission catalogs (descriptions included) and the navigation: Cap Table's
-navigation alone is about 1.2 KB. The structural fix is the one the limit catalogs already have (`writeLimitCatalogs`):
-the deploy writes the catalogs and navigation to the gateway's D1 for the app versions in production, the gateway
-reads them from there (once per isolate, as it reads `SITE_APPS` now), and `SITE_APPS` keeps only what routing needs
-(name, title, summary, public paths, tick and client settings page).
+**One variable per app.** Cloudflare holds a variable to 5 KB, and `deploy-apps.test.mjs` checks every gateway
+variable for this repository's apps against 5,000 bytes. All the apps' entries in one `SITE_APPS` list passed that
+with a fourth app, so each app has its own `SITE_APP_<APP>`, and the limit is per app: Cap Table's, the largest, is
+about 2 KB, most of it its permission catalog and navigation. The gateway reads every `SITE_APP_*` variable and refuses
+one whose `name` isn't the app its name is for. An app that outgrows 5 KB alone moves its catalogs and navigation to
+the gateway's D1, as the limit catalogs already are (`writeLimitCatalogs`).
 
 The app Worker gets `x-suger-user-id`, `x-suger-organization-id`, `x-suger-app-id` (`insulin-apps-<app>`),
 `x-suger-app-role` and the URL-encoded `x-suger-user-email` and `x-suger-user-name`, as `@fours/app` reads them with
@@ -240,7 +238,7 @@ npm run dev -- --app captable
 ```
 
 Several built apps run together, each on its own host, with `--app captable --app esign`: the gateway's config then
-gets a service binding and a `SITE_APPS` entry for each, read from its `package.json` as the deploy reads it. Esign
+gets a service binding and a `SITE_APP_<APP>` variable for each, read from its `package.json` as the deploy reads it. Esign
 runs as it does when published, so it signs nothing until its settings are configured (the docs' screenshot script
 passes local ones). By hand, which is what the script does:
 

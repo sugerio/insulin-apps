@@ -1,0 +1,30 @@
+name: taxi
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - taxi/**
+      - .github/workflows/taxi.yml
+      - .github/workflows/app.yml
+      - .github/scripts/**
+  pull_request:
+    paths:
+      - taxi/**
+      - .github/workflows/taxi.yml
+      - .github/workflows/app.yml
+      - .github/scripts/**
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: taxi-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  app:
+    uses: ./.github/workflows/app.yml
+    with:
+      app: taxi

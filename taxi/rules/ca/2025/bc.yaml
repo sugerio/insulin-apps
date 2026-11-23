@@ -1,0 +1,516 @@
+# British Columbia tax: Form BC428, Schedules BC(S2) and BC(S11), and Form BC479 (British Columbia credits). Line ids
+# are the line numbers in the form's right margin. Every number below was checked against the 2025 BC428 (5010-C),
+# Worksheet BC428 (5010-D), BC(S2) (5010-S2), BC(S11) (5010-S11), BC479 (5010-TC) and the CRA's British Columbia tax
+# information for 2025 (5010-PC).
+
+params:
+  bcTaxBrackets:
+    label: British Columbia tax brackets
+    source: "BC428 Part A, bases as printed on the form"
+    value:
+      - { upTo: 49279, rate: 5.06%, base: 0 }
+      - { upTo: 98560, rate: 7.7%, base: 2493.52 }
+      - { upTo: 113158, rate: 10.5%, base: 6288.15 }
+      - { upTo: 137407, rate: 12.29%, base: 7820.94 }
+      - { upTo: 186306, rate: 14.7%, base: 10801.15 }
+      - { upTo: 259829, rate: 16.8%, base: 17989.30 }
+      - { rate: 20.5%, base: 30341.16 }
+  bcCreditRate:
+    label: British Columbia credit rate
+    source: "BC428 line 55: 5.06%"
+    value: 5.06%
+  bcBasicPersonalAmount:
+    label: British Columbia basic personal amount
+    source: "BC428 line 58040: claim $12,932"
+    value: 12932
+  bcAgeAmountMax:
+    label: British Columbia age amount, full
+    source: "Worksheet BC428, line 58080: $5,799"
+    value: 5799
+  bcAgeAmountThreshold:
+    label: Net income where the British Columbia age amount starts to go down
+    source: "Worksheet BC428, line 58080: income threshold"
+    value: 43169
+  bcAgeAmountRate:
+    label: British Columbia age amount reduction rate
+    source: "Worksheet BC428, line 58080: applicable rate"
+    value: 15%
+  bcSpouseBase:
+    label: British Columbia spouse and eligible dependant amount, base
+    source: "BC428 lines 18 and 21: $12,181"
+    value: 12181
+  bcSpouseMax:
+    label: British Columbia spouse and eligible dependant amount, most
+    source: "BC428 lines 20 and 23: maximum $11,073"
+    value: 11073
+  bcMedicalThresholdMax:
+    label: British Columbia medical expense threshold, most
+    source: "BC428 line 50: whichever is less, $2,689 or 3% of net income"
+    value: 2689
+  bcDonationLowRate:
+    label: British Columbia donation credit rate on the first $200
+    source: "Worksheet BC428, line 58969: 5.06%"
+    value: 5.06%
+  bcDonationHighRate:
+    label: British Columbia donation credit rate above $200
+    source: "Worksheet BC428, line 58969: 16.8%"
+    value: 16.8%
+  bcDonationTopRate:
+    label: British Columbia donation credit rate on income in the top bracket
+    source: "Worksheet BC428, line 58969: 20.5% on the part of donations up to taxable income over $259,829"
+    value: 20.5%
+  bcDonationTopThreshold:
+    label: Taxable income where the top British Columbia donation rate starts
+    source: "Worksheet BC428, line 58969, line 5"
+    value: 259829
+  bcDividendEligibleRate:
+    label: British Columbia dividend tax credit rate, eligible dividends
+    source: "Worksheet BC428, line 61520: 12% of the taxable amount"
+    value: 12%
+  bcDividendOtherRate:
+    label: British Columbia dividend tax credit rate, other dividends
+    source: "Worksheet BC428, line 61520: 1.96% of the taxable amount"
+    value: 1.96%
+  bcTaxReductionBasic:
+    label: British Columbia tax reduction, basic amount
+    source: "BC428 line 73: claim $562"
+    value: 562
+  bcTaxReductionBase:
+    label: Net income where the British Columbia tax reduction starts to go down
+    source: "BC428 line 75: $25,020"
+    value: 25020
+  bcTaxReductionRate:
+    label: British Columbia tax reduction rate
+    source: "BC428 line 77: 3.56%"
+    value: 3.56%
+  bcTaxReductionLimit:
+    label: Net income from which there is no British Columbia tax reduction
+    source: "BC428: no reduction when net income is $40,807 or more"
+    value: 40807
+  bcFirstBracketTop:
+    label: Top of the lowest British Columbia tax bracket
+    source: "BC(S2) line 6: $49,279"
+    value: 49279
+  bcPensionAmountMax:
+    label: Most British Columbia pension income amount
+    source: "BC428 line 36 (58360): maximum $1,000"
+    value: 1000
+  bcCaregiverBase:
+    label: British Columbia caregiver amount, base
+    source: "Worksheet BC428, line 58175, line 1: $24,810"
+    value: 24810
+  bcCaregiverMax:
+    label: Most British Columbia caregiver amount for one dependant
+    source: "Worksheet BC428, line 58175, line 3: maximum $5,659 per dependant"
+    value: 5659
+  bcVolunteerAmount:
+    label: British Columbia volunteer firefighters' or search and rescue volunteers' amount
+    source: "BC428 lines 31 (58315) and 32 (58316); 5010-PC: enter $3,000 if you claimed line 31220 or 31240"
+    value: 3000
+  bcDisabilityAmount:
+    label: British Columbia disability amount
+    source: "BC428 line 38 (58440): claim $9,699; Worksheet BC428, line 58480, line 1"
+    value: 9699
+  bcDisabilitySupplementMax:
+    label: British Columbia disability supplement for a person under 18
+    source: "Worksheet BC428, lines 58440 and 58480, line 2: $5,659"
+    value: 5659
+  bcDisabilityCareThreshold:
+    label: Child care and attendant care that the British Columbia disability supplement allows
+    source: "Worksheet BC428, lines 58440 and 58480, line 4: $3,285"
+    value: 3285
+  bcTuitionTransferMax:
+    label: Most current-year British Columbia tuition a student can transfer
+    source: "BC(S11) line 14: maximum $5,000"
+    value: 5000
+  bcPoliticalCreditRates:
+    label: British Columbia political contribution tax credit
+    source: "Worksheet BC428, line 84: 75% of the first $100, 50% of the next $450 and 33.33% of the rest"
+    value:
+      - { upTo: 100, rate: 75%, base: 0 }
+      - { upTo: 550, rate: 50%, base: 75 }
+      - { rate: 33.33%, base: 300 }
+  bcPoliticalCreditMaxContributions:
+    label: Contributions above which the British Columbia political contribution credit is the most
+    source: "Worksheet BC428, line 84: more than $1,150"
+    value: 1150
+  bcPoliticalCreditMax:
+    label: Most British Columbia political contribution tax credit
+    source: "BC428 line 84: maximum $500"
+    value: 500
+  bcAdultAge:
+    label: Age from which a person on their own can claim the sales and renter's tax credits
+    source: "5010-PC, sales tax credit and renter's tax credit: 19 or older, or with a spouse or partner, or a parent"
+    value: 19
+  bcSalesCreditAmount:
+    label: British Columbia sales tax credit, basic and spouse credits
+    source: "BC479 lines 9 (60330) and 10 (60350): claim $75 each"
+    value: 75
+  bcSalesCreditBaseSingle:
+    label: Family income where the sales tax credit starts to go down, single
+    source: "BC479 line 7: $15,000 if you had no spouse or partner"
+    value: 15000
+  bcSalesCreditBaseFamily:
+    label: Family income where the sales tax credit starts to go down, with a spouse or partner
+    source: "BC479 line 7: $18,000 if you had a spouse or partner on December 31"
+    value: 18000
+  bcSalesCreditRate:
+    label: Sales tax credit reduction rate
+    source: "BC479 line 12: 2%"
+    value: 2%
+  bcRenovationMax:
+    label: Most home renovation expenses for the seniors and persons with disabilities credit
+    source: "BC479 line 60480: maximum $10,000, for you and your spouse or partner together (5010-PC)"
+    value: 10000
+  bcRenovationRate:
+    label: Home renovation tax credit rate
+    source: "BC479 line 14: 10%"
+    value: 10%
+  bcRenterCreditMax:
+    label: Most British Columbia renter's tax credit
+    source: "BC479 line 38: $400"
+    value: 400
+  bcRenterThreshold:
+    label: Family income where the renter's tax credit starts to go down
+    source: "BC479 line 40: $64,764"
+    value: 64764
+  bcRenterRate:
+    label: Renter's tax credit reduction rate
+    source: "BC479 line 42: 2%"
+    value: 2%
+  bcRenterMonths:
+    label: Months of renting needed for the renter's tax credit
+    source: "5010-PC, renter's tax credit: you rented and lived in a rental unit in British Columbia for at least six months of the year"
+    value: 6
+
+lines:
+  # Part A – British Columbia tax on taxable income
+  BC428.8:
+    label: British Columbia tax on taxable income
+    formula: "round(bracket(param.bcTaxBrackets, line.T1.26000), 2)"
+
+  # Part B – British Columbia non-refundable tax credits
+  BC428.16:
+    label: British Columbia basic personal amount
+    formula: >-
+      round((param.bcBasicPersonalAmount) * line.RES.factor, 2)
+
+  BC428.17:
+    label: British Columbia age amount
+    formula: >-
+      if(person.age >= 65, max(0, round(param.bcAgeAmountMax * line.RES.factor, 2)
+      - round(max(0, line.T1.23600 - round(param.bcAgeAmountThreshold * line.RES.factor, 2)) * param.bcAgeAmountRate, 2)), 0)
+    source: "Worksheet BC428, line 58080: for people born in 1960 or earlier, $5,799 less 15% of net income over $43,169 (both amounts prorated for a part-year resident: canada.ca, Completing your return for newcomers, Example 2)"
+  # For a part-year resident, the base and the maximum are prorated, and then the net income is subtracted, not
+  # prorated (canada.ca, completing a return for newcomers, Example 3 for line 30300).
+  BC428.20:
+    label: British Columbia spouse or common-law partner amount
+    formula: >-
+      round(if(line.HH.partner == 1, min(round(param.bcSpouseMax * line.RES.factor, 2), max(0, round(param.bcSpouseBase * line.RES.factor, 2) - line.HH.spouseIncomeForCredits)), 0), 2)
+
+  BC428.23:
+    label: British Columbia amount for an eligible dependant
+    formula: >-
+      round(if(line.HH.partner == 0 and family.childrenUnder18 > 0, min(round(param.bcSpouseMax * line.RES.factor, 2), max(0, round(param.bcSpouseBase * line.RES.factor, 2) - answer.dependantNetIncome)), 0), 2)
+    source: "BC428 lines 21 to 23: the base minus their net income, up to the maximum"
+  # The caregiver amount is for a dependant 18 or older: British Columbia has no amount for an infirm child under 18
+  # (federal line 30500). The adult dependant's column is worked out once: more than one is refused on line 30450. For
+  # a part-year resident, each column's base and maximum are prorated as on line 20, and line 4 is line 20 as claimed.
+  BC428.24:
+    label: British Columbia caregiver amount
+    formula: >-
+      round(if(line.HH.partner == 1 and answer.spouseInfirm, max(0, min(round(param.bcCaregiverMax * line.RES.factor, 2), max(0, round(param.bcCaregiverBase * line.RES.factor, 2) - line.HH.spouseIncomeForCredits)) - line.BC428.20), 0)
+      + if(answer.hasInfirmDependant, if(answer.infirmDependants > 0, min(round(param.bcCaregiverMax * line.RES.factor, 2), max(0, round(param.bcCaregiverBase * line.RES.factor, 2) - answer.infirmDependantIncome)), 0), 0), 2)
+    source: "Worksheet BC428, line 58175: for each dependant, $24,810 less their net income (up to $5,659), less what line 58120 claims for them"
+  BC428.25:
+    label: British Columbia amounts for you and your dependants
+    formula: "line.BC428.16 + line.BC428.17 + line.BC428.20 + line.BC428.23 + line.BC428.24"
+    source: "BC428 line 25: lines 16, 17, 20, 23 and 24"
+  BC428.31:
+    label: British Columbia volunteer firefighters' amount
+    formula: "if(line.T1.31220 > 0, param.bcVolunteerAmount, 0)"
+    source: "BC428 line 31 (58315): $3,000 when you claimed line 31220"
+  BC428.32:
+    label: British Columbia search and rescue volunteers' amount
+    formula: "if(line.T1.31240 > 0, param.bcVolunteerAmount, 0)"
+    source: "BC428 line 32 (58316): $3,000 when you claimed line 31240"
+  BC428.33:
+    label: CPP, EI and volunteer amounts
+    formula: "line.T1.30800 + line.T1.31000 + line.T1.31200 + line.BC428.31 + line.BC428.32"
+    source: "BC428 lines 27 to 33: lines 30800, 31000 and 31200 of your return, and lines 31 and 32. EI on self-employment (line 31217) isn't handled"
+  BC428.34:
+    label: British Columbia adoption expenses
+    formula: "line.T1.31300"
+    source: "BC428 line 34 (58330): the amount on line 31300 of your return (5010-PC: up to $19,580 for each child, as federally)"
+  BC428.35:
+    label: British Columbia credit amounts before pension income
+    formula: "line.BC428.25 + line.BC428.33 + line.BC428.34"
+    source: "BC428 line 35: lines 26, 33 and 34"
+  BC428.36:
+    label: British Columbia pension income amount
+    formula: "min(param.bcPensionAmountMax, line.PEN.creditBase)"
+    source: "BC428 line 36 (58360): eligible pension income, up to $1,000"
+  BC428.37:
+    label: British Columbia credit amounts before disability
+    formula: "line.BC428.35 + line.BC428.36"
+  BC428.38:
+    label: British Columbia disability amount for self
+    formula: >-
+      round((if(answer.hasDisability, param.bcDisabilityAmount, 0)) * line.RES.factor, 2)
+    source: "BC428 line 38 (58440): $9,699 at 18 or older, when you claim line 31600"
+  BC428.39:
+    label: British Columbia disability amount transferred from a dependant
+    formula: >-
+      round((if(answer.hasDisabledDependant, answer.disabledChildren * (param.bcDisabilityAmount + param.bcDisabilitySupplementMax) - min(answer.disabledChildren * param.bcDisabilitySupplementMax, max(0, answer.disabledChildCare - param.bcDisabilityCareThreshold)) + answer.disabledAdults * param.bcDisabilityAmount, 0)) * line.RES.factor, 2)
+    source: "Worksheet BC428, line 58480: $9,699, plus up to $5,659 for a child under 18, less care over $3,285. As on line 31800, the dependant has no income, so line 12 is line 7"
+  BC428.40:
+    label: British Columbia credit amounts before tuition and transfers
+    formula: "line.BC428.37 + line.BC428.38 + line.BC428.39"
+  BC428.41:
+    label: Interest paid on your student loans
+    formula: "line.T1.31900"
+    source: "BC428 line 41 (58520): line 31900 of your return"
+  BC428.42:
+    label: British Columbia tuition and education amounts
+    formula: "line.BCS11.10"
+    source: "BC428 line 42 (58560): Schedule BC(S11) line 10"
+  BC428.43:
+    label: British Columbia tuition transferred from a child or grandchild
+    formula: "round(line.CHILD.provincialTuition * line.RES.factor, 2)"
+    source: "BC428 line 43 (58600): the provincial amount each student designated to you on their T2202. Prorated for a part-year resident (RC4018, Appendix K)"
+  BC428.44:
+    label: Amounts transferred from your spouse or common-law partner
+    formula: "if(line.HH.partner == 1 and family.partnerInYear, if(line.BCS2.5 == 0, 0, round(line.BCS2.12 * line.RES.factor, 2)), 0)"
+    source: >-
+      Schedule BC(S2): their unused British Columbia age, pension income and disability amounts, and the tuition they
+      designate to you. Prorated for a part-year resident (RC4018, Appendix K: line 58640); the schedule shows the whole
+      transfer
+  BC428.45:
+    label: British Columbia credit amounts before medical expenses
+    formula: "line.BC428.40 + line.BC428.41 + line.BC428.42 + line.BC428.43 + line.BC428.44"
+    source: "BC428 line 45: lines 40 to 44"
+  BC428.51:
+    label: Allowable medical expenses
+    formula: "max(0, line.T1.33099 - min(param.bcMedicalThresholdMax, round(line.T1.23600 * param.medicalThresholdRate, 2)))"
+    source: "BC428 lines 46 to 51: expenses over whichever is less, $2,689 or 3% of net income"
+  BC428.52:
+    label: Allowable amount of medical expenses for other dependants
+    formula: >-
+      if(answer.hasOtherDependantMedical, max(0, answer.otherDependantMedical
+      - min(param.bcMedicalThresholdMax, round(answer.otherDependantIncome * param.medicalThresholdRate, 2))), 0)
+    source: "Worksheet BC428, line 58729: their expenses less line 50 of their BC428 (whichever is less, $2,689 or 3% of their net income)"
+  BC428.53:
+    label: British Columbia allowable medical expenses
+    formula: "line.BC428.51 + line.BC428.52"
+    source: "BC428 line 53 (58769): lines 51 and 52"
+  BC428.54:
+    label: British Columbia credit amounts
+    formula: "line.BC428.45 + line.BC428.53"
+    source: "BC428 line 54 (58800): lines 45 and 53"
+  BC428.56:
+    label: British Columbia credit amounts at the credit rate
+    formula: "round(line.BC428.54 * param.bcCreditRate, 2)"
+  BC428.57:
+    label: British Columbia donations credit
+    formula: >-
+      round(min(line.S9.14, max(0, line.T1.26000 - param.bcDonationTopThreshold)) * param.bcDonationTopRate, 2)
+      + round((line.S9.14 - min(line.S9.14, max(0, line.T1.26000 - param.bcDonationTopThreshold))) * param.bcDonationHighRate, 2)
+      + round(line.S9.13 * param.bcDonationLowRate, 2)
+    source: "Worksheet BC428, line 58969: the first $200 at 5.06%, the rest at 16.8%, or 20.5% up to taxable income over $259,829"
+  BC428.60:
+    label: British Columbia non-refundable tax credits
+    formula: "line.BC428.56 + line.BC428.57"
+
+  # Part C – British Columbia tax
+  BC428.65:
+    label: British Columbia dividend tax credit
+    formula: "round(line.T1.12010 * param.bcDividendOtherRate, 2) + round((line.T1.12000 - line.T1.12010) * param.bcDividendEligibleRate, 2)"
+    source: "Worksheet BC428, line 61520"
+  BC428.68:
+    label: British Columbia tax after credits
+    formula: "max(0, line.BC428.8 - line.BC428.60 - line.BC428.65)"
+  BC428.79:
+    label: British Columbia tax reduction
+    formula: "if(line.T1.23600 >= param.bcTaxReductionLimit, 0, max(0, param.bcTaxReductionBasic - round(max(0, line.T1.23600 - param.bcTaxReductionBase) * param.bcTaxReductionRate, 2)))"
+    source: "BC428 lines 73 to 79: $562, less 3.56% of net income over $25,020"
+  # Form T2036 – the provincial foreign tax credit: the foreign tax left after the federal credit, up to the share of
+  # the province's tax otherwise payable on the foreign income.
+  BC.taxOtherwise:
+    label: British Columbia tax otherwise payable, for the foreign tax credit
+    formula: "max(0, line.BC428.68 - line.BC428.79)"
+    source: "Form T2036, note 4: British Columbia tax without the foreign tax credit"
+  BC428.71:
+    label: Provincial foreign tax credit
+    formula: >-
+      if(line.FTC.left > 0 and line.T1.23600 > 0, min(line.FTC.left,
+      round(min(line.FTC.netForeign, line.T1.23600) * line.BC.taxOtherwise / line.T1.23600, 2), line.BC.taxOtherwise), 0)
+    source: "Form T2036, line 5"
+  BC428.72:
+    label: British Columbia tax after the foreign tax credit
+    formula: "max(0, line.BC428.68 - line.BC428.71)"
+  BC428.80:
+    label: British Columbia tax after the tax reduction
+    formula: "max(0, line.BC428.72 - line.BC428.79)"
+    source: "BC428 line 80. The logging tax credit (line 81) isn't handled, so line 82 is line 80"
+  BC428.83:
+    label: British Columbia political contributions made in 2025
+    formula: "answer.provincialPoliticalContributions"
+    source: "BC428 line 83 (60400)"
+  BC428.84:
+    label: British Columbia political contribution tax credit
+    formula: >-
+      if(line.BC428.83 > param.bcPoliticalCreditMaxContributions, param.bcPoliticalCreditMax,
+      round(bracket(param.bcPoliticalCreditRates, line.BC428.83), 2))
+    source: "Worksheet BC428, line 84: $500 for contributions over $1,150, otherwise 75%, 50% and 33.33% by column"
+  BC428.85:
+    label: British Columbia tax after the political contribution credit
+    formula: "max(0, line.BC428.80 - line.BC428.84)"
+    source: "BC428 line 85: line 82 minus line 84"
+  BC428.91:
+    label: British Columbia tax
+    formula: "line.BC428.85"
+    source: "BC428 lines 86 to 91: the ESOP, EVCC and mining flow-through share credits aren't handled by this app"
+
+  # Schedule BC(S2) – British Columbia amounts transferred from your spouse (read from their BC428). A spouse living in
+  # another province is read as if they lived in British Columbia, as the schedule asks.
+  BCS2.5:
+    label: Their age, pension income and disability amounts, and the tuition they designate to you
+    formula: "spouse.line.BC428.17 + spouse.line.BC428.36 + spouse.line.BC428.38 + spouse.line.BCS11.17"
+    source: "BC(S2) lines 1 to 5: their lines 58080, 58360 and 58440, and the provincial tuition on their T2202 (BC(S11) line 17)"
+  BCS2.6:
+    label: Their taxable income, for the transfer
+    formula: "if(spouse.line.T1.26000 <= param.bcFirstBracketTop, spouse.line.T1.26000, round(spouse.line.BC428.8 / param.bcCreditRate, 2))"
+    source: "BC(S2) line 6: line 26000 if it is $49,279 or less, else their British Columbia tax on taxable income ÷ 5.06%"
+  BCS2.11:
+    label: Their adjusted taxable income
+    formula: "max(0, line.BCS2.6 - spouse.line.BC428.16 - spouse.line.BC428.33 - spouse.line.BC428.42)"
+    source: "BC(S2) lines 7 to 11: their basic personal amount, line 33 (CPP, EI and volunteer amounts) and tuition (line 58560)"
+  BCS2.12:
+    label: British Columbia amounts transferred from your spouse
+    formula: "max(0, line.BCS2.5 - line.BCS2.11)"
+    source: "BC(S2) line 12: line 5 minus line 11"
+
+  # Schedule BC(S11) – British Columbia tuition amounts (the student's own). The 2025 schedule has a tuition amount for
+  # the year (line 2, the federal Schedule 11 line 8) as well as the unused amounts carried forward; no education amount.
+  BCS11.2:
+    label: British Columbia tuition fees for 2025
+    formula: "line.S11.8"
+    source: "BC(S11) line 2 (59140): line 8 of the federal Schedule 11, already less the Canada training credit"
+  BCS11.4:
+    label: Income the tuition amount can reduce to zero tax
+    formula: "if(line.T1.26000 <= param.bcFirstBracketTop, line.T1.26000, round(line.BC428.8 / param.bcCreditRate, 2))"
+    source: "BC(S11) line 4: taxable income, or above $49,279, British Columbia tax on taxable income ÷ 5.06%"
+  BCS11.6:
+    label: Room left after other credits
+    formula: "max(0, line.BCS11.4 - line.BC428.40)"
+    source: "BC(S11) lines 5 and 6: less line 40 of Form BC428"
+  BCS11.7:
+    label: Unused tuition and education amounts claimed for 2025
+    formula: 'min(if(person.province == "AB", 0, answer.unusedProvincialTuition), line.BCS11.6)'
+    source: >-
+      BC(S11) lines 1 and 7: the unused amounts on your 2024 notice of assessment. None for a spouse in Alberta, whose
+      own return doesn't carry unused provincial tuition forward (Schedule BC(S2) reads this schedule for them)
+  BCS11.9:
+    label: 2025 tuition amount claimed
+    formula: "min(line.BCS11.2, line.BCS11.6 - line.BCS11.7)"
+    source: "BC(S11) lines 8 and 9"
+  BCS11.10:
+    label: British Columbia tuition and education amounts claimed for 2025
+    formula: "line.BCS11.7 + line.BCS11.9"
+  BCS11.16:
+    label: British Columbia tuition you can transfer
+    formula: "max(0, min(param.bcTuitionTransferMax, line.BCS11.2) - line.BCS11.9)"
+    source: "BC(S11) lines 14 to 16: this year's tuition up to $5,000, less what you used"
+  BCS11.17:
+    label: British Columbia tuition transferred to your spouse or common-law partner
+    formula: "if(line.S11.24 > 0, line.BCS11.16, 0)"
+    source: "BC(S11) line 17 (59200): when you transfer tuition to your spouse federally, the app designates all you can transfer of the British Columbia amount too"
+
+  # Who claims a credit only one of a couple may claim (the sales tax and renter's credits, BC479). A spouse living in
+  # another province can't claim them, so a return claims when its spouse isn't in British Columbia; when both are, the
+  # person preparing claims (the credits are worked out from family income, so which of them claims doesn't change
+  # the amount).
+  BC.eligible:
+    label: Old enough for the British Columbia sales tax and renter's credits (1 for yes)
+    formula: "if(person.age >= param.bcAdultAge or line.HH.partner == 1 or family.childrenUnder19 > 0, 1, 0)"
+    source: "5010-PC: 19 or older on December 31, or with a spouse or partner, or a parent"
+  BC.spouseInBC:
+    label: Your spouse or partner lived in British Columbia (1 for yes)
+    formula: 'if(line.HH.partner == 0, 0, if(family.partnerInYear, if(spouse.person.province == "BC", 1, 0), 1))'
+    source: "From their return when it is prepared here; otherwise the app assumes they lived with you, in British Columbia"
+  BC.claimsSalesCredit:
+    label: This return claims the British Columbia sales tax credit for the couple (1 for yes)
+    formula: >-
+      if(line.BC.eligible == 0, 0, if(line.HH.partner == 0 or not family.partnerInYear, 1,
+      if(spouse.person.province != "BC" or person.role == "self", 1, 0)))
+    source: "BC479, sales tax credit: only one of a couple claims it, for both"
+  BC.renter:
+    label: Rented a home in British Columbia long enough for the renter's tax credit (1 for yes)
+    formula: "if(line.BC.eligible == 1 and line.RENT.months >= param.bcRenterMonths, 1, 0)"
+    source: "5010-PC, renter's tax credit: rented and lived in a rental unit for at least six months of 2025"
+  BC.claimsRentersCredit:
+    label: This return claims the British Columbia renter's tax credit for the couple (1 for yes)
+    formula: >-
+      if(line.BC.renter == 0, 0, if(line.HH.partner == 0 or not family.partnerInYear, 1,
+      if(spouse.person.province != "BC" or spouse.line.BC.renter == 0 or person.role == "self", 1, 0)))
+    source: "BC479, renter's tax credit: only one credit for a couple, even if both rent their own homes"
+
+  # Form BC479 – British Columbia credits: the sales tax credit, the home renovation tax credit for seniors and persons
+  # with disabilities and the renter's tax credit. The venture capital, mining exploration, clean buildings and training
+  # tax credits (lines 17 to 34) aren't handled by this app, so line 35 is line 15.
+  BC479.5:
+    label: Your net income, for family income
+    formula: "max(0, line.T1.23400 - line.T1.23500)"
+    source: "BC479 lines 1 to 5: net income before it was floored at zero. UCCB and RDSP amounts aren't handled"
+  BC479.6:
+    label: Adjusted family net income
+    formula: "line.BC479.5 + if(line.HH.partner == 1, if(family.partnerInYear, spouse.line.BC479.5, answer.spouseNetIncome), 0)"
+    source: "BC479 line 6: yours and your spouse's or partner's, from their return or your answer for their net income"
+  BC479.7:
+    label: Family income the sales tax credit allows
+    formula: "if(line.HH.partner == 1, param.bcSalesCreditBaseFamily, param.bcSalesCreditBaseSingle)"
+    source: "BC479 line 7: $18,000 with a spouse or partner on December 31, otherwise $15,000"
+  BC479.8:
+    label: Income for the sales tax credit
+    formula: "max(0, line.BC479.6 - line.BC479.7)"
+  BC479.10:
+    label: Additional sales tax credit for your spouse or common-law partner
+    formula: "if(line.BC.spouseInBC == 1, param.bcSalesCreditAmount, 0)"
+    source: "BC479 line 10 (60350): $75 when your spouse or partner lived in British Columbia on December 31"
+  BC479.11:
+    label: Sales tax credits before the reduction
+    formula: "param.bcSalesCreditAmount + line.BC479.10"
+    source: "BC479 lines 9 (60330) to 11: $75, and $75 for your spouse or partner"
+  BC479.13:
+    label: Sales tax credit
+    formula: "if(line.BC.claimsSalesCredit == 1, max(0, line.BC479.11 - round(line.BC479.8 * param.bcSalesCreditRate, 2)), 0)"
+    source: "BC479 lines 11 to 13: the credits less 2% of line 8, on one return of a couple"
+  # The home renovation credit reads the home accessibility expenses of line 31285: both credits are for improvements
+  # that let a senior or a person with the disability tax credit get into, move in or use their home more safely.
+  # A couple shares the $10,000; the person preparing's expenses come first.
+  BC479.60480:
+    label: Home renovation expenses
+    formula: >-
+      min(answer.homeAccessibility, param.bcRenovationMax, if(line.HH.partner == 1 and family.partnerInYear and person.role == "spouse"
+      and spouse.person.province == "BC", max(0, param.bcRenovationMax - min(spouse.answer.homeAccessibility, param.bcRenovationMax)), param.bcRenovationMax))
+    source: "BC479 line 60480 and Schedule BC(S12) line 5: eligible expenses up to $10,000 for you and your spouse or partner together"
+  BC479.14:
+    label: Home renovation tax credit for seniors and persons with disabilities
+    formula: "round(line.BC479.60480 * param.bcRenovationRate, 2)"
+    source: "BC479 line 14: 10% of line 60480"
+  BC479.15:
+    label: Sales tax and home renovation credits
+    formula: "line.BC479.13 + line.BC479.14"
+    source: "BC479 line 15, carried to lines 16, 35 and 36"
+  BC479.43:
+    label: Renter's tax credit reduction
+    formula: "if(line.BC.claimsRentersCredit == 1, round(max(0, line.BC479.6 - param.bcRenterThreshold) * param.bcRenterRate, 2), 0)"
+    source: "BC479 lines 39 to 43: 2% of adjusted family net income over $64,764"
+  BC479.44:
+    label: British Columbia renter's tax credit
+    formula: "if(line.BC.claimsRentersCredit == 1, max(0, param.bcRenterCreditMax - line.BC479.43), 0)"
+    source: "BC479 lines 38 to 44 (60576): $400 less the reduction, on one return of a couple"
+  BC479.45:
+    label: British Columbia credits
+    formula: "line.BC479.15 + line.BC479.44"
+    source: "BC479 line 45: line 36 plus line 44, for line 47900 of your return"

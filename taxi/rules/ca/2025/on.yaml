@@ -1,0 +1,640 @@
+# Ontario tax: Form ON428, Schedule ON428-A (the LIFT credit), Schedules ON(S2) and ON(S11), and Form ON479 (Ontario
+# credits) with Schedule ON479-A (the CARE credit). Line ids are the line numbers in the forms' right margin. Every
+# number below was checked against the 2025 ON428 (5006-C), ON428-A (5006-A), Worksheet ON428 (5006-D), ON(S2)
+# (5006-S2), ON(S11) (5006-S11), ON479 (5006-TC), Worksheet ON479 (5006-D1), ON479-A (5006-TCA) and the Ontario tax
+# information page (5006-PC).
+#
+# Left out of ON428 and ON479: tax on split income (line 54), the minimum tax carryover and additional tax (lines 60
+# and 72), EI premiums on self-employment (line 22, 58305), the community food program donation credit for farmers
+# (line 87), the focused flow-through share credit (ON479 line 17, mining) and the co-operative education credit
+# (ON479 line 20, for employers). The Ontario Trillium Benefit (energy and property tax credit, northern energy
+# credit) is applied for on Form ON-BEN and paid apart from the return: it is not on line 47900.
+
+params:
+  onTaxBrackets:
+    label: Ontario tax brackets
+    source: "ON428 Part A, bases as printed on the form"
+    value:
+      - { upTo: 52886, rate: 5.05%, base: 0 }
+      - { upTo: 105775, rate: 9.15%, base: 2670.74 }
+      - { upTo: 150000, rate: 11.16%, base: 7510.09 }
+      - { upTo: 220000, rate: 12.16%, base: 12445.60 }
+      - { rate: 13.16%, base: 20957.60 }
+  onFirstBracketTop:
+    label: Top of the first Ontario bracket
+    source: "ON428 Part A and ON(S2) line 5: $52,886"
+    value: 52886
+  onCreditRate:
+    label: Ontario credit rate
+    source: "ON428 line 45: Ontario non-refundable tax credit rate"
+    value: 5.05%
+  onBasicPersonalAmount:
+    label: Ontario basic personal amount
+    source: "ON428 line 58040: claim $12,747"
+    value: 12747
+  onAgeAmountMax:
+    label: Ontario age amount, full
+    source: "Worksheet ON428, line 58080: $6,223"
+    value: 6223
+  onAgeAmountThreshold:
+    label: Net income where the Ontario age amount starts to go down
+    source: "Worksheet ON428, line 58080: income threshold"
+    value: 46330
+  onAgeAmountRate:
+    label: Ontario age amount reduction rate
+    source: "Worksheet ON428, line 58080: applicable rate"
+    value: 15%
+  onSpouseBase:
+    label: Ontario spouse and eligible dependant amount, base
+    source: "ON428 lines 11 and 14: $11,905"
+    value: 11905
+  onSpouseMax:
+    label: Ontario spouse and eligible dependant amount, most
+    source: "ON428 lines 13 and 16: maximum $10,823"
+    value: 10823
+  onMedicalThresholdMax:
+    label: Ontario medical expense threshold, most
+    source: "ON428 line 40: whichever is less, $2,885 or 3% of net income"
+    value: 2885
+  onDonationLowRate:
+    label: Ontario donation credit rate on the first $200
+    source: "ON428 line 47"
+    value: 5.05%
+  onDonationHighRate:
+    label: Ontario donation credit rate above $200
+    source: "ON428 line 48"
+    value: 11.16%
+  onDividendEligibleRate:
+    label: Ontario dividend tax credit rate, eligible dividends
+    source: "Worksheet ON428, line 61520: 10% of the taxable amount of eligible dividends"
+    value: 10%
+  onDividendOtherRate:
+    label: Ontario dividend tax credit rate, other dividends
+    source: "Worksheet ON428, line 61520: 2.9863% of the taxable amount of other than eligible dividends"
+    value: 2.9863%
+  onSurtaxThreshold1:
+    label: Ontario surtax, first threshold
+    source: "ON428 line 66: 20% of Ontario tax over $5,710"
+    value: 5710
+  onSurtaxRate1:
+    label: Ontario surtax, first rate
+    source: "ON428 line 66"
+    value: 20%
+  onSurtaxThreshold2:
+    label: Ontario surtax, second threshold
+    source: "ON428 line 67: 36% of Ontario tax over $7,307"
+    value: 7307
+  onSurtaxRate2:
+    label: Ontario surtax, second rate
+    source: "ON428 line 67"
+    value: 36%
+  onTaxReductionBasic:
+    label: Ontario tax reduction, basic amount
+    source: "ON428 line 74: $294"
+    value: 294
+  onTaxReductionChild:
+    label: Ontario tax reduction per dependent child
+    source: "ON428 line 75: $544 for each dependent child born in 2007 or later"
+    value: 544
+  liftFamilyThreshold:
+    label: LIFT credit, family income threshold
+    source: "ON428-A line 36: $65,000"
+    value: 65000
+  liftMax:
+    label: LIFT credit, most
+    source: "ON428-A line 5: maximum $875"
+    value: 875
+  liftRate:
+    label: LIFT credit, share of employment income
+    source: "ON428-A line 4: 5.05%"
+    value: 5.05%
+  liftThreshold:
+    label: LIFT credit, individual income threshold
+    source: "ON428-A line 16: $32,500"
+    value: 32500
+  liftReductionRate:
+    label: LIFT credit reduction rate
+    source: "ON428-A line 18: 5%"
+    value: 5%
+  onPensionAmountMax:
+    label: Most Ontario pension income amount
+    source: "ON428 line 27 (58360): maximum $1,762"
+    value: 1762
+  onCaregiverBase:
+    label: Ontario caregiver amount, base
+    source: "Worksheet ON428, line 58185, line 1: $26,562"
+    value: 26562
+  onCaregiverMax:
+    label: Most Ontario caregiver amount for one dependant
+    source: "Worksheet ON428, line 58185, line 3: maximum $6,008 per dependant"
+    value: 6008
+  onAdoptionMax:
+    label: Most Ontario adoption expenses for each child
+    source: "Ontario tax information (5006-PC), line 58330: up to $15,551 of eligible expenses for each child"
+    value: 15551
+  onDisabilityAmount:
+    label: Ontario disability amount
+    source: "ON428 line 29 (58440) and Worksheet ON428, line 58480, line 1: $10,298"
+    value: 10298
+  onDisabilitySupplementMax:
+    label: Ontario disability supplement for a person under 18
+    source: "Worksheet ON428, lines 58440 and 58480, line 2: $6,007"
+    value: 6007
+  onDisabilityCareThreshold:
+    label: Child care and attendant care that the Ontario disability supplement allows
+    source: "Worksheet ON428, lines 58440 and 58480, line 4: $3,518"
+    value: 3518
+  onOtherDependantMedicalMax:
+    label: Most Ontario medical expenses for each other dependant
+    source: "Worksheet ON428, line 58729, line 3: maximum $15,551 per dependant"
+    value: 15551
+  onTaxReductionImpairment:
+    label: Ontario tax reduction per dependant with an impairment
+    source: "ON428 line 76: $544 for each dependant with a mental or physical impairment"
+    value: 544
+  onFertilityRate:
+    label: Ontario fertility treatment tax credit rate
+    source: "ON479 line 1: 25% of eligible medical expenses for fertility treatment"
+    value: 25%
+  onFertilityMax:
+    label: Most Ontario fertility treatment tax credit
+    source: "ON479 line 1: maximum $5,000 (25% of up to $20,000 of expenses)"
+    value: 5000
+  onCareRates:
+    label: Ontario CARE tax credit rate by family adjusted income
+    source: "Schedule ON479-A, line 7 chart: 75% up to $20,000, going down 2 points a step to 1% up to $150,000, then 0%"
+    value:
+      - { upTo: 20000, rate: 75% }
+      - { upTo: 22500, rate: 73% }
+      - { upTo: 25000, rate: 71% }
+      - { upTo: 27500, rate: 69% }
+      - { upTo: 30000, rate: 67% }
+      - { upTo: 32500, rate: 65% }
+      - { upTo: 35000, rate: 63% }
+      - { upTo: 37500, rate: 61% }
+      - { upTo: 40000, rate: 59% }
+      - { upTo: 45000, rate: 57% }
+      - { upTo: 50000, rate: 55% }
+      - { upTo: 55000, rate: 53% }
+      - { upTo: 60000, rate: 51% }
+      - { upTo: 63600, rate: 49% }
+      - { upTo: 67200, rate: 47% }
+      - { upTo: 70800, rate: 45% }
+      - { upTo: 74400, rate: 43% }
+      - { upTo: 78000, rate: 41% }
+      - { upTo: 81600, rate: 39% }
+      - { upTo: 85200, rate: 37% }
+      - { upTo: 88800, rate: 35% }
+      - { upTo: 92400, rate: 33% }
+      - { upTo: 96000, rate: 31% }
+      - { upTo: 99600, rate: 29% }
+      - { upTo: 103200, rate: 27% }
+      - { upTo: 106800, rate: 25% }
+      - { upTo: 110400, rate: 23% }
+      - { upTo: 114000, rate: 21% }
+      - { upTo: 117600, rate: 19% }
+      - { upTo: 121200, rate: 17% }
+      - { upTo: 124800, rate: 15% }
+      - { upTo: 128400, rate: 13% }
+      - { upTo: 132000, rate: 11% }
+      - { upTo: 135600, rate: 9% }
+      - { upTo: 139200, rate: 7% }
+      - { upTo: 142800, rate: 5% }
+      - { upTo: 146400, rate: 3% }
+      - { upTo: 150000, rate: 1% }
+      - { rate: 0% }
+  onSeniorsCareAge:
+    label: Age for the Ontario seniors care at home tax credit
+    source: "Ontario tax information (5006-PC), line 63095: you or your spouse 70 or older on December 31, 2025"
+    value: 70
+  onSeniorsCareRate:
+    label: Ontario seniors care at home tax credit rate
+    source: "ON479 line 4: 25%"
+    value: 25%
+  onSeniorsCareMax:
+    label: Most Ontario seniors care at home tax credit
+    source: "ON479 line 5: maximum $1,500"
+    value: 1500
+  onSeniorsCareBase:
+    label: Family net income where the Ontario seniors care at home tax credit starts to go down
+    source: "ON479 line 9: $35,000"
+    value: 35000
+  onSeniorsCareReductionRate:
+    label: Ontario seniors care at home tax credit reduction rate
+    source: "ON479 line 11: 5%"
+    value: 5%
+  onSeniorsCareFamilyLimit:
+    label: Family net income above which there is no Ontario seniors care at home tax credit
+    source: "ON479, above line 9: more than $65,000, enter 0 on line 13"
+    value: 65000
+  onTransitAge:
+    label: Age for the Ontario seniors' public transit tax credit, a year before
+    source: "Ontario tax information (5006-PC), line 63100: 65 or older on December 31, 2024"
+    value: 65
+  onTransitRate:
+    label: Ontario seniors' public transit tax credit rate
+    source: "ON479 line 14: 15%"
+    value: 15%
+  onTransitMax:
+    label: Most public transit payments for the Ontario seniors' public transit tax credit
+    source: "ON479 line 63100: maximum $3,000"
+    value: 3000
+  onPoliticalTier1:
+    label: Ontario political contributions at the 75% rate
+    source: "Worksheet ON479, line 16: $500.05 or less"
+    value: 500.05
+  onPoliticalTier2:
+    label: Ontario political contributions up to which the 50% rate applies
+    source: "Worksheet ON479, line 16: more than $500.05 but not more than $1,666.82"
+    value: 1666.82
+  onPoliticalRate1:
+    label: Ontario political contribution credit rate, first tier
+    source: "Worksheet ON479, line 16, line 4: 75%"
+    value: 75%
+  onPoliticalRate2:
+    label: Ontario political contribution credit rate, second tier
+    source: "Worksheet ON479, line 16, line 4: 50%"
+    value: 50%
+  onPoliticalRate3:
+    label: Ontario political contribution credit rate, third tier
+    source: "Worksheet ON479, line 16, line 4: 33.33%"
+    value: 33.33%
+  onPoliticalBase2:
+    label: Ontario political contribution credit on the first tier
+    source: "Worksheet ON479, line 16, line 6: $375.03 (as printed)"
+    value: 375.03
+  onPoliticalBase3:
+    label: Ontario political contribution credit on the first two tiers
+    source: "Worksheet ON479, line 16, line 6: $958.41 (as printed)"
+    value: 958.41
+  onPoliticalCreditMax:
+    label: Most Ontario political contribution tax credit
+    source: "ON479 line 16: maximum $1,666.82"
+    value: 1666.82
+  onPoliticalMaxContributions:
+    label: Ontario political contributions that give the most credit
+    source: "ON479 line 16: $1,666.82 if your total contributions are $3,793 or more"
+    value: 3793
+
+lines:
+  # Part A – Ontario tax on taxable income
+  ON428.8:
+    label: Ontario tax on taxable income
+    formula: "round(bracket(param.onTaxBrackets, line.T1.26000), 2)"
+
+  # Part B – Ontario non-refundable tax credits
+  ON428.9:
+    label: Ontario basic personal amount
+    formula: >-
+      round((param.onBasicPersonalAmount) * line.RES.factor, 2)
+
+  ON428.10:
+    label: Ontario age amount
+    formula: >-
+      if(person.age >= 65, max(0, round(param.onAgeAmountMax * line.RES.factor, 2)
+      - round(max(0, line.T1.23600 - round(param.onAgeAmountThreshold * line.RES.factor, 2)) * param.onAgeAmountRate, 2)), 0)
+    source: "Worksheet ON428, line 58080: for people born in 1960 or earlier, $6,223 less 15% of net income over $46,330 (both amounts prorated for a part-year resident: canada.ca, Completing your return for newcomers, Example 2)"
+  # For a part-year resident, the base and the maximum are prorated, and then the net income is subtracted, not
+  # prorated (canada.ca, completing a return for newcomers, Example 3 for line 30300).
+  ON428.13:
+    label: Ontario spouse or common-law partner amount
+    formula: >-
+      round(if(line.HH.partner == 1, min(round(param.onSpouseMax * line.RES.factor, 2), max(0, round(param.onSpouseBase * line.RES.factor, 2) - line.HH.spouseIncomeForCredits)), 0), 2)
+
+  ON428.16:
+    label: Ontario amount for an eligible dependant
+    formula: >-
+      round(if(line.HH.partner == 0 and family.childrenUnder18 > 0, min(round(param.onSpouseMax * line.RES.factor, 2), max(0, round(param.onSpouseBase * line.RES.factor, 2) - answer.dependantNetIncome)), 0), 2)
+    source: "ON428 lines 14 to 16: the base minus their net income, up to the maximum"
+  ON428.17:
+    label: Ontario caregiver amount
+    formula: >-
+      if(answer.hasInfirmDependant, if(answer.infirmDependants > 1, unsupported("The Ontario caregiver amount for more than one adult dependant isn't handled by this app yet"),
+      if(answer.infirmDependants == 0, 0, min(round(param.onCaregiverMax * line.RES.factor, 2), max(0, round(param.onCaregiverBase * line.RES.factor, 2) - answer.infirmDependantIncome)))), 0)
+    source: >-
+      Worksheet ON428, line 58185: $26,562 less the dependant's net income, up to $6,008 (both prorated for a part-year
+      resident before the income comes off). Only for a dependant 18 or older with an impairment, not a spouse or a
+      child under 18; line 4 (an eligible dependant amount for the same person) is zero, as the app's eligible
+      dependant is a child under 18
+  ON428.18:
+    label: Ontario amounts for you and your dependants
+    formula: "line.ON428.9 + line.ON428.10 + line.ON428.13 + line.ON428.16 + line.ON428.17"
+    source: "ON428 line 18: lines 9, 10, 13, 16 and 17"
+  ON428.23:
+    label: Ontario adoption expenses
+    formula: >-
+      if(answer.hasAdoption, if(answer.adoptedChildren > 1 and answer.adoptionExpenses > param.onAdoptionMax,
+      unsupported("Ontario adoption expenses over $15,551 for more than one child are claimed child by child, which this app doesn't handle yet"),
+      min(answer.adoptionExpenses, param.onAdoptionMax)), 0)
+    source: "ON428 line 23 (58330): the expenses of line 31300, up to $15,551 for each child"
+  ON428.24:
+    label: CPP, EI and adoption amounts
+    formula: "line.T1.30800 + line.T1.31000 + line.T1.31200 + line.ON428.23"
+    source: "ON428 lines 19 to 24: lines 30800, 31000 and 31200 of your return, and line 23"
+  ON428.27:
+    label: Ontario pension income amount
+    formula: "min(param.onPensionAmountMax, line.PEN.creditBase)"
+    source: "ON428 line 27 (58360): eligible pension income, up to $1,762"
+  ON428.28:
+    label: Ontario amounts before disability amounts
+    formula: "line.ON428.18 + line.ON428.24 + line.ON428.27"
+    source: "ON428 lines 25 to 28"
+  ON428.29:
+    label: Ontario disability amount for self
+    formula: >-
+      round((if(answer.hasDisability, param.onDisabilityAmount, 0)) * line.RES.factor, 2)
+    source: "ON428 line 29 (58440): $10,298 at 18 or older, with an approved Form T2201"
+  ON428.30:
+    label: Ontario disability amount transferred from a dependant
+    formula: >-
+      round((if(answer.hasDisabledDependant, if(answer.disabledChildren > 1 and answer.disabledChildCare > 0, unsupported("Child care for more than one child with a disability is worked out child by child, which this app doesn't handle yet"), answer.disabledChildren * (param.onDisabilityAmount + param.onDisabilitySupplementMax) - min(answer.disabledChildren * param.onDisabilitySupplementMax, max(0, answer.disabledChildCare - param.onDisabilityCareThreshold)) + answer.disabledAdults * param.onDisabilityAmount), 0)) * line.RES.factor, 2)
+    source: >-
+      Worksheet ON428, line 58480: $10,298, plus up to $6,007 for a child under 18, less care over $3,518. The app
+      assumes the dependant had no income, so lines 8 to 11 never limit it
+  ON428.31:
+    label: Ontario amounts with disability amounts
+    formula: "line.ON428.28 + line.ON428.29 + line.ON428.30"
+    source: "ON428 line 31: lines 28 to 30"
+  ON428.32:
+    label: Interest paid on your student loans
+    formula: "line.T1.31900"
+    source: "ON428 line 32 (58520): line 31900 of your return"
+  ON428.33:
+    label: Your unused Ontario tuition and education amounts
+    formula: 'min(if(person.province == "AB", 0, answer.unusedProvincialTuition), line.ONS11.4)'
+    source: >-
+      Schedule ON(S11), line 5: the unused amounts from your notice of assessment, up to line 4. None for a spouse in
+      Alberta, whose own return doesn't carry unused provincial tuition forward (Schedule ON(S2) reads this line for them)
+  ON428.34:
+    label: Ontario amounts transferred from your spouse or common-law partner
+    formula: "if(line.HH.partner == 1 and family.partnerInYear, if(line.ONS2.4 == 0, 0, round(line.ONS2.11 * line.RES.factor, 2)), 0)"
+    source: >-
+      Schedule ON(S2): their unused Ontario age, pension income and disability amounts. A spouse living in another
+      province is read as if they lived in Ontario, as the schedule asks: the engine works out Ontario's lines for
+      anyone. Prorated for a part-year resident (RC4018, Appendix K: line 58640); the schedule shows the whole transfer
+  ON428.35:
+    label: Ontario amounts before medical expenses
+    formula: "line.ON428.31 + line.ON428.32 + line.ON428.33 + line.ON428.34"
+    source: "ON428 line 35: lines 31 to 34"
+  ON428.36:
+    label: Medical expenses
+    formula: "line.T1.33099"
+  ON428.41:
+    label: Allowable medical expenses
+    formula: "max(0, line.ON428.36 - min(param.onMedicalThresholdMax, round(line.T1.23600 * param.medicalThresholdRate, 2)))"
+    source: "ON428 lines 36 to 41: expenses over whichever is less, $2,885 or 3% of net income"
+  ON428.42:
+    label: Allowable medical expenses for other dependants
+    formula: >-
+      if(answer.hasOtherDependantMedical, min(param.onOtherDependantMedicalMax, max(0, answer.otherDependantMedical
+      - min(param.onMedicalThresholdMax, round(answer.otherDependantIncome * param.medicalThresholdRate, 2)))), 0)
+    source: "Worksheet ON428, line 58729: their expenses over line 40 of their ON428 (whichever is less, $2,885 or 3% of their net income), up to $15,551"
+  ON428.43:
+    label: Ontario medical expense amounts
+    formula: "line.ON428.41 + line.ON428.42"
+    source: "ON428 line 43 (58769)"
+  ON428.44:
+    label: Ontario credit amounts
+    formula: "line.ON428.35 + line.ON428.43"
+  ON428.46:
+    label: Ontario credit amounts at the credit rate
+    formula: "round(line.ON428.44 * param.onCreditRate, 2)"
+  ON428.49:
+    label: Ontario donations credit
+    formula: "round(line.S9.13 * param.onDonationLowRate, 2) + round(line.S9.14 * param.onDonationHighRate, 2)"
+    source: "ON428 lines 47 to 49: Schedule 9 lines 13 and 14 at 5.05% and 11.16%"
+  ON428.50:
+    label: Ontario non-refundable tax credits
+    formula: "line.ON428.46 + line.ON428.49"
+
+  # Part C – Ontario tax
+  ON428.53:
+    label: Ontario tax after credits
+    formula: "max(0, line.ON428.8 - line.ON428.50)"
+  ON428.57:
+    label: Ontario dividend tax credit
+    formula: "round(line.T1.12010 * param.onDividendOtherRate, 2) + round((line.T1.12000 - line.T1.12010) * param.onDividendEligibleRate, 2)"
+    source: "Worksheet ON428, line 61520"
+  ON428.68:
+    label: Ontario surtax
+    formula: "round(max(0, line.ON428.53 - param.onSurtaxThreshold1) * param.onSurtaxRate1, 2) + round(max(0, line.ON428.53 - param.onSurtaxThreshold2) * param.onSurtaxRate2, 2)"
+    source: "ON428 lines 63 to 68, on Ontario tax after credits (line 62)"
+  ON428.73:
+    label: Ontario tax after surtax and the dividend credit
+    formula: "max(0, line.ON428.53 + line.ON428.68 - line.ON428.57)"
+    source: "ON428 lines 69 to 73"
+  ON.reductionClaimant:
+    label: This return claims the Ontario tax reductions for dependants (1 for yes)
+    formula: >-
+      if(line.HH.partner == 0, 1, if(line.HH.spouseNetIncome > line.T1.23600, 0,
+      if(line.HH.spouseNetIncome == line.T1.23600 and family.partnerInYear and person.role == "spouse", 0, 1)))
+    source: "ON428 lines 75 and 76: only the spouse with the higher net income claims them; with equal incomes, the person preparing"
+  ON428.75:
+    label: Ontario tax reduction for dependent children
+    formula: "if(line.ON.reductionClaimant == 1, param.onTaxReductionChild * family.childrenUnder19, 0)"
+    source: "ON428 line 75: $544 per child born in 2007 or later, claimed by the spouse with the higher net income"
+  # Line 76 counts each dependant with an impairment that either spouse claims on line 58160, 58185 or 58480, each
+  # dependent child with an impairment counted on line 75, and a spouse whose disability amount moves on ON(S2). One
+  # child or adult is often both infirm and approved for the disability tax credit: the app counts the larger of the
+  # two numbers, not their sum.
+  ON.impairedChildren:
+    label: Children under 18 with an impairment claimed on this return
+    formula: "max(if(answer.hasInfirmChildren, answer.infirmChildren, 0), if(answer.hasDisabledDependant, answer.disabledChildren, 0))"
+    source: "Ontario tax information (5006-PC), line 76: dependent children with an impairment counted on line 75"
+  ON.impairedAdults:
+    label: Dependants 18 or older with an impairment claimed on this return (the infirm dependant and those with the disability tax credit, who have no income, are different people)
+    formula: "if(line.ON428.17 > 0, answer.infirmDependants, 0) + if(answer.hasDisabledDependant, answer.disabledAdults, 0)"
+    source: "Ontario tax information (5006-PC), line 76: dependants claimed on line 58185 or 58480"
+  ON.impairedDependants:
+    label: Dependants with an impairment for the Ontario tax reduction
+    formula: >-
+      min(family.childrenUnder19, if(line.HH.partner == 1 and family.partnerInYear,
+      max(line.ON.impairedChildren, spouse.line.ON.impairedChildren), line.ON.impairedChildren))
+      + line.ON.impairedAdults + if(line.HH.partner == 1 and family.partnerInYear, spouse.line.ON.impairedAdults, 0)
+      + if(line.ON428.34 > 0 and line.ONS2.3 > 0, 1, 0)
+    source: "ON428 line 60970: the children (counted once for both spouses), each spouse's adult dependants, and a spouse with an impairment"
+  ON428.76:
+    label: Ontario tax reduction for dependants with an impairment
+    formula: "if(line.ON.reductionClaimant == 1, param.onTaxReductionImpairment * line.ON.impairedDependants, 0)"
+    source: "ON428 line 76: $544 for each dependant with an impairment, claimed by the spouse with the higher net income"
+  ON428.77:
+    label: Ontario tax reductions
+    formula: "param.onTaxReductionBasic + line.ON428.75 + line.ON428.76"
+    source: "ON428 line 77: lines 74 to 76"
+  ON428.80:
+    label: Ontario tax reduction
+    formula: "if(line.ON428.73 == 0 or not person.residentAllYear, 0, max(0, 2 * line.ON428.77 - line.ON428.73))"
+    source: "ON428 lines 77 to 80: twice the reductions, less Ontario tax; none for someone who moved to or from Canada during the year"
+  ON428.81:
+    label: Ontario tax after the reduction
+    formula: "max(0, line.ON428.73 - line.ON428.80)"
+  ON428.85:
+    label: Low-income individuals and families tax (LIFT) credit
+    formula: "if(not person.residentAllYear, 0, if(line.HH.partner == 1, line.ON428A.41, line.ON428A.20))"
+    source: "ON428-A Part A when single, Part B with a spouse or partner; 5006-PC line 85: only for a resident of Canada at the beginning of the year (and of Ontario at the end)"
+  # Form T2036 – the provincial foreign tax credit: the foreign tax left after the federal credit, up to the share of
+  # the province's tax otherwise payable on the foreign income.
+  ON.taxOtherwise:
+    label: Ontario tax otherwise payable, for the foreign tax credit
+    formula: >-
+      max(0, line.ON428.53 + line.ON428.68 - if(line.ON428.53 + line.ON428.68 == 0, 0,
+      max(0, 2 * line.ON428.77 - (line.ON428.53 + line.ON428.68))))
+    source: "Form T2036, note 4: ON428 line 81 worked out with lines 70 and 72 at zero"
+  ON428.82:
+    label: Provincial foreign tax credit
+    formula: >-
+      if(line.FTC.left > 0 and line.T1.23600 > 0, min(line.FTC.left,
+      round(min(line.FTC.netForeign, line.T1.23600) * line.ON.taxOtherwise / line.T1.23600, 2), line.ON.taxOtherwise), 0)
+    source: "Form T2036, line 5"
+  ON428.83:
+    label: Ontario tax after the foreign tax credit
+    formula: "max(0, line.ON428.81 - line.ON428.82)"
+  ON428.86:
+    label: Ontario tax after the LIFT credit
+    formula: "max(0, line.ON428.83 - line.ON428.85)"
+  ON428.89:
+    label: Ontario health premium
+    formula: >-
+      round(min(300, max(0, line.T1.26000 - 20000) * 6%), 2)
+      + round(min(150, max(0, line.T1.26000 - 36000) * 6%), 2)
+      + round(min(150, max(0, line.T1.26000 - 48000) * 25%), 2)
+      + round(min(150, max(0, line.T1.26000 - 72000) * 25%), 2)
+      + round(min(150, max(0, line.T1.26000 - 200000) * 25%), 2)
+    source: "ON428 line 89 chart: $0 to $900 by taxable income, in steps at $20,000, $36,000, $48,000, $72,000 and $200,000"
+  ON428.90:
+    label: Ontario tax
+    formula: "line.ON428.86 + line.ON428.89"
+
+  # Schedule ON428-A – LIFT credit, Part A (single individuals; couples use Part B, which comes with couples)
+  ON428A.5:
+    label: LIFT credit before the income test
+    formula: "min(param.liftMax, round((line.T1.10100 + line.T1.10400) * param.liftRate, 2))"
+    source: "ON428-A lines 1 to 5: lines 10100 and 10400 at 5.05%, up to $875"
+  ON428A.13:
+    label: Adjusted net income
+    formula: "max(0, line.T1.23400 - line.T1.23500)"
+    source: "ON428-A lines 6 to 13: net income (line 23600) before it was floored at zero"
+  ON428A.19:
+    label: LIFT credit reduction
+    formula: "round(max(0, line.ON428A.13 - param.liftThreshold) * param.liftReductionRate, 2)"
+  ON428A.20:
+    label: LIFT credit, single
+    formula: "max(0, line.ON428A.5 - line.ON428A.19)"
+  ON428A.28:
+    label: Your spouse's or partner's adjusted net income
+    formula: "if(family.partnerInYear, spouse.line.ON428A.13, answer.spouseNetIncome)"
+    source: "ON428-A line 28: from their return, or your answer for their net income"
+  ON428A.38:
+    label: Income over the LIFT thresholds
+    formula: "max(max(0, line.ON428A.13 - param.liftThreshold), max(0, line.ON428A.13 + line.ON428A.28 - param.liftFamilyThreshold))"
+    source: "ON428-A Part B lines 30 to 38: the greater of your income over $32,500 and family income over $65,000"
+  ON428A.41:
+    label: LIFT credit, with a spouse or partner
+    formula: "max(0, line.ON428A.5 - round(line.ON428A.38 * param.liftReductionRate, 2))"
+
+  # Schedule ON(S2) – Ontario amounts transferred from your spouse (read from their ON428)
+  ONS2.5:
+    label: Their taxable income, for the transfer
+    formula: "if(spouse.line.T1.26000 <= param.onFirstBracketTop, spouse.line.T1.26000, round(spouse.line.ON428.8 / param.onCreditRate, 2))"
+    source: "ON(S2) line 5"
+  ONS2.3:
+    label: Their Ontario disability amount
+    formula: "spouse.line.ON428.29"
+    source: "ON(S2) line 3 (59070): line 58440 of their ON428"
+  ONS2.4:
+    label: Their Ontario age, pension income and disability amounts
+    formula: "spouse.line.ON428.10 + spouse.line.ON428.27 + line.ONS2.3"
+    source: "ON(S2) lines 1 to 4"
+  ONS2.10:
+    label: Their adjusted taxable income
+    formula: "max(0, line.ONS2.5 - spouse.line.ON428.9 - spouse.line.ON428.24 - spouse.line.ON428.33)"
+    source: "ON(S2) lines 6 to 10: their lines 58040, 24 and 58560"
+  ONS2.11:
+    label: Ontario amounts transferred from your spouse
+    formula: "max(0, line.ONS2.4 - line.ONS2.10)"
+    source: "ON(S2) line 11"
+
+  # Schedule ON(S11) – Ontario tuition and education amounts carried forward (only the student claims them)
+  ONS11.2:
+    label: Taxable income, for the tuition claim
+    formula: "if(line.T1.26000 <= param.onFirstBracketTop, line.T1.26000, round(line.ON428.8 / param.onCreditRate, 2))"
+    source: "ON(S11) line 2"
+  ONS11.4:
+    label: Taxable income left for unused tuition
+    formula: "max(0, line.ONS11.2 - line.ON428.31)"
+    source: "ON(S11) lines 3 and 4: less line 31 of your ON428"
+
+  # Form ON479 – Ontario credits (refundable)
+  ON479.61268:
+    label: Eligible medical expenses for fertility treatment
+    formula: "min(answer.fertilityExpenses, line.ON428.36)"
+    source: "ON479 line 61268: fertility treatment expenses included in your medical expenses on line 58689"
+  ON479.1:
+    label: Ontario fertility treatment tax credit
+    formula: >-
+      if(line.ON479.61268 == 0, 0, if(line.HH.partner == 1 and family.partnerInYear and spouse.person.province == "ON" and spouse.answer.fertilityExpenses > 0,
+      unsupported("Only one spouse can claim the Ontario fertility treatment tax credit. Enter the fertility treatment expenses on one return only"),
+      min(param.onFertilityMax, round(line.ON479.61268 * param.onFertilityRate, 2))))
+    source: >-
+      ON479 line 1: 25% of the expenses, up to $5,000. Only one spouse may claim it, and the claim can't be split. A
+      spouse living in another province claims that province's credit, if any, not this one
+  ON479.5:
+    label: Medical expenses at the seniors care at home rate
+    formula: "min(param.onSeniorsCareMax, round(line.ON428.43 * param.onSeniorsCareRate, 2))"
+    source: "ON479 lines 3 to 5: line 58769 of your ON428 at 25%, up to $1,500"
+  ON479.8:
+    label: Family net income
+    formula: "line.T1.23600 + line.HH.spouseNetIncome"
+    source: "ON479 lines 6 to 8"
+  ON479.13:
+    label: Ontario seniors care at home tax credit
+    formula: >-
+      if((person.age >= param.onSeniorsCareAge or (line.HH.partner == 1 and family.partnerInYear and spouse.person.age >= param.onSeniorsCareAge))
+      and line.ON479.8 <= param.onSeniorsCareFamilyLimit,
+      max(0, line.ON479.5 - round(max(0, line.ON479.8 - param.onSeniorsCareBase) * param.onSeniorsCareReductionRate, 2)), 0)
+    source: >-
+      ON479 lines 9 to 13: line 5 less 5% of family net income over $35,000; nothing above $65,000. You or your
+      spouse must be 70 or older. The app knows a spouse's age only when their return is prepared here
+  ON479.14:
+    label: Ontario seniors' public transit tax credit
+    formula: "if(person.age - 1 >= param.onTransitAge, round(min(answer.publicTransitPaid, param.onTransitMax) * param.onTransitRate, 2), 0)"
+    source: "ON479 line 14: 15% of up to $3,000 of transit payments, for someone 65 or older on December 31, 2024 (66 or older at the end of 2025)"
+  ON479.15:
+    label: Ontario political contributions
+    formula: "answer.provincialPoliticalContributions"
+    source: "ON479 line 63110"
+  ON479.16:
+    label: Ontario political contribution tax credit
+    formula: >-
+      if(line.ON479.15 >= param.onPoliticalMaxContributions, param.onPoliticalCreditMax, min(param.onPoliticalCreditMax,
+      if(line.ON479.15 <= param.onPoliticalTier1, round(line.ON479.15 * param.onPoliticalRate1, 2),
+      if(line.ON479.15 <= param.onPoliticalTier2, round((line.ON479.15 - param.onPoliticalTier1) * param.onPoliticalRate2, 2) + param.onPoliticalBase2,
+      round((line.ON479.15 - param.onPoliticalTier2) * param.onPoliticalRate3, 2) + param.onPoliticalBase3))))
+    source: "Worksheet ON479, line 16: the column of the contributions, with its printed base; $1,666.82 at $3,793 or more"
+  ON479.18:
+    label: Ontario credits before the co-operative education credit
+    formula: "line.ON479.1 + line.ON479A.8 + line.ON479.13 + line.ON479.14 + line.ON479.16"
+    source: "ON479 line 18: lines 1, 2, 13, 14 and 16 (line 17, the focused flow-through share credit, isn't handled)"
+  ON479.21:
+    label: Ontario credits
+    formula: "line.ON479.18"
+    source: "ON479 line 21: line 19 plus line 20 (the co-operative education credit, for employers, isn't handled). Goes on line 47900 of the return"
+
+  # Schedule ON479-A – the childcare access and relief from expenses (CARE) tax credit, on the child care deduction.
+  # A spouse on December 31 is the supporting person; an eligible child is one the child care deduction is for.
+  ON479A.4:
+    label: Your adjusted income
+    formula: "max(0, line.T1.23400 + line.T1.21400)"
+    source: "ON479-A lines 1 to 4: net income before it is floored at zero (line 23400 less 23500), plus lines 21400 and 23500"
+  ON479A.supporting:
+    label: Your spouse's or partner's adjusted income
+    formula: "if(line.HH.partner == 1, if(family.partnerInYear, spouse.line.ON479A.4, answer.spouseNetIncome), 0)"
+    source: "ON479-A line 4, column 2: from their return, or your answer for their net income"
+  ON479A.5:
+    label: Family adjusted income
+    formula: "line.ON479A.4 + line.ON479A.supporting"
+    source: "ON479-A line 5"
+  ON479A.8:
+    label: Ontario childcare access and relief from expenses (CARE) tax credit
+    formula: "if(line.T1.21400 == 0, 0, round(line.T1.21400 * step(param.onCareRates, line.ON479A.5), 2))"
+    source: "ON479-A lines 6 to 8: the child care deduction at the rate for the family adjusted income"

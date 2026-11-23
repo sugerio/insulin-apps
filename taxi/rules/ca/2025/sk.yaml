@@ -1,0 +1,430 @@
+# Saskatchewan tax: Form SK428, Schedule SK(S2) and Form SK479. Line ids are the line numbers in the forms' right
+# margin. Every number below was checked against the 2025 SK428 (5008-C), Worksheet SK428 (5008-D), SK(S2) (5008-S2)
+# SK(S11) (5008-S11), SK(S12) (5008-S12) and SK479 (5008-TC); who claims the amount for dependent children, the
+# volunteer amounts, the first-time home buyers' amount and the active families benefit's limit per child come from the
+# CRA's 2025 Saskatchewan information (5008-PC).
+
+params:
+  skTaxBrackets:
+    label: Saskatchewan tax brackets
+    source: "SK428 Part A, bases as printed on the form"
+    value:
+      - { upTo: 53463, rate: 10.5%, base: 0 }
+      - { upTo: 152750, rate: 12.5%, base: 5613.62 }
+      - { rate: 14.5%, base: 18024.49 }
+  skFirstBracketTop:
+    label: Top of the first Saskatchewan bracket
+    source: "SK428 Part A and SK(S2) line 7: $53,463"
+    value: 53463
+  skCreditRate:
+    label: Saskatchewan credit rate
+    source: "SK428 line 52: 10.5%"
+    value: 10.5%
+  skBasicPersonalAmount:
+    label: Saskatchewan basic personal amount
+    source: "SK428 line 58040: claim $19,491"
+    value: 19491
+  skAgeAmountMax:
+    label: Saskatchewan age amount, full
+    source: "Worksheet SK428, line 58080: $5,785"
+    value: 5785
+  skAgeAmountThreshold:
+    label: Net income where the Saskatchewan age amount starts to go down
+    source: "Worksheet SK428, line 58080: income threshold"
+    value: 43066
+  skAgeAmountRate:
+    label: Saskatchewan age amount reduction rate
+    source: "Worksheet SK428, line 58080: applicable rate"
+    value: 15%
+  skSpouseBase:
+    label: Saskatchewan spouse and eligible dependant amount, base
+    source: "SK428 lines 11 and 14: $21,440"
+    value: 21440
+  skSpouseMax:
+    label: Saskatchewan spouse and eligible dependant amount, most
+    source: "SK428 lines 13 and 16: maximum $19,491"
+    value: 19491
+  skChildAmount:
+    label: Saskatchewan amount for each dependent child born in 2007 or later
+    source: "SK428 line 58210: $7,704 for each child"
+    value: 7704
+  skSeniorSupplementaryAmount:
+    label: Saskatchewan senior supplementary amount
+    source: "SK428 line 58220: claim $2,028"
+    value: 2028
+  skPensionAmountMax:
+    label: Most Saskatchewan pension income amount
+    source: "SK428 line 33 (58360): maximum $1,000"
+    value: 1000
+  skMedicalThresholdMax:
+    label: Saskatchewan medical expense threshold, most
+    source: "SK428 line 47: whichever is less, $2,681 or 3% of net income"
+    value: 2681
+  skDonationLowRate:
+    label: Saskatchewan donation credit rate on the first $200
+    source: "SK428 line 54: 10.5%"
+    value: 10.5%
+  skDonationHighRate:
+    label: Saskatchewan donation credit rate above $200
+    source: "SK428 line 55: 14.5%"
+    value: 14.5%
+  skDividendEligibleRate:
+    label: Saskatchewan dividend tax credit rate, eligible dividends
+    source: "Worksheet SK428, line 61520: 11% of the taxable amount"
+    value: 11%
+  skDividendOtherRate:
+    label: Saskatchewan dividend tax credit rate, other dividends
+    source: "Worksheet SK428, line 61520: 2.519% of the taxable amount"
+    value: 2.519%
+  skActiveFamiliesIncomeLimit:
+    label: Adjusted family income above which there is no active families benefit
+    source: "SK479 line 8: $120,000"
+    value: 120000
+  skActiveFamiliesPerChild:
+    label: Most active families benefit for each child
+    source: "SK479 active families benefit worksheet, column 5: $300 a child"
+    value: 300
+  skActiveFamiliesPerDisabledChild:
+    label: Most active families benefit for a child eligible for the disability tax credit
+    source: "SK479 active families benefit worksheet, column 5: $400 for a child eligible for the disability tax credit"
+    value: 400
+  skInfirmDependantBase:
+    label: Saskatchewan amount for infirm dependants, base
+    source: "Worksheet SK428, line 58200, line 1: $21,924"
+    value: 21924
+  skCaregiverBase:
+    label: Saskatchewan caregiver amount, base
+    source: "Worksheet SK428, line 58400, line 1: $33,094"
+    value: 33094
+  skDependantAmountMax:
+    label: Most Saskatchewan infirm dependant or caregiver amount for each dependant
+    source: "Worksheet SK428, lines 58200 and 58400, line 3: maximum $13,986 per dependant"
+    value: 13986
+  skDisabilityAmount:
+    label: Saskatchewan disability amount
+    source: "SK428 line 36 (58440): claim $13,986"
+    value: 13986
+  skDisabilitySupplementMax:
+    label: Most Saskatchewan disability supplement for a child under 18
+    source: "Worksheet SK428, line 58480, line 2: $13,986"
+    value: 13986
+  skDisabilityCareThreshold:
+    label: Child care and attendant care that the Saskatchewan disability supplement allows
+    source: "Worksheet SK428, line 58480, line 4: $3,277"
+    value: 3277
+  skVolunteerAmount:
+    label: Saskatchewan volunteer firefighters' or search and rescue volunteers' amount
+    source: "Lines 58315 and 58316 of the CRA's Saskatchewan information: enter $3,000"
+    value: 3000
+  skHomeRenovationMax:
+    label: Most home renovation expenses
+    source: "SK(S12) line 1: maximum $5,000"
+    value: 5000
+  skHomeRenovationSeniorMax:
+    label: Most home renovation expenses when the whole family is 65 or older
+    source: "SK(S12) note 1: $6,000 when you and all eligible family members were 65 or older"
+    value: 6000
+  skHomeRenovationBase:
+    label: Home renovation expenses that don't count
+    source: "SK(S12) line 2: $1,000"
+    value: 1000
+  skHomeBuyersMax:
+    label: Saskatchewan first-time home buyers' amount
+    source: "SK428 line 30 (58357): maximum $15,000"
+    value: 15000
+  skPoliticalCreditRates:
+    label: Saskatchewan political contribution tax credit rates
+    source: "Worksheet SK428, line 73: 75% up to $400, 50% to $750, 33.33% above; bases as printed"
+    value:
+      - { upTo: 400, rate: 75%, base: 0 }
+      - { upTo: 750, rate: 50%, base: 300 }
+      - { rate: 33.33%, base: 475 }
+  skPoliticalCreditMax:
+    label: Most Saskatchewan political contribution tax credit
+    source: "SK428 line 73: maximum $650"
+    value: 650
+  skPoliticalCreditMaxContributions:
+    label: Contributions above which the Saskatchewan political credit is the most
+    source: "Worksheet SK428, line 73: more than $1,275, enter $650"
+    value: 1275
+  skFertilityRate:
+    label: Saskatchewan fertility treatment tax credit rate
+    source: "SK479 line 9: 50%"
+    value: 50%
+  skFertilityMax:
+    label: Most Saskatchewan fertility treatment tax credit
+    source: "SK479 line 9: maximum $10,000"
+    value: 10000
+
+
+lines:
+  # Part A – Saskatchewan tax on taxable income
+  SK428.8:
+    label: Saskatchewan tax on taxable income
+    formula: "round(bracket(param.skTaxBrackets, line.T1.26000), 2)"
+
+  # Part B – Saskatchewan non-refundable tax credits
+  SK428.9:
+    label: Saskatchewan basic personal amount
+    formula: >-
+      round((param.skBasicPersonalAmount) * line.RES.factor, 2)
+
+  SK428.10:
+    label: Saskatchewan age amount
+    formula: >-
+      if(person.age >= 65, max(0, round(param.skAgeAmountMax * line.RES.factor, 2)
+      - round(max(0, line.T1.23600 - round(param.skAgeAmountThreshold * line.RES.factor, 2)) * param.skAgeAmountRate, 2)), 0)
+    source: "Worksheet SK428, line 58080: for people born in 1960 or earlier, $5,785 less 15% of net income over $43,066 (both amounts prorated for a part-year resident: canada.ca, Completing your return for newcomers, Example 2)"
+  # For a part-year resident, the base and the maximum are prorated, and then the net income is subtracted, not
+  # prorated (canada.ca, completing a return for newcomers, Example 3 for line 30300).
+  SK428.13:
+    label: Saskatchewan spouse or common-law partner amount
+    formula: >-
+      round(if(line.HH.partner == 1, min(round(param.skSpouseMax * line.RES.factor, 2), max(0, round(param.skSpouseBase * line.RES.factor, 2) - line.HH.spouseIncomeForCredits)), 0), 2)
+
+  SK428.16:
+    label: Saskatchewan amount for an eligible dependant
+    formula: >-
+      round(if(line.HH.partner == 0 and family.childrenUnder18 > 0, min(round(param.skSpouseMax * line.RES.factor, 2), max(0, round(param.skSpouseBase * line.RES.factor, 2) - answer.dependantNetIncome)), 0), 2)
+    source: "SK428 lines 14 to 16: the base minus their net income, up to the maximum"
+  # An adult with an impairment who lives with you gets the larger caregiver amount (line 34) instead: no one claims
+  # both for the same dependant. A spouse living elsewhere, whose SK428 Schedule SK(S2) reads, isn't asked where the
+  # dependant lived: theirs is this amount, which needs no shared home.
+  SK428.17:
+    label: Saskatchewan amount for infirm dependants age 18 or older
+    formula: >-
+      if(answer.hasInfirmDependant, if(answer.infirmDependants > 1, unsupported("The Saskatchewan amount for more than one infirm dependant isn't handled by this app yet"),
+      if(answer.infirmDependants == 0, 0, if(person.province == "SK" and answer.infirmDependantHome == "with_you", 0,
+      min(round(param.skDependantAmountMax * line.RES.factor, 2), max(0, round(param.skInfirmDependantBase * line.RES.factor, 2) - answer.infirmDependantIncome))))), 0)
+    source: "Worksheet SK428, line 58200: $21,924 less the dependant's net income, up to $13,986 (both prorated for a part-year resident before the income comes off)"
+  # Line 58210: only a Saskatchewan resident can claim it, and of a couple who both can, the one with the lower taxable
+  # income claims it; the other gets what they don't need through Schedule SK(S2).
+  SK.childClaimant:
+    label: This return claims the amount for dependent children (1 for yes)
+    formula: >-
+      if(person.province != "SK", 0, if(line.HH.partner == 0, 1,
+      if(not family.partnerInYear, if(line.T1.26000 <= line.HH.spouseNetIncome, 1, 0),
+      if(spouse.person.province != "SK", 1, if(line.T1.26000 < spouse.line.T1.26000, 1, if(line.T1.26000 > spouse.line.T1.26000, 0,
+      if(person.role == "self", 1, 0)))))))
+    source: >-
+      Line 58210 of the CRA's Saskatchewan information: the spouse with the lower taxable income claims it. Without their
+      return here, their net income stands in for their taxable income; with equal incomes, the person preparing claims it
+  SK428.18:
+    label: Saskatchewan amount for dependent children born in 2007 or later
+    formula: >-
+      round((if(family.childrenUnder19 == 0, 0, if(line.SK.childClaimant == 1, param.skChildAmount * max(0, family.childrenUnder19 - if(line.SK428.16 > 0, 1, 0)), 0))) * line.RES.factor, 2)
+    source: "SK428 line 18 (58210): $7,704 a child, except a child claimed as an eligible dependant"
+  SK428.19:
+    label: Saskatchewan senior supplementary amount
+    formula: >-
+      round((if(person.age >= 65, param.skSeniorSupplementaryAmount, 0)) * line.RES.factor, 2)
+    source: "SK428 line 19 (58220): for people born in 1960 or earlier, whatever their income"
+  SK428.20:
+    label: Saskatchewan amounts for you and your dependants
+    formula: "line.SK428.9 + line.SK428.10 + line.SK428.13 + line.SK428.16 + line.SK428.17 + line.SK428.18 + line.SK428.19"
+    source: "SK428 line 20: lines 9, 10, 13 and 16 to 19"
+  SK428.26:
+    label: Saskatchewan volunteer firefighters' amount
+    formula: "if(line.T1.31220 > 0, param.skVolunteerAmount, 0)"
+    source: "Line 58315 of the CRA's Saskatchewan information: $3,000 when you claim line 31220"
+  SK428.27:
+    label: Saskatchewan search and rescue volunteers' amount
+    formula: "if(line.T1.31240 > 0, param.skVolunteerAmount, 0)"
+    source: "Line 58316 of the CRA's Saskatchewan information: $3,000 when you claim line 31240"
+  # The family's renovations are claimed on one return here, so line 4 of SK(S12) (claimed by others) stays zero. The
+  # larger limit needs everyone in the family to be 65 or older, which is known only when the spouse's return is here.
+  # Only a resident of Saskatchewan claims it: a spouse living elsewhere has none, also when Schedule SK(S2) reads
+  # their line 31, and isn't asked for expenses.
+  SK428.29:
+    label: Saskatchewan home renovation expenses
+    formula: >-
+      if(person.province != "SK", 0, if(answer.homeRenovationExpenses == 0, 0,
+      if(line.HH.partner == 1 and family.partnerInYear and spouse.person.province == "SK" and spouse.answer.homeRenovationExpenses > 0,
+      unsupported("The Saskatchewan home renovation tax credit is for the family: claim your renovation expenses on one of your returns"),
+      max(0, min(answer.homeRenovationExpenses,
+      if(person.age >= 65 and family.childrenUnder18 == 0 and (line.HH.partner == 0 or (family.partnerInYear and spouse.person.age >= 65)),
+      param.skHomeRenovationSeniorMax, param.skHomeRenovationMax)) - param.skHomeRenovationBase))))
+    source: "SK(S12) lines 1 to 5: expenses up to $5,000 ($6,000 when the whole family is 65 or older), less $1,000"
+  SK428.30:
+    label: Saskatchewan first-time home buyers' amount
+    formula: "min(param.skHomeBuyersMax, round(line.T1.31270 * param.skHomeBuyersMax / param.homeBuyersMax, 2))"
+    source: "SK428 line 30 (58357): $15,000 when the rules of line 31270 are met. A couple splits it as they split the federal $10,000"
+  SK428.31:
+    label: CPP, EI, volunteer, home renovation and home buyers' amounts
+    formula: "line.T1.30800 + line.T1.31000 + line.T1.31200 + line.SK428.26 + line.SK428.27 + line.SK428.29 + line.SK428.30"
+    source: "SK428 lines 22 to 31: lines 30800, 31000 and 31200 of your return, and lines 26 to 30"
+  SK428.33:
+    label: Saskatchewan pension income amount
+    formula: "min(param.skPensionAmountMax, line.T1.31400)"
+    source: "SK428 line 33 (58360): line 31400 of your return, up to $1,000"
+  SK428.34:
+    label: Saskatchewan caregiver amount
+    formula: >-
+      if(answer.hasInfirmDependant, if(answer.infirmDependants > 1, unsupported("The Saskatchewan amount for more than one infirm dependant isn't handled by this app yet"),
+      if(answer.infirmDependants == 0, 0, if(person.province == "SK" and answer.infirmDependantHome == "with_you",
+      min(round(param.skDependantAmountMax * line.RES.factor, 2), max(0, round(param.skCaregiverBase * line.RES.factor, 2) - answer.infirmDependantIncome)), 0))), 0)
+    source: "Worksheet SK428, line 58400: for a dependant with an impairment who lived with you, $33,094 less their net income, up to $13,986 (both prorated for a part-year resident before the income comes off)"
+  SK428.36:
+    label: Saskatchewan disability amount for self
+    formula: >-
+      round((if(line.T1.31600 > 0, param.skDisabilityAmount, 0)) * line.RES.factor, 2)
+    source: "SK428 line 36 (58440): $13,986 when you claim line 31600"
+  SK428.37:
+    label: Saskatchewan disability amount transferred from a dependant
+    formula: >-
+      round((if(answer.hasDisabledDependant, if(answer.disabledChildren > 1 and answer.disabledChildCare > 0, unsupported("Child care for more than one child with a disability is worked out child by child, which this app doesn't handle yet"), answer.disabledChildren * (param.skDisabilityAmount + param.skDisabilitySupplementMax) - min(answer.disabledChildren * param.skDisabilitySupplementMax, max(0, answer.disabledChildCare - param.skDisabilityCareThreshold)) + answer.disabledAdults * param.skDisabilityAmount), 0)) * line.RES.factor, 2)
+    source: "Worksheet SK428, line 58480: $13,986, plus up to $13,986 for a child under 18, less care over $3,277. The app assumes the dependant had no income"
+  SK428.38:
+    label: Saskatchewan credit amounts before interest, tuition and transfers
+    formula: "line.SK428.20 + line.SK428.31 + line.SK428.33 + line.SK428.34 + line.SK428.36 + line.SK428.37"
+    source: "SK428 lines 21 to 38"
+  SK428.39:
+    label: Interest paid on your student loans
+    formula: "line.T1.31900"
+    source: "SK428 line 39 (58520): line 31900 of your return"
+  SK428.40:
+    label: Your unused tuition and education amounts
+    formula: "line.SKS11.5"
+    source: "SK428 line 40 (58560): Schedule SK(S11)"
+  SK428.41:
+    label: Amounts transferred from your spouse or common-law partner
+    formula: "if(line.HH.partner == 1 and family.partnerInYear, round(line.SKS2.13 * line.RES.factor, 2), 0)"
+    source: >-
+      Schedule SK(S2): their unused Saskatchewan child, age, senior supplementary, pension income and disability
+      amounts. Prorated for a part-year resident (RC4018, Appendix K: line 58640); the schedule shows the whole transfer
+  SK428.48:
+    label: Allowable medical expenses
+    formula: "max(0, line.T1.33099 - min(param.skMedicalThresholdMax, round(line.T1.23600 * param.medicalThresholdRate, 2)))"
+    source: "SK428 lines 43 to 48: expenses over whichever is less, $2,681 or 3% of net income"
+  SK428.49:
+    label: Allowable amount of medical expenses for other dependants
+    formula: "line.T1.33199"
+    source: "SK428 line 49 (58729): line 33199 of your return"
+  SK428.51:
+    label: Saskatchewan credit amounts
+    formula: "line.SK428.38 + line.SK428.39 + line.SK428.40 + line.SK428.41 + line.SK428.48 + line.SK428.49"
+    source: "SK428 lines 42, 50 and 51"
+  SK428.53:
+    label: Saskatchewan credit amounts at the credit rate
+    formula: "round(line.SK428.51 * param.skCreditRate, 2)"
+  SK428.56:
+    label: Saskatchewan donations credit
+    formula: "round(line.S9.13 * param.skDonationLowRate, 2) + round(line.S9.14 * param.skDonationHighRate, 2)"
+    source: "SK428 lines 54 to 56: Schedule 9 lines 13 and 14 at 10.5% and 14.5%"
+  SK428.57:
+    label: Saskatchewan non-refundable tax credits
+    formula: "line.SK428.53 + line.SK428.56"
+
+  # Part C – Saskatchewan tax
+  SK428.64:
+    label: Saskatchewan dividend tax credit
+    formula: "round(line.T1.12010 * param.skDividendOtherRate, 2) + round((line.T1.12000 - line.T1.12010) * param.skDividendEligibleRate, 2)"
+    source: "Worksheet SK428, line 61520"
+  SK428.67:
+    label: Saskatchewan tax after credits
+    formula: "max(0, line.SK428.8 - line.SK428.57 - line.SK428.64)"
+    source: "SK428 lines 58 to 67"
+  # Form T2036 – the provincial foreign tax credit: the foreign tax left after the federal credit, up to the share of
+  # the province's tax otherwise payable on the foreign income.
+  SK.taxOtherwise:
+    label: Saskatchewan tax otherwise payable, for the foreign tax credit
+    formula: "line.SK428.67"
+    source: "Form T2036, note 4: Saskatchewan tax before the foreign tax credit (SK428 line 69; line 68 doesn't apply)"
+  SK428.70:
+    label: Provincial foreign tax credit
+    formula: >-
+      if(line.FTC.left > 0 and line.T1.23600 > 0, min(line.FTC.left,
+      round(min(line.FTC.netForeign, line.T1.23600) * line.SK.taxOtherwise / line.T1.23600, 2), line.SK.taxOtherwise), 0)
+    source: "Form T2036, line 5"
+  SK428.71:
+    label: Saskatchewan tax after the foreign tax credit
+    formula: "max(0, line.SK428.67 - line.SK428.70)"
+  SK428.73:
+    label: Saskatchewan political contribution tax credit
+    formula: >-
+      if(answer.provincialPoliticalContributions > param.skPoliticalCreditMaxContributions, param.skPoliticalCreditMax,
+      round(bracket(param.skPoliticalCreditRates, answer.provincialPoliticalContributions), 2))
+    source: "Worksheet SK428, line 73: 75% of the first $400, 50% of the next $350 and 33.33% of the rest; $650 above $1,275"
+  SK428.82:
+    label: Saskatchewan tax
+    formula: "max(0, line.SK428.71 - line.SK428.73)"
+    source: "SK428 lines 74 to 82. The labour-sponsored venture capital, mineral exploration and graduate tuition credits aren't claimed"
+
+  # Schedule SK(S11) – Saskatchewan tuition and education amounts: only unused amounts carried forward, since
+  # Saskatchewan has no tuition credit for 2025 tuition.
+  SKS11.2:
+    label: Taxable income, for the tuition claim
+    formula: "if(line.T1.26000 <= param.skFirstBracketTop, line.T1.26000, round(line.SK428.8 / param.skCreditRate, 2))"
+    source: "SK(S11) line 2: above $53,463, SK428 line 8 ÷ 10.5%"
+  SKS11.4:
+    label: Room left after other credits
+    formula: "max(0, line.SKS11.2 - line.SK428.38)"
+    source: "SK(S11) lines 3 and 4: less SK428 line 38"
+  SKS11.5:
+    label: Unused Saskatchewan tuition and education amounts claimed for 2025
+    formula: 'min(if(person.province == "AB", 0, answer.unusedProvincialTuition), line.SKS11.4)'
+    source: >-
+      SK(S11) lines 1 and 5: the unused amounts on your 2024 notice of assessment. None for a spouse in Alberta, whose
+      own return doesn't carry unused provincial tuition forward (Schedule SK(S2) reads this line for them)
+
+  # Schedule SK(S2) – Saskatchewan amounts transferred from your spouse (read from their SK428, worked out under
+  # Saskatchewan's rules wherever they live, as the schedule asks)
+  SKS2.6:
+    label: Their child, age, senior supplementary, pension income and disability amounts
+    formula: "spouse.line.SK428.18 + spouse.line.SK428.10 + spouse.line.SK428.19 + spouse.line.SK428.33 + spouse.line.SK428.36"
+    source: "SK(S2) lines 1 to 6"
+  SKS2.7:
+    label: Their taxable income, for the transfer
+    formula: "if(spouse.line.T1.26000 <= param.skFirstBracketTop, spouse.line.T1.26000, round(spouse.line.SK428.8 / param.skCreditRate, 2))"
+    source: "SK(S2) line 7: above $53,463, their SK428 line 8 ÷ 10.5%"
+  SKS2.11:
+    label: Their basic personal amount, line 31 amounts and unused tuition
+    formula: "spouse.line.SK428.9 + spouse.line.SK428.31 + spouse.line.SK428.40"
+    source: "SK(S2) lines 8 to 11: their SK428 lines 58040, 31 and 58560"
+  SKS2.12:
+    label: Their adjusted taxable income
+    formula: "max(0, line.SKS2.7 - line.SKS2.11)"
+  SKS2.13:
+    label: Saskatchewan amounts transferred from your spouse
+    formula: "max(0, line.SKS2.6 - line.SKS2.12)"
+
+  # Form SK479 – Saskatchewan credits: the active families benefit and the fertility treatment tax credit. Only a
+  # spouse who also lives in Saskatchewan shares them: one elsewhere answers the same questions for their own
+  # province's credits (Quebec's for children's activities, Ontario's for fertility treatment), not for these.
+  SK479.6:
+    label: Adjusted family income
+    formula: "line.T1.23600 + line.HH.spouseNetIncome"
+    source: "SK479 lines 1 to 6: your net income and your spouse's or partner's. UCCB and RDSP amounts aren't handled"
+  SK.activeFamiliesLimit:
+    label: Most active families benefit for your children
+    formula: >-
+      param.skActiveFamiliesPerChild * family.childrenUnder19
+      + (param.skActiveFamiliesPerDisabledChild - param.skActiveFamiliesPerChild) * min(family.childrenUnder19,
+      if(answer.hasDisabledDependant, answer.disabledChildren, 0)
+      + if(line.HH.partner == 1 and family.partnerInYear and spouse.answer.hasDisabledDependant, spouse.answer.disabledChildren, 0))
+    source: "SK479 active families benefit worksheet, column 5: $300 a child born in 2007 or later, $400 for a child eligible for the disability tax credit"
+  SK479.7:
+    label: Children's activity fees claimed
+    formula: >-
+      if(family.childrenUnder19 == 0, 0,
+      if(line.HH.partner == 1 and family.partnerInYear and spouse.person.province == "SK"
+      and answer.childActivityFees + spouse.answer.childActivityFees > line.SK.activeFamiliesLimit,
+      unsupported("Only one of you can claim the active families benefit for a child, up to $300 a child ($400 for a child with the disability tax credit). Together you claim more: enter each child's fees on one return"),
+      min(answer.childActivityFees, line.SK.activeFamiliesLimit)))
+    source: "SK479 active families benefit worksheet: fees for children born in 2007 or later, less reimbursements"
+  SK479.8:
+    label: Active families benefit
+    formula: "if(line.SK479.6 > param.skActiveFamiliesIncomeLimit, 0, line.SK479.7)"
+    source: "SK479 line 8: nothing when adjusted family income is more than $120,000"
+  SK479.9:
+    label: Fertility treatment tax credit
+    formula: >-
+      if(answer.fertilityExpenses == 0, 0,
+      if(line.HH.partner == 1 and family.partnerInYear and spouse.person.province == "SK" and spouse.answer.fertilityExpenses > 0,
+      unsupported("You or your spouse or partner can claim the Saskatchewan fertility treatment tax credit, but not both: enter the expenses on one return"),
+      min(param.skFertilityMax, round(answer.fertilityExpenses * param.skFertilityRate, 2))))
+    source: "SK479 line 9 (61268): 50% of the expenses, up to $10,000"
+  SK479.10:
+    label: Saskatchewan credits
+    formula: "line.SK479.8 + line.SK479.9"
+    source: "SK479 line 10: entered on line 47900 of your return"

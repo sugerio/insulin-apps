@@ -1,0 +1,415 @@
+# Prince Edward Island tax: Form PE428 (with its Part D credit), Schedules PE(S2) and PE(S11). Line ids are the line
+# numbers in the forms' right margin. Every number below was checked against the 2025 PE428 (5002-C), Worksheet PE428
+# (5002-D), PE(S2) (5002-S2), PE(S11) (5002-S11) and the CRA's "Prince Edward Island tax information for 2025"
+# (5002-PC). Prince Edward Island has no Form 479: its one refundable credit is Part D of the PE428 (line 98), which goes
+# on line 47900 of the return.
+
+params:
+  peTaxBrackets:
+    label: Prince Edward Island tax brackets
+    source: "PE428 Part A, bases as printed on the form"
+    value:
+      - { upTo: 33328, rate: 9.5%, base: 0 }
+      - { upTo: 64656, rate: 13.47%, base: 3166.16 }
+      - { upTo: 105000, rate: 16.6%, base: 7386.04 }
+      - { upTo: 140000, rate: 17.62%, base: 14083.15 }
+      - { rate: 19%, base: 20250.15 }
+  peFirstBracketTop:
+    label: Top of the first Prince Edward Island bracket
+    source: "PE428 Part A, PE(S2) line 6 and PE(S11) line 7: $33,328"
+    value: 33328
+  peCreditRate:
+    label: Prince Edward Island credit rate
+    source: "PE428 line 49: 9.5%"
+    value: 9.5%
+  peBasicPersonalAmount:
+    label: Prince Edward Island basic personal amount
+    source: "PE428 line 58040: claim $14,650"
+    value: 14650
+  peAgeAmountMax:
+    label: Prince Edward Island age amount, full
+    source: "Worksheet PE428, line 58080: $6,510"
+    value: 6510
+  peAgeAmountThreshold:
+    label: Net income where the Prince Edward Island age amount starts to go down
+    source: "Worksheet PE428, line 58080: income threshold"
+    value: 36600
+  peAgeAmountRate:
+    label: Prince Edward Island age amount reduction rate
+    source: "Worksheet PE428, line 58080: applicable rate"
+    value: 15%
+  peSpouseBase:
+    label: Prince Edward Island spouse and eligible dependant amount, base
+    source: "PE428 lines 11 and 14: $13,687"
+    value: 13687
+  peSpouseMax:
+    label: Prince Edward Island spouse and eligible dependant amount, most
+    source: "PE428 lines 13 and 16: maximum $12,443"
+    value: 12443
+  peYoungChildAmount:
+    label: Prince Edward Island amount for young children, per month
+    source: "PE428 line 58230: $100 for each month a child was under 6"
+    value: 100
+  pePensionAmountMax:
+    label: Most Prince Edward Island pension income amount
+    source: "PE428 line 27 (58360): maximum $1,000"
+    value: 1000
+  peWellnessMaxPerChild:
+    label: Most children's wellness fees per child
+    source: "PE428 line 28 (58365): up to $1,000 per child (Prince Edward Island tax information for 2025)"
+    value: 1000
+  peInfirmBase:
+    label: Prince Edward Island amount for infirm dependants age 18 or older, base
+    source: "Worksheet PE428, line 58200, line 1: $7,412"
+    value: 7412
+  peInfirmMax:
+    label: Most Prince Edward Island amount for an infirm dependant age 18 or older
+    source: "Worksheet PE428, line 58200, line 3: maximum $2,446 per dependant"
+    value: 2446
+  peDisabilityAmount:
+    label: Prince Edward Island disability amount
+    source: "PE428 line 31 (58440): claim $6,890; Worksheet PE428, lines 58440 and 58480, line 1"
+    value: 6890
+  peDisabilitySupplementMax:
+    label: Prince Edward Island disability supplement for a person under 18
+    source: "Worksheet PE428, lines 58440 and 58480, line 2: $4,019"
+    value: 4019
+  peDisabilityCareThreshold:
+    label: Child care and attendant care that the Prince Edward Island disability supplement allows
+    source: "Worksheet PE428, lines 58440 and 58480, line 4: $2,354"
+    value: 2354
+  peTeacherSuppliesMax:
+    label: Most Prince Edward Island teacher school supply amount
+    source: "PE428 line 33 (58500): maximum $500"
+    value: 500
+  peMedicalThresholdMax:
+    label: Prince Edward Island medical expense threshold, most
+    source: "PE428 line 44: whichever is less, $1,678 or 3% of net income"
+    value: 1678
+  peDonationLowRate:
+    label: Prince Edward Island donation credit rate on the first $200
+    source: "PE428 line 51: 9.5%"
+    value: 9.5%
+  peDonationHighRate:
+    label: Prince Edward Island donation credit rate above $200
+    source: "PE428 line 52: 19%"
+    value: 19%
+  peDividendEligibleRate:
+    label: Prince Edward Island dividend tax credit rate, eligible dividends
+    source: "Worksheet PE428, line 61520: 10.5% of the taxable amount"
+    value: 10.5%
+  peDividendOtherRate:
+    label: Prince Edward Island dividend tax credit rate, other dividends
+    source: "Worksheet PE428, line 61520: 1.3% of the taxable amount"
+    value: 1.3%
+  peEducationPartTime:
+    label: Prince Edward Island education amount per part-time month
+    source: "PE(S11) line 3: $120 for each month from line 32010 of federal Schedule 11"
+    value: 120
+  peEducationFullTime:
+    label: Prince Edward Island education amount per full-time month
+    source: "PE(S11) line 4: $400 for each month from line 32020 of federal Schedule 11"
+    value: 400
+  pePoliticalMax:
+    label: Most Prince Edward Island political contribution tax credit
+    source: "PE428 line 92 and Worksheet PE428, line 92: $500, for contributions over $1,150"
+    value: 500
+  pePoliticalAll:
+    label: Contributions above which the Prince Edward Island political credit is the most
+    source: "Worksheet PE428, line 92: more than $1,150"
+    value: 1150
+  peVolunteerCredit:
+    label: Prince Edward Island volunteer firefighter and volunteer search and rescue personnel tax credit
+    source: "PE428 line 98 (63510): claim $1,000"
+    value: 1000
+  peTaxReductionBasic:
+    label: Prince Edward Island low-income tax reduction, basic, spouse and eligible dependant amounts
+    source: "PE428 lines 75, 77 and 79: claim $350 each"
+    value: 350
+  peTaxReductionAge:
+    label: Prince Edward Island low-income tax reduction for age, for you and for your spouse
+    source: "PE428 lines 76 and 78: claim $250 each, for people born in 1960 or earlier"
+    value: 250
+  peTaxReductionChild:
+    label: Prince Edward Island low-income tax reduction per dependent child
+    source: "PE428 line 80: $300 for each dependent child born in 2007 or later"
+    value: 300
+  peTaxReductionBase:
+    label: Adjusted family income where the Prince Edward Island low-income tax reduction starts to go down
+    source: "PE428 line 83: $22,650"
+    value: 22650
+  peTaxReductionRate:
+    label: Prince Edward Island low-income tax reduction rate
+    source: "PE428 line 85: 5%"
+    value: 5%
+
+lines:
+  # Part A – Prince Edward Island tax on taxable income
+  PE428.8:
+    label: Prince Edward Island tax on taxable income
+    formula: "round(bracket(param.peTaxBrackets, line.T1.26000), 2)"
+
+  # Part B – Prince Edward Island non-refundable tax credits
+  PE428.9:
+    label: Prince Edward Island basic personal amount
+    formula: >-
+      round((param.peBasicPersonalAmount) * line.RES.factor, 2)
+
+  PE428.10:
+    label: Prince Edward Island age amount
+    formula: >-
+      if(person.age >= 65, max(0, round(param.peAgeAmountMax * line.RES.factor, 2)
+      - round(max(0, line.T1.23600 - round(param.peAgeAmountThreshold * line.RES.factor, 2)) * param.peAgeAmountRate, 2)), 0)
+    source: "Worksheet PE428, line 58080: for people born in 1960 or earlier, $6,510 less 15% of net income over $36,600 (both amounts prorated for a part-year resident: canada.ca, Completing your return for newcomers, Example 2)"
+  # For a part-year resident, the base and the maximum are prorated, and then the net income is subtracted, not
+  # prorated (canada.ca, completing a return for newcomers, Example 3 for line 30300).
+  PE428.13:
+    label: Prince Edward Island spouse or common-law partner amount
+    formula: >-
+      round(if(line.HH.partner == 1, min(round(param.peSpouseMax * line.RES.factor, 2), max(0, round(param.peSpouseBase * line.RES.factor, 2) - line.HH.spouseIncomeForCredits)), 0), 2)
+
+  PE428.16:
+    label: Prince Edward Island amount for an eligible dependant
+    formula: >-
+      round(if(line.HH.partner == 0 and family.childrenUnder18 > 0, min(round(param.peSpouseMax * line.RES.factor, 2), max(0, round(param.peSpouseBase * line.RES.factor, 2) - answer.dependantNetIncome)), 0), 2)
+    source: "PE428 lines 14 to 16: the base minus their net income, up to the maximum"
+  # The amount for infirm dependants needs no shared home, unlike the caregiver amount (line 29), which the app can't
+  # tell; so the infirm amount is claimed for an adult relative with an impairment.
+  PE428.17:
+    label: Prince Edward Island amount for infirm dependants age 18 or older
+    formula: >-
+      if(answer.hasInfirmDependant, if(answer.infirmDependants > 1, unsupported("The Canada caregiver amount for more than one adult dependant isn't handled by this app yet"),
+      answer.infirmDependants * min(round(param.peInfirmMax * line.RES.factor, 2), max(0, round(param.peInfirmBase * line.RES.factor, 2) - answer.infirmDependantIncome))), 0)
+    source: "Worksheet PE428, line 58200: $7,412 less the dependant's net income, up to $2,446 (both prorated for a part-year resident before the income comes off)"
+  PE428.58229:
+    label: Months claimed for the amount for young children
+    formula: >-
+      if(line.HH.partner == 1 and (line.T1.23600 > line.HH.spouseNetIncome
+      or (line.T1.23600 == line.HH.spouseNetIncome and person.role == "spouse")), 0,
+      sum(family.childMonthsUnder6))
+    source: >-
+      PE428 line 58229 (5002-PC, line 58230): each month a child was under 6 on its first day, the child claimed as an
+      eligible dependant too; with a spouse or partner, only the one with the lower net income claims (with equal
+      incomes, the person preparing)
+  PE428.18:
+    label: Prince Edward Island amount for young children
+    formula: "line.PE428.58229 * param.peYoungChildAmount"
+  PE428.24:
+    label: CPP and EI credit amounts
+    formula: "line.T1.30800 + line.T1.31000 + line.T1.31200"
+    source: "PE428 lines 20 to 24: lines 30800, 31000 and 31200 of your return"
+  PE428.27:
+    label: Prince Edward Island pension income amount
+    formula: "min(param.pePensionAmountMax, line.T1.31400)"
+    source: "PE428 line 27 (58360): line 31400 of your return, up to $1,000"
+  PE428.28:
+    label: Children's wellness tax credit
+    formula: 'if(person.province == "PE" and family.childrenUnder19 > 0, min(answer.childActivityFees, param.peWellnessMaxPerChild * family.childrenUnder19), 0)'
+    source: >-
+      PE428 line 28 (58365): program fees for children under 18 at the start of the year, up to $1,000 per child. Only
+      for residents of Prince Edward Island: none for a spouse elsewhere, whose PE428 the S2 and S11 schedules read
+  PE428.31:
+    label: Prince Edward Island disability amount for self
+    formula: >-
+      round((if(answer.hasDisability, param.peDisabilityAmount, 0)) * line.RES.factor, 2)
+    source: "PE428 line 31 (58440): $6,890 with an approved Form T2201"
+  PE428.32:
+    label: Prince Edward Island disability amount transferred from a dependant
+    formula: >-
+      round((if(answer.hasDisabledDependant, if(answer.disabledChildren > 1 and answer.disabledChildCare > 0, unsupported("Child care for more than one child with a disability is worked out child by child, which this app doesn't handle yet"), answer.disabledChildren * (param.peDisabilityAmount + param.peDisabilitySupplementMax) - min(answer.disabledChildren * param.peDisabilitySupplementMax, max(0, answer.disabledChildCare - param.peDisabilityCareThreshold)) + answer.disabledAdults * param.peDisabilityAmount), 0)) * line.RES.factor, 2)
+    source: "Worksheet PE428, line 58480: $6,890, plus up to $4,019 for a child under 18, less care over $2,354. The app assumes the dependant had no income"
+  PE428.33:
+    label: Teacher school supply amount
+    formula: "min(param.peTeacherSuppliesMax, answer.teacherSupplies)"
+    source: "PE428 line 33 (58500): supplies a teacher or early childhood educator bought, up to $500"
+  PE428.34:
+    label: Prince Edward Island credit amounts before tuition and transfers
+    formula: >-
+      line.PE428.9 + line.PE428.10 + line.PE428.13 + line.PE428.16 + line.PE428.17 + line.PE428.18 + line.PE428.24
+      + line.PE428.27 + line.PE428.28 + line.PE428.31 + line.PE428.32 + line.PE428.33
+    source: "PE428 lines 19 to 34"
+  PE428.35:
+    label: Interest paid on your student loans
+    formula: "line.T1.31900"
+    source: "PE428 line 35 (58520): line 31900 of your return"
+  PE428.36:
+    label: Prince Edward Island tuition and education amounts
+    formula: "line.PES11.13"
+    source: "Schedule PE(S11) line 13"
+  PE428.37:
+    label: Tuition and education amounts transferred from a child or grandchild
+    formula: "round(line.CHILD.provincialTuition * line.RES.factor, 2)"
+    source: "PE428 line 37 (58600): the provincial amount they designate on their T2202, taken as the federal one. Prorated for a part-year resident (RC4018, Appendix K)"
+  PE428.38:
+    label: Prince Edward Island amounts transferred from your spouse or common-law partner
+    formula: "if(line.HH.partner == 1 and family.partnerInYear and line.PES2.5 > 0, round(line.PES2.12 * line.RES.factor, 2), 0)"
+    source: >-
+      Schedule PE(S2): their unused Prince Edward Island age, pension, disability and tuition amounts. Prorated for a
+      part-year resident (RC4018, Appendix K: line 58640); the schedule shows the whole transfer
+  PE428.45:
+    label: Allowable medical expenses
+    formula: "max(0, line.T1.33099 - min(param.peMedicalThresholdMax, round(line.T1.23600 * param.medicalThresholdRate, 2)))"
+    source: "PE428 lines 40 to 45: expenses over whichever is less, $1,678 or 3% of net income"
+  PE428.46:
+    label: Allowable medical expenses for other dependants
+    formula: >-
+      if(answer.hasOtherDependantMedical, max(0, answer.otherDependantMedical
+      - min(param.peMedicalThresholdMax, round(answer.otherDependantIncome * param.medicalThresholdRate, 2))), 0)
+    source: "Worksheet PE428, line 58729: their expenses over line 44 of their PE428 (whichever is less, $1,678 or 3% of their net income)"
+  PE428.48:
+    label: Prince Edward Island credit amounts
+    formula: >-
+      line.PE428.34 + line.PE428.35 + line.PE428.36 + line.PE428.37 + line.PE428.38 + line.PE428.45
+      + line.PE428.46
+  PE428.50:
+    label: Prince Edward Island credit amounts at the credit rate
+    formula: "round(line.PE428.48 * param.peCreditRate, 2)"
+  PE428.53:
+    label: Prince Edward Island donations credit
+    formula: "round(line.S9.13 * param.peDonationLowRate, 2) + round(line.S9.14 * param.peDonationHighRate, 2)"
+    source: "PE428 lines 51 to 53: Schedule 9 lines 13 and 14 at 9.5% and 19%"
+  PE428.54:
+    label: Prince Edward Island non-refundable tax credits
+    formula: "line.PE428.50 + line.PE428.53"
+
+  # Part C – Prince Edward Island tax
+  PE428.59:
+    label: Prince Edward Island tax after non-refundable credits
+    formula: "max(0, line.PE428.8 - line.PE428.54)"
+  PE428.60:
+    label: Prince Edward Island dividend tax credit
+    formula: "round(line.T1.12010 * param.peDividendOtherRate, 2) + round((line.T1.12000 - line.T1.12010) * param.peDividendEligibleRate, 2)"
+    source: "Worksheet PE428, line 61520"
+  PE428.63:
+    label: Prince Edward Island tax after the dividend credit
+    formula: "max(0, line.PE428.59 - line.PE428.60)"
+    source: "PE428 line 63, which is line 65 without minimum tax"
+  # The low-income tax reduction is the family's: one spouse claims it, and the other can claim what is left of it
+  # (line 66). The app claims it on the return with more Prince Edward Island tax to reduce (with equal tax, the higher
+  # net income, then the person preparing).
+  PE.claimsReduction:
+    label: This return claims the family's low-income tax reduction (1 for yes)
+    formula: >-
+      if(person.age >= 19 or line.HH.partner == 1 or family.childrenUnder19 > 0,
+      if(line.HH.partner == 1 and family.partnerInYear and spouse.person.province == "PE"
+      and (spouse.line.PE428.63 > line.PE428.63 or (spouse.line.PE428.63 == line.PE428.63
+      and (spouse.line.T1.23600 > line.T1.23600 or (spouse.line.T1.23600 == line.T1.23600 and person.role == "spouse")))), 0, 1), 0)
+    source: "PE428 line 87: for someone 19 or older, with a spouse or partner, or a parent; a couple claims it on one return"
+  PE428.66:
+    label: Unused low-income tax reduction from your spouse or common-law partner
+    formula: 'if(line.HH.partner == 1 and family.partnerInYear and spouse.person.province == "PE" and line.PE.claimsReduction == 0, spouse.line.PE428.101, 0)'
+    source: "PE428 line 66: line 101 of their PE428"
+  PE428.67:
+    label: Prince Edward Island tax after your spouse's unused reduction
+    formula: "max(0, line.PE428.63 - line.PE428.66)"
+  PE428.73:
+    label: Adjusted family income
+    formula: "line.T1.23600 + if(line.HH.partner == 1, line.HH.spouseNetIncome, 0)"
+    source: "PE428 lines 68 to 73: both net incomes. UCCB amounts aren't handled"
+  PE428.78:
+    label: Age reduction for your spouse or common-law partner
+    formula: "if(line.HH.partner == 1 and family.partnerInYear, if(spouse.person.age >= 65, param.peTaxReductionAge, 0), 0)"
+    source: "PE428 line 78: $250 if they were born in 1960 or earlier. Their age is known only when their return is prepared here"
+  PE428.81:
+    label: Prince Edward Island tax reductions
+    formula: >-
+      param.peTaxReductionBasic + if(person.age >= 65, param.peTaxReductionAge, 0)
+      + if(line.HH.partner == 1, param.peTaxReductionBasic, 0) + line.PE428.78
+      + if(line.PE428.16 > 0, param.peTaxReductionBasic, 0)
+      + param.peTaxReductionChild * max(0, family.childrenUnder19 - if(line.PE428.16 > 0, 1, 0))
+    source: "PE428 lines 75 to 81"
+  PE428.86:
+    label: Prince Edward Island tax reduction clawback
+    formula: "round(max(0, line.PE428.73 - param.peTaxReductionBase) * param.peTaxReductionRate, 2)"
+    source: "PE428 lines 82 to 86: 5% of adjusted family income over $22,650"
+  PE428.87:
+    label: Prince Edward Island low-income tax reduction
+    formula: "if(line.PE.claimsReduction == 1, max(0, line.PE428.81 - line.PE428.86), 0)"
+  PE428.88:
+    label: Prince Edward Island tax after the low-income tax reduction
+    formula: "max(0, line.PE428.67 - line.PE428.87)"
+  # Form T2036 – the provincial foreign tax credit: the foreign tax left after the federal credit, up to the share of
+  # the province's tax otherwise payable on the foreign income, which here is the tax before the credit (line 88).
+  PE428.89:
+    label: Provincial foreign tax credit
+    formula: >-
+      if(line.FTC.left > 0 and line.T1.23600 > 0, min(line.FTC.left,
+      round(min(line.FTC.netForeign, line.T1.23600) * line.PE428.88 / line.T1.23600, 2), line.PE428.88), 0)
+    source: "Form T2036, line 5, with note 4: Prince Edward Island tax before the foreign tax credit"
+  PE428.90:
+    label: Prince Edward Island tax after the foreign tax credit
+    formula: "max(0, line.PE428.88 - line.PE428.89)"
+  PE428.92:
+    label: Prince Edward Island political contribution tax credit
+    formula: >-
+      if(answer.provincialPoliticalContributions > param.pePoliticalAll, param.pePoliticalMax,
+      if(answer.provincialPoliticalContributions > 550, 300 + round((answer.provincialPoliticalContributions - 550) * 33.33%, 2),
+      if(answer.provincialPoliticalContributions > 100, 75 + round((answer.provincialPoliticalContributions - 100) * 50%, 2),
+      round(answer.provincialPoliticalContributions * 75%, 2))))
+    source: "Worksheet PE428, line 92: 75% of the first $100, 50% of the next $450, 33.33% of the next $600; $500 over $1,150"
+  PE428.97:
+    label: Prince Edward Island tax
+    formula: "max(0, line.PE428.90 - line.PE428.92)"
+    source: "PE428 lines 93 to 97. The equity tax credit isn't handled"
+  # Part D – Prince Edward Island tax credits (refundable, on line 47900 of the return)
+  PE428.98:
+    label: Volunteer firefighter and volunteer search and rescue personnel tax credit
+    formula: "if(answer.hasVolunteerService, param.peVolunteerCredit, 0)"
+    source: "PE428 line 98 (63510): $1,000 when you meet the rules for line 31220 or 31240 of your return"
+  PE428.101:
+    label: Unused low-income tax reduction your spouse or common-law partner can claim
+    formula: "if(line.HH.partner == 1, max(0, line.PE428.87 - line.PE428.63), 0)"
+    source: "PE428 lines 99 to 101: line 87 less line 65"
+
+  # Schedule PE(S11) – Prince Edward Island tuition and education amounts (the student's own)
+  PES11.1:
+    label: Unused Prince Edward Island tuition and education amounts from your 2024 notice of assessment
+    formula: 'if(person.province == "AB", 0, answer.unusedProvincialTuition)'
+    source: "None for a spouse in Alberta, whose own return doesn't carry unused provincial tuition forward (Schedule PE(S2) reads this schedule for them)"
+  PES11.5:
+    label: 2025 Prince Edward Island tuition and education amounts
+    formula: >-
+      line.S11.8 + min(12, sum(T2202.box24)) * param.peEducationPartTime
+      + min(12, sum(T2202.box25)) * param.peEducationFullTime
+    source: "PE(S11) lines 2 to 5: the tuition on federal Schedule 11 line 8, and $120 a month part-time or $400 full-time (T2202 boxes 24 and 25)"
+  PES11.9:
+    label: Income the tuition amount can reduce to zero Prince Edward Island tax
+    formula: >-
+      max(0, if(line.T1.26000 <= param.peFirstBracketTop, line.T1.26000, round(line.PE428.8 / param.peCreditRate, 2))
+      - line.PE428.34)
+    source: "PE(S11) lines 7 to 9: taxable income, or above $33,328 Prince Edward Island tax on it ÷ 9.5%, less PE428 line 34"
+  PES11.10:
+    label: Unused amounts claimed for 2025
+    formula: "min(line.PES11.1, line.PES11.9)"
+  PES11.12:
+    label: 2025 amounts claimed
+    formula: "min(line.PES11.5, line.PES11.9 - line.PES11.10)"
+  PES11.13:
+    label: Prince Edward Island tuition and education amounts claimed for 2025
+    formula: "line.PES11.10 + line.PES11.12"
+  PES11.19:
+    label: Prince Edward Island tuition and education amounts you can transfer
+    formula: "max(0, min(param.tuitionTransferMax, line.PES11.5) - line.PES11.12)"
+    source: "PE(S11) lines 17 to 19: this year's amounts up to $5,000, less what you used"
+  PES11.20:
+    label: Prince Edward Island tuition and education amounts transferred to your spouse or common-law partner
+    formula: "if(line.HH.partner == 1 and family.partnerInYear and line.PES11.5 > 0, min(answer.tuitionTransfer, line.PES11.19), 0)"
+    source: "PE(S11) line 20: the amount you designate on your T2202 (the same as federally), up to line 19"
+
+  # Schedule PE(S2) – Prince Edward Island amounts transferred from your spouse (read from their PE428, as if they lived
+  # here)
+  PES2.5:
+    label: Their Prince Edward Island age, pension and disability amounts, and the tuition they designate to you
+    formula: "spouse.line.PE428.10 + spouse.line.PE428.27 + spouse.line.PE428.31 + spouse.line.PES11.20"
+    source: "PE(S2) lines 1 to 5"
+  PES2.6:
+    label: Their taxable income, for the transfer
+    formula: "if(spouse.line.T1.26000 <= param.peFirstBracketTop, spouse.line.T1.26000, round(spouse.line.PE428.8 / param.peCreditRate, 2))"
+    source: "PE(S2) line 6"
+  PES2.11:
+    label: Their adjusted taxable income
+    formula: "max(0, line.PES2.6 - spouse.line.PE428.9 - spouse.line.PE428.24 - spouse.line.PE428.36)"
+    source: "PE(S2) lines 7 to 11: their lines 58040, 24 and 58560"
+  PES2.12:
+    label: Prince Edward Island amounts transferred from your spouse
+    formula: "max(0, line.PES2.5 - line.PES2.11)"

@@ -278,14 +278,18 @@ test('configuration: app names, bindings, sender, and failing closed', () => {
   const binding = { prepare() {}, limit() {}, send() {}, fetch() {} }
   const env = {
     DB: binding, RL_AUTH: binding, RL_APP: binding, RL_PUBLIC: binding, EMAIL: binding, APP_CAPTABLE: binding,
-    SITE_DOMAIN: 'example.test', SITE_APPS: [{ name: 'captable', title: 'Cap Table', binding: 'APP_CAPTABLE' }],
+    SITE_DOMAIN: 'example.test', SITE_APP_CAPTABLE: { name: 'captable', title: 'Cap Table', binding: 'APP_CAPTABLE' },
     TURNSTILE_SITE_KEY: 'k', TURNSTILE_SECRET_KEY: 's', EMAIL_FROM: 'no-reply@example.test',
   }
   const ok = readConfig(env)
   assert.equal(ok.ok, true)
   assert.equal(ok.config.apps[0].appId, 'insulin-apps-captable')
   assert.equal(ok.config.testMode, false)
-  assert.equal(readConfig({ ...env, SITE_APPS: JSON.stringify(env.SITE_APPS) }).ok, true, 'SITE_APPS as a JSON string')
+  assert.equal(readConfig({ ...env, SITE_APP_CAPTABLE: JSON.stringify(env.SITE_APP_CAPTABLE) }).ok, true, "an app's variable as a JSON string")
+  // One variable per app; the apps come in the order of their names, whatever order the variables are in.
+  const two = readConfig({ APP_ESIGN: binding, SITE_APP_ESIGN: { name: 'esign', title: 'Esign' }, ...env })
+  assert.deepEqual(two.config.apps.map(({ name, binding: bound }) => [name, bound]), [['captable', 'APP_CAPTABLE'], ['esign', 'APP_ESIGN']])
+  assert.equal(readConfig({ ...env, SITE_APPS: [{ name: 'esign' }] }).config.apps.length, 1, 'a list of every app in one variable is no longer read')
   // The optional addresses: normalized when usable, ignored (never fatal) when not.
   assert.equal(ok.config.orgRequestEmail, null)
   assert.equal(readConfig({ ...env, ORG_REQUEST_EMAIL: ' Requests@Example.TEST ' }).config.orgRequestEmail, 'requests@example.test')
@@ -298,9 +302,12 @@ test('configuration: app names, bindings, sender, and failing closed', () => {
     [{ SITE_DOMAIN: undefined }, 'SITE_DOMAIN'],
     [{ TURNSTILE_SECRET_KEY: '' }, 'TURNSTILE_SECRET_KEY'],
     [{ GOOGLE_CLIENT_ID: 'id' }, 'GOOGLE_CLIENT_SECRET'],
-    [{ SITE_APPS: '[not json' }, 'SITE_APPS'],
-    [{ SITE_APPS: [{ name: 'auth' }] }, 'SITE_APPS[0].name'],
-    [{ SITE_APPS: [{ name: 'captable', binding: 'APP_OTHER' }] }, 'SITE_APPS[0].binding'],
+    [{ SITE_APP_CAPTABLE: '[not json' }, 'SITE_APP_CAPTABLE (not valid JSON)'],
+    [{ SITE_APP_CAPTABLE: [{ name: 'captable' }] }, 'SITE_APP_CAPTABLE (expected a JSON object)'],
+    [{ SITE_APP_AUTH: { name: 'auth' } }, 'SITE_APP_AUTH.name'],
+    // A variable holds only its own app: SITE_APP_CAPTABLE can't route esign's host to captable's Worker.
+    [{ SITE_APP_CAPTABLE: { name: 'esign' } }, 'SITE_APP_CAPTABLE.name'],
+    [{ SITE_APP_CAPTABLE: { name: 'captable', binding: 'APP_OTHER' } }, 'SITE_APP_CAPTABLE.binding'],
     [{ EMAIL: undefined }, 'EMAIL'],
     [{ DB: undefined }, 'DB'],
     [{ RL_PUBLIC: undefined }, 'RL_PUBLIC'],
@@ -329,7 +336,7 @@ function ctxFor(url, { testMode = false } = {}) {
   const binding = { prepare() {}, limit() {}, send() {}, fetch() {} }
   const result = readConfig({
     DB: binding, RL_AUTH: binding, RL_APP: binding, RL_PUBLIC: binding, EMAIL: binding, APP_CAPTABLE: binding,
-    SITE_DOMAIN: testMode ? 'insulinapps.localhost' : 'example.test', SITE_APPS: [{ name: 'captable' }],
+    SITE_DOMAIN: testMode ? 'insulinapps.localhost' : 'example.test', SITE_APP_CAPTABLE: { name: 'captable' },
     TURNSTILE_SITE_KEY: 'k', TURNSTILE_SECRET_KEY: 's', EMAIL_FROM: 'no-reply@example.test', ...(testMode ? { SITE_ENV: 'test' } : {}),
   })
   return createContext(new Request(url), {}, { waitUntil() {} }, result.config)
@@ -465,10 +472,10 @@ test('public paths: the same rule as the deploy, matched at segment boundaries, 
     DB: binding, RL_AUTH: binding, RL_APP: binding, RL_PUBLIC: binding, EMAIL: binding, APP_CAPTABLE: binding, SITE_DOMAIN: 'example.test',
     TURNSTILE_SITE_KEY: 'k', TURNSTILE_SECRET_KEY: 's', EMAIL_FROM: 'no-reply@example.test',
   }
-  assert.deepEqual(readConfig({ ...env, SITE_APPS: [{ name: 'captable', publicPaths: ['/sign'] }] }).config.apps[0].publicPaths, ['/sign'])
-  const refused = readConfig({ ...env, SITE_APPS: [{ name: 'captable', publicPaths: ['/settings/'] }] })
+  assert.deepEqual(readConfig({ ...env, SITE_APP_CAPTABLE: { name: 'captable', publicPaths: ['/sign'] } }).config.apps[0].publicPaths, ['/sign'])
+  const refused = readConfig({ ...env, SITE_APP_CAPTABLE: { name: 'captable', publicPaths: ['/settings/'] } })
   assert.equal(refused.ok, false, 'a malformed list fails closed')
-  assert.ok(refused.problems.includes('SITE_APPS[0].publicPaths[0]'))
+  assert.ok(refused.problems.includes('SITE_APP_CAPTABLE.publicPaths[0]'))
 })
 
 test("the gateway's paths on an app host: its settings addresses (People, Integrations, API access, Connect AI) and below", () => {
@@ -498,14 +505,14 @@ test("an app's scheduled path: one path under /api/, never reserved, never publi
     DB: binding, RL_AUTH: binding, RL_APP: binding, RL_PUBLIC: binding, EMAIL: binding, APP_CAPTABLE: binding, SITE_DOMAIN: 'example.test',
     TURNSTILE_SITE_KEY: 'k', TURNSTILE_SECRET_KEY: 's', EMAIL_FROM: 'no-reply@example.test',
   }
-  const declared = readConfig({ ...env, SITE_APPS: [{ name: 'captable', publicPaths: ['/api/public/'], scheduled: '/api/scheduled' }] })
+  const declared = readConfig({ ...env, SITE_APP_CAPTABLE: { name: 'captable', publicPaths: ['/api/public/'], scheduled: '/api/scheduled' } })
   assert.equal(declared.config.apps[0].scheduled, '/api/scheduled')
-  assert.equal(readConfig({ ...env, SITE_APPS: [{ name: 'captable' }] }).config.apps[0].scheduled, null, 'most apps have none')
-  assert.equal(readConfig({ ...env, SITE_APPS: [{ name: 'captable', scheduled: null }] }).config.apps[0].scheduled, null)
+  assert.equal(readConfig({ ...env, SITE_APP_CAPTABLE: { name: 'captable' } }).config.apps[0].scheduled, null, 'most apps have none')
+  assert.equal(readConfig({ ...env, SITE_APP_CAPTABLE: { name: 'captable', scheduled: null } }).config.apps[0].scheduled, null)
   for (const scheduled of ['/api/public/tick', '/mcp', '/api/__suger/x', '/api/', 7]) {
-    const refused = readConfig({ ...env, SITE_APPS: [{ name: 'captable', publicPaths: ['/api/public/'], scheduled }] })
+    const refused = readConfig({ ...env, SITE_APP_CAPTABLE: { name: 'captable', publicPaths: ['/api/public/'], scheduled } })
     assert.equal(refused.ok, false, `${scheduled} fails closed`)
-    assert.ok(refused.problems.includes('SITE_APPS[0].scheduled'), String(scheduled))
+    assert.ok(refused.problems.includes('SITE_APP_CAPTABLE.scheduled'), String(scheduled))
   }
 })
 
@@ -550,21 +557,21 @@ test("an app's navigation: the gateway bundles exactly list-apps.mjs's icons, an
     DB: binding, RL_AUTH: binding, RL_APP: binding, RL_PUBLIC: binding, EMAIL: binding, APP_CAPTABLE: binding, SITE_DOMAIN: 'example.test',
     TURNSTILE_SITE_KEY: 'k', TURNSTILE_SECRET_KEY: 's', EMAIL_FROM: 'no-reply@example.test',
   }
-  const old = readConfig({ ...env, SITE_APPS: JSON.stringify([{ name: 'captable', title: 'Cap Table', binding: 'APP_CAPTABLE', permissions: [], publicPaths: [], scheduled: null }]) })
-  assert.equal(old.ok, true, 'a SITE_APPS from before the navigation manifest still loads')
+  const old = readConfig({ ...env, SITE_APP_CAPTABLE: JSON.stringify({ name: 'captable', title: 'Cap Table', binding: 'APP_CAPTABLE', permissions: [], publicPaths: [], scheduled: null }) })
+  assert.equal(old.ok, true, 'an app without a navigation manifest loads')
   assert.deepEqual(old.config.apps[0].navigation, [])
-  const declared = readConfig({ ...env, SITE_APPS: [{ name: 'captable', navigation: manifest }] })
+  const declared = readConfig({ ...env, SITE_APP_CAPTABLE: { name: 'captable', navigation: manifest } })
   assert.deepEqual(declared.config.apps[0].navigation, readNavigation('captable', manifest))
-  const refused = readConfig({ ...env, SITE_APPS: [{ name: 'captable', navigation: [{ key: 'a', label: 'A', icon: 'list', path: '/__insulin/me' }] }] })
+  const refused = readConfig({ ...env, SITE_APP_CAPTABLE: { name: 'captable', navigation: [{ key: 'a', label: 'A', icon: 'list', path: '/__insulin/me' }] } })
   assert.equal(refused.ok, false, 'a malformed manifest fails closed, like the other fields')
-  assert.ok(refused.problems.includes('SITE_APPS[0].navigation[0]'))
+  assert.ok(refused.problems.includes('SITE_APP_CAPTABLE.navigation[0]'))
 })
 
 test("a local run's gateway config carries each app's level 1, as the deploy's does", async () => {
   const apps = await listApps()
   const local = await gatewayConfig(apps.map(({ name }) => name))
   for (const app of apps) {
-    const entry = local.vars.SITE_APPS.find(({ name }) => name === app.name)
+    const entry = local.vars[`SITE_APP_${app.name.toUpperCase().replaceAll('-', '_')}`]
     assert.deepEqual(entry.navigation, gatewayNavigation(app.navigation), `${app.name}: level 1`)
     assert.ok(entry.navigation.every((item) => !('children' in item)), `${app.name}: never level 2`)
     assert.equal('secrets' in entry, false, `${app.name}: never the names of its secrets`)

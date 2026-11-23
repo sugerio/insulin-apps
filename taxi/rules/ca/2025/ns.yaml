@@ -1,0 +1,415 @@
+# Nova Scotia tax: Form NS428, Schedules NS(S2) and NS(S11), and Form NS479. Line ids are the line numbers in the
+# forms' right margin. Every number below was checked against the 2025 NS428 (5003-C), Worksheet NS428 (5003-D),
+# NS(S2) (5003-S2), NS(S11) (5003-S11), NS479 (5003-TC) and the CRA's "Nova Scotia tax information for 2025" (5003-PC).
+# For 2025 Nova Scotia folded its basic personal amount supplement into one $11,744 amount and indexed its brackets.
+
+params:
+  nsTaxBrackets:
+    label: Nova Scotia tax brackets
+    source: "NS428 Part A, bases as printed on the form"
+    value:
+      - { upTo: 30507, rate: 8.79%, base: 0 }
+      - { upTo: 61015, rate: 14.95%, base: 2681.57 }
+      - { upTo: 95883, rate: 16.67%, base: 7242.51 }
+      - { upTo: 154650, rate: 17.5%, base: 13055.01 }
+      - { rate: 21%, base: 23339.23 }
+  nsFirstBracketTop:
+    label: Top of the first Nova Scotia bracket
+    source: "NS428 Part A, NS(S2) line 6 and NS(S11) line 7: $30,507"
+    value: 30507
+  nsCreditRate:
+    label: Nova Scotia credit rate
+    source: "NS428 line 47: 8.79%"
+    value: 8.79%
+  nsBasicPersonalAmount:
+    label: Nova Scotia basic personal amount
+    source: "NS428 line 58040: claim $11,744"
+    value: 11744
+  nsAgeAmountMax:
+    label: Nova Scotia age amount, full
+    source: "Worksheet NS428, line 58080: $5,734"
+    value: 5734
+  nsAgeAmountThreshold:
+    label: Net income where the Nova Scotia age amount starts to go down
+    source: "Worksheet NS428, line 58080: income threshold"
+    value: 30828
+  nsAgeAmountRate:
+    label: Nova Scotia age amount reduction rate
+    source: "Worksheet NS428, line 58080: applicable rate"
+    value: 15%
+  nsSpouseBase:
+    label: Nova Scotia spouse and eligible dependant amount, base
+    source: "NS428 lines 11 and 14: $12,618"
+    value: 12618
+  nsSpouseIncomeFloor:
+    label: Least net income taken off the Nova Scotia spouse and eligible dependant amounts
+    source: "NS428 lines 12 and 15: whichever is more, $874 or their net income"
+    value: 874
+  nsSpouseMax:
+    label: Nova Scotia spouse and eligible dependant amount, most
+    source: "NS428 lines 13 and 16: maximum $11,744"
+    value: 11744
+  nsYoungChildAmount:
+    label: Nova Scotia amount for young children, per month
+    source: "NS428 line 58230: $100 for each month a child was under 6"
+    value: 100
+  nsPensionAmountMax:
+    label: Most Nova Scotia pension income amount
+    source: "NS428 line 27 (58360): maximum $1,173"
+    value: 1173
+  nsInfirmBase:
+    label: Nova Scotia amount for infirm dependants age 18 or older, base
+    source: "Worksheet NS428, line 58200, line 1: $8,744"
+    value: 8744
+  nsInfirmMax:
+    label: Most Nova Scotia amount for an infirm dependant age 18 or older
+    source: "Worksheet NS428, line 58200, line 3: maximum $2,885 per dependant"
+    value: 2885
+  nsDisabilityAmount:
+    label: Nova Scotia disability amount
+    source: "NS428 line 30 (58440): claim $7,341; Worksheet NS428, lines 58440 and 58480, line 1"
+    value: 7341
+  nsDisabilitySupplementMax:
+    label: Nova Scotia disability supplement for a person under 18
+    source: "Worksheet NS428, lines 58440 and 58480, line 2: $3,449"
+    value: 3449
+  nsDisabilityCareThreshold:
+    label: Child care and attendant care that the Nova Scotia disability supplement allows
+    source: "Worksheet NS428, lines 58440 and 58480, line 4: $2,346"
+    value: 2346
+  nsMedicalThresholdMax:
+    label: Nova Scotia medical expense threshold, most
+    source: "NS428 line 42: whichever is less, $1,637 or 3% of net income"
+    value: 1637
+  nsDonationLowRate:
+    label: Nova Scotia donation credit rate on the first $200
+    source: "NS428 line 49: 8.79%"
+    value: 8.79%
+  nsDonationHighRate:
+    label: Nova Scotia donation credit rate above $200
+    source: "NS428 line 50: 21%"
+    value: 21%
+  nsDividendEligibleRate:
+    label: Nova Scotia dividend tax credit rate, eligible dividends
+    source: "Worksheet NS428, line 61520: 8.85% of the taxable amount"
+    value: 8.85%
+  nsDividendOtherRate:
+    label: Nova Scotia dividend tax credit rate, other dividends
+    source: "Worksheet NS428, line 61520: 1.5% of the taxable amount"
+    value: 1.5%
+  nsEducationPartTime:
+    label: Nova Scotia education amount per part-time month
+    source: "NS(S11) line 3: $60 for each month from line 32010 of federal Schedule 11"
+    value: 60
+  nsEducationFullTime:
+    label: Nova Scotia education amount per full-time month
+    source: "NS(S11) line 4: $200 for each month from line 32020 of federal Schedule 11"
+    value: 200
+  nsTaxReductionEach:
+    label: Nova Scotia low-income tax reduction, basic, spouse and eligible dependant amounts
+    source: "NS428 lines 71 to 73: claim $300 each"
+    value: 300
+  nsTaxReductionMax:
+    label: Most of the Nova Scotia basic, spouse and eligible dependant reductions together
+    source: "NS428 line 74: maximum $600"
+    value: 600
+  nsTaxReductionChild:
+    label: Nova Scotia low-income tax reduction per dependent child
+    source: "NS428 line 75: $165 for each dependent child born in 2007 or later"
+    value: 165
+  nsTaxReductionBase:
+    label: Adjusted family income where the Nova Scotia low-income tax reduction starts to go down
+    source: "NS428 line 80: $15,000"
+    value: 15000
+  nsTaxReductionRate:
+    label: Nova Scotia low-income tax reduction rate
+    source: "NS428 line 82: 5%"
+    value: 5%
+  nsPoliticalRate:
+    label: Nova Scotia political contribution tax credit rate
+    source: "NS428 line 86: 75% of contributions"
+    value: 75%
+  nsPoliticalMax:
+    label: Most Nova Scotia political contribution tax credit
+    source: "NS428 line 86: maximum $750"
+    value: 750
+  nsAgeTaxCredit:
+    label: Nova Scotia age tax credit
+    source: "NS428 line 98: claim $1,000"
+    value: 1000
+  nsAgeTaxCreditLimit:
+    label: Taxable income from which there is no Nova Scotia age tax credit
+    source: "NS428 line 98: taxable income less than $24,000"
+    value: 24000
+  nsActivityMaxPerChild:
+    label: Most children's sports and arts expenses per child
+    source: "NS479 column D: maximum $500 per child"
+    value: 500
+  nsVolunteerCredit:
+    label: Nova Scotia volunteer firefighters and ground search and rescue tax credit
+    source: "NS479 line 1 (62400): claim $500"
+    value: 500
+  nsActivityRate:
+    label: Nova Scotia children's sports and arts tax credit rate
+    source: "NS479 line 3: 8.79%"
+    value: 8.79%
+
+lines:
+  # Part A – Nova Scotia tax on taxable income
+  NS428.8:
+    label: Nova Scotia tax on taxable income
+    formula: "round(bracket(param.nsTaxBrackets, line.T1.26000), 2)"
+
+  # Part B – Nova Scotia non-refundable tax credits
+  NS428.9:
+    label: Nova Scotia basic personal amount
+    formula: >-
+      round((param.nsBasicPersonalAmount) * line.RES.factor, 2)
+
+  NS428.10:
+    label: Nova Scotia age amount
+    formula: >-
+      if(person.age >= 65, max(0, round(param.nsAgeAmountMax * line.RES.factor, 2)
+      - round(max(0, line.T1.23600 - round(param.nsAgeAmountThreshold * line.RES.factor, 2)) * param.nsAgeAmountRate, 2)), 0)
+    source: "Worksheet NS428, line 58080: for people born in 1960 or earlier, $5,734 less 15% of net income over $30,828 (both amounts prorated for a part-year resident: canada.ca, Completing your return for newcomers, Example 2)"
+  # For a part-year resident, the base, the $874 and the maximum are prorated, and then the net income is subtracted,
+  # not prorated (canada.ca, completing a return for newcomers, Example 3 for line 30300).
+  NS428.13:
+    label: Nova Scotia spouse or common-law partner amount
+    formula: >-
+      round(if(line.HH.partner == 1, min(round(param.nsSpouseMax * line.RES.factor, 2), max(0, round(param.nsSpouseBase * line.RES.factor, 2)
+      - max(round(param.nsSpouseIncomeFloor * line.RES.factor, 2), line.HH.spouseIncomeForCredits))), 0), 2)
+    source: "NS428 lines 11 to 13: $12,618 less whichever is more, $874 or their net income"
+  NS428.16:
+    label: Nova Scotia amount for an eligible dependant
+    formula: >-
+      round(if(line.HH.partner == 0 and family.childrenUnder18 > 0, min(round(param.nsSpouseMax * line.RES.factor, 2), max(0, round(param.nsSpouseBase * line.RES.factor, 2)
+      - max(round(param.nsSpouseIncomeFloor * line.RES.factor, 2), answer.dependantNetIncome))), 0), 2)
+    source: "NS428 lines 14 to 16: $12,618 less whichever is more, $874 or their net income"
+  # The amount for infirm dependants needs no shared home, unlike the caregiver amount (line 28), which the app can't
+  # tell; so the infirm amount is claimed for an adult relative with an impairment.
+  NS428.17:
+    label: Nova Scotia amount for infirm dependants age 18 or older
+    formula: >-
+      if(answer.hasInfirmDependant, if(answer.infirmDependants > 1, unsupported("The Canada caregiver amount for more than one adult dependant isn't handled by this app yet"),
+      answer.infirmDependants * min(round(param.nsInfirmMax * line.RES.factor, 2), max(0, round(param.nsInfirmBase * line.RES.factor, 2) - answer.infirmDependantIncome))), 0)
+    source: "Worksheet NS428, line 58200: $8,744 less the dependant's net income, up to $2,885 (both prorated for a part-year resident before the income comes off)"
+  # The child claimed as an eligible dependant gets no amount for young children; the app claims the eligible dependant
+  # for the child with the fewest months under 6, which leaves the most months here.
+  NS428.58229:
+    label: Months claimed for the amount for young children
+    formula: >-
+      if(line.HH.partner == 1 and (line.T1.23600 > line.HH.spouseNetIncome
+      or (line.T1.23600 == line.HH.spouseNetIncome and person.role == "spouse")), 0,
+      sum(family.childMonthsUnder6) - if(line.NS428.16 > 0, min(family.childMonthsUnder6), 0))
+    source: "NS428 line 58229: each month a child was under 6 on its first day; with a spouse or partner, only the one with the lower net income claims (with equal incomes, the person preparing)"
+  NS428.18:
+    label: Nova Scotia amount for young children
+    formula: "line.NS428.58229 * param.nsYoungChildAmount"
+  NS428.25:
+    label: CPP and EI credit amounts
+    formula: "line.T1.30800 + line.T1.31000 + line.T1.31200"
+    source: "NS428 lines 21 to 25: lines 30800, 31000 and 31200 of your return"
+  NS428.27:
+    label: Nova Scotia pension income amount
+    formula: "min(param.nsPensionAmountMax, line.T1.31400)"
+    source: "NS428 line 27 (58360): line 31400 of your return, up to $1,173"
+  NS428.30:
+    label: Nova Scotia disability amount for self
+    formula: >-
+      round((if(answer.hasDisability, param.nsDisabilityAmount, 0)) * line.RES.factor, 2)
+    source: "NS428 line 30 (58440): $7,341 with an approved Form T2201"
+  NS428.31:
+    label: Nova Scotia disability amount transferred from a dependant
+    formula: >-
+      round((if(answer.hasDisabledDependant, if(answer.disabledChildren > 1 and answer.disabledChildCare > 0, unsupported("Child care for more than one child with a disability is worked out child by child, which this app doesn't handle yet"), answer.disabledChildren * (param.nsDisabilityAmount + param.nsDisabilitySupplementMax) - min(answer.disabledChildren * param.nsDisabilitySupplementMax, max(0, answer.disabledChildCare - param.nsDisabilityCareThreshold)) + answer.disabledAdults * param.nsDisabilityAmount), 0)) * line.RES.factor, 2)
+    source: "Worksheet NS428, line 58480: $7,341, plus up to $3,449 for a child under 18, less care over $2,346. The app assumes the dependant had no income"
+  NS428.32:
+    label: Nova Scotia credit amounts before tuition and transfers
+    formula: >-
+      line.NS428.9 + line.NS428.10 + line.NS428.13 + line.NS428.16 + line.NS428.17 + line.NS428.18 + line.NS428.25
+      + line.NS428.27 + line.NS428.30 + line.NS428.31
+    source: "NS428 lines 19 to 32"
+  NS428.33:
+    label: Interest paid on your student loans
+    formula: "line.T1.31900"
+    source: "NS428 line 33 (58520): line 31900 of your return"
+  NS428.34:
+    label: Nova Scotia tuition and education amounts
+    formula: "line.NSS11.13"
+    source: "Schedule NS(S11) line 13"
+  NS428.35:
+    label: Tuition and education amounts transferred from a child or grandchild
+    formula: "round(line.CHILD.provincialTuition * line.RES.factor, 2)"
+    source: "NS428 line 35 (58600): the provincial amount they designate on their T2202, taken as the federal one. Prorated for a part-year resident (RC4018, Appendix K)"
+  NS428.36:
+    label: Nova Scotia amounts transferred from your spouse or common-law partner
+    formula: "if(line.HH.partner == 1 and family.partnerInYear and line.NSS2.5 > 0, round(line.NSS2.12 * line.RES.factor, 2), 0)"
+    source: >-
+      Schedule NS(S2): their unused Nova Scotia age, pension, disability and tuition amounts. Prorated for a part-year
+      resident (RC4018, Appendix K: line 58640); the schedule shows the whole transfer
+  NS428.43:
+    label: Allowable medical expenses
+    formula: "max(0, line.T1.33099 - min(param.nsMedicalThresholdMax, round(line.T1.23600 * param.medicalThresholdRate, 2)))"
+    source: "NS428 lines 38 to 43: expenses over whichever is less, $1,637 or 3% of net income"
+  NS428.44:
+    label: Allowable medical expenses for other dependants
+    formula: >-
+      if(answer.hasOtherDependantMedical, max(0, answer.otherDependantMedical
+      - min(param.nsMedicalThresholdMax, round(answer.otherDependantIncome * param.medicalThresholdRate, 2))), 0)
+    source: "Worksheet NS428, line 58729: their expenses over line 42 of their NS428 (whichever is less, $1,637 or 3% of their net income)"
+  NS428.46:
+    label: Nova Scotia credit amounts
+    formula: "line.NS428.32 + line.NS428.33 + line.NS428.34 + line.NS428.35 + line.NS428.36 + line.NS428.43 + line.NS428.44"
+  NS428.48:
+    label: Nova Scotia credit amounts at the credit rate
+    formula: "round(line.NS428.46 * param.nsCreditRate, 2)"
+  NS428.51:
+    label: Nova Scotia donations credit
+    formula: "round(line.S9.13 * param.nsDonationLowRate, 2) + round(line.S9.14 * param.nsDonationHighRate, 2)"
+    source: "NS428 lines 49 to 51: Schedule 9 lines 13 and 14 at 8.79% and 21%"
+  NS428.52:
+    label: Nova Scotia non-refundable tax credits
+    formula: "line.NS428.48 + line.NS428.51"
+
+  # Part C – Nova Scotia tax
+  NS428.57:
+    label: Nova Scotia dividend tax credit
+    formula: "round(line.T1.12010 * param.nsDividendOtherRate, 2) + round((line.T1.12000 - line.T1.12010) * param.nsDividendEligibleRate, 2)"
+    source: "Worksheet NS428, line 61520"
+  NS428.60:
+    label: Nova Scotia tax after credits
+    formula: "max(0, line.NS428.8 - line.NS428.52 - line.NS428.57)"
+  # Form T2036 – the provincial foreign tax credit: the foreign tax left after the federal credit, up to the share of
+  # the province's tax otherwise payable on the foreign income. For Nova Scotia that is the tax before the credit
+  # (line 62, which is line 60 without minimum tax).
+  NS428.63:
+    label: Provincial foreign tax credit
+    formula: >-
+      if(line.FTC.left > 0 and line.T1.23600 > 0, min(line.FTC.left,
+      round(min(line.FTC.netForeign, line.T1.23600) * line.NS428.60 / line.T1.23600, 2), line.NS428.60), 0)
+    source: "Form T2036, line 5, with note 4: Nova Scotia tax before the foreign tax credit"
+  NS428.64:
+    label: Nova Scotia tax after the foreign tax credit
+    formula: "max(0, line.NS428.60 - line.NS428.63)"
+  # The low-income tax reduction is the family's: one spouse claims it, and it can't move to the other. The app claims
+  # it on the return with more Nova Scotia tax to reduce (with equal tax, the higher net income, then the person preparing).
+  NS428.70:
+    label: Adjusted family income
+    formula: "line.T1.23600 + if(line.HH.partner == 1, line.HH.spouseNetIncome, 0)"
+    source: "NS428 lines 65 to 70: both net incomes. The UCCB and RDSP amounts aren't handled"
+  NS428.74:
+    label: Basic, spouse and eligible dependant reductions
+    formula: >-
+      min(param.nsTaxReductionMax, param.nsTaxReductionEach + if(line.HH.partner == 1, param.nsTaxReductionEach, 0)
+      + if(line.NS428.16 > 0, param.nsTaxReductionEach, 0))
+    source: "NS428 lines 71 to 74: $300 each, up to $600"
+  NS428.75:
+    label: Reduction for dependent children
+    formula: "param.nsTaxReductionChild * max(0, family.childrenUnder19 - if(line.NS428.16 > 0, 1, 0))"
+    source: "NS428 line 75: $165 for each child born in 2007 or later, other than the one claimed on line 73"
+  NS428.76:
+    label: Nova Scotia tax reductions
+    formula: "line.NS428.74 + line.NS428.75"
+  NS428.83:
+    label: Nova Scotia tax reduction clawback
+    formula: "round(max(0, line.NS428.70 - param.nsTaxReductionBase) * param.nsTaxReductionRate, 2)"
+    source: "NS428 lines 79 to 83: 5% of adjusted family income over $15,000"
+  NS.claimsReduction:
+    label: This return claims the family's low-income tax reduction (1 for yes)
+    formula: >-
+      if(person.age >= 19 or line.HH.partner == 1 or family.childrenUnder19 > 0,
+      if(line.HH.partner == 1 and family.partnerInYear and spouse.person.province == "NS"
+      and (spouse.line.NS428.64 > line.NS428.64 or (spouse.line.NS428.64 == line.NS428.64
+      and (spouse.line.T1.23600 > line.T1.23600 or (spouse.line.T1.23600 == line.T1.23600 and person.role == "spouse")))), 0, 1), 0)
+    source: "Nova Scotia low-income tax reduction: for someone 19 or older, with a spouse or partner, or a parent; a couple claims it on one return"
+  NS428.84:
+    label: Nova Scotia low-income tax reduction
+    formula: "if(line.NS.claimsReduction == 1, max(0, line.NS428.76 - line.NS428.83), 0)"
+  NS428.85:
+    label: Nova Scotia tax after the low-income tax reduction
+    formula: "max(0, line.NS428.64 - line.NS428.84)"
+  NS428.86:
+    label: Nova Scotia political contribution tax credit
+    formula: "min(param.nsPoliticalMax, round(answer.provincialPoliticalContributions * param.nsPoliticalRate, 2))"
+    source: "NS428 line 86: 75% of contributions made in 2025 (line 62100), up to $750"
+  NS428.87:
+    label: Nova Scotia tax after the political contribution tax credit
+    formula: "max(0, line.NS428.85 - line.NS428.86)"
+    source: "NS428 lines 87 to 97. The food bank, venture capital and equity tax credits aren't handled"
+  NS428.98:
+    label: Nova Scotia age tax credit
+    formula: "if(person.age >= 65 and line.T1.26000 < param.nsAgeTaxCreditLimit, param.nsAgeTaxCredit, 0)"
+    source: "NS428 line 98: $1,000 for people born in 1960 or earlier with taxable income under $24,000"
+  NS428.99:
+    label: Nova Scotia tax
+    formula: "max(0, line.NS428.87 - line.NS428.98)"
+
+  # Schedule NS(S11) – Nova Scotia tuition and education amounts (the student's own)
+  NSS11.1:
+    label: Unused Nova Scotia tuition and education amounts from your 2024 notice of assessment
+    formula: 'if(person.province == "AB", 0, answer.unusedProvincialTuition)'
+    source: "None for a spouse in Alberta, whose own return doesn't carry unused provincial tuition forward (Schedule NS(S2) reads this schedule for them)"
+  NSS11.5:
+    label: 2025 Nova Scotia tuition and education amounts
+    formula: >-
+      line.S11.8 + min(12, sum(T2202.box24)) * param.nsEducationPartTime
+      + min(12, sum(T2202.box25)) * param.nsEducationFullTime
+    source: "NS(S11) lines 2 to 5: the tuition on federal Schedule 11 line 8, and $60 a month part-time or $200 full-time (T2202 boxes 24 and 25)"
+  NSS11.9:
+    label: Income the tuition amount can reduce to zero Nova Scotia tax
+    formula: >-
+      max(0, if(line.T1.26000 <= param.nsFirstBracketTop, line.T1.26000, round(line.NS428.8 / param.nsCreditRate, 2))
+      - line.NS428.32)
+    source: "NS(S11) lines 7 to 9: taxable income, or above $30,507 Nova Scotia tax on it ÷ 8.79%, less NS428 line 32"
+  NSS11.10:
+    label: Unused amounts claimed for 2025
+    formula: "min(line.NSS11.1, line.NSS11.9)"
+  NSS11.12:
+    label: 2025 amounts claimed
+    formula: "min(line.NSS11.5, line.NSS11.9 - line.NSS11.10)"
+  NSS11.13:
+    label: Nova Scotia tuition and education amounts claimed for 2025
+    formula: "line.NSS11.10 + line.NSS11.12"
+  NSS11.19:
+    label: Nova Scotia tuition and education amounts you can transfer
+    formula: "max(0, min(param.tuitionTransferMax, line.NSS11.5) - line.NSS11.12)"
+    source: "NS(S11) lines 17 to 19: this year's amounts up to $5,000, less what you used"
+  NSS11.20:
+    label: Nova Scotia tuition and education amounts transferred to your spouse or common-law partner
+    formula: "if(line.HH.partner == 1 and family.partnerInYear and line.NSS11.5 > 0, min(answer.tuitionTransfer, line.NSS11.19), 0)"
+    source: "NS(S11) line 20: the amount you designate on your T2202 (the same as federally), up to line 19"
+
+  # Schedule NS(S2) – Nova Scotia amounts transferred from your spouse (read from their NS428, as if they lived here)
+  NSS2.5:
+    label: Their Nova Scotia age, pension and disability amounts, and the tuition they designate to you
+    formula: "spouse.line.NS428.10 + spouse.line.NS428.27 + spouse.line.NS428.30 + spouse.line.NSS11.20"
+    source: "NS(S2) lines 1 to 5"
+  NSS2.6:
+    label: Their taxable income, for the transfer
+    formula: "if(spouse.line.T1.26000 <= param.nsFirstBracketTop, spouse.line.T1.26000, round(spouse.line.NS428.8 / param.nsCreditRate, 2))"
+    source: "NS(S2) line 6"
+  NSS2.11:
+    label: Their adjusted taxable income
+    formula: "max(0, line.NSS2.6 - spouse.line.NS428.9 - spouse.line.NS428.25 - spouse.line.NS428.34)"
+    source: "NS(S2) lines 7 to 11: their lines 58040, 25 and 58560"
+  NSS2.12:
+    label: Nova Scotia amounts transferred from your spouse
+    formula: "max(0, line.NSS2.5 - line.NSS2.11)"
+
+  # Form NS479 – Nova Scotia credits (refundable, on line 47900 of the return)
+  NS479.1:
+    label: Volunteer firefighters and ground search and rescue tax credit
+    formula: "if(answer.hasVolunteerService, param.nsVolunteerCredit, 0)"
+    source: "NS479 line 1 (62400): $500 for a volunteer firefighter or ground search and rescue volunteer"
+  NS479.2:
+    label: Your children's sports and arts expenses
+    formula: "if(family.childrenUnder19 > 0, min(answer.childActivityFees, param.nsActivityMaxPerChild * family.childrenUnder19), 0)"
+    source: "NS479 line 2: fees for children under 19 at the end of the year, less assistance, up to $500 per child"
+  NS479.4:
+    label: Children's sports and arts tax credit
+    formula: "round(line.NS479.2 * param.nsActivityRate, 2)"
+    source: "NS479 lines 3 and 4: 8.79%"
+  NS479.5:
+    label: Nova Scotia credits
+    formula: "line.NS479.1 + line.NS479.4"

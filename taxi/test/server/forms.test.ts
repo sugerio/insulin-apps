@@ -10,7 +10,7 @@ import { VIEWER, startServer, type TestServer } from "../support/server.ts";
 // repository, so these tests print on blank stand-in pages of the same size and count, and read the amounts back from
 // where they were written.
 
-const rules = rulesFor(2025)!;
+const rules = rulesFor("ca", 2025)!;
 let server: TestServer;
 afterEach(() => server.close());
 

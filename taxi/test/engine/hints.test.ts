@@ -9,7 +9,7 @@ import { rulesFor } from "../../src/app/shared/rules/index.ts";
 // simple enough to do on paper: Ontario couples with T4 income only (no CPP or EI boxes), incomes where the Ontario
 // surtax, tax reduction, LIFT credit and the federal top-up credit are all zero.
 
-const rules = rulesFor(2025)!;
+const rules = rulesFor("ca", 2025)!;
 
 /** Every question that has a default, answered with it: a return with nothing else to say. */
 const NONE = Object.fromEntries(

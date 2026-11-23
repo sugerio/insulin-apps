@@ -126,6 +126,10 @@ const manifestSchema = z.strictObject({
   resultWhen: z.record(z.string(), z.string()).optional(),
   /** The line hints compare with and without their change: the refund less the balance owing. */
   outcome: z.string().optional(),
+  /** Each refund-or-balance a return shows, in order: the federal one, then Quebec's for a resident of Quebec. */
+  balances: z.array(z.strictObject({ name: z.string().min(1), refund: z.string(), owing: z.string() })).min(1).optional(),
+  /** What person.residentAllYear means, as an explanation names it: "Lived in Canada all year". */
+  residency: z.string().min(1).optional(),
 });
 const entriesSchema = z.strictObject({
   params: z.record(z.string(), sourceParam.nullable()).optional(),
@@ -146,6 +150,8 @@ export function compileRules(chain: SourceYear[], hash: (text: string) => string
   let result: string[] | undefined;
   let resultWhen: Record<string, string> | undefined;
   let outcome: string | undefined;
+  let balances: z.infer<typeof manifestSchema>["balances"];
+  let residency: string | undefined;
 
   chain.forEach((year, index) => {
     const manifestFile = year.files.find((file) => file.path.endsWith(`/${MANIFEST}`));
@@ -160,6 +166,8 @@ export function compileRules(chain: SourceYear[], hash: (text: string) => string
     result = parsedManifest.result ?? result;
     resultWhen = parsedManifest.resultWhen ?? resultWhen;
     outcome = parsedManifest.outcome ?? outcome;
+    balances = parsedManifest.balances ?? balances;
+    residency = parsedManifest.residency ?? residency;
 
     const seen = new Map<string, string>();
     for (const file of year.files) {
@@ -242,6 +250,8 @@ export function compileRules(chain: SourceYear[], hash: (text: string) => string
       };
     }),
     ...(outcome === undefined ? {} : { outcome }),
+    balances: balances ?? [],
+    ...(residency === undefined ? {} : { residency }),
   };
   const compiled: CompiledRules = { ...content, version: hash(JSON.stringify(content)) };
   // Loading runs every check the engine relies on: formulas parse, names exist, types agree, no cycles.

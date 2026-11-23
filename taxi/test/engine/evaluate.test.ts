@@ -205,7 +205,7 @@ describe("evaluating a year", () => {
 
 describe("the 2025 rules", () => {
   const alone = (slips: EngineInput["slips"], province = "ON", answers: Record<string, string> = {}) =>
-    new Evaluation(rulesFor(2025)!, {
+    new Evaluation(rulesFor("ca", 2025)!, {
       year: 2025,
       people: [{ id: "p1", name: "Alex", role: "self", birthDate: "1985-04-02", province }],
       family: { maritalStatus: "single", dependants: [] },
@@ -249,7 +249,7 @@ describe("the 2025 rules", () => {
   });
 
   it("say which family fact is missing", () => {
-    const evaluation = new Evaluation(rulesFor(2025)!, {
+    const evaluation = new Evaluation(rulesFor("ca", 2025)!, {
       year: 2025,
       people: [{ id: "p1", name: "Alex", role: "self", birthDate: "1985-04-02", province: null }],
       family: { maritalStatus: null, dependants: [] },
@@ -317,7 +317,7 @@ describe("the 2025 rules", () => {
 
   it("phase out the basic personal amount between the 26% and 33% brackets", () => {
     const at = (income: string) =>
-      new Evaluation(rulesFor(2025)!, {
+      new Evaluation(rulesFor("ca", 2025)!, {
         year: 2025,
         people: [{ id: "p1", name: "Alex", role: "self", birthDate: "1985-04-02", province: "ON" }],
         family: { maritalStatus: "single", dependants: [] },
@@ -343,16 +343,16 @@ describe("the 2025 rules", () => {
   it("deduct an OAS overpayment recovered (T4A(OAS) box 20) on line 23200", () => {
     const pensioner = JSON.parse(readFileSync(resolve(import.meta.dirname, "../golden/ca-2025/pensioner-on.json"), "utf8")).input as EngineInput;
     const recovered = { ...pensioner, slips: pensioner.slips.map((slip) => (slip.type === "T4AOAS" ? { ...slip, boxes: { ...slip.boxes, 20: "1000" } } : slip)) };
-    expect(value(new Evaluation(rulesFor(2025)!, pensioner), "p1", "T1.23600")).toEqual(["58300", "complete"]);
-    expect(value(new Evaluation(rulesFor(2025)!, recovered), "p1", "T1.23200")).toEqual(["1000", "complete"]);
-    expect(value(new Evaluation(rulesFor(2025)!, recovered), "p1", "T1.23600")).toEqual(["57300", "complete"]);
+    expect(value(new Evaluation(rulesFor("ca", 2025)!, pensioner), "p1", "T1.23600")).toEqual(["58300", "complete"]);
+    expect(value(new Evaluation(rulesFor("ca", 2025)!, recovered), "p1", "T1.23200")).toEqual(["1000", "complete"]);
+    expect(value(new Evaluation(rulesFor("ca", 2025)!, recovered), "p1", "T1.23600")).toEqual(["57300", "complete"]);
   });
 
   it("keep an OAS overpayment recovered out of the foreign income the foreign tax credits are on", () => {
     const pensioner = JSON.parse(readFileSync(resolve(import.meta.dirname, "../golden/ca-2025/pensioner-on.json"), "utf8")).input as EngineInput;
     const foreign = { hasForeignIncome: true, foreignInvestmentIncome: "1000", foreignInvestmentTax: "150", foreignEmploymentIncome: "0", foreignEmploymentTax: "0" };
     const withBoxes = (boxes: Record<string, Record<string, string>>) =>
-      new Evaluation(rulesFor(2025)!, {
+      new Evaluation(rulesFor("ca", 2025)!, {
         ...pensioner,
         answers: { p1: { ...pensioner.answers.p1, ...foreign } },
         slips: pensioner.slips.map((slip) => ({ ...slip, boxes: { ...slip.boxes, ...boxes[slip.type] } })),
@@ -371,7 +371,7 @@ describe("the 2025 rules", () => {
 
   it("reduce the eligible dependant amounts by the dependant's net income", () => {
     const singleParent = (province: string, answers: Record<string, string>) =>
-      new Evaluation(rulesFor(2025)!, {
+      new Evaluation(rulesFor("ca", 2025)!, {
         year: 2025,
         people: [{ id: "p1", name: "Alex", role: "self", birthDate: "1985-04-02", province }],
         family: { maritalStatus: "single", dependants: [{ id: "d1", name: "Jamie", birthDate: "2017-04-04" }] },
@@ -391,7 +391,7 @@ describe("the 2025 rules", () => {
     expect(value(unanswered, "p1", "T1.30400")).toEqual([null, "missing"]);
     expect(unanswered.result().people[0]!.missing.map((each) => each.question)).toContain("dependantNetIncome");
     // Asked only when the amount applies: not of a couple's return.
-    const couple = new Evaluation(rulesFor(2025)!, {
+    const couple = new Evaluation(rulesFor("ca", 2025)!, {
       year: 2025,
       people: [{ id: "p1", name: "Alex", role: "self", birthDate: "1985-04-02", province: "ON" }],
       family: { maritalStatus: "married", dependants: [{ id: "d1", name: "Jamie", birthDate: "2017-04-04" }] },
@@ -403,7 +403,7 @@ describe("the 2025 rules", () => {
 
   it("reduce every other province's and territory's eligible dependant amount by the dependant's net income", () => {
     const singleParent = (province: string, dependantNetIncome: string) =>
-      new Evaluation(rulesFor(2025)!, {
+      new Evaluation(rulesFor("ca", 2025)!, {
         year: 2025,
         people: [{ id: "p1", name: "Alex", role: "self", birthDate: "1985-04-02", province }],
         family: { maritalStatus: "single", dependants: [{ id: "d1", name: "Jamie", birthDate: "2017-04-04" }] },
@@ -436,7 +436,7 @@ describe("the 2025 rules", () => {
   });
 
   it("keep T5 and T4A boxes they don't handle on the slip, and say so", () => {
-    const rules2025 = rulesFor(2025)!;
+    const rules2025 = rulesFor("ca", 2025)!;
     expect(rules2025.slips.get("T5")!.boxes).toMatchObject({
       14: "Other income from Canadian sources",
       15: "Foreign income",
@@ -460,7 +460,7 @@ describe("the 2025 rules", () => {
     // Alex moved to Ontario for the last `days` days of 2025 and earned $100,000 here, after $60,000 abroad (none of it
     // from Canada: the 90% rule isn't met).
     const arrived = (days: string, family: EngineInput["family"], answers: Record<string, string | boolean>, spouse?: EngineInput["people"][number]) =>
-      new Evaluation(rulesFor(2025)!, {
+      new Evaluation(rulesFor("ca", 2025)!, {
         year: 2025,
         people: [{ id: "p1", name: "Alex", role: "self", birthDate: "1985-04-02", province: "ON", residentAllYear: false }, ...(spouse ? [spouse] : [])],
         family,
@@ -483,14 +483,14 @@ describe("the 2025 rules", () => {
       const infirm = arrived("100", { maritalStatus: "married", dependants: [] }, { spouseNetIncome: "25000", spouseIncomeWhileResident: "5000", spouseInfirm: true });
       expect([line(infirm, "S5.3"), line(infirm, "T1.30300"), line(infirm, "T1.30425")]).toEqual(["5155.06", "155.06", "2201.38"]);
       // Lived here all year: the full amount less their $20,800 for the year, which leaves nothing.
-      const resident = new Evaluation(rulesFor(2025)!, { ...couple.input, people: [{ ...couple.input.people[0]!, residentAllYear: true }] });
+      const resident = new Evaluation(rulesFor("ca", 2025)!, { ...couple.input, people: [{ ...couple.input.people[0]!, residentAllYear: true }] });
       expect([line(resident, "T1.30000"), line(resident, "T1.30300")]).toEqual(["16129", "0"]);
     });
 
     it("prorate the age amount's $9,028 and its $45,522 base, not the net income", () => {
       // canada.ca, Example 2: arrived March 31 (276 days), aged 70, $35,000 of net income: 276/365 of $9,028, less 15%
       // of the income over 276/365 of $45,522.
-      const senior = new Evaluation(rulesFor(2025)!, {
+      const senior = new Evaluation(rulesFor("ca", 2025)!, {
         year: 2025,
         people: [{ id: "p1", name: "Alex", role: "self", birthDate: "1955-02-02", province: "ON", residentAllYear: false }],
         family: { maritalStatus: "single", dependants: [] },
@@ -503,7 +503,7 @@ describe("the 2025 rules", () => {
     it("don't meet the 90% rule with no world income for the rest of the year", () => {
       const emigrant = JSON.parse(readFileSync(resolve(import.meta.dirname, "../golden/ca-2025/emigrant-bc.json"), "utf8")).input as EngineInput;
       const withIncome = (world: string, canadian: string) =>
-        new Evaluation(rulesFor(2025)!, { ...emigrant, answers: { p1: { ...emigrant.answers.p1, nonResidentIncome: world, nonResidentCanadianIncome: canadian } } });
+        new Evaluation(rulesFor("ca", 2025)!, { ...emigrant, answers: { p1: { ...emigrant.answers.p1, nonResidentIncome: world, nonResidentCanadianIncome: canadian } } });
       // RC4018, Appendix K: none at all isn't 90% from Canada, so the amounts are prorated by the 273 days.
       expect([line(withIncome("0", "0"), "RES.full"), line(withIncome("0", "0"), "T1.30000")]).toEqual(["0", "12063.61"]);
       expect([line(withIncome("4000", "3600"), "RES.full"), line(withIncome("4000", "3600"), "T1.30000")]).toEqual(["1", "16129"]);
@@ -524,7 +524,7 @@ describe("the 2025 rules", () => {
       // their T4 too) and T4. Alex earned $100,000 in Ontario, there all year unless `days` says otherwise.
       type Robin = { days?: string; abroad?: string; canadian?: string; t4: string };
       const couple = (robin: Robin, alex: { days?: string; answers?: Record<string, string | boolean> } = {}) =>
-        new Evaluation(rulesFor(2025)!, {
+        new Evaluation(rulesFor("ca", 2025)!, {
           year: 2025,
           people: [
             { id: "p1", name: "Alex", role: "self", birthDate: "1985-04-02", province: "ON", residentAllYear: alex.days === undefined },
@@ -571,7 +571,7 @@ describe("the 2025 rules", () => {
 
   describe("for the Canada workers benefit", () => {
     const worker = (province: string, income: string, options: { dependant?: boolean; disability?: boolean } = {}) =>
-      new Evaluation(rulesFor(2025)!, {
+      new Evaluation(rulesFor("ca", 2025)!, {
         year: 2025,
         people: [{ id: "p1", name: "Alex", role: "self", birthDate: "1985-04-02", province }],
         family: { maritalStatus: "single", dependants: options.dependant ? [{ id: "d1", name: "Jamie", birthDate: "2017-04-04" }] : [] },
@@ -600,7 +600,7 @@ describe("the 2025 rules", () => {
     });
 
     it("count a spouse who wasn't resident all year as no eligible spouse", () => {
-      const couple = new Evaluation(rulesFor(2025)!, {
+      const couple = new Evaluation(rulesFor("ca", 2025)!, {
         year: 2025,
         people: [
           { id: "p1", name: "Alex", role: "self", birthDate: "1985-04-02", province: "ON" },
@@ -619,7 +619,7 @@ describe("the 2025 rules", () => {
 
     it("ask for the spouse's return when both of you might be eligible for the disability tax credit", () => {
       const couple = (province: string, income: string, spouseNetIncome: string, hasDisability: boolean) =>
-        new Evaluation(rulesFor(2025)!, {
+        new Evaluation(rulesFor("ca", 2025)!, {
           year: 2025,
           people: [{ id: "p1", name: "Alex", role: "self", birthDate: "1985-04-02", province }],
           family: { maritalStatus: "married", dependants: [] },
@@ -642,7 +642,7 @@ describe("the 2025 rules", () => {
   describe("on the Quebec return", () => {
     const employee = JSON.parse(readFileSync(resolve(import.meta.dirname, "../golden/ca-2025/single-employee-qc.json"), "utf8")).input as EngineInput;
     const withSlips = (...slips: [string, Record<string, string>][]) =>
-      new Evaluation(rulesFor(2025)!, {
+      new Evaluation(rulesFor("ca", 2025)!, {
         ...employee,
         slips: [...employee.slips, ...slips.map(([type, boxes], index) => ({ id: `x${index}`, person: "p1", type, issuer: "Rivière Payer", boxes }))],
       });
@@ -716,7 +716,7 @@ describe("the 2025 rules", () => {
       // The Quebec job's RL-1 shows $2,000 more than its T4 (group insurance is taxable in Quebec): that alone is fine.
       const quebecJob = employee.slips.map((slip) => (slip.type === "RL1" ? { ...slip, boxes: { ...slip.boxes, A: "64000" } } : slip));
       const evaluate = (slips: EngineInput["slips"], answers: Record<string, string> = {}) =>
-        new Evaluation(rulesFor(2025)!, { ...employee, slips, answers: { ...employee.answers, p1: { ...employee.answers.p1, ...answers } } });
+        new Evaluation(rulesFor("ca", 2025)!, { ...employee, slips, answers: { ...employee.answers, p1: { ...employee.answers.p1, ...answers } } });
       // Where box 14 is more than box A less box J, the benefits Quebec doesn't tax are asked; none here.
       const none = { qcExemptBenefits: "0" };
       expect(scope(evaluate(quebecJob))).toEqual([]);
@@ -835,7 +835,7 @@ describe("the 2025 rules", () => {
     it("ask for the benefits Quebec doesn't tax when the T4s show more than the RL-1s, and take them off box 14", () => {
       const scope = (evaluation: Evaluation) => evaluation.explain("p1", "line.QC.scope").notes ?? [];
       const evaluate = (slips: EngineInput["slips"], answers: Record<string, string> = {}) =>
-        new Evaluation(rulesFor(2025)!, { ...employee, slips, answers: { ...employee.answers, p1: { ...employee.answers.p1, ...answers } } });
+        new Evaluation(rulesFor("ca", 2025)!, { ...employee, slips, answers: { ...employee.answers, p1: { ...employee.answers.p1, ...answers } } });
       const slip = (id: string, type: string, boxes: Record<string, string>) => ({ id, person: "p1", type, issuer: "Érable Conseil inc.", boxes });
       const t4 = (id: string, income: string, qpp: string, ei: string, ppip: string) =>
         slip(id, "T4", { 14: income, 17: qpp, 18: ei, 22: "0", 24: income, 26: income, 55: ppip, 56: income });
@@ -875,7 +875,7 @@ describe("the 2025 rules", () => {
       expect(consolidated.line("p1", "TP1.478").status).toBe("complete");
       // Slips that agree never ask it, nor do slips refused before the amounts matter (box A above box 14 on one RL-1 for
       // two T4s, as with allocated tips).
-      expect(new Evaluation(rulesFor(2025)!, employee).result().people[0]!.questions).not.toContain("qcExemptBenefits");
+      expect(new Evaluation(rulesFor("ca", 2025)!, employee).result().people[0]!.questions).not.toContain("qcExemptBenefits");
       const tips = evaluate([t4("e5", "40000", "2336", "524", "197.60"), t4("e6", "1000", "0", "13.10", "4.94"), slip("e7", "RL1", { A: "42000", G: "42000" })]);
       expect(tips.result().people[0]!.questions).not.toContain("qcExemptBenefits");
       expect(scope(tips)).toEqual([expect.stringMatching(/If every RL-1 is here, .*allocated tips in box T.*which this app doesn't handle yet/)]);
@@ -895,7 +895,7 @@ describe("the 2025 rules", () => {
 
     it("refuse a slip box whose amount belongs on a TP-1 line they don't handle, instead of leaving it out", () => {
       const withT4 = (boxes: Record<string, string>) =>
-        new Evaluation(rulesFor(2025)!, {
+        new Evaluation(rulesFor("ca", 2025)!, {
           ...employee,
           slips: employee.slips.map((slip) => (slip.type === "T4" ? { ...slip, boxes: { ...slip.boxes, ...boxes } } : slip)),
         });

@@ -14,14 +14,15 @@ import { parseFormula, references, type Formula } from "./formula.ts";
 //   <SLIP>.box<key>               that box of every one of the person's slips of that type (a list: sum, count,
 //                                 countNonZero, countIssuers, max)
 //   <SLIP>.slips                  how many slips of that type the person has, whatever boxes they show
-//   person.age, person.province, person.role   the person's age and province on December 31, and "self" for the
-//                                 person preparing or "spouse"; person.residentAllYear whether they lived in Canada all year
+//   person.age, person.province, person.role   the person's age and province (or state) on December 31, and "self"
+//                                 for the person preparing or "spouse"; person.residentAllYear whether they were a
+//                                 resident all year (the rule set's `residency` says of which country)
 //   person.birthMonth             the month the person was born, 1 to 12 (with person.age, the month they turned an
 //                                 age this year, which prorates CPP in the year they turn 18 or 70)
 //   family.maritalStatus, family.partnerInYear, family.childrenUnder18, family.childrenUnder19
 //                                 the year's marital status, whether the spouse's return is prepared too, and the
 //                                 number of dependants under 18 (or 19) at the end of the year; also childrenUnder6,
-//                                 childrenUnder7 and childrenUnder17
+//                                 childrenUnder7 and childrenUnder17, and family.dependants, the dependants of any age
 //   family.childMonthsUnder6      for each dependant under 18, the months on whose first day they were born and under 6
 //                                 (a list: sum, min)
 //   spouse.<any of the above but param>   the same, for the spouse
@@ -248,6 +249,20 @@ export interface RuleSet {
   forms: Map<string, FormSpec>;
   /** The line a hint's what-if compares, added up over the year's returns: the refund less the balance owing. */
   outcome?: string;
+  /**
+   * Each refund-or-balance a return shows, in order, as a pair of result lines: the federal one, then (for a resident
+   * of Quebec) Revenu Québec's. A return shows the ones whose lines are in its result.
+   */
+  balances: Balance[];
+  /** What person.residentAllYear means, as an explanation names it. */
+  residency: string;
+}
+
+export interface Balance {
+  /** "Federal", "Quebec": the title when a return shows more than one. */
+  name: string;
+  refund: string;
+  owing: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -309,6 +324,8 @@ export const compiledRulesSchema = z.strictObject({
     }),
   ),
   outcome: z.string().optional(),
+  balances: z.array(z.strictObject({ name: z.string(), refund: z.string(), owing: z.string() })),
+  residency: z.string().optional(),
   forms: z.record(
     z.string(),
     z.strictObject({
@@ -522,6 +539,8 @@ export function loadRuleSet(json: unknown, where: (entry: string) => string = ()
       }),
     ),
     ...(compiled.outcome === undefined ? {} : { outcome: compiled.outcome }),
+    balances: compiled.balances,
+    residency: compiled.residency ?? "Lived in the country all year",
   };
   checkRuleSet(ruleSet, fail);
   return ruleSet;
@@ -574,6 +593,16 @@ const FUNCTIONS: Record<string, { args: [number, number]; check: (types: Type[],
     },
   },
   clamp: { args: [3, 3], check: (types) => (types.every((t) => t === "number") ? "number" : "takes three numbers: value, low, high") },
+  // The amount rounded down to a multiple of a positive number: the start of a printed tax table's row (the IRS Tax
+  // Table's rows are $50 wide, so floor(line.F1040.15, 50)).
+  floor: {
+    args: [2, 2],
+    check: (types, args) => {
+      if (types[0] !== "number") return "rounds a number down";
+      const unit = args[1];
+      return unit?.kind === "number" && Number(unit.value) > 0 ? "number" : "takes a positive number to round down to a multiple of";
+    },
+  },
   if: {
     args: [3, 3],
     check: (types) => {
@@ -663,6 +692,9 @@ function checkRuleSet(ruleSet: RuleSet, fail: (entry: string, message: string, c
 
   // A hint's formulas: `when` a yes/no value, its amount a number, each change of its answer's type.
   if (ruleSet.outcome !== undefined && !ruleSet.lines.has(ruleSet.outcome)) fail("outcome", `No line ${ruleSet.outcome}`);
+  for (const balance of ruleSet.balances) {
+    for (const id of [balance.refund, balance.owing]) if (!ruleSet.result.includes(id)) fail(`balances.${balance.name}`, `${id} must be a line of the result`);
+  }
   for (const hint of ruleSet.hints.values()) {
     const entry = `hints.${hint.id}`;
     const at = (message: string, column?: number) => fail(entry, message, column);
@@ -818,9 +850,9 @@ function refType(ruleSet: RuleSet, path: string[], fail: (message: string) => ne
       if (spouse) return fail(`${name}: the family facts are the same for both spouses; write family.${rest.join(".")}`);
       if (rest.length === 1 && rest[0] === "maritalStatus") return "string";
       if (rest.length === 1 && rest[0] === "partnerInYear") return "boolean";
-      if (rest.length === 1 && ["childrenUnder6", "childrenUnder7", "childrenUnder17", "childrenUnder18", "childrenUnder19"].includes(rest[0]!)) return "number";
+      if (rest.length === 1 && ["dependants", "childrenUnder6", "childrenUnder7", "childrenUnder17", "childrenUnder18", "childrenUnder19"].includes(rest[0]!)) return "number";
       if (rest.length === 1 && rest[0] === "childMonthsUnder6") return "list";
-      return fail(`${name}: family has maritalStatus, partnerInYear, childrenUnder6, childrenUnder7, childrenUnder17, childrenUnder18, childrenUnder19 and childMonthsUnder6`);
+      return fail(`${name}: family has maritalStatus, partnerInYear, dependants, childrenUnder6, childrenUnder7, childrenUnder17, childrenUnder18, childrenUnder19 and childMonthsUnder6`);
     case "person":
       if (rest.length === 1 && (rest[0] === "age" || rest[0] === "birthMonth")) return "number";
       if (rest.length === 1 && (rest[0] === "province" || rest[0] === "role")) return "string";

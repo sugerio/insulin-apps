@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { ChevronRight } from "lucide-react";
-import type { Estimate } from "#shared";
+import { balancesOf, type Estimate } from "#shared";
 import { Button } from "@/components/ui/button.tsx";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet.tsx";
 import { cn } from "@/lib/utils.ts";
@@ -10,7 +10,7 @@ import { rulesFor } from "../shared/rules/index.ts";
 import { formatMoney, formatRate } from "../lib/format.ts";
 import { useEstimate } from "../lib/useYearData.ts";
 import { ResourceView } from "./Feedback.tsx";
-import { useReturn } from "./YearFrame.tsx";
+import { useReturn, useYear } from "./YearFrame.tsx";
 
 // The open return's estimate above each step: its refund or balance owing in one line, and on "Details" its result
 // lines in a panel from the side, with "why" for each line, which the browser works out with the same engine and the
@@ -20,7 +20,8 @@ import { useReturn } from "./YearFrame.tsx";
 export function EstimateSummary() {
   const resource = useEstimate();
   const { person } = useReturn();
-  const result = resource.status === "ready" ? headline(resource.data, person.id) : null;
+  const { year } = useYear();
+  const result = resource.status === "ready" ? headline(rulesFor(year.country, year.year)!, resource.data, person.id) : null;
   return (
     <Sheet>
       <div className="flex items-center gap-3" role="group" aria-label="Estimate">
@@ -51,30 +52,24 @@ export function EstimateSummary() {
 }
 
 /** The refund or balance owing, and whether an answer assumed for now went into it. */
-function headline(estimate: Estimate, personId: string): { text: string; estimate: boolean } | null {
+function headline(rules: RuleSet, estimate: Estimate, personId: string): { text: string; estimate: boolean } | null {
   const lines = estimate.result.people.find((person) => person.personId === personId)?.lines ?? [];
-  const one = (refundId: string, owingId: string) => {
-    const refund = lines.find((line) => line.id === refundId);
-    const owing = lines.find((line) => line.id === owingId);
-    if (!refund || !owing || refund.value === null || owing.value === null) return null;
-    const owes = Number(owing.value) > 0;
-    const line = owes ? owing : refund;
-    return { owes, value: line.value!, estimate: line.status === "estimate" };
-  };
-  const federal = one("T1.48400", "T1.48500");
-  if (!federal) return null;
-  // A resident of Quebec also files the TP-1, whose refund or balance is shown after the federal one.
-  const hasQuebec = lines.some((line) => line.id === "TP1.478");
-  const quebec = hasQuebec ? one("TP1.478", "TP1.479") : null;
-  if (hasQuebec && !quebec) return null;
-  const text = (each: { owes: boolean; value: string }, name: string) => `${name}${each.owes ? "balance owing" : "refund"} ${formatMoney(each.value)}`;
-  if (!quebec) return { text: text(federal, "").replace(/^./, (first) => first.toUpperCase()), estimate: federal.estimate };
-  return { text: `${text(federal, "Federal ")} · ${text(quebec, "Quebec ")}`, estimate: federal.estimate || quebec.estimate };
+  // The federal refund or balance, and a resident of Quebec's after it (TP-1 lines 478 and 479).
+  const balances = balancesOf(rules, lines);
+  if (balances.length === 0 || balances.some((balance) => balance.refund.value === null || balance.owing.value === null)) return null;
+  const parts = balances.map((balance) => {
+    const owes = Number(balance.owing.value) > 0;
+    const line = owes ? balance.owing : balance.refund;
+    const name = balances.length > 1 ? `${balance.name} ` : "";
+    return { text: `${name}${owes ? "balance owing" : "refund"} ${formatMoney(line.value!)}`, estimate: line.status === "estimate" };
+  });
+  return { text: parts.map((part) => part.text).join(" · ").replace(/^./, (first) => first.toUpperCase()), estimate: parts.some((part) => part.estimate) };
 }
 
 function EstimateBody({ estimate }: { estimate: Estimate }) {
   const { person: owner } = useReturn();
-  const rules = rulesFor(estimate.input.year)!;
+  const { year } = useYear();
+  const rules = rulesFor(year.country, estimate.input.year)!;
   const evaluation = useMemo(() => new Evaluation(rules, estimate.input), [rules, estimate.input]);
   const person = estimate.result.people.find((each) => each.personId === owner.id);
   if (!person) return <p className="text-sm text-muted-foreground">Nothing to work out yet.</p>;

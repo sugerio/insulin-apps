@@ -26,3 +26,12 @@ resultWhen:
 
 # The line hints compare with and without their change, added up over both returns.
 outcome: RESULT.net
+
+# The refund or balance owing a return shows: the federal one, then Quebec's for a resident of Quebec (its lines are
+# in the result only then, by resultWhen).
+balances:
+  - { name: Federal, refund: T1.48400, owing: T1.48500 }
+  - { name: Quebec, refund: TP1.478, owing: TP1.479 }
+
+# What person.residentAllYear means.
+residency: Lived in Canada all year

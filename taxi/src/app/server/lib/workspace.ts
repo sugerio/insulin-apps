@@ -1,4 +1,4 @@
-import { STEPS, isIssueOf, leftInModule, printBlockers, spouseOf, type AdultYear, type Issue, type Person, type PrintYear, type ReturnProgress, type Slip, type StepStatuses } from "#shared";
+import { STEPS, isIssueOf, leftInModule, printBlockers, spouseOf, type AdultYear, type Country, type Issue, type Person, type PrintYear, type ReturnProgress, type Slip, type StepStatuses } from "#shared";
 import { Evaluation, type EngineInput, type EvaluationResult } from "../../shared/engine/evaluate.ts";
 import type { Module, RuleSet } from "../../shared/engine/rules.ts";
 import { rulesFor } from "../../shared/rules/index.ts";
@@ -73,6 +73,7 @@ export async function loadWorkspace(db: D1Database, orgId: string, taxYearId: st
 /** What the engine needs from a year: who files it, the family facts, and each adult's answers and slips. */
 export interface YearFacts {
   year: number;
+  country: Country;
   maritalStatus: string | null;
   people: Person[];
   members: string[];
@@ -82,6 +83,7 @@ export interface YearFacts {
 export function engineInputOf(facts: YearFacts, workspace: Workspace): EngineInput {
   const adults = new Set(facts.adults.map((adult) => adult.personId));
   return {
+    country: facts.country,
     year: facts.year,
     people: facts.adults.map((adult) => {
       const person = facts.people.find((each) => each.id === adult.personId)!;
@@ -109,7 +111,7 @@ export function engineInputOf(facts: YearFacts, workspace: Workspace): EngineInp
 
 /** The engine's result for a year, or null when the rules can't read what is stored (logged). */
 export function evaluateYear(facts: YearFacts, workspace: Workspace): { input: EngineInput; result: EvaluationResult } | null {
-  const rules = rulesFor(facts.year);
+  const rules = rulesFor(facts.country, facts.year);
   if (!rules || facts.adults.length === 0) return null;
   const input = engineInputOf(facts, workspace);
   try {
@@ -129,7 +131,7 @@ export function evaluateYear(facts: YearFacts, workspace: Workspace): { input: E
  * confirmed. Finish: the return is finished, so its CRA forms can be printed (shared/print.ts).
  */
 export function stepStatuses(facts: YearFacts, issues: Issue[], workspace: Workspace): ReturnProgress[] {
-  const rules = rulesFor(facts.year);
+  const rules = rulesFor(facts.country, facts.year);
   const evaluation = evaluateYear(facts, workspace);
   return facts.adults.map(({ personId }) => {
     const slips = workspace.slips.filter((slip) => slip.personId === personId);

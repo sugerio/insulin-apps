@@ -1,7 +1,7 @@
 import { createContext, useContext, useRef, useState } from "react";
 import { Link, Navigate, Outlet, useLocation, useParams } from "react-router";
 import { Check, ChevronRight, ChevronsUpDown } from "lucide-react";
-import { STEPS, SUPPORTED_YEARS, routes, type AdultYear, type Estimate, type Person, type SlipList, type Step, type StepStatuses, type TaxYear } from "#shared";
+import { STEPS, SUPPORTED_YEARS, balancesOf, routes, type AdultYear, type Estimate, type Person, type SlipList, type Step, type StepStatuses, type TaxYear } from "#shared";
 import { Button } from "@/components/ui/button.tsx";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from "@/components/ui/dropdown-menu.tsx";
 import { cn } from "@/lib/utils.ts";
@@ -9,6 +9,8 @@ import { ApiError, apiRequest } from "../api/client.ts";
 import { formatMoney } from "../lib/format.ts";
 import { useResource, type Resource } from "../lib/useResource.ts";
 import { NotFoundPage } from "../pages/Pages.tsx";
+import type { RuleSet } from "../shared/engine/rules.ts";
+import { rulesFor } from "../shared/rules/index.ts";
 import { ErrorState, Loading } from "./Feedback.tsx";
 
 // A tax year's pages. The year is loaded once here, with its estimate and slips (again whenever its revision changes),
@@ -168,11 +170,13 @@ function useCurrentStep(): Step | null {
 }
 
 /** A return's result in a few words: the refund or balance owing, when it can be worked out. */
-export function resultOf(estimate: Resource<Estimate>, personId: string): string | null {
+export function resultOf(rules: RuleSet, estimate: Resource<Estimate>, personId: string): string | null {
   if (estimate.status !== "ready") return null;
   const lines = estimate.data.result.people.find((person) => person.personId === personId)?.lines ?? [];
-  const refund = lines.find((line) => line.id === "T1.48400")?.value;
-  const owing = lines.find((line) => line.id === "T1.48500")?.value;
+  // The first of the rules' balances: the federal one.
+  const federal = balancesOf(rules, lines)[0];
+  const refund = federal?.refund.value;
+  const owing = federal?.owing.value;
   if (refund === undefined || owing === undefined || refund === null || owing === null) return null;
   return Number(owing) ? `Owing ${formatMoney(owing)}` : `Refund ${formatMoney(refund)}`;
 }
@@ -202,7 +206,7 @@ export function ReturnSwitcher() {
       <DropdownMenuContent align="start" className="w-(--radix-dropdown-menu-trigger-width) min-w-56">
         <DropdownMenuLabel>{year.year} returns</DropdownMenuLabel>
         {returns.map((each) => {
-          const other = resultOf(estimate, each.id);
+          const other = resultOf(rulesFor(year.country, year.year)!, estimate, each.id);
           return (
             <DropdownMenuItem key={each.id} asChild>
               <Link to={stepPath(year.year, each.id, step)} aria-current={each.id === person.id ? "page" : undefined} className="flex items-center gap-2">

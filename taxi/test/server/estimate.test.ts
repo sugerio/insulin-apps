@@ -25,6 +25,7 @@ describe("a year's estimate", () => {
     expect(response.status).toBe(200);
     const estimate = (await response.json()) as Estimate;
     expect(estimate.input).toEqual({
+      country: "ca",
       year: 2025,
       people: [
         { id: alex.id, name: "Alex Martin", role: "self", birthDate: "1985-04-02", province: "ON", residentAllYear: true },
@@ -49,7 +50,7 @@ describe("a year's estimate", () => {
       body: { revision: 1, maritalStatus: "single", adults: [{ personId: alex.id, province: "ON", residentAllYear: true }] },
     });
     const answers = Object.fromEntries(
-      [...rulesFor(2025)!.questions.values()]
+      [...rulesFor("ca", 2025)!.questions.values()]
         .filter((question) => question.module === "income" && question.type === "boolean")
         .map((question) => [question.id, false]),
     );

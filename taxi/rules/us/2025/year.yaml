@@ -1,0 +1,29 @@
+# The 2025 United States federal rules (Form 1040), part 1: wages and interest, filing Single or Married filing
+# separately, the standard deduction, the enhanced deduction for seniors, and the tax. Each number names its source in
+# the 2025 Instructions for Form 1040 (i1040gi, February 25, 2026) or on the 2025 form; check it there before changing it.
+country: us
+year: 2025
+filingUnit: person   # one return per adult: Single, or Married filing separately; a joint return comes in a later part
+extends: null
+
+# The lines a summary shows, in order.
+result:
+  - F1040.9
+  - F1040.11a
+  - F1040.12e
+  - F1040.15
+  - F1040.16
+  - F1040.24
+  - F1040.33
+  - F1040.34
+  - F1040.37
+
+# The line hints compare with and without their change.
+outcome: RESULT.net
+
+# The refund or amount owed a return shows.
+balances:
+  - { name: Federal, refund: F1040.34, owing: F1040.37 }
+
+# What person.residentAllYear means: a nonresident or dual-status alien files Form 1040-NR, not this return.
+residency: A U.S. citizen or resident alien all year

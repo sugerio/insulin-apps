@@ -8,7 +8,7 @@ import { rulesFor } from "../../src/app/shared/rules/index.ts";
 // The provincial and territorial forms for a couple who live in two provinces, and for someone who lived in Canada
 // for part of the year.
 
-const rules = rulesFor(2025)!;
+const rules = rulesFor("ca", 2025)!;
 const JURISDICTIONS = ["AB", "BC", "MB", "NB", "NL", "NS", "NT", "NU", "ON", "PE", "QC", "SK", "YT"];
 type Answers = Record<string, string | boolean>;
 const child = { id: "d1", name: "Jamie", birthDate: "2018-05-05" };

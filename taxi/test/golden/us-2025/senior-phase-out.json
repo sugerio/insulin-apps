@@ -1,0 +1,67 @@
+{
+  "about": "Single, 66, $90,000 of wages: the seniors' deduction reduced by 6% of AGI over $75,000",
+  "input": {
+    "country": "us",
+    "year": 2025,
+    "people": [
+      {
+        "id": "p1",
+        "name": "Robin Hale",
+        "role": "self",
+        "birthDate": "1959-11-11",
+        "province": null,
+        "residentAllYear": true
+      }
+    ],
+    "family": {
+      "maritalStatus": "single",
+      "dependants": []
+    },
+    "answers": {
+      "p1": {
+        "hasWages": true,
+        "hasInterest": false,
+        "hasTipsOrOvertime": false,
+        "canBeClaimed": false,
+        "isBlind": false,
+        "estimatedPayments": "0"
+      }
+    },
+    "slips": [
+      {
+        "id": "p1-w2-0",
+        "person": "p1",
+        "type": "W2",
+        "issuer": "Harbor Inc",
+        "boxes": {
+          "1": "90000",
+          "2": "9000",
+          "4": "5580",
+          "5": "90000",
+          "6": "1305"
+        }
+      }
+    ]
+  },
+  "expected": {
+    "p1": {
+      "F1040.1a": "90000",
+      "F1040.2a": "0",
+      "F1040.2b": "0",
+      "F1040.9": "90000",
+      "F1040.11a": "90000",
+      "F1040.12e": "17750",
+      "F1040.13b": "5100",
+      "F1040.15": "67150",
+      "F1040.16": "9693",
+      "F8959.7": "0",
+      "F8960.17": "0",
+      "F1040.24": "9693",
+      "F1040.25c": "0",
+      "S3.11": "0",
+      "F1040.33": "9000",
+      "F1040.34": "0",
+      "F1040.37": "693"
+    }
+  }
+}

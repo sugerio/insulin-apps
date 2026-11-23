@@ -1,7 +1,7 @@
 import { useId, useMemo, useState } from "react";
 import { Link } from "react-router";
 import { FileDown } from "lucide-react";
-import { formsToAdd, printBlockers, spouseOf, type Estimate, type FormLanguage, type SlipList, type Step } from "#shared";
+import { balancesOf, formsToAdd, printBlockers, spouseOf, type Estimate, type FormLanguage, type SlipList, type Step } from "#shared";
 import { Button } from "@/components/ui/button.tsx";
 import { Card, CardContent } from "@/components/ui/card.tsx";
 import { Label } from "@/components/ui/label.tsx";
@@ -38,17 +38,13 @@ export function FinishStep() {
 function Results({ estimate, slips }: { estimate: Estimate; slips: SlipList }) {
   const { year } = useYear();
   const { person: owner } = useReturn();
-  const rules = rulesFor(year.year)!;
+  const rules = rulesFor(year.country, year.year)!;
   const evaluation = useMemo(() => new Evaluation(rules, estimate.input), [rules, estimate.input]);
   const person = estimate.result.people.find((each) => each.personId === owner.id);
   if (!person) return <p className="text-sm text-muted-foreground">Nothing to work out yet.</p>;
-  const line = (id: string) => person.lines.find((each) => each.id === id);
-  const refund = line("T1.48400");
-  const owing = line("T1.48500");
-  // A resident of Quebec files two returns: the result has the Quebec refund and balance (TP-1 lines 478 and 479) too.
-  const quebecRefund = line("TP1.478");
-  const quebecOwing = line("TP1.479");
-  const results = new Set(["T1.48400", "T1.48500", "TP1.478", "TP1.479"]);
+  // The refund or balance owing, and a resident of Quebec's second one (TP-1 lines 478 and 479).
+  const balances = balancesOf(rules, person.lines);
+  const results = new Set(balances.flatMap((balance) => [balance.refund.id, balance.owing.id]));
   /** The step that asks a question: its module's, Personal info for facts about the person. */
   const stepOfQuestion = (id: string): Step => {
     const module = rules.questions.get(id)?.module;
@@ -68,13 +64,14 @@ function Results({ estimate, slips }: { estimate: Estimate; slips: SlipList }) {
   return (
     <Card>
       <CardContent className="flex flex-col gap-5">
-        {quebecRefund && quebecOwing ? (
+        {balances.length > 1 ? (
           <div className="grid gap-2 sm:grid-cols-2">
-            <Headline title="Federal" refund={refund?.value ?? null} owing={owing?.value ?? null} />
-            <Headline title="Quebec" refund={quebecRefund.value} owing={quebecOwing.value} />
+            {balances.map((balance) => (
+              <Headline key={balance.name} title={balance.name} refund={balance.refund.value} owing={balance.owing.value} />
+            ))}
           </div>
         ) : (
-          <Headline refund={refund?.value ?? null} owing={owing?.value ?? null} />
+          <Headline refund={balances[0]?.refund.value ?? null} owing={balances[0]?.owing.value ?? null} />
         )}
         <ul className="flex flex-col" aria-label="Key lines">
           {person.lines
@@ -100,13 +97,23 @@ function Results({ estimate, slips }: { estimate: Estimate; slips: SlipList }) {
             </ul>
           </section>
         ) : null}
+        {rules.forms.size === 0 ? (
+          <section aria-label="Your forms" className="flex flex-col gap-1.5">
+            <h2 className="text-sm font-medium">Your forms</h2>
+            <p className="text-sm text-muted-foreground">
+              Printing this return on the official forms comes in a later version of the app. Copy the amounts above into the forms or into tax
+              software to file.
+            </p>
+          </section>
+        ) : (
         <Download
           ready={checks.length === 0}
-          quebec={Boolean(quebecRefund && quebecOwing)}
+          quebec={balances.some((balance) => balance.name === "Quebec")}
           toAdd={formsToAdd(evaluation, owner.id)}
           href={`/api/years/${year.year}/returns/${owner.id}/forms`}
           fileName={`Taxi ${year.year} return - ${owner.name}.pdf`}
         />
+        )}
       </CardContent>
     </Card>
   );

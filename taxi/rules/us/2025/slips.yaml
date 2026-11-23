@@ -1,0 +1,40 @@
+# Information returns: what each one is, for the screens, and its boxes as printed. `informational` boxes never change
+# a return. Any other box no formula reads is kept and, unless it holds 0, shown as not handled by this app (on the
+# W-2: tips in boxes 7 and 8, dependent care benefits in box 10; on the 1099-INT: an early withdrawal penalty, foreign
+# tax, private activity bond interest, market discount and bond premium).
+
+slips:
+  W2:
+    title: Form W-2 Wage and Tax Statement
+    name: W-2
+    about: Wages an employer paid, and the federal income, social security and Medicare tax it withheld
+    boxes:
+      1: Wages, tips, other compensation
+      2: Federal income tax withheld
+      3: Social security wages
+      4: Social security tax withheld
+      5: Medicare wages and tips
+      6: Medicare tax withheld
+      7: Social security tips
+      8: Allocated tips
+      10: Dependent care benefits
+      11: Nonqualified plans
+      16: State wages, tips, etc.
+      17: State income tax
+    # Box 3 caps box 4, which is read; box 11 is already in box 1; boxes 16 and 17 are for the state return.
+    informational: [3, 11, 16, 17]
+
+  INT:
+    title: Form 1099-INT Interest Income
+    name: 1099-INT
+    about: Interest a bank, credit union, broker or the U.S. Treasury paid, and any federal income tax withheld
+    boxes:
+      1: Interest income
+      2: Early withdrawal penalty
+      3: Interest on U.S. Savings Bonds and Treasury obligations
+      4: Federal income tax withheld
+      6: Foreign tax paid
+      8: Tax-exempt interest
+      9: Specified private activity bond interest
+      10: Market discount
+      11: Bond premium

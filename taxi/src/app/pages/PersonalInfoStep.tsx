@@ -7,6 +7,7 @@ import {
   isIssueOf,
   maritalStatusesFor,
   routes,
+  type Country,
   type MaritalStatus,
   type Province,
   type TaxYear,
@@ -71,7 +72,7 @@ export function PersonalInfoStep() {
     },
   };
   return (
-    <StepLayout step="personal" title="Personal info" aside={<TaxNotes year={year.year} />}>
+    <StepLayout step="personal" title="Personal info" aside={year.country === "us" ? <UsTaxNotes /> : <TaxNotes year={year.year} />}>
       {/* A new revision (a save, or someone else's) starts the form again from what is stored. */}
       <YearFacts key={year.revision} draft={draft} onDraft={setDraft} requests={requests} showMissing={showMissing} />
     </StepLayout>
@@ -101,6 +102,34 @@ interface Requests {
   run: (calls: (answered: (year: TaxYear) => TaxYear) => Promise<void>, thenContinue: boolean) => Promise<void>;
   /** Loads the year again, and clears what the last save said. */
   reload: () => void;
+}
+
+/** What each answer means for a US return. */
+function UsTaxNotes() {
+  return (
+    <Card size="sm">
+      <CardHeader>
+        <CardTitle>
+          <h2 className="text-sm font-semibold">How these answers affect the tax</h2>
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3 text-sm text-muted-foreground">
+        <p>
+          <b className="text-foreground">Filing status.</b> It follows the marital status on December 31. Unmarried (single, divorced, legally
+          separated under a decree, or widowed) files Single. Married files separately: each spouse prepared here gets their own return. A joint
+          return comes in a later version.
+        </p>
+        <p>
+          <b className="text-foreground">Standard deduction.</b> $15,750, plus $2,000 ($1,600 if married) for being 65 or older and again for being
+          blind. Someone who can be claimed as a dependent gets less. Itemized deductions aren't handled yet.
+        </p>
+        <p>
+          <b className="text-foreground">Residency.</b> This is the federal return of a U.S. citizen or resident alien for the whole year. A
+          nonresident or dual-status alien files Form 1040-NR, which the app doesn't prepare. State returns aren't prepared.
+        </p>
+      </CardContent>
+    </Card>
+  );
 }
 
 /** What each answer means for the tax. */
@@ -172,7 +201,7 @@ function YearFacts({
   };
   // The spouse or partner in the Profile, in this year or not: it decides which statuses there are to choose from.
   const partner = year.people.find((person) => person.relationship === "spouse");
-  const statuses = maritalStatusesFor(partner !== undefined);
+  const statuses = maritalStatusesFor(year.country, partner !== undefined);
   // A status saved before the people in the Profile changed no longer fits: start from none, so a save can't send it back.
   const storedStatus = year.maritalStatus !== null && statuses.includes(year.maritalStatus) ? year.maritalStatus : null;
   const maritalStatus = valueOf<MaritalStatus | null>("maritalStatus", storedStatus);
@@ -181,7 +210,7 @@ function YearFacts({
   const estimate = useEstimate();
   const given = estimate.status === "ready" ? (estimate.data.input.answers[owner.id] ?? {}) : {};
   const reached = new Set(estimate.status === "ready" ? (estimate.data.result.people.find((each) => each.personId === owner.id)?.questions ?? []) : []);
-  const about = [...rulesFor(year.year)!.questions.values()].filter((question) => question.module === "about" && (reached.has(question.id) || question.id in given));
+  const about = [...rulesFor(year.country, year.year)!.questions.values()].filter((question) => question.module === "about" && (reached.has(question.id) || question.id in given));
   const storedAmount = (id: string) => (typeof given[id] === "string" ? (given[id] as string) : "");
   const amountOf = (id: string) => valueOf(`answers.${id}`, storedAmount(id));
   // A yes/no question (spouseSameDays) is null until answered.
@@ -197,7 +226,7 @@ function YearFacts({
     if (key === "residentAllYear") return { value: adult.residentAllYear };
     if (estimate.status !== "ready") return null;
     const id = key.slice("answers.".length);
-    return { value: rulesFor(year.year)!.questions.get(id)?.type === "boolean" ? storedChoice(id) : storedAmount(id) };
+    return { value: rulesFor(year.country, year.year)!.questions.get(id)?.type === "boolean" ? storedChoice(id) : storedAmount(id) };
   };
   const superseded = Object.entries(draft).flatMap(([key, change]) => {
     const stored = storedOf(key);
@@ -288,7 +317,7 @@ function YearFacts({
             className={partner ? "grid gap-2 sm:grid-cols-2" : "grid gap-2 sm:grid-cols-4"}
           >
             {statuses.map((status) => (
-              <Choice key={status} value={status} label={MARITAL_STATUS_LABELS[status]} />
+              <Choice key={status} value={status} label={year.country === "us" && status === "separated" ? "Legally separated" : MARITAL_STATUS_LABELS[status]} />
             ))}
           </RadioGroup>
           {partner ? null : (
@@ -300,6 +329,7 @@ function YearFacts({
       </Card>
 
       <AdultCard
+        country={year.country}
         draft={facts}
         editable={!locked}
         onChange={(change) => {
@@ -379,13 +409,18 @@ function YearFacts({
   );
 }
 
-/** The province and residency, then `children`: the questions for someone who didn't live in Canada all year. */
+/**
+ * The province and residency, then `children`: the questions for someone who didn't live in Canada all year. A US
+ * return is federal only: it asks no state, only whether the person was a U.S. citizen or resident all year.
+ */
 function AdultCard({
+  country,
   draft,
   editable,
   onChange,
   children,
 }: {
+  country: Country;
   draft: AdultDraft;
   editable: boolean;
   onChange: (change: Partial<AdultDraft>) => void;
@@ -401,6 +436,7 @@ function AdultCard({
         </CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
+        {country === "ca" ? (
         <div className="flex flex-col gap-1.5">
           <Label htmlFor={`${id}-province`}>Province on December 31</Label>
           <NativeSelect
@@ -426,9 +462,10 @@ function AdultCard({
             ) : null}
           </NativeSelect>
         </div>
+        ) : null}
         <div className="flex flex-col gap-2">
           <p className="text-sm font-medium" id={`${id}-resident`}>
-            Lived in Canada all year?
+            {country === "ca" ? "Lived in Canada all year?" : "A U.S. citizen or resident alien all year?"}
           </p>
           <RadioGroup
             aria-labelledby={`${id}-resident`}

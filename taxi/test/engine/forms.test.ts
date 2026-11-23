@@ -12,7 +12,7 @@ import { PROVINCE_NAMES, type Province } from "../../src/app/shared/people.ts";
 // every amount written on them against the case's expected lines, the bracket tables against the tax lines, and
 // the other kinds of field (Step 1's name and dates, ticks, counts).
 
-const rules = rulesFor(2025)!;
+const rules = rulesFor("ca", 2025)!;
 const GOLDEN = resolve(import.meta.dirname, "../golden/ca-2025");
 
 interface Golden {

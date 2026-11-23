@@ -31,7 +31,7 @@ async function seed(
 
 /** Blank pages for each form, as the server's stand-in for canada.ca and revenuquebec.ca; the urls asked for. */
 function standIn(): FormSource & { fetched: string[] } {
-  const rules = rulesFor(2025)!;
+  const rules = rulesFor("ca", 2025)!;
   const fetched: string[] = [];
   return {
     fetched,
@@ -91,7 +91,7 @@ describe("the forms on Finish", () => {
     fireEvent.click(within(choice).getByRole("radio", { name: "Français" }));
     fireEvent.click(within(forms).getByRole("button", { name: "Download the forms (PDF)" }));
     await waitFor(() => expect(saved).toHaveLength(1));
-    const tp1 = rulesFor(2025)!.forms.get("TP1")!;
+    const tp1 = rulesFor("ca", 2025)!.forms.get("TP1")!;
     expect(source.fetched).toContain(tp1.french!.url);
     expect(source.fetched).not.toContain(tp1.url);
   });

@@ -21,7 +21,7 @@ const self = option("self", "Alex Martin");
 const spouse = option("spouse", "Sam Martin");
 
 const YEAR = 2025;
-const rules = rulesFor(YEAR)!;
+const rules = rulesFor("ca", YEAR)!;
 
 interface Sample {
   file: string;

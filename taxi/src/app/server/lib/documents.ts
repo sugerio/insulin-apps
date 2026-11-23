@@ -379,12 +379,16 @@ const membersOf = (view: TaxYear) => view.people.filter((person) => view.members
 
 /** AI's reading of a file, told the names and relationships of the year's people so it can say whose each slip is. */
 function readFile(year: number, view: TaxYear, file: FileToRead, reader: SlipReader): Promise<ReadOutcome> {
-  return reader.read(file, { year, rules: rulesFor(year)!, people: membersOf(view).map((person) => ({ name: person.name, relationship: person.relationship })) });
+  // The reader knows Canada's slips: a US form is kept, unread, until reading them is added.
+  if (view.country !== "ca") {
+    return Promise.resolve({ kind: "not_available", message: "Reading U.S. forms isn't available yet. Enter each W-2 and 1099-INT by hand on Income." });
+  }
+  return reader.read(file, { year, rules: rulesFor(view.country, year)!, people: membersOf(view).map((person) => ({ name: person.name, relationship: person.relationship })) });
 }
 
 /** AI's reading of a file, checked against the year's rules and the slips already in it (less those of the files it replaces). */
 function checkReading(outcome: ReadOutcome, year: number, view: TaxYear, uploader: Person, slips: Slip[], replacing: string[] = []): Reading {
-  const rules = rulesFor(year)!;
+  const rules = rulesFor(view.country, year)!;
   if (outcome.kind !== "read") return { status: outcome.kind, message: outcome.message, modelId: null, found: [] };
   const modelId = outcome.model;
   const read = plan(outcome.slips, view, year, uploader);
@@ -476,7 +480,7 @@ function uploaderOf(view: TaxYear, header: string | null): Person {
  * several, leaves the slip in that return too, to be checked.
  */
 function plan(slips: ReadSlip[], view: TaxYear, year: number, uploader: Person): { planned: Planned[]; skipped: Skipped[] } {
-  const rules = rulesFor(year)!;
+  const rules = rulesFor(view.country, year)!;
   const adults = new Set(view.adults.map((adult) => adult.personId));
   const members = membersOf(view);
   const planned: Planned[] = [];

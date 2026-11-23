@@ -1,0 +1,54 @@
+# Questions a formula reads as answer.<id>; see rules/ca/2025/questions.yaml for how the screens ask them.
+
+questions:
+  # About you (Personal info)
+  canBeClaimed:
+    type: boolean
+    module: about
+    ask: Someone can claim you as a dependent
+    help: A parent or other person can claim you as a dependent on their 2025 return, even if they don't. Your standard deduction is then smaller (Form 1040, line 12a).
+    default: false
+  isBlind:
+    type: boolean
+    module: about
+    ask: You are blind
+    help: Totally or partly blind on December 31, 2025, as a doctor certifies (Form 1040, line 12d). It adds to your standard deduction.
+    default: false
+  spouseItemizes:
+    type: boolean
+    module: about
+    ask: Your spouse itemizes deductions on their separate return
+    help: When a married couple files separately and one of them itemizes on Schedule A, the other must itemize too (Form 1040, line 12b).
+
+  spouseDiedIn2025:
+    type: boolean
+    module: about
+    ask: Your spouse died in 2025
+    help: A spouse who died during 2025 lets you file a joint return for 2025.
+
+  # Income
+  hasWages:
+    type: boolean
+    module: income
+    slip: W2
+    ask: Wages from an employer
+    help: A Form W-2 from each employer you worked for in 2025.
+  hasInterest:
+    type: boolean
+    module: income
+    slip: INT
+    ask: Interest
+    help: A Form 1099-INT from each bank, credit union or broker that paid you $10 or more of interest, and from the Treasury for savings bonds.
+  hasTipsOrOvertime:
+    type: boolean
+    module: income
+    ask: Tips or overtime pay
+    help: Tips you received, or overtime pay above your regular rate. For 2025 part of them can be deducted on Schedule 1-A.
+
+  # Payments
+  estimatedPayments:
+    type: money
+    module: credits
+    ask: Estimated tax payments
+    help: Estimated tax you paid for 2025, and any 2024 refund you applied to 2025 (Form 1040, line 26).
+    default: 0

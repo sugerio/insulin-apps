@@ -18128,5 +18128,7 @@
     }
   },
   "outcome": "RESULT.net",
-  "version": "8395aa45e22b93ee"
+  "balances": [{"name":"Federal","refund":"T1.48400","owing":"T1.48500"},{"name":"Quebec","refund":"TP1.478","owing":"TP1.479"}],
+  "residency": "Lived in Canada all year",
+  "version": "6fa4bab4764800a0"
 }

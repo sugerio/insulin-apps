@@ -6,6 +6,15 @@ import { z } from "zod";
 // change from year to year: marital status on December 31, each adult's province, whether they lived in Canada all
 // year.
 
+/**
+ * The countries the app prepares returns for: Canada (the CRA's T1, and Revenu Québec's TP-1) and the United States
+ * (federal Form 1040). A tax year is of one country.
+ */
+export const COUNTRIES = ["ca", "us"] as const;
+export const countrySchema = z.enum(COUNTRIES);
+export type Country = z.infer<typeof countrySchema>;
+export const COUNTRY_NAMES: Record<Country, string> = { ca: "Canada", us: "United States" };
+
 /** The years the app prepares returns for. A year is data for the tax engine; adding one adds its rule files. */
 export const SUPPORTED_YEARS = [2025] as const;
 export const yearSchema = z.coerce.number().int().refine((year) => (SUPPORTED_YEARS as readonly number[]).includes(year), {
@@ -18,17 +27,22 @@ export type Relationship = z.infer<typeof relationshipSchema>;
 /** The two people who can file a return here: the person preparing it and their spouse or common-law partner. */
 export const isAdult = (relationship: Relationship) => relationship === "self" || relationship === "spouse";
 
-/** Marital status on December 31, as the T1 asks it (page 1, "Your marital status on December 31"). */
+/**
+ * Marital status on December 31, as the T1 asks it (page 1, "Your marital status on December 31"). A US year records
+ * it too, and its filing status follows it: `separated` there is legally separated under a decree, which files as
+ * unmarried; a couple only living apart is `married`.
+ */
 export const MARITAL_STATUSES = ["married", "common_law", "widowed", "divorced", "separated", "single"] as const;
 export const maritalStatusSchema = z.enum(MARITAL_STATUSES);
 export type MaritalStatus = z.infer<typeof maritalStatusSchema>;
 /**
- * The statuses a year may record, from the Profile: with a spouse or partner in it, married or living common-law
- * (the tax treats both the same; the T1 has a box for each); without one, the other four. A separation during the
- * year isn't handled yet, so a profile with a spouse never records one.
+ * The statuses a year may record, from the Profile: with a spouse or partner in it, married or (in Canada) living
+ * common-law (the tax treats both the same; the T1 has a box for each); without one, the other four. A separation
+ * during the year isn't handled yet, so a profile with a spouse never records one.
  */
-export function maritalStatusesFor(hasSpouse: boolean): readonly MaritalStatus[] {
-  return hasSpouse ? ["married", "common_law"] : ["single", "widowed", "divorced", "separated"];
+export function maritalStatusesFor(country: Country, hasSpouse: boolean): readonly MaritalStatus[] {
+  if (hasSpouse) return country === "ca" ? ["married", "common_law"] : ["married"];
+  return ["single", "widowed", "divorced", "separated"];
 }
 
 /** Province or territory of residence on December 31, by its two-letter code. */
@@ -130,6 +144,8 @@ export type ReturnProgress = z.infer<typeof returnProgressSchema>;
 
 export const taxYearSchema = z.strictObject({
   year: z.number().int(),
+  /** Whose return it is: Canada's or the United States'. A year is of one country. */
+  country: countrySchema,
   /** Bumped on every change to the year's personal info; a save names the revision it started from. */
   revision: z.number().int().min(1),
   maritalStatus: maritalStatusSchema.nullable(),
@@ -154,8 +170,8 @@ const memberIdsSchema = z
   .max(30)
   .refine((ids) => new Set(ids).size === ids.length, { message: "A person is listed twice" });
 
-/** Start a year with the people in it: you, and whoever else is in this year. */
-export const startYearSchema = z.strictObject({ year: yearSchema, people: memberIdsSchema });
+/** Start a year with the people in it: you, and whoever else is in this year. The country is Canada when not given. */
+export const startYearSchema = z.strictObject({ year: yearSchema, country: countrySchema.default("ca"), people: memberIdsSchema });
 
 /** Change who is in a year, from the revision you read. */
 export const setYearPeopleSchema = z.strictObject({ revision: z.number().int().min(1), people: memberIdsSchema });
@@ -178,6 +194,7 @@ export type SavePersonalInfo = z.infer<typeof savePersonalInfoSchema>;
 
 export const yearSummarySchema = z.strictObject({
   year: z.number().int(),
+  country: countrySchema,
   /** The year's revision, to change who is in it from the list of years. */
   revision: z.number().int().min(1),
   /** The ids of the year's people, in the profile's order. */
@@ -189,13 +206,17 @@ export const yearSummarySchema = z.strictObject({
 export const peopleListSchema = z.strictObject({ people: z.array(personSchema) });
 
 export const yearListSchema = z.strictObject({
-  supportedYears: z.array(z.number().int()),
+  /** The years a return can be prepared for, by country. */
+  supported: z.array(z.strictObject({ country: countrySchema, years: z.array(z.number().int()) })),
   years: z.array(yearSummarySchema),
   people: z.array(personSchema),
 });
 export type YearList = z.infer<typeof yearListSchema>;
 
-/** The tax filing deadline for most people, for a tax year (April 30 of the next year). */
-export function filingDeadline(year: number): string {
-  return `${year + 1}-04-30`;
+/**
+ * The filing deadline for most people, for a tax year: April 30 of the next year in Canada; April 15 in the United
+ * States (the next business day when it falls on a weekend or holiday; for 2025 returns, Wednesday April 15, 2026).
+ */
+export function filingDeadline(country: Country, year: number): string {
+  return country === "ca" ? `${year + 1}-04-30` : `${year + 1}-04-15`;
 }

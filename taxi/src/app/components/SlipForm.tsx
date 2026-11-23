@@ -186,7 +186,7 @@ export function SlipForm({
 }) {
   const id = useId();
   const { year, replace } = useYear();
-  const types = [...rulesFor(year.year)!.slips.values()];
+  const types = [...rulesFor(year.country, year.year)!.slips.values()];
   const basis = slip?.updatedAt ?? null;
   const kept = host?.values?.basis === basis ? host.values : undefined;
   const [type, setType] = useState(kept?.type ?? slip?.type ?? presetType ?? types[0]!.id);

@@ -98,7 +98,7 @@ describe("starting a year", () => {
   it("sends you to the Profile when you haven't added yourself", async () => {
     await renderApp("/returns");
     const link = await screen.findByRole("link", { name: "Go to Profile" });
-    expect(link.getAttribute("href")).toBe(`/profile?back=${encodeURIComponent("/returns?start=2025")}`);
+    expect(link.getAttribute("href")).toBe(`/profile?back=${encodeURIComponent("/returns?start=2025&country=ca")}`);
   });
 
   it("says what the app covers, without calling what it handles not yet done", async () => {
@@ -119,7 +119,7 @@ describe("starting a year", () => {
     expect(checkbox("Sam Martin").getAttribute("aria-checked")).toBe("false");
     expect(checkbox("Jamie Martin").getAttribute("aria-checked")).toBe("false");
     fireEvent.click(checkbox("Sam Martin"));
-    expect(screen.getByRole("link", { name: "Add a new person" }).getAttribute("href")).toBe(`/profile?back=${encodeURIComponent("/returns?start=2025")}`);
+    expect(screen.getByRole("link", { name: "Add a new person" }).getAttribute("href")).toBe(`/profile?back=${encodeURIComponent("/returns?start=2025&country=ca")}`);
     fireEvent.click(screen.getByRole("button", { name: "Start 2025" }));
     await waitFor(() => expect(router.state.location.pathname).toMatch(/^\/returns\/2025\/[0-9a-f-]{36}\/personal$/));
     const year = (await (await server.call("GET", "/api/years/2025")).json()) as TaxYear;

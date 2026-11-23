@@ -1,7 +1,7 @@
 import { useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link, useNavigate } from "react-router";
 import { ChevronRight, FileUp, PencilLine, Plus } from "lucide-react";
-import { canPrepare, isAsked, leftInModule, type Estimate, type Slip, type SlipList, type Step, type TaxYear } from "#shared";
+import { canPrepare, isAsked, leftInModule, type Country, type Estimate, type Slip, type SlipList, type Step, type TaxYear } from "#shared";
 import { Badge } from "@/components/ui/badge.tsx";
 import { Button } from "@/components/ui/button.tsx";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card.tsx";
@@ -242,7 +242,7 @@ function ModuleForm({
   const { year } = useYear();
   const { person } = useReturn();
   const editable = canPrepare(me);
-  const rules = rulesFor(year.year)!;
+  const rules = rulesFor(year.country, year.year)!;
   const given = estimate.input.answers[person.id] ?? {};
   const result = estimate.result.people.find((each) => each.personId === person.id);
   const reached = new Set(result?.questions ?? []);
@@ -429,7 +429,7 @@ function ModuleForm({
               </span>
             ) : null}
             {waiting.length > 0 ? (
-              <span>Waiting for a slip: {waiting.map((item) => `the ${slipName(year.year, item.slip!)} (${item.ask})`).join(", ")}. Upload or enter it below, or remove the item.</span>
+              <span>Waiting for a slip: {waiting.map((item) => `the ${slipName(year.country, year.year, item.slip!)} (${item.ask})`).join(", ")}. Upload or enter it below, or remove the item.</span>
             ) : null}
           </span>
         </Banner>
@@ -616,7 +616,7 @@ function ItemCard({
           <CardTitle>
             <h3 className="flex flex-wrap items-center gap-2 text-sm font-semibold">
               {question.ask}
-              {kind === "slip" ? <Badge variant="secondary">{slipName(year.year, question.slip!)}</Badge> : null}
+              {kind === "slip" ? <Badge variant="secondary">{slipName(year.country, year.year, question.slip!)}</Badge> : null}
             </h3>
           </CardTitle>
           {question.help ? <p className="text-xs text-muted-foreground">{question.help}</p> : null}
@@ -661,7 +661,7 @@ function SlipItem({
 }) {
   const { person } = useReturn();
   const { year } = useYear();
-  const name = slipName(year.year, type);
+  const name = slipName(year.country, year.year, type);
   return (
     <div className="flex flex-col gap-2">
       {slips.length > 0 ? (
@@ -696,7 +696,7 @@ function SlipItem({
 function FoundSlip({ slip, open, onToggle, editable, hostOf }: { slip: Slip; open: boolean; onToggle: () => void; editable: boolean; hostOf: HostOf }) {
   const { year } = useYear();
   const panel = useId();
-  const slipType = rulesFor(year.year)!.slips.get(slip.type)!;
+  const slipType = rulesFor(year.country, year.year)!.slips.get(slip.type)!;
   const confirmed = slip.status === "confirmed";
   return (
     <li className="py-1 text-sm">
@@ -756,7 +756,7 @@ function AmountItem({
 }) {
   const { year } = useYear();
   const { person } = useReturn();
-  const type = question.receipts ? rulesFor(year.year)!.slips.get(question.receipts)! : null;
+  const type = question.receipts ? rulesFor(year.country, year.year)!.slips.get(question.receipts)! : null;
   const added = type !== null && question.suggest === undefined;
   // A receipt by its title in lower case ("medical expense receipt"), keeping acronyms (RRSP); a slip by its code (T4FHSA).
   const noun = !type ? "" : type.receipt ? lowerCaseTitle(type.title.replace(/^Official /, "")) : documentName(type, type.id);
@@ -833,7 +833,8 @@ function UploadSlip({ label, busy, onFile }: { label: string; busy: boolean; onF
 /** The module's amounts the slips already claim (rule lines with this `module`), when not zero. */
 function FromYourSlips({ module, estimate }: { module: ReturnModule; estimate: Estimate }) {
   const { person } = useReturn();
-  const rules = rulesFor(estimate.input.year)!;
+  const { year } = useYear();
+  const rules = rulesFor(year.country, estimate.input.year)!;
   const evaluation = useMemo(() => new Evaluation(rules, estimate.input), [rules, estimate.input]);
   if (!estimate.result.people.some((each) => each.personId === person.id)) return null;
   const lines = [...rules.lines.values()]
@@ -881,8 +882,8 @@ function ChoiceField({ question, value, disabled, issue, onChange }: { question:
 }
 
 /** How a slip type is named on screen: T4A(OAS) for T4AOAS. */
-function slipName(year: number, type: string): string {
-  return rulesFor(year)?.slips.get(type)?.name ?? type;
+function slipName(country: Country, year: number, type: string): string {
+  return rulesFor(country, year)?.slips.get(type)?.name ?? type;
 }
 
 /** A title in lower case, but for its acronyms and codes (RRSP, T2202), which stay as printed. */

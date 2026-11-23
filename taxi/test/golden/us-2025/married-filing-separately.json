@@ -1,0 +1,127 @@
+{
+  "about": "A married couple filing separately: one over the $125,000 Additional Medicare Tax threshold with estimated payments, one with interest and 1099 withholding",
+  "input": {
+    "country": "us",
+    "year": 2025,
+    "people": [
+      {
+        "id": "p1",
+        "name": "Sam Ortiz",
+        "role": "self",
+        "birthDate": "1984-02-02",
+        "province": null,
+        "residentAllYear": true
+      },
+      {
+        "id": "p2",
+        "name": "Ana Ortiz",
+        "role": "spouse",
+        "birthDate": "1986-06-06",
+        "province": null,
+        "residentAllYear": true
+      }
+    ],
+    "family": {
+      "maritalStatus": "married",
+      "dependants": []
+    },
+    "answers": {
+      "p1": {
+        "hasWages": true,
+        "hasInterest": false,
+        "hasTipsOrOvertime": false,
+        "canBeClaimed": false,
+        "isBlind": false,
+        "estimatedPayments": "2000",
+        "spouseItemizes": false
+      },
+      "p2": {
+        "hasWages": true,
+        "hasInterest": true,
+        "hasTipsOrOvertime": false,
+        "canBeClaimed": false,
+        "isBlind": false,
+        "estimatedPayments": "0",
+        "spouseItemizes": false
+      }
+    },
+    "slips": [
+      {
+        "id": "p1-w2-0",
+        "person": "p1",
+        "type": "W2",
+        "issuer": "Globex",
+        "boxes": {
+          "1": "140000",
+          "2": "24000",
+          "4": "8680",
+          "5": "140000",
+          "6": "2030"
+        }
+      },
+      {
+        "id": "p2-w2-0",
+        "person": "p2",
+        "type": "W2",
+        "issuer": "Initech",
+        "boxes": {
+          "1": "50000",
+          "2": "4200",
+          "4": "3100",
+          "5": "50000",
+          "6": "725"
+        }
+      },
+      {
+        "id": "p2-int-0",
+        "person": "p2",
+        "type": "INT",
+        "issuer": "Credit Union",
+        "boxes": {
+          "1": "2000",
+          "4": "50"
+        }
+      }
+    ]
+  },
+  "expected": {
+    "p1": {
+      "F1040.1a": "140000",
+      "F1040.2a": "0",
+      "F1040.2b": "0",
+      "F1040.9": "140000",
+      "F1040.11a": "140000",
+      "F1040.12e": "15750",
+      "F1040.13b": "0",
+      "F1040.15": "124250",
+      "F1040.16": "22667",
+      "F8959.7": "135",
+      "F8960.17": "0",
+      "F1040.24": "22802",
+      "F1040.25c": "0",
+      "S3.11": "0",
+      "F1040.33": "26000",
+      "F1040.34": "3198",
+      "F1040.37": "0"
+    },
+    "p2": {
+      "F1040.1a": "50000",
+      "F1040.2a": "0",
+      "F1040.2b": "2000",
+      "F1040.9": "52000",
+      "F1040.11a": "52000",
+      "F1040.12e": "15750",
+      "F1040.13b": "0",
+      "F1040.15": "36250",
+      "F1040.16": "4115",
+      "F8959.7": "0",
+      "F8960.17": "0",
+      "F1040.24": "4115",
+      "F1040.25c": "0",
+      "S3.11": "0",
+      "F1040.33": "4250",
+      "F1040.34": "135",
+      "F1040.37": "0"
+    }
+  }
+}

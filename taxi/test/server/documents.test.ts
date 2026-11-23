@@ -443,7 +443,7 @@ describe("uploading a slip", () => {
     // Medical receipts count toward the medical expenses claimed.
     const result = await json<Estimate>(server.call("GET", "/api/years/2025/estimate"));
     const alex = result.input.people.find((person) => person.name === "Alex Martin")!.id;
-    expect(new Evaluation(rulesFor(2025)!, result.input).line(alex, "T1.33099").value?.toString()).toBe("50");
+    expect(new Evaluation(rulesFor("ca", 2025)!, result.input).line(alex, "T1.33099").value?.toString()).toBe("50");
   });
 
   it("keeps a slip whose boxes couldn't be read, to be entered, and a readable copy beside it, flagged, in either order", async () => {

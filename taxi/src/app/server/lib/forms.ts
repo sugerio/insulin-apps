@@ -89,8 +89,10 @@ export async function printReturn(
 ): Promise<{ bytes: Uint8Array<ArrayBuffer>; name: string }> {
   const { row, view } = await openYear(db, orgId, year);
   if (!view.adults.some((adult) => adult.personId === personId)) throw notFound("There is no such return in this year");
-  const rules = rulesFor(year);
+  const rules = rulesFor(view.country, year);
   if (!rules) throw notFound(`No tax rules for ${year}`);
+  // The United States' forms aren't measured for printing yet: its rules have none.
+  if (rules.forms.size === 0) throw notFound("Printing this return on the official forms isn't available yet");
   const workspace = await loadWorkspace(db, orgId, row.id);
   const evaluation = new Evaluation(rules, engineInputOf(view, workspace));
   const people = evaluation.result().people;

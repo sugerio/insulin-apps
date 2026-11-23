@@ -1,0 +1,411 @@
+{
+  "country": "us",
+  "year": 2025,
+  "filingUnit": "person",
+  "result": ["F1040.9","F1040.11a","F1040.12e","F1040.15","F1040.16","F1040.24","F1040.33","F1040.34","F1040.37"],
+  "resultWhen": {},
+  "params": {
+    "standardSingle": {
+      "label": "Standard deduction, Single",
+      "value": "15750",
+      "source": "Form 1040, line 12e: $15,750 for Single or Married filing separately"
+    },
+    "standardSeparate": {
+      "label": "Standard deduction, Married filing separately",
+      "value": "15750",
+      "source": "Form 1040, line 12e: $15,750 for Single or Married filing separately"
+    },
+    "additionalUnmarried": {
+      "label": "Additional standard deduction for each box on line 12d, unmarried",
+      "value": "2000",
+      "source": "Instructions, Standard Deduction Chart for People Who Were Born Before January 2, 1961, or Were Blind: Single, 1 box $17,750, 2 boxes $19,750"
+    },
+    "additionalMarried": {
+      "label": "Additional standard deduction for each box on line 12d, married",
+      "value": "1600",
+      "source": "Instructions, the same chart: Married filing separately, 1 box $17,350, 2 boxes $18,950"
+    },
+    "dependentMinimum": {
+      "label": "Smallest standard deduction for someone claimed as a dependent",
+      "value": "1350",
+      "source": "Instructions, Standard Deduction Worksheet for Dependents, line 2: $1,350"
+    },
+    "dependentEarnedAdd": {
+      "label": "Added to earned income for a dependent's standard deduction",
+      "value": "450",
+      "source": "Instructions, Standard Deduction Worksheet for Dependents, line 2: earned income plus $450"
+    },
+    "bracketsSingle": {
+      "label": "Tax brackets, Single",
+      "value": [
+        {"upTo":"11925","rate":"0.1"},
+        {"upTo":"48475","rate":"0.12"},
+        {"upTo":"103350","rate":"0.22"},
+        {"upTo":"197300","rate":"0.24"},
+        {"upTo":"250525","rate":"0.32"},
+        {"upTo":"626350","rate":"0.35"},
+        {"upTo":null,"rate":"0.37"}
+      ],
+      "source": "Instructions, 2025 Tax Computation Worksheet, Section A (22% less $5,086.00 from $100,000; 24% less $7,153.00 over $103,350; 32% less $22,937.00 over $197,300; 35% less $30,452.75 over $250,525; 37% less $42,979.75 over $626,350)"
+    },
+    "bracketsSeparate": {
+      "label": "Tax brackets, Married filing separately",
+      "value": [
+        {"upTo":"11925","rate":"0.1"},
+        {"upTo":"48475","rate":"0.12"},
+        {"upTo":"103350","rate":"0.22"},
+        {"upTo":"197300","rate":"0.24"},
+        {"upTo":"250525","rate":"0.32"},
+        {"upTo":"375800","rate":"0.35"},
+        {"upTo":null,"rate":"0.37"}
+      ],
+      "source": "Instructions, 2025 Tax Computation Worksheet, Section C (as Single to $250,525; 35% less $30,452.75 to $375,800; 37% less $37,968.75 over $375,800)"
+    },
+    "taxTableLimit": {
+      "label": "Taxable income from which the Tax Computation Worksheet is used instead of the Tax Table",
+      "value": "100000",
+      "source": "Instructions, line 16: if your taxable income is $100,000 or more, use the Tax Computation Worksheet"
+    },
+    "seniorAmount": {"label":"Enhanced deduction for seniors","value":"6000","source":"Schedule 1-A (2025), Part V, line 35: $6,000"},
+    "seniorPhaseOutStart": {
+      "label": "Modified AGI over which the enhanced deduction for seniors is reduced",
+      "value": "75000",
+      "source": "Schedule 1-A (2025), line 32: $75,000 ($150,000 if married filing jointly)"
+    },
+    "seniorPhaseOutRate": {
+      "label": "Reduction of the enhanced deduction for seniors",
+      "value": "0.06",
+      "source": "Schedule 1-A (2025), line 34: 6% of modified AGI over line 32"
+    },
+    "medicareThresholdSingle": {
+      "label": "Medicare wages over which Additional Medicare Tax applies, Single",
+      "value": "200000",
+      "source": "Instructions, Schedule 2, line 11: $200,000 if single"
+    },
+    "medicareThresholdSeparate": {
+      "label": "Medicare wages over which Additional Medicare Tax applies, Married filing separately",
+      "value": "125000",
+      "source": "Instructions, Schedule 2, line 11: $125,000 if married filing separately"
+    },
+    "additionalMedicareRate": {"label":"Additional Medicare Tax rate","value":"0.009","source":"Form 8959, line 7: 0.9%"},
+    "medicareRate": {"label":"Regular Medicare tax withholding rate","value":"0.0145","source":"Form 8959, line 21: 1.45%"},
+    "niitThresholdSingle": {
+      "label": "Modified AGI over which the net investment income tax applies, Single",
+      "value": "200000",
+      "source": "Instructions, Schedule 2, line 12: $200,000 if single"
+    },
+    "niitThresholdSeparate": {
+      "label": "Modified AGI over which the net investment income tax applies, Married filing separately",
+      "value": "125000",
+      "source": "Instructions, Schedule 2, line 12: $125,000 if married filing separately"
+    },
+    "niitRate": {"label":"Net investment income tax rate","value":"0.038","source":"Form 8960, line 17: 3.8%"},
+    "socialSecurityMax": {
+      "label": "Most social security tax withheld on 2025 wages",
+      "value": "10918.2",
+      "source": "Instructions, Schedule 3, line 11: 6.2% of the $176,100 wage base, $10,918.20"
+    },
+    "eicNoChildLimit": {
+      "label": "AGI below which someone without a qualifying child can get the earned income credit, Single",
+      "value": "19104",
+      "source": "Instructions, line 27a, Step 1: less than $19,104 with no children"
+    },
+    "eicInvestmentLimit": {
+      "label": "Most investment income someone can have and get the earned income credit",
+      "value": "11950",
+      "source": "Instructions, line 27a, Investment Income: more than $11,950 and you can't take the credit"
+    },
+    "kiddieThreshold": {
+      "label": "Unearned income over which a child's tax is figured on Form 8615",
+      "value": "2700",
+      "source": "Instructions, line 16, Form 8615: unearned income over $2,700"
+    }
+  },
+  "lines": {
+    "US.single": {
+      "label": "Filing status is Single (1 for yes, 0 for Married filing separately)",
+      "formula": "if(family.maritalStatus == \"married\", 0, 1)",
+      "source": "Instructions, Filing Status: Single, or Married filing separately"
+    },
+    "F1040.1a": {"label":"Wages from Forms W-2, box 1","formula":"sum(W2.box1)"},
+    "F1040.1z": {"label":"Wages and other earned income","formula":"line.F1040.1a"},
+    "F1040.2a": {
+      "label": "Tax-exempt interest",
+      "formula": "sum(INT.box8)",
+      "source": "Form 1040, line 2a: Form 1099-INT, box 8. It isn't taxed; it is reported"
+    },
+    "F1040.2b": {
+      "label": "Taxable interest",
+      "formula": "sum(INT.box1) + sum(INT.box3)",
+      "source": "Form 1040, line 2b: Form 1099-INT, boxes 1 and 3 (savings bond and Treasury interest is taxed federally)"
+    },
+    "F1040.9": {"label":"Total income","formula":"line.F1040.1z + line.F1040.2b"},
+    "F1040.11a": {
+      "label": "Adjusted gross income",
+      "formula": "line.F1040.9",
+      "source": "Form 1040, line 11a: line 9 less line 10; no adjustment from Schedule 1 is worked out yet"
+    },
+    "US.boxes": {
+      "label": "Boxes checked on line 12d (born before January 2, 1961; blind)",
+      "formula": "if(person.age >= 65, 1, 0) + if(answer.isBlind, 1, 0)",
+      "source": "Form 1040, line 12d. Someone born on January 1, 1961 counts as 65 for 2025; the app knows the birth year only and counts them as 64. The spouse's boxes, which a separate return checks only when the spouse had no income and files no return, aren't counted"
+    },
+    "US.basicStandard": {
+      "label": "Standard deduction for the filing status",
+      "formula": "if(line.US.single == 1, param.standardSingle, param.standardSeparate)"
+    },
+    "US.dependentStandard": {
+      "label": "Standard deduction for someone who can be claimed as a dependent, before line 12d's boxes",
+      "formula": "min(line.US.basicStandard, max(param.dependentMinimum, line.F1040.1z + param.dependentEarnedAdd))",
+      "source": "Instructions, Standard Deduction Worksheet for Dependents, lines 2 to 4"
+    },
+    "US.standard": {
+      "label": "Standard deduction with line 12d's boxes",
+      "formula": "if(answer.canBeClaimed, line.US.dependentStandard, line.US.basicStandard) + line.US.boxes * if(line.US.single == 1, param.additionalUnmarried, param.additionalMarried)"
+    },
+    "F1040.12e": {
+      "label": "Standard deduction",
+      "formula": "if(line.US.single == 1, line.US.standard, if(answer.spouseItemizes, unsupported(\"Your spouse itemizes, so you must itemize too (Schedule A); this app doesn't itemize deductions yet\"), line.US.standard))"
+    },
+    "S1A.3": {
+      "label": "Modified adjusted gross income",
+      "formula": "line.F1040.11a",
+      "source": "Schedule 1-A, line 3: line 11b, plus income excluded from Puerto Rico or abroad (not handled)"
+    },
+    "S1A.35": {
+      "label": "Enhanced deduction for seniors, after the reduction",
+      "formula": "max(0, param.seniorAmount - round(max(0, line.S1A.3 - param.seniorPhaseOutStart) * param.seniorPhaseOutRate, 2))",
+      "source": "Schedule 1-A, lines 31 to 35"
+    },
+    "S1A.37": {
+      "label": "Enhanced deduction for seniors",
+      "formula": "if(line.US.single == 1 and person.age >= 65, line.S1A.35, 0)",
+      "source": "Schedule 1-A, line 36a: born before January 2, 1961, with a valid social security number; not on a separate return"
+    },
+    "F1040.13b": {
+      "label": "Additional deductions from Schedule 1-A",
+      "formula": "line.S1A.37",
+      "source": "Schedule 1-A, line 38; the deductions for tips, overtime and car loan interest aren't worked out yet (SCOPE.tips)"
+    },
+    "F1040.14": {"label":"Total deductions","formula":"line.F1040.12e + line.F1040.13b"},
+    "F1040.15": {"label":"Taxable income","formula":"max(0, line.F1040.11a - line.F1040.14)"},
+    "US.tableRow": {
+      "label": "The middle of the Tax Table's row for line 15",
+      "formula": "if(line.F1040.15 < 5, 2.5, if(line.F1040.15 < 15, 10, if(line.F1040.15 < 25, 20, if(line.F1040.15 < 3000, floor(line.F1040.15, 25) + 12.5, floor(line.F1040.15, 50) + 25))))",
+      "source": "2025 Tax Table: rows of $5, $10 and $10, then $25 wide to $3,000 and $50 wide to $100,000. Each row's tax is the tax on the middle of the row, to the nearest dollar ($3,000 to $3,050: $303)"
+    },
+    "US.tableTax": {
+      "label": "Tax from the Tax Table",
+      "formula": "round(if(line.US.single == 1, bracket(param.bracketsSingle, line.US.tableRow), bracket(param.bracketsSeparate, line.US.tableRow)), 0)"
+    },
+    "US.worksheetTax": {
+      "label": "Tax from the Tax Computation Worksheet",
+      "formula": "round(if(line.US.single == 1, bracket(param.bracketsSingle, line.F1040.15), bracket(param.bracketsSeparate, line.F1040.15)), 2)"
+    },
+    "F1040.16": {
+      "label": "Tax",
+      "formula": "if(line.F1040.15 < param.taxTableLimit, line.US.tableTax, line.US.worksheetTax)",
+      "source": "Instructions, line 16: the Tax Table under $100,000, the Tax Computation Worksheet from $100,000. Line 17 (the alternative minimum tax, Schedule 2 line 3) is 0 here: with only wages, interest and the standard deduction, the tentative minimum tax of Form 6251 stays below this tax"
+    },
+    "F1040.18": {"label":"Tax and the alternative minimum tax","formula":"line.F1040.16"},
+    "F1040.22": {
+      "label": "Tax after nonrefundable credits",
+      "formula": "line.F1040.18",
+      "source": "Form 1040, line 22: no credit on lines 19 and 20 is worked out yet"
+    },
+    "F8959.1": {"label":"Medicare wages and tips","formula":"sum(W2.box5)","source":"Form 8959, line 1: Form W-2, box 5"},
+    "F8959.5": {
+      "label": "Threshold for Additional Medicare Tax",
+      "formula": "if(line.US.single == 1, param.medicareThresholdSingle, param.medicareThresholdSeparate)"
+    },
+    "F8959.7": {
+      "label": "Additional Medicare Tax on Medicare wages",
+      "formula": "round(max(0, line.F8959.1 - line.F8959.5) * param.additionalMedicareRate, 2)",
+      "source": "Form 8959, lines 4 to 7"
+    },
+    "F8960.13": {"label":"Modified adjusted gross income","formula":"line.F1040.11a"},
+    "F8960.14": {
+      "label": "Threshold for the net investment income tax",
+      "formula": "if(line.US.single == 1, param.niitThresholdSingle, param.niitThresholdSeparate)"
+    },
+    "F8960.17": {
+      "label": "Net investment income tax",
+      "formula": "round(min(line.F1040.2b, max(0, line.F8960.13 - line.F8960.14)) * param.niitRate, 2)",
+      "source": "Form 8960, lines 8 and 13 to 17: the smaller of the net investment income (here, taxable interest) and the MAGI over the threshold, times 3.8%"
+    },
+    "S2.21": {
+      "label": "Total other taxes",
+      "formula": "line.F8959.7 + line.F8960.17",
+      "source": "Schedule 2, line 21: lines 11 (Form 8959) and 12 (Form 8960)"
+    },
+    "F1040.23": {"label":"Other taxes","formula":"line.S2.21"},
+    "F1040.24": {"label":"Total tax","formula":"line.F1040.22 + line.F1040.23 + line.SCOPE.return"},
+    "F1040.25a": {"label":"Federal income tax withheld on Forms W-2","formula":"sum(W2.box2)"},
+    "F1040.25b": {"label":"Federal income tax withheld on Forms 1099","formula":"sum(INT.box4)"},
+    "F8959.19": {"label":"Medicare tax withheld","formula":"sum(W2.box6)"},
+    "F8959.21": {
+      "label": "Regular Medicare tax withholding on Medicare wages",
+      "formula": "round(line.F8959.1 * param.medicareRate, 2)"
+    },
+    "F8959.24": {
+      "label": "Additional Medicare Tax withheld",
+      "formula": "max(0, line.F8959.19 - line.F8959.21)",
+      "source": "Form 8959, lines 19 to 24: what box 6 holds above 1.45% of box 5"
+    },
+    "F1040.25c": {
+      "label": "Federal income tax withheld on other forms",
+      "formula": "line.F8959.24",
+      "source": "Instructions, line 25c: the Additional Medicare Tax withheld, Form 8959 line 24"
+    },
+    "F1040.25d": {"label":"Federal income tax withheld","formula":"line.F1040.25a + line.F1040.25b + line.F1040.25c"},
+    "F1040.26": {"label":"Estimated tax payments","formula":"answer.estimatedPayments"},
+    "S3.11": {
+      "label": "Excess social security tax withheld",
+      "formula": "if(max(W2.box4) > param.socialSecurityMax, unsupported(\"An employer withheld more social security tax than the 2025 maximum of $10,918.20; ask it to refund the excess\"), if(countIssuers(W2.box4) > 1, max(0, sum(W2.box4) - param.socialSecurityMax), 0))",
+      "source": "Instructions, Schedule 3, line 11: with more than one employer, the social security tax withheld over $10,918.20"
+    },
+    "F1040.31": {"label":"Credits and payments from Schedule 3","formula":"line.S3.11"},
+    "F1040.33": {"label":"Total payments","formula":"line.F1040.25d + line.F1040.26 + line.F1040.31"},
+    "F1040.34": {
+      "label": "Refund",
+      "formula": "max(0, line.F1040.33 - line.F1040.24)",
+      "source": "Form 1040, line 34: the amount you overpaid"
+    },
+    "F1040.37": {"label":"Amount you owe","formula":"max(0, line.F1040.24 - line.F1040.33)"},
+    "RESULT.net": {"label":"Refund, less the amount owed","formula":"line.F1040.34 - line.F1040.37"},
+    "SCOPE.return": {
+      "label": "Situations this app doesn't handle yet",
+      "formula": "line.SCOPE.residency + line.SCOPE.dependants + line.SCOPE.widowed + line.SCOPE.tips + line.SCOPE.kiddie + line.SCOPE.eic"
+    },
+    "SCOPE.residency": {
+      "label": "A nonresident or dual-status alien",
+      "formula": "if(person.residentAllYear, 0, unsupported(\"A nonresident or dual-status alien files Form 1040-NR or a dual-status return, which this app doesn't prepare\"))"
+    },
+    "SCOPE.dependants": {
+      "label": "Dependants",
+      "formula": "if(family.dependants > 0, unsupported(\"Dependants (the child tax credit, head of household and the earned income credit with children) aren't handled by this app yet\"), 0)"
+    },
+    "SCOPE.widowed": {
+      "label": "A spouse who died in 2025",
+      "formula": "if(family.maritalStatus == \"widowed\", if(answer.spouseDiedIn2025, unsupported(\"Your spouse died in 2025, so you can file jointly for 2025; this app doesn't prepare a joint return yet\"), 0), 0)"
+    },
+    "SCOPE.tips": {
+      "label": "Tips and overtime pay",
+      "formula": "if(answer.hasTipsOrOvertime, unsupported(\"The 2025 deductions for tips and overtime pay (Schedule 1-A) aren't worked out by this app yet\"), 0)"
+    },
+    "SCOPE.kiddie": {
+      "label": "A child's interest taxed at the parent's rate",
+      "formula": "if(person.age < 24 and line.F1040.2b > param.kiddieThreshold, unsupported(\"Interest over $2,700 for someone under 24 may be taxed on Form 8615 (the kiddie tax), which this app doesn't prepare\"), 0)"
+    },
+    "SCOPE.eic": {
+      "label": "The earned income credit without a qualifying child",
+      "formula": "if(line.US.single == 0, 0, if(not answer.canBeClaimed and person.age >= 25 and person.age < 65 and line.F1040.1z > 0 and line.F1040.11a < param.eicNoChildLimit and line.F1040.2a + line.F1040.2b <= param.eicInvestmentLimit, unsupported(\"You may get the earned income credit, which this app doesn't work out yet (Form 1040, line 27a)\"), 0))"
+    }
+  },
+  "questions": {
+    "canBeClaimed": {
+      "type": "boolean",
+      "ask": "Someone can claim you as a dependent",
+      "module": "about",
+      "help": "A parent or other person can claim you as a dependent on their 2025 return, even if they don't. Your standard deduction is then smaller (Form 1040, line 12a).",
+      "default": false
+    },
+    "isBlind": {
+      "type": "boolean",
+      "ask": "You are blind",
+      "module": "about",
+      "help": "Totally or partly blind on December 31, 2025, as a doctor certifies (Form 1040, line 12d). It adds to your standard deduction.",
+      "default": false
+    },
+    "spouseItemizes": {
+      "type": "boolean",
+      "ask": "Your spouse itemizes deductions on their separate return",
+      "module": "about",
+      "help": "When a married couple files separately and one of them itemizes on Schedule A, the other must itemize too (Form 1040, line 12b)."
+    },
+    "spouseDiedIn2025": {
+      "type": "boolean",
+      "ask": "Your spouse died in 2025",
+      "module": "about",
+      "help": "A spouse who died during 2025 lets you file a joint return for 2025."
+    },
+    "hasWages": {
+      "type": "boolean",
+      "ask": "Wages from an employer",
+      "module": "income",
+      "help": "A Form W-2 from each employer you worked for in 2025.",
+      "slip": "W2"
+    },
+    "hasInterest": {
+      "type": "boolean",
+      "ask": "Interest",
+      "module": "income",
+      "help": "A Form 1099-INT from each bank, credit union or broker that paid you $10 or more of interest, and from the Treasury for savings bonds.",
+      "slip": "INT"
+    },
+    "hasTipsOrOvertime": {
+      "type": "boolean",
+      "ask": "Tips or overtime pay",
+      "module": "income",
+      "help": "Tips you received, or overtime pay above your regular rate. For 2025 part of them can be deducted on Schedule 1-A."
+    },
+    "estimatedPayments": {
+      "type": "money",
+      "ask": "Estimated tax payments",
+      "module": "credits",
+      "help": "Estimated tax you paid for 2025, and any 2024 refund you applied to 2025 (Form 1040, line 26).",
+      "default": "0"
+    }
+  },
+  "slips": {
+    "W2": {
+      "title": "Form W-2 Wage and Tax Statement",
+      "about": "Wages an employer paid, and the federal income, social security and Medicare tax it withheld",
+      "boxes": {
+        "1": "Wages, tips, other compensation",
+        "2": "Federal income tax withheld",
+        "3": "Social security wages",
+        "4": "Social security tax withheld",
+        "5": "Medicare wages and tips",
+        "6": "Medicare tax withheld",
+        "7": "Social security tips",
+        "8": "Allocated tips",
+        "10": "Dependent care benefits",
+        "11": "Nonqualified plans",
+        "16": "State wages, tips, etc.",
+        "17": "State income tax"
+      },
+      "informational": ["3","11","16","17"],
+      "name": "W-2",
+      "counts": [],
+      "receipt": false,
+      "printedYears": [0]
+    },
+    "INT": {
+      "title": "Form 1099-INT Interest Income",
+      "about": "Interest a bank, credit union, broker or the U.S. Treasury paid, and any federal income tax withheld",
+      "boxes": {
+        "1": "Interest income",
+        "2": "Early withdrawal penalty",
+        "3": "Interest on U.S. Savings Bonds and Treasury obligations",
+        "4": "Federal income tax withheld",
+        "6": "Foreign tax paid",
+        "8": "Tax-exempt interest",
+        "9": "Specified private activity bond interest",
+        "10": "Market discount",
+        "11": "Bond premium"
+      },
+      "name": "1099-INT",
+      "informational": [],
+      "counts": [],
+      "receipt": false,
+      "printedYears": [0]
+    }
+  },
+  "hints": {},
+  "forms": {},
+  "outcome": "RESULT.net",
+  "balances": [{"name":"Federal","refund":"F1040.34","owing":"F1040.37"}],
+  "residency": "A U.S. citizen or resident alien all year",
+  "version": "84d6bfc5b9f63f6e"
+}

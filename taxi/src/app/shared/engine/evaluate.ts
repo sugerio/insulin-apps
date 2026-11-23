@@ -10,6 +10,8 @@ import { isNumberQuestion, type BracketRow, type RuleSet, type Status } from "./
 // reached reads it. Each value records what it read, which is what `explain` walks.
 
 export const engineInputSchema = z.strictObject({
+  /** The rule set's country: the input is refused by another country's rules. Left out, it isn't checked. */
+  country: z.string().regex(/^[a-z]{2}$/).optional(),
   year: z.number().int(),
   /** The adults whose returns are prepared: one per return, as the rule set's filing unit is `person`. */
   people: z
@@ -20,7 +22,7 @@ export const engineInputSchema = z.strictObject({
         role: z.enum(["self", "spouse"]),
         birthDate: z.iso.date(),
         province: z.string().nullable(),
-        /** Lived in Canada all year; null when not said yet. Left out, it is taken as yes. */
+        /** Resident all year (the rule set's `residency`); null when not said yet. Left out, it is taken as yes. */
         residentAllYear: z.boolean().nullable().optional(),
       }),
     )
@@ -124,6 +126,9 @@ export class Evaluation {
     this.rules = rules;
     this.input = engineInputSchema.parse(input);
     if (this.input.year !== rules.year) throw new EngineError("ENGINE_YEAR", `The input is for ${this.input.year}; the rules are for ${rules.year}`);
+    if (this.input.country !== undefined && this.input.country !== rules.country) {
+      throw new EngineError("ENGINE_COUNTRY", `The input is for ${this.input.country}; the rules are for ${rules.country}`);
+    }
     const ids = new Set(this.input.people.map((person) => person.id));
     for (const slip of this.input.slips) {
       if (!ids.has(slip.person)) throw new EngineError("ENGINE_INPUT", `Slip ${slip.id} belongs to no one in the input`);
@@ -329,7 +334,7 @@ export class Evaluation {
         if (rest[0] === "role") return { value: person.role, status: "complete", label: "The person preparing, or their spouse", reads: [] };
         if (rest[0] === "residentAllYear") {
           const resident = person.residentAllYear === undefined ? true : person.residentAllYear;
-          return { value: resident, status: resident === null ? "missing" : "complete", label: "Lived in Canada all year", reads: [] };
+          return { value: resident, status: resident === null ? "missing" : "complete", label: this.rules.residency, reads: [] };
         }
         return { value: person.province, status: person.province === null ? "missing" : "complete", label: "Province on December 31", reads: [] };
       default: {
@@ -367,6 +372,8 @@ export class Evaluation {
         };
       case "partnerInYear":
         return { value: this.input.people.length > 1, status: "complete", label: "Both returns are prepared together", reads: [] };
+      case "dependants":
+        return { value: Dec.of(born.length), status: "complete", label: "Dependants in the year", reads: [] };
       case "childrenUnder6":
         return { value: childrenUnder(6), status: "complete", label: "Dependants under 6 at the end of the year", reads: [] };
       case "childrenUnder7":
@@ -545,6 +552,8 @@ function call(name: string, args: Value[]): Value {
       const [value, low, high] = args as Dec[];
       return Dec.min(Dec.max(value!, low!), high!);
     }
+    case "floor":
+      return (args[0] as Dec).floorToUnit(args[1] as Dec);
     case "bracket":
       return bracket(args[0] as BracketRow[], args[1] as Dec);
     case "step": {

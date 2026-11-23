@@ -34,7 +34,7 @@ export async function listSlips(db: Db, orgId: string, year: number): Promise<Sl
 export async function saveAnswers(db: Db, caller: Caller, year: number, input: SaveAnswers, now: number): Promise<TaxYear> {
   const { row, view } = await openYear(db, caller.orgId, year);
   checkAdult(view, input.personId, "personId");
-  const rules = rulesFor(year)!;
+  const rules = rulesFor(view.country, year)!;
   const issues: { path: string; message: string }[] = [];
   for (const [id, value] of Object.entries(input.answers)) {
     const question = rules.questions.get(id);
@@ -81,8 +81,8 @@ function canonical(value: string | boolean): string | boolean {
 }
 
 /** The slip's type must be one of the year's, and every box one that type has. */
-function checkSlip(year: number, type: string, boxes: Record<string, string> | undefined): Record<string, string> | undefined {
-  const slip = rulesFor(year)!.slips.get(type);
+function checkSlip(view: TaxYear, year: number, type: string, boxes: Record<string, string> | undefined): Record<string, string> | undefined {
+  const slip = rulesFor(view.country, year)!.slips.get(type);
   if (!slip) throw new ApiError("validation_failed", "Not a slip type of this year", [{ path: "type", message: "Unknown slip type" }]);
   if (!boxes) return undefined;
   const unknown = Object.keys(boxes).filter((box) => !(box in slip.boxes));
@@ -99,7 +99,7 @@ function checkSlip(year: number, type: string, boxes: Record<string, string> | u
 export async function addSlip(db: Db, caller: Caller, year: number, input: CreateSlip, now: number): Promise<TaxYear> {
   const { row, view } = await openYear(db, caller.orgId, year);
   checkAdult(view, input.personId, "personId");
-  const boxes = checkSlip(year, input.type, input.boxes)!;
+  const boxes = checkSlip(view, year, input.type, input.boxes)!;
   const id = crypto.randomUUID();
   await runGuarded(db, [
     bumpRevision(db, caller.orgId, row.id, input.revision, now),
@@ -133,7 +133,7 @@ export async function updateSlip(db: Db, caller: Caller, year: number, id: strin
   const { row, view } = await openYear(db, caller.orgId, year);
   if (input.personId !== undefined) checkAdult(view, input.personId, "personId");
   const current = await slipRow(db, caller.orgId, row.id, id);
-  const boxes = checkSlip(year, current.type, input.boxes);
+  const boxes = checkSlip(view, year, current.type, input.boxes);
   const unsure = boxes ? current.unsure.filter((box) => !(box in boxes)) : current.unsure;
   await runGuarded(db, [
     bumpRevision(db, caller.orgId, row.id, input.revision, now),
@@ -167,7 +167,7 @@ export async function removeSlip(db: Db, caller: Caller, year: number, id: strin
 export async function confirmSlips(db: Db, caller: Caller, year: number, input: ConfirmSlips, now: number): Promise<TaxYear> {
   const { row, view } = await openYear(db, caller.orgId, year);
   if (input.personId !== undefined) checkAdult(view, input.personId, "personId");
-  const rules = rulesFor(year)!;
+  const rules = rulesFor(view.country, year)!;
   const unread = (await loadWorkspace(db, caller.orgId, row.id)).slips
     .filter((slip) => slip.status === "unconfirmed" && (input.personId === undefined || slip.personId === input.personId))
     .map((slip) => ({ slip, boxes: unreadBoxes(slip) }))

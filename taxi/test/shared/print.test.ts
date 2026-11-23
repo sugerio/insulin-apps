@@ -7,7 +7,7 @@ import { rulesFor } from "../../src/app/shared/rules/index.ts";
 
 // What keeps a return from its forms, its own and, for a couple, what is left on the other return it reads.
 
-const rules = rulesFor(2025)!;
+const rules = rulesFor("ca", 2025)!;
 const result = (personId: string, overrides: Partial<PersonResult> = {}): PersonResult => ({
   personId,
   lines: [{ id: "T1.48400", label: "Refund", value: "100", status: "complete" }],

@@ -1,0 +1,77 @@
+{
+  "about": "Single, 70 and blind, $30,000 of wages, savings bond and tax-exempt interest: the larger standard deduction and the seniors' deduction",
+  "input": {
+    "country": "us",
+    "year": 2025,
+    "people": [
+      {
+        "id": "p1",
+        "name": "Pat Moreno",
+        "role": "self",
+        "birthDate": "1955-01-20",
+        "province": null,
+        "residentAllYear": true
+      }
+    ],
+    "family": {
+      "maritalStatus": "single",
+      "dependants": []
+    },
+    "answers": {
+      "p1": {
+        "hasWages": true,
+        "hasInterest": true,
+        "hasTipsOrOvertime": false,
+        "canBeClaimed": false,
+        "isBlind": true,
+        "estimatedPayments": "0"
+      }
+    },
+    "slips": [
+      {
+        "id": "p1-w2-0",
+        "person": "p1",
+        "type": "W2",
+        "issuer": "Library Co",
+        "boxes": {
+          "1": "30000",
+          "2": "900",
+          "4": "1860",
+          "5": "30000",
+          "6": "435"
+        }
+      },
+      {
+        "id": "p1-int-0",
+        "person": "p1",
+        "type": "INT",
+        "issuer": "City Bonds",
+        "boxes": {
+          "3": "500",
+          "8": "300"
+        }
+      }
+    ]
+  },
+  "expected": {
+    "p1": {
+      "F1040.1a": "30000",
+      "F1040.2a": "300",
+      "F1040.2b": "500",
+      "F1040.9": "30500",
+      "F1040.11a": "30500",
+      "F1040.12e": "19750",
+      "F1040.13b": "6000",
+      "F1040.15": "4750",
+      "F1040.16": "478",
+      "F8959.7": "0",
+      "F8960.17": "0",
+      "F1040.24": "478",
+      "F1040.25c": "0",
+      "S3.11": "0",
+      "F1040.33": "900",
+      "F1040.34": "422",
+      "F1040.37": "0"
+    }
+  }
+}

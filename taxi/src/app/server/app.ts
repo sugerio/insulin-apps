@@ -1,6 +1,7 @@
 import { Hono, type Context } from "hono";
 import { z } from "zod";
-import { FORM_LANGUAGES, ROUTE_TABLE, SUPPORTED_YEARS, fileRoutes, routes, type AnyRoute, type ApiCatalog, type Me } from "#shared";
+import { COUNTRIES, FORM_LANGUAGES, ROUTE_TABLE, SUPPORTED_YEARS, fileRoutes, routes, type AnyRoute, type ApiCatalog, type Me } from "#shared";
+import { yearsFor } from "../shared/rules/index.ts";
 import { platformReader } from "./lib/ai.ts";
 import * as documents from "./lib/documents.ts";
 import { getEstimate } from "./lib/estimate.ts";
@@ -92,9 +93,9 @@ export function createApp(options: AppOptions = {}) {
 
   mount(routes.getMe, async ({ caller }) => meOf(caller));
   mount(routes.getCatalog, async ({ caller }) => catalogFor(caller));
-  mount(routes.listYears, async ({ caller, db }) => people.listYears(db, caller.orgId, SUPPORTED_YEARS));
+  mount(routes.listYears, async ({ caller, db }) => people.listYears(db, caller.orgId, COUNTRIES.map((country) => ({ country, years: yearsFor(country) }))));
   mount(routes.startYear, async ({ caller, body, db, now }) => {
-    const { view, created } = await people.startYear(db, caller, body.year, body.people, now);
+    const { view, created } = await people.startYear(db, caller, body.year, body.country, body.people, now);
     return created ? { status: 201, body: view } : view;
   });
   mount(routes.getYear, async ({ caller, params, db }) => people.getYear(db, caller.orgId, params.year));

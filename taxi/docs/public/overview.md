@@ -4,8 +4,8 @@ description: What Taxi does, who it is for, what it doesn't do yet, and how it r
 order: 1
 ---
 
-Taxi prepares Canadian personal income tax returns. This page explains what it does today, who it is for,
-and what it leaves out. Read it first if you are deciding whether Taxi suits you, or if you are an AI agent that
+Taxi prepares Canadian personal income tax returns, and the first part of the United States federal return. This
+page explains what it does today, who it is for, and what it leaves out. Read it first if you are deciding whether Taxi suits you, or if you are an AI agent that
 needs the big picture before calling its API.
 
 ## What Taxi does
@@ -63,6 +63,26 @@ The returns cover:
 
 Taxi doesn't handle a few rare cases, such as property that is treated as sold when you leave Canada, and business and
 investment tax credits. The app says so when a case it doesn't handle applies.
+
+## United States (federal)
+
+When you start a year, you choose Canada or the United States. A year is of one country. A US year prepares the
+federal Form 1040 of a U.S. citizen or resident alien for the whole year. It prepares no state return.
+
+The US return covers:
+
+- Income: wages on Form W-2, and interest on Form 1099-INT (with savings bond and Treasury interest, and tax-exempt
+  interest).
+- Filing status: single, or married filing separately. Each spouse prepared here gets their own return.
+- Deductions: the standard deduction, with the additional amounts at 65 or older and for blindness, the smaller
+  deduction of someone who can be claimed as a dependent, and the 2025 enhanced deduction for seniors.
+- Tax: the IRS Tax Table under $100,000 and the Tax Computation Worksheet from $100,000, the Additional Medicare Tax,
+  the net investment income tax, and a credit for excess social security tax withheld by two or more employers.
+
+A joint return, dependants (with head of household, the child tax credit and the earned income credit), itemized
+deductions, tips and overtime pay, and other income come in later versions. The app says so when one of them applies,
+instead of giving a wrong amount. A US return can't be printed on the IRS forms yet, and its forms can't be read by AI
+yet: enter each W-2 and 1099-INT on Income, then copy the amounts into the forms or into tax software.
 
 ## What it stores
 

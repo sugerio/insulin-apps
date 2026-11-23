@@ -66,7 +66,7 @@ describe("hints", () => {
     const after = await estimate();
     expect(after.input.answers[alex.id]).toMatchObject({ donations: "150", claimSpouseDonations: true });
     expect(after.input.answers[sam.id]).toMatchObject({ donations: "150", claimSpouseDonations: false });
-    const evaluation = new Evaluation(rulesFor(2025)!, after.input);
+    const evaluation = new Evaluation(rulesFor("ca", 2025)!, after.input);
     expect(evaluation.line(alex.id, "S9.5").value?.toString()).toBe("300");
     expect(evaluation.line(sam.id, "S9.5").value?.toString()).toBe("0");
     expect((await hints()).hints.filter((hint) => hint.id === "poolDonations")).toEqual([

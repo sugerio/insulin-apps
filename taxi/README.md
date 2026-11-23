@@ -2,7 +2,8 @@
 
 Taxi prepares Canadian personal income tax returns (the T1): yours, and your spouse's or common-law
 partner's if you prepare them together. It never files with the CRA. When a return is done, you get the CRA's own
-forms, filled in, to sign and mail, or numbers to copy into certified software.
+forms, filled in, to sign and mail, or numbers to copy into certified software. It also prepares the first part of the
+United States federal return (Form 1040): a year is started for one country.
 
 It is an Insulin app: you start from it in the Insulin console, change it with the AppBuilder if you want to, preview it
 and publish it. It brings its own database.
@@ -70,6 +71,12 @@ investment tax credits, and a few Quebec cases (a Quebec return for the year of 
 without the RL slip issued with it, such as a T4 for work outside Quebec or a T2202 from a school outside Quebec;
 on the TP-1, rental and foreign income, scholarships, RDSP income, taxable FHSA withdrawals and workers'
 compensation).
+
+United States, part 1: the federal Form 1040 of a U.S. citizen or resident alien for the whole year, filing single or
+married filing separately, with wages (W-2) and interest (1099-INT), the standard deduction (with the 2025 deduction
+for seniors), the Tax Table and Tax Computation Worksheet, the Additional Medicare Tax, the net investment income tax
+and excess social security tax. No state return, no printing and no AI reading yet; a joint return, dependants,
+itemized deductions and tips or overtime say so when they apply.
 
 ## Good to know
 

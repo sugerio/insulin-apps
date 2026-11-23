@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { READER_MODEL, claudeReader, promptFor, type ReadContext } from "../../src/app/server/lib/reader.ts";
 import { rulesFor } from "../../src/app/shared/rules/index.ts";
 
-const context: ReadContext = { year: 2025, rules: rulesFor(2025)!, people: [{ name: "Alex Martin", relationship: "self" }] };
+const context: ReadContext = { year: 2025, rules: rulesFor("ca", 2025)!, people: [{ name: "Alex Martin", relationship: "self" }] };
 const file = { bytes: new TextEncoder().encode("%PDF-1.4 sample"), contentType: "application/pdf" as const };
 
 /** A client whose requests are captured and answered with `reply`, as the API would. */

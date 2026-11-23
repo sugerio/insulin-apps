@@ -1,0 +1,1 @@
+ALTER TABLE `tax_years` ADD `country` text DEFAULT 'ca' NOT NULL;

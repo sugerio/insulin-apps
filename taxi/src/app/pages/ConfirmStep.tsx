@@ -231,8 +231,8 @@ function PersonSlips({
   hostOf: (key: string) => SlipFormHost;
 }) {
   const { year } = useYear();
-  const types = rulesFor(year.year)!.slips;
-  const duplicates = possibleDuplicates(rulesFor(year.year)!, slips);
+  const types = rulesFor(year.country, year.year)!.slips;
+  const duplicates = possibleDuplicates(rulesFor(year.country, year.year)!, slips);
   const others = year.adults.filter((adult) => adult.personId !== personId).map((adult) => year.people.find((person) => person.id === adult.personId)!);
   return (
     <Card>

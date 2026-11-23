@@ -131,8 +131,15 @@ function Uploader({ onUploading }: { onUploading: (uploading: boolean) => void }
             onDragLeave={() => setDragging(false)}
             onDrop={onDrop}
           >
-            <p className="text-sm font-medium wrap-anywhere">{person.name}'s slips and receipts for {year.year}, and last year's notice of assessment</p>
-            <p className="text-xs text-muted-foreground">PDF, PNG or JPEG, up to 10 MiB each. Drop them here, or choose:</p>
+            <p className="text-sm font-medium wrap-anywhere">
+              {year.country === "us"
+                ? `${person.name}'s Forms W-2 and 1099-INT for ${year.year}`
+                : `${person.name}'s slips and receipts for ${year.year}, and last year's notice of assessment`}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              {year.country === "us" ? "They are kept with the return but can't be read yet: enter each one on Income. " : ""}PDF, PNG or JPEG, up to
+              10 MiB each. Drop them here, or choose:
+            </p>
             <div className="flex flex-wrap justify-center gap-2">
               <Button variant="outline" onClick={() => folderInput.current?.click()} disabled={reading}>
                 <FolderUp aria-hidden="true" />
@@ -343,7 +350,7 @@ function UploadedFile({ document, uploading, onNotice }: { document: DocumentRec
               <ul className="mt-1 list-disc pl-5 wrap-anywhere">
                 {document.slips.map((slip) => (
                   <li key={slip.id}>
-                    {documentName(rulesFor(year.year)!.slips.get(slip.type), slip.type)} from {slip.issuer}, on {nameOf(slip.personId)}'s return{slip.status === "confirmed" ? " (confirmed)" : ""}
+                    {documentName(rulesFor(year.country, year.year)!.slips.get(slip.type), slip.type)} from {slip.issuer}, on {nameOf(slip.personId)}'s return{slip.status === "confirmed" ? " (confirmed)" : ""}
                   </li>
                 ))}
               </ul>

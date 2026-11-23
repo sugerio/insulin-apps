@@ -193,7 +193,7 @@ describe("slips", () => {
 /** A module's questions answered as for a return with none of it: each yes/no question no, each amount its default. */
 function noneOf(module: string, except: string[] = []): Record<string, string | boolean> {
   return Object.fromEntries(
-    [...rulesFor(2025)!.questions.values()]
+    [...rulesFor("ca", 2025)!.questions.values()]
       .filter((question) => question.module === module && !question.parent && !except.includes(question.id))
       .flatMap((question) => (question.type === "boolean" ? [[question.id, false]] : question.default !== undefined ? [[question.id, question.default]] : [])),
   );

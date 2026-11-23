@@ -5,7 +5,7 @@ import { canChange } from '../../components/CollectionParts.tsx'
 import { ActionError, Badge, Banner, ErrorState, Loading, Note } from '../../components/Feedback.tsx'
 import { api, collectionPath } from '../../lib/api.ts'
 import { formatWhen, formatWhenInline, notRestorableReason, plural } from '../../lib/format.ts'
-import type { CollectionDetail, GoBackPreview, RestorePoint } from '../../lib/types.ts'
+import type { CollectionDetail, GoBackPreview, HistoryPoint, MadeBy, RestorePoint } from '../../lib/types.ts'
 import { useResource } from '../../lib/useResource.ts'
 import { useSupportSentence } from '../../session.tsx'
 import type { TabProps } from './CollectionPage.tsx'
@@ -27,11 +27,23 @@ export function describeRestorePoint(point: RestorePoint, all: RestorePoint[]): 
   return point.summary
 }
 
+/**
+ * Who made a restore point's changes, in plain words: "Maya Example", or for an API client acting for someone,
+ * "Partner Agent, on behalf of Ana Lee". Whom they acted for is what the client said: a label, not an account.
+ */
+export function describeMadeBy(made: MadeBy[]): string | null {
+  if (!made.length) return null
+  return made.map((entry) => {
+    const who = entry.name ?? (entry.type === 'client' ? 'An API client' : 'Someone')
+    return entry.onBehalfOf ? `${who}, on behalf of ${entry.onBehalfOf}` : who
+  }).join('; ')
+}
+
 export function HistoryTab({ detail, reload }: TabProps) {
   const { collection } = detail
   const editor = canChange(detail.role) && detail.can.change
   const support = useSupportSentence()
-  const history = useResource<{ restorePoints: RestorePoint[] }>(collectionPath(collection.id, '/history'))
+  const history = useResource<{ restorePoints: HistoryPoint[] }>(collectionPath(collection.id, '/history'))
   const [asking, setAsking] = useState<RestorePoint | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -123,24 +135,28 @@ export function HistoryTab({ detail, reload }: TabProps) {
         <Note>No changes yet. The first files, web pages or notes it learns make its first restore point.</Note>
       ) : (
         <ol className="flex flex-col gap-0 border-l pl-5" aria-label="Restore points">
-          {points.map((point) => (
-            <li key={point.version} className="relative pb-5" data-restore-point={point.version}>
-              <span className={`absolute top-1.5 -left-[25px] size-2.5 rounded-full ${point.current ? 'bg-primary' : 'bg-muted-foreground/40'}`} aria-hidden="true" />
-              <p className="text-xs text-muted-foreground">{formatWhen(point.createdAt)} · restore point</p>
-              <p className="flex flex-wrap items-center gap-2 font-medium [overflow-wrap:anywhere]">
-                {describeRestorePoint(point, points)}
-                {point.current ? <Badge tone="green">Now</Badge> : null}
-              </p>
-              <p className="text-xs text-muted-foreground">{plural(point.documents, 'document')}</p>
-              {!point.restorable && !point.current ? <p className="mt-1 text-sm text-amber-800 dark:text-amber-300">{notRestorableReason(point.reason)}</p> : null}
-              {editor && point.current && WENT_BACK.test(point.summary) && state !== 'going_back' && state !== 'held' ? (
-                <Button type="button" variant="outline" size="sm" className="mt-2" disabled={busy} onClick={() => void undo()}>Undo</Button>
-              ) : null}
-              {editor && !point.current && point.restorable && state !== 'going_back' && state !== 'held' ? (
-                <Button type="button" variant="outline" size="sm" className="mt-2" onClick={() => { setNotice(null); setStopped(false); setAsking(point) }}>Go back to this version</Button>
-              ) : null}
-            </li>
-          ))}
+          {points.map((point) => {
+            const by = describeMadeBy(point.madeBy ?? [])
+            return (
+              <li key={point.version} className="relative pb-5" data-restore-point={point.version}>
+                <span className={`absolute top-1.5 -left-[25px] size-2.5 rounded-full ${point.current ? 'bg-primary' : 'bg-muted-foreground/40'}`} aria-hidden="true" />
+                <p className="text-xs text-muted-foreground">{formatWhen(point.createdAt)} · restore point</p>
+                <p className="flex flex-wrap items-center gap-2 font-medium [overflow-wrap:anywhere]">
+                  {describeRestorePoint(point, points)}
+                  {point.current ? <Badge tone="green">Now</Badge> : null}
+                </p>
+                {by ? <p className="text-sm text-muted-foreground [overflow-wrap:anywhere]" data-made-by="">By {by}</p> : null}
+                <p className="text-xs text-muted-foreground">{plural(point.documents, 'document')}</p>
+                {!point.restorable && !point.current ? <p className="mt-1 text-sm text-amber-800 dark:text-amber-300">{notRestorableReason(point.reason)}</p> : null}
+                {editor && point.current && WENT_BACK.test(point.summary) && state !== 'going_back' && state !== 'held' ? (
+                  <Button type="button" variant="outline" size="sm" className="mt-2" disabled={busy} onClick={() => void undo()}>Undo</Button>
+                ) : null}
+                {editor && !point.current && point.restorable && state !== 'going_back' && state !== 'held' ? (
+                  <Button type="button" variant="outline" size="sm" className="mt-2" onClick={() => { setNotice(null); setStopped(false); setAsking(point) }}>Go back to this version</Button>
+                ) : null}
+              </li>
+            )
+          })}
         </ol>
       )}
       <Note>Restore points last 30 days and come back in about a minute. Daily backups are kept {plural(detail.backupDays ?? 30, 'day')}, and the latest one as long as the collection exists, so it is never lost.</Note>

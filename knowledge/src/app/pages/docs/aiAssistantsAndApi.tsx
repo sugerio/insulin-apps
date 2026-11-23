@@ -52,7 +52,48 @@ export const aiAssistantsAndApi: DocTopic = {
             <li><b>Some things only a person on the site can do:</b> sharing, a collection's settings, export, transfer, delete, and changes to Rules and data. Assistants and API clients get 403 <Code>browser_only</Code>, and the catalog doesn't list them.</li>
             <li><b>No waiting.</b> A collection that is asleep or learning answers at once with <Code>status</Code> <Code>waking</Code> or <Code>learning</Code> and <Code>retryAfterSeconds</Code>: ask again then.</li>
             <li><b>Changes that create something</b> (a collection, a note, an import, a correction, a report) need an <Code>Idempotency-Key</Code> header with a new random value, so a retry never does it twice.</li>
+            <li><b>A program that writes for people</b> can name whom it acts for, and write only if nothing changed meanwhile. See <DocLink to="ai-assistants-and-api" section="writing-for-people">Writing for people</DocLink>.</li>
             <li><b>Errors are plain words:</b> <Code>{'{ error, message }'}</Code>. Over a limit, 429 with <Code>quota_exceeded</Code>, the <Code>limit</Code>, when it resets (<Code>resets_at</Code>) and a message naming Insulin Apps support. See <DocLink to="limits">Limits</DocLink>.</li>
+          </ul>
+        </>
+      ),
+    },
+    {
+      id: 'writing-for-people',
+      title: 'Writing for people',
+      body: (
+        <>
+          <p>
+            A program can keep a collection up to date for the people who use it: it proposes notes and corrections, a person
+            approves them, and the program writes them, with the collection's Editor role and permission to change content.
+          </p>
+          <ul>
+            <li>
+              <b>The collection's version.</b> Every collection has a <Code>version</Code>: the number of its latest restore point.
+              It grows with every change to what it knows, including stopping a file and going back. The list of collections can
+              trail a change made elsewhere until Knowledge next reads the engine's changes, right after any request to a
+              collection or within five minutes; one collection's <Code>engine.version</Code> is always current.
+            </li>
+            <li>
+              <b>Only if nothing changed meanwhile.</b> A note or a correction can carry <Code>expectedVersion</Code>, the version the
+              program read. At any other version Knowledge answers 409 <Code>version_changed</Code> with <Code>currentVersion</Code>,
+              and adds nothing. If something else changes the collection before it is learned (it waited its turn, or for the 1st),
+              it isn't learned: its import fails with the error <Code>version_changed</Code>. A request sent again with the same
+              Idempotency-Key answers its first result. Once learned, the import's <Code>version</Code> is the one to name next.
+            </li>
+            <li>
+              <b>Whom it acts for.</b> The header <Code>x-on-behalf-of</Code> (1 to 200 characters, one line, UTF-8) on adding a note, a
+              correction, files or a web page names whom the program acts for, such as the person who approved it. It is kept with
+              the import, answered as <Code>onBehalfOf</Code>, and History shows it: "Partner Agent, on behalf of Ana Lee". It is a
+              label only: it gives no access and isn't checked against anyone's account. A retry with the same Idempotency-Key keeps
+              the first value. Longer, with control characters, or not UTF-8: 400.
+            </li>
+            <li>
+              <b>What nothing answered.</b> <Code>GET /api/collections/{'{id}'}/gaps</Code> lists the questions nothing in the
+              collection covered, newest asked first, with how many times each was asked, 50 at a time (up to 100
+              with <Code>limit</Code>; <Code>next</Code> asks for more). Values your organization hides show as [hidden]. It needs the
+              collection's Editor role and permission to change content.
+            </li>
           </ul>
         </>
       ),
@@ -78,13 +119,14 @@ export const aiAssistantsAndApi: DocTopic = {
               [<Code>GET /api/collections/{'{id}'}/facts</Code>, 'What a collection knows, as sentences, and who checked each', 'Viewer'],
               [<Code>POST /api/collections/{'{id}'}/facts/{'{factId}'}/check</Code>, 'Mark a fact as checked ("Looks right"), with your name', 'Editor'],
               [<Code>POST /api/collections/{'{id}'}/reports</Code>, 'Report that an answer may be wrong', 'Viewer'],
-              [<Code>POST /api/collections/{'{id}'}/notes</Code>, 'Add a note the collection learns', 'Editor'],
+              [<Code>POST /api/collections/{'{id}'}/notes</Code>, <>Add a note the collection learns (optional <Code>expectedVersion</Code> and <Code>x-on-behalf-of</Code>)</>, 'Editor'],
               [<Code>POST /api/collections/{'{id}'}/preflight</Code>, 'Check files before adding them; then upload each one and start learning them, all or nothing', 'Editor'],
-              [<Code>POST /api/collections/{'{id}'}/corrections</Code>, 'Fix an answer or a fact once', 'Editor'],
+              [<Code>POST /api/collections/{'{id}'}/corrections</Code>, <>Fix an answer or a fact once (optional <Code>expectedVersion</Code> and <Code>x-on-behalf-of</Code>)</>, 'Editor'],
+              [<Code>GET /api/collections/{'{id}'}/gaps</Code>, 'The questions nothing in it covered, newest asked first', 'Editor'],
               [<Code>POST /api/collections/{'{id}'}/correction-checks/clear</Code>, 'A correction to check is still right: Needs attention lets go of it', 'Editor'],
               [<Code>GET /api/collections/{'{id}'}/imports?state=waiting</Code>, 'Imports waiting for the 1st (or ?state=queued: those Insulin has but hasn\'t started learning); DELETE one by its id to cancel it', 'Viewer'],
               [<Code>POST /api/answers/{'{answerId}'}/right</Code>, '"Was this right?" Yes, for an answer you asked for', '–'],
-              [<Code>GET /api/collections/{'{id}'}/history</Code>, 'Restore points, and whether each can be brought back', 'Viewer'],
+              [<Code>GET /api/collections/{'{id}'}/history</Code>, 'Restore points, whether each can be brought back, and who made their changes', 'Viewer'],
               [<Code>GET /api/attention</Code>, "Needs attention: files Insulin couldn't read, values hidden before learning (a total, never the values), reported answers waiting and corrections to check, in the collections you can change", 'Editor'],
             ]}
           />

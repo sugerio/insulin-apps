@@ -14,6 +14,12 @@ corrections, a file stopped or used again, going back. A collection's **History*
 each was saved, what changed and how many documents it held. Changes made within 5 minutes of each other share one
 restore point, so a few quick changes come back, or are taken back, together. Restore points are kept 30 days.
 
+Each restore point also says **who added** its files, web pages, notes and corrections: a person by name, or an API
+client by its name. A program that writes what a person approved can say whom it acted for (the `x-on-behalf-of`
+header, see [Writing for people](/docs/knowledge/ai-assistants-and-api#writing-for-people-notes-corrections-and-open-questions)),
+and History shows it: "By Partner Agent, on behalf of Ana Lee". That is what the program said, a label only: it gives
+nobody access. Going back, undo and stopping a file name no one.
+
 Sharing and settings aren't part of a restore point: who has access never changes by going back.
 
 ## Go back to an earlier version
@@ -48,8 +54,8 @@ the note's version, which can be undone.
 
 ![A collection's History after going back: the newest restore point, Went back to the version from earlier today, marked Now with Undo, then Added 1 file, Added a note and Added 3 files, each with Go back to this version](/docs/assets/screenshots/knowledge-history.png "History: restore points, going back and undo")
 
-Through the API: `GET /api/collections/{id}/history`, then `GET /api/collections/{id}/history/{version}/preview` for
-the explanation, then `POST /api/collections/{id}/history/{version}/go-back`; `POST /api/collections/{id}/history/undo`
+Through the API: `GET /api/collections/{id}/history` (each restore point with `madeBy`:
+`[{ id, type, name, onBehalfOf }]`), then `GET /api/collections/{id}/history/{version}/preview` for the explanation, then `POST /api/collections/{id}/history/{version}/go-back`; `POST /api/collections/{id}/history/undo`
 undoes it. Going back and undo need the collection's Editor role and an `Idempotency-Key`.
 
 ## Versions that can't be brought back

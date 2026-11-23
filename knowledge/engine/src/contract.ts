@@ -11,8 +11,12 @@
 //
 // Both the real engine (src/index.ts) and the in-memory one (src/stub/) implement exactly this.
 // Change a shape only together with both, and with the app's engine client.
+//
+// API versions (package.json `insulin.serves` here, `insulin.engineApi` in the app; the deploy refuses a pair that
+// doesn't match): 1 is the first; 2 adds `expectedVersion` to imports and corrections, and the error code
+// `version_changed` an import can fail with. Version 2 only adds optional fields, so an engine serving 2 serves 1 too.
 
-export const ENGINE_API_VERSION = 1
+export const ENGINE_API_VERSION = 2
 export const ORG_HEADER = 'x-knowledge-org'
 
 export type EngineErrorCode =
@@ -26,6 +30,7 @@ export type EngineErrorCode =
   | 'unsupported_type'
   | 'model_unavailable'
   | 'stale_settings'
+  | 'version_changed' // API 2: an import whose expectedVersion wasn't the collection's version when it applied (ImportStatus.error)
   | 'internal'
 
 export interface EngineError {
@@ -166,6 +171,7 @@ export interface ImportRequest {
   files: ImportFile[]
   notes: ImportNote[]
   small: boolean // notes and corrections: goes ahead of normal imports in the queue
+  expectedVersion?: number // API 2: see ExpectedVersion
 }
 
 // POST /v1/collections/:cid/corrections: a small import of one note that marks the passages it corrects as
@@ -173,7 +179,17 @@ export interface ImportRequest {
 export interface CorrectionRequest {
   importId: string
   note: ImportNote
+  expectedVersion?: number // API 2: see ExpectedVersion
 }
+
+// ExpectedVersion (API 2), on an import or a correction: the collection's committed version (CollectionStatus.version,
+// a restore point's version) the change was based on. It is checked when the import applies, in the collection's
+// serialized write path: when its try starts and again in the commit's own transaction, so a change committed while it
+// waited in the queue (or for the organization's hold, or for a removal for good) or while it learned is always seen.
+// At any other version the import fails, learning nothing, with `error: { error: 'version_changed', message }` and the
+// collection's version then in the message. Not checked when the import is submitted (the app checks before it
+// submits), and an import that turns out to change nothing ends `duplicate` whatever the version. Absent: no check.
+// A submission with an id the engine already has answers that import first, whatever the body says now.
 
 export type ImportState =
   | 'queued'

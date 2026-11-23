@@ -157,6 +157,7 @@ export interface ImportRecord {
   rounds?: number // a removal for good that failed its three tries this many times: each wait is longer
   turns?: number // how many times the alarm started it (a removal or a hold can send it back to the queue): keys its events
   fromExport?: { collectionId: string; version: number } // an empty collection started from that collection's export
+  expectedVersion?: number | null // API 2: the collection version the import was based on, checked when it applies (contract.ts, ExpectedVersion)
   result: Record<string, any> | null // the container job's result, kept until the commit
   test: { crashFileId?: string; detectorError?: boolean } | null
 }

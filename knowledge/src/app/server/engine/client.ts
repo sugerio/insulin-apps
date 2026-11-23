@@ -38,6 +38,8 @@ export { ENGINE_API_VERSION }
 export interface CorrectionRequest {
   importId: string
   note: ImportNote
+  /** Engine API 2: the collection version it was based on, checked again when it applies (contract.ts, ExpectedVersion). */
+  expectedVersion?: number
 }
 
 /** The engine answered with an error (`EngineError`), or couldn't be reached at all (status 0). */

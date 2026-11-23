@@ -11,11 +11,24 @@ export type { CollectionStatus, DocumentInfo, DocumentText, ExportStatus, Fact, 
 export type ImportStatus = Omit<EngineImportStatus, 'state' | 'waitingFor'> & {
   state: EngineImportStatus['state'] | 'waiting'
   waitingFor: EngineImportStatus['waitingFor'] | 'month'
+  /** Whom the person or API client that added it said they acted for (`x-on-behalf-of`), or null. */
+  onBehalfOf?: string | null
 }
+
+/** Who made a change a restore point holds, and whom they said they acted for (`x-on-behalf-of`). */
+export interface MadeBy {
+  id: string
+  type: 'person' | 'client'
+  name: string | null
+  onBehalfOf: string | null
+}
+
+/** A restore point as History lists it: the engine's, with who made the files, web pages, notes and corrections it holds. */
+export type HistoryPoint = RestorePoint & { madeBy?: MadeBy[] }
 
 export type AppRole = 'ADMIN' | 'EDITOR' | 'VIEWER'
 export type CollectionRole = 'OWNER' | 'ADMIN' | 'EDITOR' | 'VIEWER'
-export type Action = 'read' | 'report' | 'change' | 'remove' | 'share' | 'settings' | 'export' | 'transfer' | 'delete'
+export type Action = 'read' | 'report' | 'change' | 'gaps' | 'remove' | 'share' | 'settings' | 'export' | 'transfer' | 'delete'
 
 export interface Me {
   organizationId: string

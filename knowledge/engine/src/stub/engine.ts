@@ -747,6 +747,13 @@ export function createStubEngine(options: StubOptions = {}): StubEngine {
       const text = note.title.trim() ? `${note.title.trim()}\n\n${note.text}` : note.text
       added.push(buildDocument('note', note.title.trim() || 'Note', 'text/plain', new TextEncoder().encode(text).byteLength, '', text, [], rules, collection.version + 1, note))
     }
+    // API 2, as the real engine: an import based on another version than the collection's when it commits learns
+    // nothing and fails with version_changed (one that changes nothing ends duplicate whatever the version).
+    const expected = item.request.expectedVersion
+    if (added.length && typeof expected === 'number' && expected !== collection.version) {
+      failImport(collection, item, null, versionChangedMessage(expected, collection.version), 'version_changed')
+      return
+    }
     for (const file of item.request.files) collection.inbox.delete(file.fileId)
     item.status.files = files
     if (added.length === 0) {
@@ -1552,14 +1559,14 @@ export function createStubEngine(options: StubOptions = {}): StubEngine {
       return json({ facts: page, next: from + 50 < all.length ? String(from + 50) : null })
     }
     if (rest === '/corrections' && method === 'POST') {
-      const raw = await body<{ importId?: string; note?: ImportNote; notes?: ImportNote[] }>(request)
+      const raw = await body<{ importId?: string; note?: ImportNote; notes?: ImportNote[]; expectedVersion?: unknown }>(request)
       const before = submittedBefore(collection, raw?.importId, [])
       if (before) return json(before, 200)
       const note = raw.note ?? raw.notes?.[0]
       if (typeof raw.importId !== 'string' || !ID.test(raw.importId) || !note || typeof note.text !== 'string' || !note.text.trim()) {
         throw new StubError(400, 'bad_request', 'Send the correction as a note.')
       }
-      const request_: ImportRequest = { importId: raw.importId, files: [], notes: [normalNote(note)], small: true }
+      const request_: ImportRequest = { importId: raw.importId, files: [], notes: [normalNote(note)], small: true, ...expectedVersionOf(raw.expectedVersion) }
       const { status, created } = enqueue(collection, request_, true)
       pump()
       return json(created ? currentStatus(collection, status.importId) : status, created ? 202 : 200)
@@ -1626,6 +1633,21 @@ export function createStubEngine(options: StubOptions = {}): StubEngine {
     if (request.files.length + request.notes.length === 0) throw new StubError(400, 'bad_request', 'There is nothing to learn.')
     request.notes = request.notes.map(normalNote)
     request.small = Boolean(request.small)
+    const expected = expectedVersionOf((request as { expectedVersion?: unknown }).expectedVersion)
+    delete request.expectedVersion
+    Object.assign(request, expected)
+  }
+
+  /** API 2: the collection version an import or a correction was based on, checked when it commits; absent checks nothing. */
+  function expectedVersionOf(value: unknown): { expectedVersion?: number } {
+    if (value === undefined || value === null) return {}
+    if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0) throw new StubError(400, 'bad_request', 'expectedVersion must be a collection version: a whole number, 0 or more.')
+    return { expectedVersion: value }
+  }
+
+  /** Why an import based on an earlier version wasn't learned, in the real engine's words. */
+  function versionChangedMessage(expected: number, current: number): string {
+    return `The collection changed after this was written: it is at version ${current} now, not ${expected}, so nothing was learned. Read it again, and send the change again if it still applies.`
   }
 
   /** Stricter rules apply to what is stored: re-read, a new restore point, and older ones with the text blocked. */

@@ -15,6 +15,8 @@ export interface CatalogEndpoint {
   body: Record<string, unknown> | null
   /** Whether the request needs an `Idempotency-Key` header (a fresh random value per change). */
   idempotencyKey: boolean
+  /** Optional request headers the endpoint reads besides it, as JSON Schema by name. */
+  headers?: Record<string, unknown>
   /** The least role in the collection, where the path names one. */
   collectionRole?: 'VIEWER' | 'EDITOR' | 'ADMIN' | 'OWNER'
   errors: string[]
@@ -38,6 +40,13 @@ const ENGINE_CHANGE = [...IN_COLLECTION, 'bad_request', 'busy_learning', 'engine
 const CHANGE = [...ENGINE_CHANGE, 'idempotency_key_required', 'idempotency_key_reused', 'conflict (the same request is still running)']
 /** The engine works, so awake hours count: refused at the organization's limit. */
 const AWAKE = 'quota_exceeded (429, limit awake_hours_month)'
+/** K3: whom the caller acts for, on changes that add to a collection. */
+const ON_BEHALF_OF = {
+  'x-on-behalf-of': str('Optional: whom you act for, such as the person who approved the change ("Ana Lee"). Trimmed, 1 to 200 characters, one line. Kept with the import, answered as onBehalfOf with it and in History; a label only, it gives no access. Not part of the request an Idempotency-Key retry repeats: the first request\'s value stays. Longer, or with control characters: 400 bad_request.', 200, { minLength: 1 }),
+}
+/** K4: the collection version a note or a correction was based on. */
+const EXPECTED_VERSION = { type: 'integer', minimum: 0, description: 'Optional: the collection\'s version you based this on (version in GET /api/collections, or an import\'s version once committed). If the collection is at another version now, 409 version_changed and nothing is added; if it moves on before this is learned (the queue, or the 1st for one that waits), the import fails with error version_changed. A retry with the same Idempotency-Key answers the first result, whatever the version now.' }
+const VERSION_CHANGED = 'version_changed (409: { error, currentVersion, message }: the collection isn\'t at expectedVersion; nothing was added)'
 
 const ENTRIES: Entry[] = [
   { method: 'GET', path: '/api/me', summary: 'Who is calling: the organization, the role in Knowledge and its permissions', query: null, body: null, idempotencyKey: false, permission: null, errors: COMMON },
@@ -74,7 +83,7 @@ const ENTRIES: Entry[] = [
     method: 'GET', path: '/api/attention', summary: 'Needs attention: files Insulin couldn\'t read, values hidden before learning, reported answers waiting and corrections to check, in every collection you can change. Values hidden before learning are read for the 50 collections changed most recently (any one collection asked for on its own is read in full): the others are marked partial, and notice says so.',
     query: { type: 'object', properties: { collection: { type: 'string', description: 'Only this collection' } } }, body: null, idempotencyKey: false, permission: 'knowledge.collections.edit', errors: [...IN_COLLECTION],
   },
-  { method: 'GET', path: '/api/collections/{id}/history', summary: 'Restore points, newest first, and whether each can be brought back', query: null, body: null, idempotencyKey: false, permission: 'knowledge.use', collectionRole: 'VIEWER', errors: [...IN_COLLECTION, 'engine_unavailable'] },
+  { method: 'GET', path: '/api/collections/{id}/history', summary: 'Restore points, newest first, and whether each can be brought back. madeBy lists who made the files, web pages, notes and corrections each holds ({ id, type: person or client, name, onBehalfOf }); going back, undo and stopping a file name no one.', query: null, body: null, idempotencyKey: false, permission: 'knowledge.use', collectionRole: 'VIEWER', errors: [...IN_COLLECTION, 'engine_unavailable'] },
   { method: 'GET', path: '/api/collections/{id}/history/{version}/preview', summary: 'What going back to a restore point would do: files set aside (not deleted) and corrections undone', query: null, body: null, idempotencyKey: false, permission: 'knowledge.use', collectionRole: 'VIEWER', errors: [...IN_COLLECTION, 'engine_unavailable'] },
   {
     method: 'POST', path: '/api/collections/{id}/reports', summary: 'Report that an answer may be wrong; the owner and the collection\'s admins get an e-mail',
@@ -83,9 +92,9 @@ const ENTRIES: Entry[] = [
   },
   { method: 'GET', path: '/api/collections/{id}/reports', summary: 'Reported answers and whether each is open, fixed or dismissed', query: { type: 'object', properties: { status: { type: 'string', enum: ['open', 'fixed', 'dismissed'] }, answerId: { type: 'string' } } }, body: null, idempotencyKey: false, permission: 'knowledge.use', collectionRole: 'VIEWER', errors: IN_COLLECTION },
   {
-    method: 'POST', path: '/api/collections/{id}/notes', summary: 'Add a note; the collection learns it in about a minute (questions wait meanwhile). When the organization has learned this month\'s documents, it waits and is learned on the 1st: `waiting` says until when.',
-    query: null, body: { type: 'object', required: ['text'], additionalProperties: false, properties: { title: str('A title', 200), text: str('The note', 20_000) } },
-    idempotencyKey: true, permission: 'knowledge.collections.edit', collectionRole: 'EDITOR', errors: [...CHANGE, QUOTA],
+    method: 'POST', path: '/api/collections/{id}/notes', summary: 'Add a note; the collection learns it in about a minute (questions wait meanwhile). When the organization has learned this month\'s documents, it waits and is learned on the 1st: `waiting` says until when. Answers 202 { import } (with onBehalfOf); follow it with GET /api/collections/{id}/imports/{importId}.',
+    query: null, body: { type: 'object', required: ['text'], additionalProperties: false, properties: { title: str('A title', 200), text: str('The note', 20_000), expectedVersion: EXPECTED_VERSION } },
+    idempotencyKey: true, headers: ON_BEHALF_OF, permission: 'knowledge.collections.edit', collectionRole: 'EDITOR', errors: [...CHANGE, QUOTA, VERSION_CHANGED],
   },
   {
     method: 'POST', path: '/api/collections/{id}/preflight', summary: 'Before adding files: which can be learned and which can\'t (with the reason), within your organization\'s limits. Gives a fileId for each file to upload.',
@@ -99,23 +108,23 @@ const ENTRIES: Entry[] = [
   {
     method: 'POST', path: '/api/collections/{id}/imports', summary: 'Learn uploaded files, all or nothing. Questions to the collection wait while it learns. When the organization has learned this month\'s documents, the files wait and are learned on the 1st: `waiting` says until when, and names a file Insulin couldn\'t keep until then (listed as failed, to add again).',
     query: null, body: { type: 'object', required: ['fileIds'], additionalProperties: false, properties: { fileIds: { type: 'array', minItems: 1, maxItems: 100, items: { type: 'string' } } } },
-    idempotencyKey: true, permission: 'knowledge.collections.edit', collectionRole: 'EDITOR', errors: [...CHANGE, QUOTA, 'capacity'],
+    idempotencyKey: true, headers: ON_BEHALF_OF, permission: 'knowledge.collections.edit', collectionRole: 'EDITOR', errors: [...CHANGE, QUOTA, 'capacity'],
   },
   {
-    method: 'GET', path: '/api/collections/{id}/imports', summary: 'Imports waiting for the 1st (?state=waiting), or that Insulin has but hasn\'t started learning (?state=queued; once it starts on one, it leaves this list): what each brings, who added it, and when one waiting for the 1st starts by itself',
+    method: 'GET', path: '/api/collections/{id}/imports', summary: 'Imports waiting for the 1st (?state=waiting), or that Insulin has but hasn\'t started learning (?state=queued; once it starts on one, it leaves this list): what each brings, who added it (and onBehalfOf, whom they said they acted for), and when one waiting for the 1st starts by itself',
     query: { type: 'object', required: ['state'], properties: { state: { type: 'string', enum: ['waiting', 'queued'] } } }, body: null, idempotencyKey: false, permission: 'knowledge.use', collectionRole: 'VIEWER', errors: [...IN_COLLECTION, 'bad_request'],
   },
   { method: 'DELETE', path: '/api/collections/{id}/imports/{importId}', summary: 'Cancel an import waiting for the 1st, or one Insulin has but hasn\'t started learning: it is never learned, and what it held of the limits is free again. Once learning has started it can\'t be cancelled (409), also while a try that was interrupted is made again; one Insulin put back in its queue (a removal for good or the awake-hours stop went first) can be again.', query: null, body: null, idempotencyKey: false, permission: 'knowledge.collections.edit', collectionRole: 'EDITOR', errors: [...IN_COLLECTION, 'conflict (it has started learning or finished, or Insulin can\'t tell yet)'] },
   {
     method: 'POST', path: '/api/collections/{id}/import-export', summary: 'Start an empty collection from a Knowledge export, after preflight with "export": true and the upload: the same sources, the files it stopped using, its notes and corrections. What it holds is reserved against the limits first.',
     query: null, body: { type: 'object', required: ['fileId'], additionalProperties: false, properties: { fileId: str('The export\'s fileId from preflight', 64) } },
-    idempotencyKey: true, permission: 'knowledge.collections.edit', collectionRole: 'EDITOR', errors: [...CHANGE, QUOTA, 'conflict (the collection isn\'t empty)'],
+    idempotencyKey: true, headers: ON_BEHALF_OF, permission: 'knowledge.collections.edit', collectionRole: 'EDITOR', errors: [...CHANGE, QUOTA, 'conflict (the collection isn\'t empty)'],
   },
-  { method: 'GET', path: '/api/collections/{id}/imports/{importId}', summary: 'An import\'s progress: each file waiting, reading, understanding, learned or already here, and the time left', query: null, body: null, idempotencyKey: false, permission: 'knowledge.use', collectionRole: 'VIEWER', errors: [...IN_COLLECTION, 'engine_unavailable'] },
+  { method: 'GET', path: '/api/collections/{id}/imports/{importId}', summary: 'An import\'s progress: each file waiting, reading, understanding, learned or already here, and the time left. state ends committed (with the version it made), duplicate, failed (error: { error, message }; error version_changed when the collection moved past its expectedVersion) or cancelled. onBehalfOf: the x-on-behalf-of it was added with, or null.', query: null, body: null, idempotencyKey: false, permission: 'knowledge.use', collectionRole: 'VIEWER', errors: [...IN_COLLECTION, 'engine_unavailable'] },
   {
     method: 'POST', path: '/api/collections/{id}/web-pages', summary: 'Add a public web page; add it again to read it again',
     query: null, body: { type: 'object', required: ['url'], additionalProperties: false, properties: { url: str('An http or https address on the public internet', 2000) } },
-    idempotencyKey: true, permission: 'knowledge.collections.edit', collectionRole: 'EDITOR', errors: [...CHANGE, QUOTA, 'unreachable', 'unsupported_type', 'payload_too_large'],
+    idempotencyKey: true, headers: ON_BEHALF_OF, permission: 'knowledge.collections.edit', collectionRole: 'EDITOR', errors: [...CHANGE, QUOTA, 'unreachable', 'unsupported_type', 'payload_too_large'],
   },
   {
     method: 'PATCH', path: '/api/collections/{id}/sources/{docId}', summary: 'Stop using a file (kept, not used for answers) or use it again; a restore point either way',
@@ -124,9 +133,14 @@ const ENTRIES: Entry[] = [
   },
   { method: 'DELETE', path: '/api/collections/{id}/sources/{docId}', summary: 'Remove a file for good: its text goes, and restore points that held it can no longer be brought back. Answers the version the removal commits as. It goes ahead at the awake-hours stop too.', query: null, body: null, idempotencyKey: false, permission: 'knowledge.collections.share', collectionRole: 'ADMIN', errors: ENGINE_CHANGE },
   {
-    method: 'POST', path: '/api/collections/{id}/corrections', summary: 'Fix an answer or a fact once: a note the collection learns, marking the passages it corrects as outdated. New questions use it everywhere.',
-    query: null, body: { type: 'object', required: ['text'], additionalProperties: false, properties: { text: str('The right answer', 20_000), question: str('The question it answers', 2000), outdated: { type: 'array', maxItems: 20, items: { type: 'object', required: ['documentId', 'textHash'], properties: { documentId: { type: 'string' }, textHash: { type: 'string' } } } }, factId: str('A fact from /facts to correct', 200), reportId: str('A report this settles, once the correction is learned', 64), notifyAuthors: { type: 'boolean', description: 'E-mail the people who added the files it corrects (a link, not the correction)' } } },
-    idempotencyKey: true, permission: 'knowledge.collections.edit', collectionRole: 'EDITOR', errors: [...CHANGE, QUOTA],
+    method: 'POST', path: '/api/collections/{id}/corrections', summary: 'Fix an answer or a fact once: a note the collection learns, marking the passages it corrects as outdated. New questions use it everywhere. Answers 202 { correction, import } (import with onBehalfOf).',
+    query: null, body: { type: 'object', required: ['text'], additionalProperties: false, properties: { text: str('The right answer', 20_000), question: str('The question it answers', 2000), outdated: { type: 'array', maxItems: 20, items: { type: 'object', required: ['documentId', 'textHash'], properties: { documentId: { type: 'string' }, textHash: { type: 'string' } } } }, factId: str('A fact from /facts to correct', 200), reportId: str('A report this settles, once the correction is learned', 64), notifyAuthors: { type: 'boolean', description: 'E-mail the people who added the files it corrects (a link, not the correction)' }, expectedVersion: EXPECTED_VERSION } },
+    idempotencyKey: true, headers: ON_BEHALF_OF, permission: 'knowledge.collections.edit', collectionRole: 'EDITOR', errors: [...CHANGE, QUOTA, VERSION_CHANGED],
+  },
+  {
+    method: 'GET', path: '/api/collections/{id}/gaps', summary: 'Questions nothing in the collection covered ("I won\'t guess"), still open: what a note or a correction could answer. Newest asked first: { gaps: [{ question, asked, firstAskedAt, lastAskedAt }], next } (next only while there are more: send it as cursor). Values the organization hides show as [hidden]. Needs permission to change content.',
+    query: { type: 'object', properties: { limit: { type: 'integer', minimum: 1, maximum: 100, default: 50 }, cursor: { type: 'string', description: 'next, from the previous page' } } }, body: null,
+    idempotencyKey: false, permission: 'knowledge.collections.edit', collectionRole: 'EDITOR', errors: [...IN_COLLECTION, 'bad_request (limit or cursor)'],
   },
   {
     method: 'POST', path: '/api/collections/{id}/correction-checks/clear', summary: 'A correction to check (Needs attention: its file was read again) is still right: it is no longer listed',

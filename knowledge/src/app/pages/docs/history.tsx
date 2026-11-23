@@ -22,6 +22,12 @@ export const history: DocTopic = {
             days.
           </p>
           <p>
+            Each restore point also says <b>who added</b> its files, web pages, notes and corrections: a person by name, or an API
+            client by its name. A program that writes what a person approved can say whom it acted for, and History shows it:
+            "By Partner Agent, on behalf of Ana Lee". That is what the program said, a label only: it gives nobody access. Going
+            back, undo and stopping a file name no one.
+          </p>
+          <p>
             Sharing and settings aren't part of a restore point: who has access never changes by going back.
           </p>
         </>

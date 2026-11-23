@@ -33,7 +33,7 @@ describe('the insulin manifest', () => {
   it('declares the tick, the engine and its API version', () => {
     expect(insulin.scheduled).toBe('/api/scheduled')
     expect(insulin.engine).toBe('engine/')
-    expect(insulin.engineApi).toBe(1)
+    expect(insulin.engineApi).toBe(2)
     expect((insulin as Record<string, unknown>).publicPaths).toBeUndefined()
   })
 })

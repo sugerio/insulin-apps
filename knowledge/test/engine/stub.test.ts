@@ -269,6 +269,32 @@ describe('the in-memory engine, as the real engine behaves', () => {
     expect((await call<CollectionStatus>('GET', '/v1/collections/c1')).body.version).toBe(3)
   })
 
+  it('API 2 expectedVersion: checked when the import commits, version_changed at another version; an id it has answers first', async () => {
+    const { call, learn, engine, advance } = engineFor()
+    await call('PUT', '/v1/collections/c1', { settings: SETTINGS })
+    await learn('c1', 'imp1', [{ fileId: 'file0001', name: 'One.md', text: 'The first rule.' }])
+    advance(6 * 60_000)
+    const note = (noteId: string) => ({ noteId, title: 'Rule', text: `The rule ${noteId}.`, outdated: [] })
+    for (const expectedVersion of [-1, 2.5, 'one']) {
+      expect((await call('POST', '/v1/collections/c1/imports', { importId: 'bad', files: [], notes: [note('n0')], small: true, expectedVersion })).body).toMatchObject({ error: 'bad_request' })
+      expect((await call('POST', '/v1/collections/c1/corrections', { importId: 'bad', note: note('n0'), expectedVersion })).body).toMatchObject({ error: 'bad_request' })
+    }
+    engine.control.hold(true)
+    expect((await call('POST', '/v1/collections/c1/imports', { importId: 'ahead', files: [], notes: [note('n1')], small: true })).status).toBe(202)
+    expect((await call('POST', '/v1/collections/c1/imports', { importId: 'behind', files: [], notes: [note('n2')], small: true, expectedVersion: 1 })).status).toBe(202)
+    expect((await call('POST', '/v1/collections/c1/corrections', { importId: 'fix', note: note('n3'), expectedVersion: 1 })).status).toBe(202)
+    engine.control.hold(false)
+    expect((await call<ImportStatus>('GET', '/v1/collections/c1/imports/ahead')).body).toMatchObject({ state: 'committed', version: 2 })
+    for (const importId of ['behind', 'fix']) {
+      const failed = (await call<ImportStatus>('GET', `/v1/collections/c1/imports/${importId}`)).body
+      expect(failed).toMatchObject({ state: 'failed', version: null, error: { error: 'version_changed' } })
+      expect(failed.error!.message).toMatch(/it is at version 2 now, not 1, so nothing was learned/)
+    }
+    expect((await call<CollectionStatus>('GET', '/v1/collections/c1')).body).toMatchObject({ version: 2, counts: { documents: 2 } })
+    expect((await call('POST', '/v1/collections/c1/imports', { importId: 'behind', files: [], notes: [], small: true, expectedVersion: 'stale' })).body).toMatchObject({ importId: 'behind', state: 'failed' })
+    expect((await call('POST', '/v1/collections/c1/imports', { importId: 'now', files: [], notes: [note('n4')], small: true, expectedVersion: 2 })).body).toMatchObject({ state: 'committed', version: 3 })
+  })
+
   it('stages without a SHA-256 (it computes it), refuses more than 64 MB, and answers a finished delete with deleted', async () => {
     const { call } = engineFor()
     await call('PUT', '/v1/collections/c1', { settings: SETTINGS })

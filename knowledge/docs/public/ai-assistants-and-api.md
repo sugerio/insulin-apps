@@ -57,6 +57,9 @@ curl -s https://knowledge.insulinapps.com/api/catalog -H "Authorization: Bearer 
 - **Idempotency.** Requests that create something (a collection, a note, an import, a web page, a correction, a report,
   going back) need an `Idempotency-Key` header with a fresh random value. A retry with the same key answers the first
   result with `idempotent-replay: true`.
+- **Acting for someone.** A program that writes what a person approved can name that person in an `x-on-behalf-of`
+  header when it adds a note, a correction, files or a web page. See
+  [Writing for people](#writing-for-people-notes-corrections-and-open-questions).
 - **Errors in plain words**: `{ "error": "<code>", "message": "<what happened and what to do>" }`. Over a limit, 429:
 
 ```json
@@ -107,6 +110,89 @@ returns:
 Write the answer from the passages and link to the sources on the site. `GET /api/collections/{id}/sources/{documentId}`
 returns the source's text (hidden values as `[hidden]`) and its pages.
 
+## Writing for people: notes, corrections and open questions
+
+A program can keep a collection up to date for the people who use it: it proposes notes and corrections, a person
+approves them, and the program writes them. Three things make that safe. They need the collection's Editor role (an
+OAuth client gets it from a share by name) and permission to change content.
+
+**The collection's version.** Every collection has a `version` (in `GET /api/collections` and
+`GET /api/collections/{id}`): the number of its latest restore point. It grows with every change to what the collection
+knows: files, web pages, notes and corrections learned, a file stopped or used again, removed for good, going back and
+undo. In `GET /api/collections` it can trail a change made elsewhere until Knowledge next reads the engine's changes,
+right after any request to a collection or within five minutes; `engine.version` in `GET /api/collections/{id}` is
+always current.
+
+**Write only if nothing changed meanwhile: `expectedVersion`.** A note (`POST /api/collections/{id}/notes`) or a
+correction (`POST /api/collections/{id}/corrections`) can carry `"expectedVersion": <version>`, the version the program
+read before it proposed the change. Knowledge checks it twice:
+
+- when it receives the request: at any other version it answers 409, and adds nothing:
+
+```json
+{
+  "error": "version_changed",
+  "currentVersion": 13,
+  "message": "This collection has changed since version 12: it is at version 13 now, so nothing was added. Read it again and, if the change still applies, send it again with expectedVersion 13."
+}
+```
+
+- when the collection learns it, after its turn in the queue (or on the 1st, for a change that waited for the month's
+  documents learned): if something else changed the collection first, the import fails, learning nothing, and its
+  status says why: `"state": "failed"`, `"error": { "error": "version_changed", "message": "…" }`.
+
+A request sent again with the same `Idempotency-Key` answers its first result, whatever the version now. Once an import
+is `committed`, its `version` is the collection's new version: the next change can name it. Without `expectedVersion`
+nothing is checked.
+
+**Say whom you act for: `x-on-behalf-of`.** On adding a note, a correction, files (`POST …/imports`), a web page or
+starting from an export, the header `x-on-behalf-of: Ana Lee` (trimmed, 1 to 200 characters, one line, UTF-8) names
+whom the program acts for. It is kept with the import, answered as `onBehalfOf` in the change's answer, in
+`GET /api/collections/{id}/imports/{importId}` and in the lists of imports, and History shows it: "Partner Agent, on behalf
+of Ana Lee". It is a label only: it gives no access, and Knowledge never checks it against anyone's account. It isn't part
+of the request a retry repeats: a retry with the same `Idempotency-Key` and another value keeps the first value. Longer
+than 200 characters, with control characters, or not sent as UTF-8, it answers 400 `bad_request` with
+`"header": "x-on-behalf-of"`.
+
+```bash
+curl -s https://knowledge.insulinapps.com/api/collections/$COLLECTION/notes \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Idempotency-Key: $(uuidgen)" \
+  -H "x-on-behalf-of: Ana Lee" \
+  -H "Content-Type: application/json" \
+  -d '{ "title": "Renewal timeline", "text": "Start renewals 120 days before the end date.", "expectedVersion": 12 }'
+```
+
+It answers 202 with the import to follow:
+
+```json
+{
+  "import": { "importId": "6f1c…", "state": "queued", "version": null, "error": null, "onBehalfOf": "Ana Lee" },
+  "waiting": null
+}
+```
+
+Then ask `GET /api/collections/{id}/imports/{importId}` until `state` is `committed` (with `version`), `duplicate`,
+`failed` (with `error`) or `cancelled`. A correction answers the same, with `correction: { id, outdated }` beside it.
+`GET /api/collections/{id}/history` lists who made each restore point's changes in `madeBy`
+(`[{ "id", "type": "person" | "client", "name", "onBehalfOf" }]`); going back, undo and stopping a file name no one.
+
+**What nothing answered: `GET /api/collections/{id}/gaps`.** The questions nothing in the collection covered (the
+ones answered "I won't guess"), still open, newest asked first, with how many times each was asked:
+
+```json
+{
+  "gaps": [
+    { "question": "What is the parking policy?", "asked": 3, "firstAskedAt": "2026-11-02T09:15:00.000Z", "lastAskedAt": "2026-11-20T16:40:00.000Z" }
+  ],
+  "next": "WzE3OTU…"
+}
+```
+
+`?limit=` takes 1 to 100 (50 by default); `next` is there only while there are more: send it back as `?cursor=`. The
+questions are shown with the values your organization hides replaced by `[hidden]`. It needs the collection's Editor
+role and permission to change content: a Viewer, or an OAuth client whose role only asks and reads, gets 403.
+
 ## Endpoints
 
 Paths with `{id}` need the collection role shown; "–" needs none.
@@ -138,11 +224,11 @@ Paths with `{id}` need the collection role shown; "–" needs none.
 | `POST /api/collections/{id}/preflight` | Editor | Which files can be learned, with a `fileId` each, within the limits |
 | `PUT /api/collections/{id}/uploads/{fileId}` | Editor | Upload a file preflight accepted (raw bytes; optionally `x-file-sha256`) |
 | `POST /api/collections/{id}/imports` | Editor | Learn uploaded files, all or nothing |
-| `GET /api/collections/{id}/imports/{importId}` | Viewer | An import's progress, file by file, with the time left |
+| `GET /api/collections/{id}/imports/{importId}` | Viewer | An import's progress, file by file, with the time left, how it ended, and `onBehalfOf` |
 | `GET /api/collections/{id}/imports?state=waiting` | Viewer | Imports waiting for the 1st: what each brings, who added it, when it starts (`?state=queued`: those Insulin has but hasn't started learning) |
 | `DELETE /api/collections/{id}/imports/{importId}` | Editor | Cancel an import waiting for the 1st, or one Insulin hasn't started learning: it is never learned |
 | `POST /api/collections/{id}/import-export` | Editor | Start an empty collection from a Knowledge export (`{ fileId }`, after preflight with `"export": true` and the upload) |
-| `POST /api/collections/{id}/notes` | Editor | Add a note |
+| `POST /api/collections/{id}/notes` | Editor | Add a note (`expectedVersion` and `x-on-behalf-of` optional) |
 | `POST /api/collections/{id}/web-pages` | Editor | Add a public web page; add it again to read it again |
 | `PATCH /api/collections/{id}/sources/{docId}` | Editor | Stop using a file (`{ "active": false }`) or use it again |
 | `DELETE /api/collections/{id}/sources/{docId}` | Admin | Remove a file for good |
@@ -153,7 +239,8 @@ Paths with `{id}` need the collection role shown; "–" needs none.
 |---|---|---|
 | `GET /api/collections/{id}/facts` | Viewer | Facts as sentences, each with its source sentence and `checked` (`{ by, at }` or null) (`?cursor=` for more) |
 | `POST /api/collections/{id}/facts/{factId}/check` | Editor | Mark a fact as checked ("Looks right"), with your name |
-| `POST /api/collections/{id}/corrections` | Editor | Fix an answer or a fact once |
+| `POST /api/collections/{id}/corrections` | Editor | Fix an answer or a fact once (`expectedVersion` and `x-on-behalf-of` optional) |
+| `GET /api/collections/{id}/gaps` | Editor | The questions nothing covered, newest asked first (`?limit=`, `?cursor=`); needs permission to change content |
 | `POST /api/collections/{id}/reports` | Viewer | Report that an answer may be wrong |
 | `GET /api/collections/{id}/reports` | Viewer | Reports, open, fixed or dismissed |
 | `PATCH /api/collections/{id}/reports/{reportId}` | Editor | Settle a report |
@@ -167,7 +254,7 @@ Paths with `{id}` need the collection role shown; "–" needs none.
 | `GET /api/attention` | Editor | Files Insulin couldn't read, values hidden before learning, reported answers waiting and corrections to check, in every collection you can change (`?collection=<id>` for one, always read in full). Values hidden before learning are read for the 50 collections changed most recently; the others are marked `"partial": true`, and `notice` says how many. Needs permission to change content. |
 
 Its items are `unreadable` (an import that failed, or a file refused at upload, in the last 30 days, until a file with
-the same name is learned), `hidden` (a recent file or note in which values were hidden, with how many in all as
+the same name is learned; not one that failed with `version_changed`, which its sender is told about), `hidden` (a recent file or note in which values were hidden, with how many in all as
 `total`, never the values), `reported` (open reports) and `needs_check` (a correction whose file was read again: its
 text as learned, the file, and the `noteId`, `documentId` and `textHash` that clear it). Assistants and API clients see
 only collections whose switch for them is on.
@@ -176,7 +263,7 @@ only collections whose switch for them is on.
 
 | Endpoint | Role | What it does |
 |---|---|---|
-| `GET /api/collections/{id}/history` | Viewer | Restore points, and whether each can be brought back |
+| `GET /api/collections/{id}/history` | Viewer | Restore points, whether each can be brought back, and who made their changes (`madeBy`) |
 | `GET /api/collections/{id}/history/{version}/preview` | Viewer | What going back would do |
 | `POST /api/collections/{id}/history/{version}/go-back` | Editor | Answer from an earlier restore point |
 | `POST /api/collections/{id}/history/undo` | Editor | Undo going back |

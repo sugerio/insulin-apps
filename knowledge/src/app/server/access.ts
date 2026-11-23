@@ -18,12 +18,14 @@ import { can, type Caller, type Permission } from './identity.ts'
 export type CollectionRole = 'OWNER' | 'ADMIN' | 'EDITOR' | 'VIEWER'
 export const ROLE_RANK: Record<CollectionRole, number> = { VIEWER: 1, EDITOR: 2, ADMIN: 3, OWNER: 4 }
 
-export type Action = 'read' | 'report' | 'change' | 'remove' | 'share' | 'settings' | 'export' | 'transfer' | 'delete'
+export type Action = 'read' | 'report' | 'change' | 'gaps' | 'remove' | 'share' | 'settings' | 'export' | 'transfer' | 'delete'
 
 export const ACTIONS: Record<Action, { role: CollectionRole; permission: Permission; browserOnly: boolean; what: string }> = {
   read: { role: 'VIEWER', permission: 'knowledge.use', browserOnly: false, what: 'ask it or read it' },
   report: { role: 'VIEWER', permission: 'knowledge.use', browserOnly: false, what: 'report an answer' },
   change: { role: 'EDITOR', permission: 'knowledge.collections.edit', browserOnly: false, what: 'change what is in it' },
+  // The questions nothing in it covered: other people's questions, for those who can write what answers them.
+  gaps: { role: 'EDITOR', permission: 'knowledge.collections.edit', browserOnly: false, what: 'see the questions nothing in it answered' },
   remove: { role: 'ADMIN', permission: 'knowledge.collections.share', browserOnly: false, what: 'remove a file for good' },
   share: { role: 'ADMIN', permission: 'knowledge.collections.share', browserOnly: true, what: 'share it' },
   settings: { role: 'ADMIN', permission: 'knowledge.collections.share', browserOnly: true, what: 'change its settings' },

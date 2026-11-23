@@ -86,7 +86,7 @@ Three kinds of roles work together (design section 08):
 | In a collection | Owner | Admin | Editor | Viewer |
 | --- | --- | --- | --- | --- |
 | Ask, open sources, see facts and history, report an answer | ✓ | ✓ | ✓ | ✓ |
-| Add files, web pages and notes, fix answers and facts, stop using a file, go back | ✓ | ✓ | ✓ | |
+| Add files, web pages and notes, fix answers and facts, stop using a file, go back, list the questions it couldn't answer | ✓ | ✓ | ✓ | |
 | Remove a file for good | ✓ | ✓ | | |
 | Share; change settings; export (browser only) | ✓ | ✓ | | |
 | Transfer ownership; delete (browser only) | ✓ | | | |
@@ -109,6 +109,14 @@ Everything is under `/api`, JSON, and `GET /api/catalog` lists what the caller m
 need an `Idempotency-Key` header. Errors are `{ error, message }` in plain words; over a limit, 429
 `{ error: 'quota_exceeded', limit, resets_at, message }` naming Insulin Apps support (`SUGER_SUPPORT_EMAIL`).
 
+For programs that write what people approved: a note or a correction may carry `expectedVersion` (the collection's
+`version`, its restore point), refused with 409 `{ error: 'version_changed', currentVersion, message }` at another version
+and checked again by the engine when the import applies (the import then fails with error `version_changed`); an
+accepted request sent again with its `Idempotency-Key` answers first. Adding a note, a correction, files or a web page
+takes `x-on-behalf-of` (1 to 200 characters, UTF-8): a label kept with the import (`imports.on_behalf_of`), answered as
+`onBehalfOf` and shown in History, never used for access and not part of what an idempotent retry compares (the first
+value stays).
+
 | Route | Who |
 | --- | --- |
 | `GET /api/me`, `GET /api/catalog` | everyone |
@@ -124,6 +132,7 @@ need an `Idempotency-Key` header. Errors are `{ error, message }` in plain words
 | `POST /api/ask` (site: a written answer with checked citations, or "I won't guess") | Viewer; browser only |
 | `POST /api/search` (assistants and API clients: passages and `covered`; 1 to 5 collections) | Viewer |
 | `POST …/corrections`, `POST …/history/:version/go-back`, `POST …/history/undo`, `PATCH …/reports/:reportId` | Editor |
+| `GET …/gaps` (open questions nothing covered, newest asked first, `?limit=` 1 to 100, `?cursor=`) | Editor with `knowledge.collections.edit` |
 | `POST\|GET …/reports` | Viewer |
 | `POST …/exports`, `GET …/exports/:exportId` (`?download=1`) | Admin; browser only |
 | `GET\|PUT /api/rules`, `POST /api/rules/hiding-preview`, `POST /api/rules/ask-for-more`, `GET /api/usage`, `GET /api/health` | `knowledge.rules.manage`; `PUT` browser only. `GET /api/health` without identity answers `{ status: 'ok' }` |

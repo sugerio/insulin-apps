@@ -58,10 +58,14 @@ export function useYear(): YearValue {
   return value;
 }
 
-/** The return open: whose it is, their facts for the year and how far each step is. */
+/**
+ * The return open: whose it is, their facts for the year, who is on it (`members`: the owner, and the spouse on a joint
+ * return) and how far each step is.
+ */
 export interface ReturnValue {
   person: Person;
   adult: AdultYear;
+  members: Person[];
   steps: StepStatuses;
 }
 const ReturnContext = createContext<ReturnValue | null>(null);
@@ -140,6 +144,10 @@ export function ReturnFrame() {
   const progress = year.returns.find((each) => each.personId === param);
   const adult = year.adults.find((each) => each.personId === param);
   const person = year.people.find((each) => each.id === param);
+  // The spouse on a joint return has no return of their own: theirs is the joint one, at the same step.
+  const joint = progress ? undefined : year.returns.find((each) => each.members.includes(param));
+  const here = useCurrentStep();
+  if (joint) return <Navigate to={stepPath(year.year, joint.personId, here ?? nextStep(joint.steps))} replace />;
   if (!progress || !adult || !person) {
     const first = year.returns[0];
     if (!first) return <NotFoundPage />;
@@ -150,7 +158,7 @@ export function ReturnFrame() {
   // The switcher keeps the step: a new key starts its form again from the other person's stored facts, so a draft of
   // one return is never shown, or saved, as the other's.
   return (
-    <ReturnContext value={{ person, adult, steps: progress.steps }}>
+    <ReturnContext value={{ person, adult, members: progress.members.map((id) => year.people.find((each) => each.id === id)!).filter(Boolean), steps: progress.steps }}>
       <Outlet key={person.id} />
     </ReturnContext>
   );

@@ -11,17 +11,38 @@ const rules = rulesFor("us", 2025)!;
 const table = JSON.parse(readFileSync(resolve(import.meta.dirname, "us-2025-tax-table.json"), "utf8")) as { rows: number[][] };
 
 /** One adult with one W-2; `taxable` is reached through wages less the $15,750 standard deduction. */
-function oneW2(options: { taxable?: string; wages?: string; married?: boolean; birthDate?: string; answers?: Record<string, string | boolean>; interest?: string; dependants?: number; resident?: boolean; maritalStatus?: string }): EngineInput {
-  const wages = options.wages ?? (Number(options.taxable ?? "0") + 15750).toFixed(2);
+function oneW2(options: {
+  taxable?: string;
+  wages?: string;
+  married?: boolean;
+  joint?: boolean;
+  birthDate?: string;
+  answers?: Record<string, string | boolean>;
+  interest?: string;
+  dependants?: number;
+  resident?: boolean;
+  spouseResident?: boolean;
+  maritalStatus?: string;
+}): EngineInput {
+  const married = options.married || options.joint;
+  const wages = options.wages ?? (Number(options.taxable ?? "0") + (options.joint ? 31500 : 15750)).toFixed(2);
   return {
     country: "us",
     year: 2025,
-    people: [{ id: "p1", name: "Alex", role: "self", birthDate: options.birthDate ?? "1990-05-05", province: null, residentAllYear: options.resident ?? true }],
+    people: [
+      { id: "p1", name: "Alex", role: "self", birthDate: options.birthDate ?? "1990-05-05", province: null, residentAllYear: options.resident ?? true },
+      // Filing jointly, the spouse is on the return too, here with no income of their own.
+      ...(options.joint ? [{ id: "p2", name: "Sam", role: "spouse" as const, birthDate: "1991-06-06", province: null, residentAllYear: options.spouseResident ?? true }] : []),
+    ],
     family: {
-      maritalStatus: options.maritalStatus === undefined ? (options.married ? "married" : "single") : options.maritalStatus,
+      maritalStatus: options.maritalStatus === undefined ? (married ? "married" : "single") : options.maritalStatus,
+      ...(married ? { filingStatus: options.joint ? "joint" : "separate" } : {}),
       dependants: Array.from({ length: options.dependants ?? 0 }, (_, index) => ({ id: `d${index}`, name: "Kid", birthDate: "2015-01-01" })),
     },
-    answers: { p1: { hasTipsOrOvertime: false, spouseItemizes: false, ...options.answers } },
+    answers: {
+      p1: { hasTipsOrOvertime: false, spouseItemizes: false, ...options.answers },
+      ...(options.joint ? { p2: { hasTipsOrOvertime: false } } : {}),
+    },
     slips: [
       { id: "w", person: "p1", type: "W2", issuer: "Acme", boxes: { 1: wages, 2: "0", 5: wages, 6: (Number(wages) * 0.0145).toFixed(2) } },
       ...(options.interest ? [{ id: "i", person: "p1", type: "INT", issuer: "Bank", boxes: { 1: options.interest } }] : []),
@@ -30,15 +51,20 @@ function oneW2(options: { taxable?: string; wages?: string; married?: boolean; b
 }
 
 describe("the 2025 US rules", () => {
-  it("give the Tax Table's tax for every row, at both ends, single and married filing separately", () => {
+  it("give the Tax Table's tax for every row, at both ends, single, jointly and separately", () => {
     const wrong: string[] = [];
-    for (const [from, to, single, , separate] of table.rows as [number, number, number, number, number, number][]) {
+    for (const [from, to, single, joint, separate] of table.rows as [number, number, number, number, number, number][]) {
       for (const taxable of [String(from), (to - 0.01).toFixed(2)]) {
-        for (const [married, expected] of [[false, single], [true, separate]] as const) {
-          const evaluation = new Evaluation(rules, oneW2({ taxable, married }));
+        const statuses = [
+          ["single", {}, single],
+          ["jointly", { joint: true }, joint],
+          ["separately", { married: true }, separate],
+        ] as const;
+        for (const [name, status, expected] of statuses) {
+          const evaluation = new Evaluation(rules, oneW2({ taxable, ...status }));
           expect(evaluation.line("p1", "F1040.15").value?.toString()).toBe(String(Number(taxable)));
           const tax = evaluation.line("p1", "F1040.16").value?.toString();
-          if (tax !== String(expected)) wrong.push(`${taxable} ${married ? "separately" : "single"}: ${tax}, the table says ${expected}`);
+          if (tax !== String(expected)) wrong.push(`${taxable} ${name}: ${tax}, the table says ${expected}`);
         }
       }
     }
@@ -54,6 +80,10 @@ describe("the 2025 US rules", () => {
     expect(tax("700000")).toBe("216020.25");
     // Section C: married filing separately reaches 37% (less $37,968.75) over $375,800.
     expect(tax("400000", true)).toBe("110031.25");
+    // Section B: married filing jointly, 22% less $10,172.00 at $100,000 and 37% less $75,937.50 over $751,600.
+    const joint = (taxable: string) => new Evaluation(rules, oneW2({ taxable, joint: true })).line("p1", "F1040.16").value?.toString();
+    expect(joint("100000")).toBe("11828");
+    expect(joint("800000")).toBe("220062.5");
   });
 
   it("refuse to evaluate a US input with Canada's rules", () => {
@@ -93,6 +123,30 @@ describe("the 2025 US rules", () => {
     // Known, a separate return asks whether the spouse itemizes, and a widow whether the spouse died in 2025.
     expect(new Evaluation(rules, oneW2({ taxable: "30000", married: true })).result().people[0]!.questions).toContain("spouseItemizes");
     expect(new Evaluation(rules, oneW2({ taxable: "30000", maritalStatus: "widowed" })).result().people[0]!.questions).toContain("spouseDiedIn2025");
+  });
+
+  it("put a joint return on the person preparing's: the spouse has no result of their own, and their questions are asked", () => {
+    const result = new Evaluation(rules, oneW2({ taxable: "30000", joint: true })).result();
+    const [alex, sam] = result.people;
+    expect(alex!.lines.map((line) => line.id)).toContain("F1040.24");
+    expect(sam!.lines).toEqual([]);
+    expect(sam!.questions).toEqual(expect.arrayContaining(["isBlind", "canBeClaimed", "hasTipsOrOvertime"]));
+    // Separately, each spouse has a return of their own.
+    const separate = new Evaluation(rules, { ...oneW2({ taxable: "30000", joint: true }), family: { maritalStatus: "married", filingStatus: "separate", dependants: [] } }).result();
+    expect(separate.people[1]!.lines.map((line) => line.id)).toContain("F1040.24");
+  });
+
+  it("say a spouse who wasn't a resident all year can't be on a joint return here", () => {
+    const result = new Evaluation(rules, oneW2({ taxable: "30000", joint: true, spouseResident: false })).result().people[0]!;
+    expect(result.lines.find((line) => line.id === "F1040.24")?.value).toBeNull();
+    expect(result.unhandled.join(" ")).toMatch(/Your spouse wasn't a U.S. citizen or resident alien all year/);
+  });
+
+  it("wait for a married couple's filing status before working out the return", () => {
+    const input = oneW2({ taxable: "30000", joint: true });
+    const undecided = new Evaluation(rules, { ...input, family: { maritalStatus: "married", dependants: [] } }).result().people[0]!;
+    expect(undecided.lines.find((line) => line.id === "F1040.15")?.value).toBeNull();
+    expect(undecided.questions).not.toContain("spouseItemizes");
   });
 
   it("show one federal refund or amount owed", () => {

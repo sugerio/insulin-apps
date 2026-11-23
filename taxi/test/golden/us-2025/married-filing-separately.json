@@ -23,7 +23,8 @@
     ],
     "family": {
       "maritalStatus": "married",
-      "dependants": []
+      "dependants": [],
+      "filingStatus": "separate"
     },
     "answers": {
       "p1": {

@@ -32,6 +32,8 @@ export const engineInputSchema = z.strictObject({
   /** The family facts of the year: the marital status on December 31 and the dependants in the year. */
   family: z.strictObject({
     maritalStatus: z.string().nullable(),
+    /** A married couple's filing status where the rules ask for one (a US return: joint or separate). */
+    filingStatus: z.string().nullable().optional(),
     dependants: z.array(z.strictObject({ id: z.string().min(1), name: z.string(), birthDate: z.iso.date() })),
   }),
   /** Per person, the answers given: money as decimal text, yes/no, a choice's option. */
@@ -372,6 +374,10 @@ export class Evaluation {
         };
       case "partnerInYear":
         return { value: this.input.people.length > 1, status: "complete", label: "Both returns are prepared together", reads: [] };
+      case "filingStatus": {
+        const status = family.filingStatus ?? null;
+        return { value: status, status: status === null ? "missing" : "complete", label: "Filing status of a married couple", reads: [] };
+      }
       case "dependants":
         return { value: Dec.of(born.length), status: "complete", label: "Dependants in the year", reads: [] };
       case "childrenUnder6":

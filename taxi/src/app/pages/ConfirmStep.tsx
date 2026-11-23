@@ -24,7 +24,8 @@ import { rulesFor } from "../shared/rules/index.ts";
 export function ConfirmStep() {
   const slips = useSlips();
   const { year, replace } = useYear();
-  const { person } = useReturn();
+  const { members } = useReturn();
+  const onReturn = (personId: string) => members.some((member) => member.id === personId);
   // Kept here, over the slips, which load again whenever the year changes (a save, an upload finishing on another step):
   // the slip open to change ("new" for one being added), what was typed in it and why its save failed, and what the page
   // has to say about it. This step is mounted once per return, so each has its own.
@@ -47,12 +48,12 @@ export function ConfirmStep() {
   // again from what is stored, dropping what was typed and why its save was refused, and says so (SlipForm).
   useEffect(() => {
     if (!fresh || editing === null || editing === "new") return;
-    if (!fresh.slips.some((each) => each.id === editing && each.personId === person.id)) {
+    if (!fresh.slips.some((each) => each.id === editing && onReturn(each.personId))) {
       forget(editing);
       setEditing(null);
       setNotice("The slip you were changing was removed or replaced.");
     }
-  }, [fresh, editing, person.id]);
+  }, [fresh, editing, members.map((member) => member.id).join(",")]);
 
   const hostOf = (key: string): SlipFormHost => ({
     async save(send) {
@@ -126,10 +127,11 @@ function ReturnSlips({
 }) {
   const me = useMe();
   const { year, replace, reload } = useYear();
-  const { person } = useReturn();
+  const { person, members } = useReturn();
   const editable = canPrepare(me);
   const [state, setState] = useState<{ status: "idle" | "saving" } | { status: "error"; error: unknown }>({ status: "idle" });
-  const slips = data.slips.filter((slip) => slip.personId === person.id);
+  // Everyone's on the return: on a joint return, both spouses' slips.
+  const slips = data.slips.filter((slip) => members.some((member) => member.id === slip.personId));
   const unconfirmed = slips.filter((slip) => slip.status === "unconfirmed").length;
   // The server refuses to confirm a slip with a box AI couldn't read and no amount.
   const unread = slips.some((slip) => slip.status === "unconfirmed" && unreadBoxes(slip).length > 0);
@@ -137,7 +139,7 @@ function ReturnSlips({
   async function confirmAll() {
     setState({ status: "saving" });
     try {
-      replace(await apiRequest(routes.confirmSlips, { params: { year: year.year }, body: { revision: year.revision, personId: person.id } }));
+      replace(await apiRequest(routes.confirmSlips, { params: { year: year.year }, body: { revision: year.revision, ...(members.length > 1 ? {} : { personId: person.id }) } }));
       setState({ status: "idle" });
     } catch (error) {
       setState({ status: "error", error });

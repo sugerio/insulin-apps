@@ -40,7 +40,7 @@ export interface PrintYear {
 
 const SLIP_MODULES = ["income", "deductions", "credits"] as const;
 
-export function printBlockers(year: PrintYear, person: PersonResult, spouse?: { name: string; result: PersonResult }): PrintBlocker[] {
+export function printBlockers(year: PrintYear, person: PersonResult, spouse?: { name: string; result: PersonResult; joint?: boolean }): PrintBlocker[] {
   const own = slipsLeft(year, person);
   const blockers: PrintBlocker[] = [
     ...year.issues.filter((issue) => isIssueOf(issue, person.personId)).map((issue) => ({ text: issue.message, issue: issue.code })),
@@ -53,7 +53,8 @@ export function printBlockers(year: PrintYear, person: PersonResult, spouse?: { 
   const incomplete = person.lines.some((line) => line.status !== "complete");
   if (spouse) {
     const theirs = spouse.result.personId;
-    const on = `${spouse.name}'s return:`;
+    // On a joint return the spouse's items are this return's: named by person, not by return.
+    const on = spouse.joint ? `${spouse.name}:` : `${spouse.name}'s return:`;
     const other = slipsLeft(year, spouse.result);
     // Their facts, slips and what the app doesn't handle never show in a line's status, so they hold this return
     // whatever it reads. The issues the returns share are listed above already.

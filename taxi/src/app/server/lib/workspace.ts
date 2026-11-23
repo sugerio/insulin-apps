@@ -1,4 +1,4 @@
-import { STEPS, isIssueOf, leftInModule, printBlockers, spouseOf, type AdultYear, type Country, type Issue, type Person, type PrintYear, type ReturnProgress, type Slip, type StepStatuses } from "#shared";
+import { STEPS, filesJointly, isIssueOf, leftInModule, printBlockers, returnsOf, spouseOf, type AdultYear, type Country, type FilingStatus, type Issue, type MaritalStatus, type Person, type PrintYear, type ReturnProgress, type Slip, type StepStatuses } from "#shared";
 import { Evaluation, type EngineInput, type EvaluationResult } from "../../shared/engine/evaluate.ts";
 import type { Module, RuleSet } from "../../shared/engine/rules.ts";
 import { rulesFor } from "../../shared/rules/index.ts";
@@ -74,7 +74,8 @@ export async function loadWorkspace(db: D1Database, orgId: string, taxYearId: st
 export interface YearFacts {
   year: number;
   country: Country;
-  maritalStatus: string | null;
+  maritalStatus: MaritalStatus | null;
+  filingStatus: FilingStatus | null;
   people: Person[];
   members: string[];
   adults: AdultYear[];
@@ -98,6 +99,8 @@ export function engineInputOf(facts: YearFacts, workspace: Workspace): EngineInp
     }),
     family: {
       maritalStatus: facts.maritalStatus,
+      // Only a US return has a filing status: Canada's input stays as it was.
+      ...(facts.country === "us" ? { filingStatus: facts.filingStatus } : {}),
       dependants: facts.people
         .filter((person) => facts.members.includes(person.id) && (person.relationship === "child" || person.relationship === "other_dependant"))
         .map((person) => ({ id: person.id, name: person.name, birthDate: person.birthDate })),
@@ -133,25 +136,35 @@ export function evaluateYear(facts: YearFacts, workspace: Workspace): { input: E
 export function stepStatuses(facts: YearFacts, issues: Issue[], workspace: Workspace): ReturnProgress[] {
   const rules = rulesFor(facts.country, facts.year);
   const evaluation = evaluateYear(facts, workspace);
-  return facts.adults.map(({ personId }) => {
-    const slips = workspace.slips.filter((slip) => slip.personId === personId);
-    const answers = workspace.answers[personId] ?? {};
+  // Each return's steps cover everyone on it: on a joint return, both spouses' facts, answers and slips.
+  return returnsOf(facts).map(({ personId, members }) => {
+    const slips = workspace.slips.filter((slip) => members.includes(slip.personId));
     const result = evaluation?.result.people.find((person) => person.personId === personId);
-    const reached = result?.questions;
     // Without an evaluation (the engine refused what is stored) nothing says which questions the return reads, so no
     // step that depends on them is done.
-    const answered = (module: Module) => evaluation !== null && rules !== undefined && leftInModule(rules, module, answers, slips, reached ?? []).length === 0;
+    const answered = (module: Module) =>
+      evaluation !== null &&
+      rules !== undefined &&
+      members.every((member) => {
+        const reached = evaluation.result.people.find((person) => person.personId === member)?.questions ?? [];
+        const theirs = workspace.slips.filter((slip) => slip.personId === member);
+        return leftInModule(rules, module, workspace.answers[member] ?? {}, theirs, reached).length === 0;
+      });
     const state = (done: boolean) => (done ? "done" : "todo");
     const status: StepStatuses = {
-      personal: state(!issues.some((issue) => issue.kind === "blocking" && isIssueOf(issue, personId)) && answered("about")),
-      upload: state(workspace.uploadedIn.has(personId) || slips.some((slip) => slip.documentId !== null)),
+      personal: state(!issues.some((issue) => issue.kind === "blocking" && members.some((member) => isIssueOf(issue, member))) && answered("about")),
+      upload: state(members.some((member) => workspace.uploadedIn.has(member)) || slips.some((slip) => slip.documentId !== null)),
       income: state(answered("income")),
       deductions: state(answered("deductions")),
       credits: state(answered("credits")),
       confirm: state(slips.length > 0 && slips.every((slip) => slip.status === "confirmed")),
-      finish: state(rules !== undefined && result !== undefined && printBlockers(printYear(rules, issues, workspace), result, spouseResult(facts, evaluation?.result.people ?? [], personId)).length === 0),
+      finish: state(
+        rules !== undefined &&
+          result !== undefined &&
+          printBlockers(printYear(rules, issues, workspace), result, spouseResult(facts, evaluation?.result.people ?? [], personId)).length === 0,
+      ),
     };
-    return { personId, steps: Object.fromEntries(STEPS.map((step) => [step, status[step]])) as StepStatuses };
+    return { personId, members, steps: Object.fromEntries(STEPS.map((step) => [step, status[step]])) as StepStatuses };
   });
 }
 
@@ -161,8 +174,12 @@ export function printYear(rules: RuleSet, issues: Issue[], workspace: Workspace)
 }
 
 /** The other adult's name and result, when both returns of a couple are prepared here. */
-export function spouseResult(facts: YearFacts, people: EvaluationResult["people"], personId: string): { name: string; result: EvaluationResult["people"][number] } | undefined {
+export function spouseResult(
+  facts: YearFacts,
+  people: EvaluationResult["people"],
+  personId: string,
+): { name: string; result: EvaluationResult["people"][number]; joint: boolean } | undefined {
   const result = spouseOf(people, personId);
   if (!result) return undefined;
-  return { name: facts.people.find((person) => person.id === result.personId)?.name ?? "Your spouse", result };
+  return { name: facts.people.find((person) => person.id === result.personId)?.name ?? "Your spouse", result, joint: filesJointly(facts) };
 }

@@ -8,6 +8,7 @@ import {
   maritalStatusesFor,
   routes,
   type Country,
+  type FilingStatus,
   type MaritalStatus,
   type Province,
   type TaxYear,
@@ -116,8 +117,8 @@ function UsTaxNotes() {
       <CardContent className="flex flex-col gap-3 text-sm text-muted-foreground">
         <p>
           <b className="text-foreground">Filing status.</b> It follows the marital status on December 31. Unmarried (single, divorced, legally
-          separated under a decree, or widowed) files Single. Married files separately: each spouse prepared here gets their own return. A joint
-          return comes in a later version.
+          separated under a decree, or widowed) files Single. A married couple chooses: jointly, one return with both incomes, which usually
+          costs less; or separately, a return each.
         </p>
         <p>
           <b className="text-foreground">Standard deduction.</b> $15,750, plus $2,000 ($1,600 if married) for being 65 or older and again for being
@@ -185,8 +186,11 @@ function YearFacts({
 }) {
   const me = useMe();
   const { year } = useYear();
-  const { person: owner, adult } = useReturn();
+  const { person: owner, members } = useReturn();
   const editable = canPrepare(me);
+  // A joint return asks about both spouses: the owner's fields keep their plain keys, a spouse's are prefixed with their id.
+  const keyOf = (personId: string, key: string) => (personId === owner.id ? key : `${personId}:${key}`);
+  const adultOf = (personId: string) => year.adults.find((each) => each.personId === personId)!;
   // Locked while it is saved, as a save starts the form again from what it saved.
   const locked = !editable || requests.state.status === "saving";
   const error = requests.state.status === "error" ? requests.state.error : null;
@@ -205,28 +209,46 @@ function YearFacts({
   // A status saved before the people in the Profile changed no longer fits: start from none, so a save can't send it back.
   const storedStatus = year.maritalStatus !== null && statuses.includes(year.maritalStatus) ? year.maritalStatus : null;
   const maritalStatus = valueOf<MaritalStatus | null>("maritalStatus", storedStatus);
-  const facts: AdultDraft = { province: valueOf("province", adult.province), residentAllYear: valueOf("residentAllYear", adult.residentAllYear) };
-  // The questions about this person that the return reads, once the estimate says which.
+  // A married couple on a US return chooses to file jointly or separately.
+  const asksFilingStatus = year.country === "us" && maritalStatus === "married";
+  const filingStatus = valueOf<FilingStatus | null>("filingStatus", year.filingStatus);
+  const factsOf = (personId: string): AdultDraft => {
+    const adult = adultOf(personId);
+    return { province: valueOf(keyOf(personId, "province"), adult.province), residentAllYear: valueOf(keyOf(personId, "residentAllYear"), adult.residentAllYear) };
+  };
+  // The questions about each person on the return that it reads, once the estimate says which.
   const estimate = useEstimate();
-  const given = estimate.status === "ready" ? (estimate.data.input.answers[owner.id] ?? {}) : {};
-  const reached = new Set(estimate.status === "ready" ? (estimate.data.result.people.find((each) => each.personId === owner.id)?.questions ?? []) : []);
-  const about = [...rulesFor(year.country, year.year)!.questions.values()].filter((question) => question.module === "about" && (reached.has(question.id) || question.id in given));
-  const storedAmount = (id: string) => (typeof given[id] === "string" ? (given[id] as string) : "");
-  const amountOf = (id: string) => valueOf(`answers.${id}`, storedAmount(id));
+  const rules = rulesFor(year.country, year.year)!;
+  const givenOf = (personId: string) => (estimate.status === "ready" ? (estimate.data.input.answers[personId] ?? {}) : {});
+  const aboutOf = (personId: string) => {
+    const reached = new Set(estimate.status === "ready" ? (estimate.data.result.people.find((each) => each.personId === personId)?.questions ?? []) : []);
+    const given = givenOf(personId);
+    return [...rules.questions.values()].filter((question) => question.module === "about" && (reached.has(question.id) || question.id in given));
+  };
+  const about = aboutOf(owner.id);
+  const storedAmount = (id: string, personId = owner.id) => (typeof givenOf(personId)[id] === "string" ? (givenOf(personId)[id] as string) : "");
+  const amountOf = (id: string, personId = owner.id) => valueOf(keyOf(personId, `answers.${id}`), storedAmount(id, personId));
   // A yes/no question (spouseSameDays) is null until answered.
-  const storedChoice = (id: string) => (typeof given[id] === "boolean" ? (given[id] as boolean) : null);
-  const choiceOf = (id: string) => valueOf<boolean | null>(`answers.${id}`, storedChoice(id));
-  const answerOf = (question: (typeof about)[number]) => (question.type === "boolean" ? choiceOf(question.id) : cleanAmount(amountOf(question.id)));
+  const storedChoice = (id: string, personId = owner.id) => (typeof givenOf(personId)[id] === "boolean" ? (givenOf(personId)[id] as boolean) : null);
+  const choiceOf = (id: string, personId = owner.id) => valueOf<boolean | null>(keyOf(personId, `answers.${id}`), storedChoice(id, personId));
+  const answerOf = (question: (typeof about)[number], personId = owner.id) =>
+    question.type === "boolean" ? choiceOf(question.id, personId) : cleanAmount(amountOf(question.id, personId));
   // What was typed over a stored value that has changed since (someone else's save) has given way to it for good: it is
   // dropped, so it can't come back if the stored value later returns to what it was typed over. Answers are checked
   // once the estimate, which holds them, is loaded for this year.
-  const storedOf = (key: string): { value: string | boolean | null } | null => {
-    if (key === "maritalStatus") return { value: storedStatus };
+  const storedOf = (full: string): { value: string | boolean | null } | null => {
+    if (full === "maritalStatus") return { value: storedStatus };
+    if (full === "filingStatus") return { value: year.filingStatus };
+    const colon = full.indexOf(":");
+    const personId = colon >= 0 ? full.slice(0, colon) : owner.id;
+    const key = colon >= 0 ? full.slice(colon + 1) : full;
+    const adult = year.adults.find((each) => each.personId === personId);
+    if (!adult) return { value: null };
     if (key === "province") return { value: adult.province };
     if (key === "residentAllYear") return { value: adult.residentAllYear };
     if (estimate.status !== "ready") return null;
     const id = key.slice("answers.".length);
-    return { value: rulesFor(year.country, year.year)!.questions.get(id)?.type === "boolean" ? storedChoice(id) : storedAmount(id) };
+    return { value: rules.questions.get(id)?.type === "boolean" ? storedChoice(id, personId) : storedAmount(id, personId) };
   };
   const superseded = Object.entries(draft).flatMap(([key, change]) => {
     const stored = storedOf(key);
@@ -239,62 +261,86 @@ function YearFacts({
   // Saving waits for the answers: until the estimate is loaded the questions about the person aren't known, and what
   // was typed for them can't be checked against what is stored.
   const answersReady = estimate.status === "ready";
-  const unanswered = about.filter((question) => answerOf(question) === null || answerOf(question) === "");
+  const others = members.filter((member) => member.id !== owner.id);
+  const unanswered = [
+    ...about.filter((question) => answerOf(question) === null || answerOf(question) === ""),
+    ...others.flatMap((member) =>
+      aboutOf(member.id)
+        .filter((question) => answerOf(question, member.id) === null || answerOf(question, member.id) === "")
+        .map((question) => ({ ...question, ask: `${member.name}: ${question.ask}` })),
+    ),
+  ];
   // The spouse's questions (spouseNetIncome and the like) are asked under the spouse; the others are about where this
   // person lived.
   const spouseQuestions = about.filter((question) => question.id.startsWith("spouse"));
-  const fields = new Set(about.map((question) => `answers.${question.id}`));
+  const fields = new Set([
+    ...about.map((question) => `answers.${question.id}`),
+    ...others.flatMap((member) => aboutOf(member.id).map((question) => keyOf(member.id, `answers.${question.id}`))),
+  ]);
   const { issueFor, unshown, inBanner } = fieldIssues(error, (path) => fields.has(path), requests.edited);
-  const field = (question: (typeof about)[number]) =>
-    question.type === "boolean" ? (
+  const field = (question: (typeof about)[number], personId = owner.id) => {
+    const key = keyOf(personId, `answers.${question.id}`);
+    return question.type === "boolean" ? (
       <YesNoField
-        key={question.id}
+        key={key}
         label={question.ask}
         help={question.help}
-        value={choiceOf(question.id)}
+        value={choiceOf(question.id, personId)}
         disabled={locked}
-        issue={issueFor(`answers.${question.id}`)}
-        onChange={(value) => type(`answers.${question.id}`, storedChoice(question.id), value)}
+        issue={issueFor(key)}
+        onChange={(value) => type(key, storedChoice(question.id, personId), value)}
       />
     ) : (
       <AmountField
-        key={question.id}
+        key={key}
         label={question.ask}
         help={question.help}
         unit={question.type === "count" ? "" : "$"}
         max={question.max}
-        value={amountOf(question.id)}
+        value={amountOf(question.id, personId)}
         disabled={locked}
-        issue={issueFor(`answers.${question.id}`)}
-        onChange={(value) => type(`answers.${question.id}`, storedAmount(question.id), value)}
+        issue={issueFor(key)}
+        onChange={(value) => type(key, storedAmount(question.id, personId), value)}
       />
     );
+  };
 
   async function save(thenContinue: boolean) {
     const sent = draft;
     // Each answer given; one emptied here is cleared (null), so the field and what is stored agree: unanswered, and
     // listed as missing. Unlike an amount on Income or Deductions, an empty answer here doesn't mean 0.
-    const answers = Object.fromEntries(
-      about.flatMap((question): [string, string | boolean | null][] => {
-        const value = answerOf(question);
-        if (value !== null && value !== "") return [[question.id, value]];
-        return `answers.${question.id}` in draft ? [[question.id, null]] : [];
-      }),
-    );
-    await requests.run(async (answered) => {
-      const saved = answered(
-        await apiRequest(routes.savePersonalInfo, { params: { year: year.year }, body: { revision: year.revision, maritalStatus, adults: [{ personId: owner.id, ...facts }] } }),
+    const answersOf = (personId: string) =>
+      Object.fromEntries(
+        aboutOf(personId).flatMap((question): [string, string | boolean | null][] => {
+          const value = answerOf(question, personId);
+          if (value !== null && value !== "") return [[question.id, value]];
+          return keyOf(personId, `answers.${question.id}`) in draft ? [[question.id, null]] : [];
+        }),
       );
-      answered(await saveAnswersFor(saved, { [owner.id]: answers }));
+    const byPerson = Object.fromEntries(members.map((member) => [member.id, answersOf(member.id)]));
+    await requests.run(async (answered) => {
+      const body = {
+        revision: year.revision,
+        maritalStatus,
+        ...(year.country === "us" ? { filingStatus: asksFilingStatus ? filingStatus : null } : {}),
+        adults: members.map((member) => ({ personId: member.id, ...factsOf(member.id) })),
+      };
+      const saved = answered(await apiRequest(routes.savePersonalInfo, { params: { year: year.year }, body }));
+      answered(await saveAnswersFor(saved, byPerson));
       // What this save sent is stored now, so it is no longer a change: the facts, and the answers it sent.
-      const stored = (key: string) => !key.startsWith("answers.") || key.slice("answers.".length) in answers;
+      const stored = (full: string) => {
+        const colon = full.indexOf(":");
+        const personId = colon >= 0 && !full.startsWith("answers.") ? full.slice(0, colon) : owner.id;
+        const key = colon >= 0 && !full.startsWith("answers.") ? full.slice(colon + 1) : full;
+        return !key.startsWith("answers.") || key.slice("answers.".length) in (byPerson[personId] ?? {});
+      };
       onDraft((current) => Object.fromEntries(Object.entries(current).filter(([key, entry]) => !(sent[key] === entry && stored(key)))));
     }, thenContinue);
   }
 
   const stale = error instanceof ApiError && error.status === 409;
-  // This return's issues: its adult's, and those of the facts the year's returns share.
-  const issues = year.issues.filter((issue) => isIssueOf(issue, owner.id));
+  // This return's issues: its adults', and those of the facts the year's returns share.
+  const issues = year.issues.filter((issue, index, all) => members.some((member) => isIssueOf(issue, member.id)) && all.indexOf(issue) === index);
   const blocking = issues.filter((issue) => issue.kind === "blocking");
   const unsupported = issues.filter((issue) => issue.kind === "unsupported");
 
@@ -328,17 +374,68 @@ function YearFacts({
         </CardContent>
       </Card>
 
+      {asksFilingStatus ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>
+              <h2 className="text-base font-semibold" id="filing-status">
+                Filing status
+              </h2>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-3">
+            <RadioGroup
+              aria-labelledby="filing-status"
+              value={filingStatus ?? ""}
+              onValueChange={(value) => type("filingStatus", year.filingStatus, value)}
+              disabled={locked}
+              className="grid gap-2 sm:grid-cols-2"
+            >
+              <Choice value="joint" label="Married filing jointly" />
+              <Choice value="separate" label="Married filing separately" />
+            </RadioGroup>
+            <p className="text-sm text-muted-foreground">
+              {year.adults.length > 1
+                ? "Jointly, you file one return with both incomes on it. Separately, each of you files a return of your own."
+                : `To file jointly, add ${partner?.name ?? "your spouse"} to this year on the Returns page.`}
+            </p>
+          </CardContent>
+        </Card>
+      ) : null}
+
       <AdultCard
         country={year.country}
-        draft={facts}
+        title={others.length > 0 ? `Where you lived: ${owner.name}` : undefined}
+        draft={factsOf(owner.id)}
         editable={!locked}
         onChange={(change) => {
+          const adult = adultOf(owner.id);
           if (change.province !== undefined) type("province", adult.province, change.province);
           if (change.residentAllYear !== undefined) type("residentAllYear", adult.residentAllYear, change.residentAllYear);
         }}
       >
-        {about.filter((question) => !spouseQuestions.includes(question)).map(field)}
+        {about.filter((question) => !spouseQuestions.includes(question)).map((question) => field(question))}
       </AdultCard>
+
+      {/* On a joint return, the spouse's facts and the questions about them. */}
+      {others.map((member) => (
+        <AdultCard
+          key={member.id}
+          country={year.country}
+          title={`Where you lived: ${member.name}`}
+          draft={factsOf(member.id)}
+          editable={!locked}
+          onChange={(change) => {
+            const adult = adultOf(member.id);
+            if (change.province !== undefined) type(keyOf(member.id, "province"), adult.province, change.province);
+            if (change.residentAllYear !== undefined) type(keyOf(member.id, "residentAllYear"), adult.residentAllYear, change.residentAllYear);
+          }}
+        >
+          {aboutOf(member.id)
+            .filter((question) => !question.id.startsWith("spouse"))
+            .map((question) => field({ ...question, ask: askedOf(question.ask, member.name), help: question.help && askedOf(question.help, member.name) }, member.id))}
+        </AdultCard>
+      ))}
 
       {spouseQuestions.length > 0 ? (
         <Card>
@@ -347,7 +444,7 @@ function YearFacts({
               <h2 className="text-base font-semibold">Your spouse or partner</h2>
             </CardTitle>
           </CardHeader>
-          <CardContent className="flex flex-col gap-4">{spouseQuestions.map(field)}</CardContent>
+          <CardContent className="flex flex-col gap-4">{spouseQuestions.map((question) => field(question))}</CardContent>
         </Card>
       ) : null}
 
@@ -415,12 +512,14 @@ function YearFacts({
  */
 function AdultCard({
   country,
+  title,
   draft,
   editable,
   onChange,
   children,
 }: {
   country: Country;
+  title?: string;
   draft: AdultDraft;
   editable: boolean;
   onChange: (change: Partial<AdultDraft>) => void;
@@ -432,7 +531,7 @@ function AdultCard({
     <Card>
       <CardHeader>
         <CardTitle>
-          <h2 className="text-base font-semibold">Where you lived</h2>
+          <h2 className="text-base font-semibold wrap-anywhere">{title ?? "Where you lived"}</h2>
         </CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
@@ -484,6 +583,18 @@ function AdultCard({
   );
 }
 
+
+/**
+ * A question about the person preparing, asked about someone else on the return: "You are blind" becomes "Sam Rivera
+ * is blind", "Someone can claim you" becomes "Someone can claim Sam Rivera".
+ */
+function askedOf(ask: string, name: string): string {
+  return ask
+    .replace(/^You are\b/, `${name} is`)
+    .replace(/^You were\b/, `${name} was`)
+    .replace(/^You\b/, name)
+    .replace(/\byou\b/, name);
+}
 
 /** A yes/no question about the person, answered with two choices; null until one is chosen. */
 function YesNoField({

@@ -9,7 +9,7 @@
 // Uploaded files are kept as uploaded (document_chunks), so a slip's printed SIN and address are in its bytes.
 import { sql } from "drizzle-orm";
 import { blob, check, index, integer, primaryKey, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
-import { COUNTRIES, MARITAL_STATUSES, PROVINCES, RELATIONSHIPS } from "../shared/people.ts";
+import { COUNTRIES, FILING_STATUSES, MARITAL_STATUSES, PROVINCES, RELATIONSHIPS } from "../shared/people.ts";
 
 const inList = (column: string, values: readonly string[]) =>
   sql.raw(`${column} IN (${values.map((value) => `'${value}'`).join(", ")})`);
@@ -67,6 +67,9 @@ export const taxYears = sqliteTable(
     // CHECK here would make SQLite rebuild the table, which other tables reference with ON DELETE CASCADE.
     country: text("country", { enum: COUNTRIES }).notNull().default("ca"),
     maritalStatus: text("marital_status", { enum: MARITAL_STATUSES }),
+    // A married couple's US filing status: "joint" or "separate" (shared/people.ts FILING_STATUSES); checked by the app,
+    // for the same reason as country.
+    filingStatus: text("filing_status", { enum: FILING_STATUSES }),
     revision: integer("revision").notNull().default(1),
     createdAt: integer("created_at").notNull(),
     updatedAt: integer("updated_at").notNull(),

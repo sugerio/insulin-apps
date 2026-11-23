@@ -1,7 +1,7 @@
 import { useId, useMemo, useState } from "react";
 import { Link } from "react-router";
 import { FileDown } from "lucide-react";
-import { balancesOf, formsToAdd, printBlockers, spouseOf, type Estimate, type FormLanguage, type SlipList, type Step } from "#shared";
+import { balancesOf, filesJointly, formsToAdd, printBlockers, spouseOf, type Estimate, type FormLanguage, type SlipList, type Step } from "#shared";
 import { Button } from "@/components/ui/button.tsx";
 import { Card, CardContent } from "@/components/ui/card.tsx";
 import { Label } from "@/components/ui/label.tsx";
@@ -51,7 +51,9 @@ function Results({ estimate, slips }: { estimate: Estimate; slips: SlipList }) {
     return module === "income" || module === "deductions" || module === "credits" ? module : "personal";
   };
   const other = spouseOf(estimate.result.people, owner.id);
-  const spouse = other ? { name: year.people.find((each) => each.id === other.personId)?.name ?? "Your spouse", result: other } : undefined;
+  // On a joint return the spouse's items are this return's, named by person rather than by return.
+  const joint = filesJointly(year);
+  const spouse = other ? { name: year.people.find((each) => each.id === other.personId)?.name ?? "Your spouse", result: other, joint } : undefined;
   const checks = groupUnanswered(
     printBlockers({ rules, issues: year.issues, answers: estimate.input.answers, slips: slips.slips }, person, spouse).map((blocker) => ({
       text: blocker.text,
@@ -59,7 +61,7 @@ function Results({ estimate, slips }: { estimate: Estimate; slips: SlipList }) {
       step: blocker.confirm ? ("confirm" as const) : blocker.issue ? ("personal" as const) : blocker.question ? stepOfQuestion(blocker.question) : null,
       ask: blocker.question && blocker.unanswered ? (rules.questions.get(blocker.question)?.ask ?? null) : null,
     })),
-    (personId) => (personId === owner.id ? "" : `${spouse?.name ?? "Your spouse"}'s return: `),
+    (personId) => (personId === owner.id ? "" : joint ? `${spouse?.name ?? "Your spouse"}: ` : `${spouse?.name ?? "Your spouse"}'s return: `),
   );
   return (
     <Card>

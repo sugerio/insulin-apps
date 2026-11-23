@@ -54,7 +54,8 @@ describe("a United States year", () => {
     expect((await save("common_law", null)).status).toBe(400);
     const saved = await json<TaxYear>(save("married", null));
     expect(saved.adults[0]).toEqual({ personId: alex.id, province: null, residentAllYear: true, prepared: true });
-    expect(saved.issues.map((issue) => issue.code)).toEqual(["no_residency"]);
+    // Married, the couple still has to choose to file jointly or separately.
+    expect(saved.issues.map((issue) => issue.code)).toEqual(["no_filing_status", "no_residency"]);
   });
 
   it("works out the return with the US rules, from a W-2 to the refund, and finishes it", async () => {
@@ -109,5 +110,86 @@ describe("an upload in a United States year", () => {
     const body = await response.text();
     expect(response.status, body).toBeLessThan(300);
     expect(body).toContain("Reading U.S. forms isn't available yet");
+  });
+});
+
+describe("a joint return", () => {
+  /** Alex and Sam, married, both in a US 2025 year. */
+  async function couple() {
+    const alex = await addPerson("Alex Rivera", "self", "1984-02-02");
+    const sam = await addPerson("Sam Rivera", "spouse", "1986-06-06");
+    const year = await json<TaxYear>(server.call("POST", "/api/years", { body: { year: 2025, country: "us", people: [alex.id, sam.id] } }), 201);
+    return { alex, sam, year };
+  }
+  const personal = (revision: number, filingStatus: string | null, adults: { personId: string }[]) =>
+    server.call("PUT", "/api/years/2025/personal-info", {
+      body: { revision, maritalStatus: "married", filingStatus, adults: adults.map(({ personId }) => ({ personId, province: null, residentAllYear: true })) },
+    });
+
+  it("is one return with both spouses on it, and two again when they file separately", async () => {
+    const { alex, sam, year } = await couple();
+    expect(year.returns.map((each) => each.members)).toEqual([[alex.id], [sam.id]]);
+    const joint = await json<TaxYear>(personal(year.revision, "joint", [{ personId: alex.id }, { personId: sam.id }]));
+    expect(joint.filingStatus).toBe("joint");
+    expect(joint.issues).toEqual([]);
+    expect(joint.returns.map((each) => [each.personId, each.members])).toEqual([[alex.id, [alex.id, sam.id]]]);
+    const list = await json<YearList>(server.call("GET", "/api/years"));
+    expect(list.years[0]!.returns.map((each) => [each.name, each.members])).toEqual([["Alex Rivera", [alex.id, sam.id]]]);
+    const separate = await json<TaxYear>(personal(joint.revision, "separate", [{ personId: alex.id }, { personId: sam.id }]));
+    expect(separate.returns.map((each) => each.members)).toEqual([[alex.id], [sam.id]]);
+  });
+
+  it("is chosen only by a married couple on a US return, and needs the spouse in the year", async () => {
+    const { alex, year } = await couple();
+    // Without the spouse in the year, a joint return can't be prepared: the year says so.
+    let changed = await json<TaxYear>(server.call("PUT", "/api/years/2025/people", { body: { revision: year.revision, people: [alex.id] } }));
+    changed = await json<TaxYear>(personal(changed.revision, "joint", [{ personId: alex.id }]));
+    expect(changed.issues.map((issue) => [issue.code, issue.message])).toEqual([
+      ["no_filing_status", "Sam Rivera isn't in this year: add them to file jointly, or file separately."],
+    ]);
+    expect(changed.returns.map((each) => each.members)).toEqual([[alex.id]]);
+    // A Canadian year has no filing status.
+    const other = await startServer({ now: () => 1_767_225_600_000 });
+    try {
+      const pat = (await (await other.call("POST", "/api/people", { body: { name: "Pat Lee", relationship: "self", birthDate: "1980-01-01" } })).json()) as Person;
+      const ca = (await (await other.call("POST", "/api/years", { body: { year: 2025, people: [pat.id] } })).json()) as TaxYear;
+      const refused = await other.call("PUT", "/api/years/2025/personal-info", {
+        body: { revision: ca.revision, maritalStatus: "single", filingStatus: "joint", adults: [{ personId: pat.id, province: "ON", residentAllYear: true }] },
+      });
+      expect(refused.status).toBe(400);
+    } finally {
+      other.close();
+    }
+  });
+
+  it("works out both spouses' income on one return, and finishes when both are done", async () => {
+    const { alex, sam, year } = await couple();
+    let current = await json<TaxYear>(personal(year.revision, "joint", [{ personId: alex.id }, { personId: sam.id }]));
+    const w2 = (personId: string, issuer: string, wages: string, withheld: string) =>
+      json<TaxYear>(
+        server.call("POST", "/api/years/2025/slips", {
+          body: { revision: current.revision, personId, type: "W2", issuer, boxes: { 1: wages, 2: withheld, 4: "0", 5: wages, 6: (Number(wages) * 0.0145).toFixed(2) } },
+        }),
+        201,
+      );
+    current = await w2(alex.id, "Globex", "140000", "24000");
+    current = await w2(sam.id, "Initech", "50000", "4200");
+    const answers = (personId: string) =>
+      server.call("PUT", "/api/years/2025/answers", {
+        body: { revision: current.revision, personId, answers: { hasWages: true, hasInterest: false, hasTipsOrOvertime: false, canBeClaimed: false, isBlind: false, estimatedPayments: "0" } },
+      });
+    current = await json<TaxYear>(answers(alex.id));
+    // Sam's answers are still missing: the joint return isn't done.
+    expect(current.returns[0]!.steps.income).toBe("todo");
+    current = await json<TaxYear>(answers(sam.id));
+    current = await json<TaxYear>(server.call("POST", "/api/years/2025/slips/confirm", { body: { revision: current.revision } }));
+    expect(current.returns[0]!.steps).toMatchObject({ personal: "done", income: "done", confirm: "done", finish: "done" });
+    const estimate = await json<Estimate>(server.call("GET", "/api/years/2025/estimate"));
+    expect(estimate.input.family.filingStatus).toBe("joint");
+    const [mine, theirs] = estimate.result.people;
+    const line = (id: string) => mine!.lines.find((each) => each.id === id)?.value;
+    // $190,000 of wages less $31,500: $158,500, on the Tax Computation Worksheet's Section B (22% less $10,172).
+    expect([line("F1040.9"), line("F1040.15"), line("F1040.16"), line("F1040.33")]).toEqual(["190000", "158500", "24698", "28200"]);
+    expect(theirs!.lines).toEqual([]);
   });
 });

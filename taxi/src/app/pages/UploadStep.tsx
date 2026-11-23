@@ -233,11 +233,12 @@ export function DocumentStatus({ document }: { document: DocumentRecord }) {
  */
 function Uploaded({ data, uploading, onNotice }: { data: DocumentList; uploading: boolean; onNotice: (notice: string | null) => void }) {
   const { year } = useYear();
-  const { person } = useReturn();
+  const { person, members } = useReturn();
   const preparing = year.returns[0]?.personId;
+  const onReturn = (personId: string | null) => members.some((member) => member.id === personId);
   const documents = data.documents.filter(
     (document) =>
-      document.personId === person.id || document.slips.some((slip) => slip.personId === person.id) || (document.personId === null && document.slips.length === 0 && person.id === preparing),
+      onReturn(document.personId) || document.slips.some((slip) => onReturn(slip.personId)) || (document.personId === null && document.slips.length === 0 && person.id === preparing),
   );
   if (documents.length === 0) return null;
   return (

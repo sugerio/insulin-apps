@@ -72,10 +72,10 @@ without the RL slip issued with it, such as a T4 for work outside Quebec or a T2
 on the TP-1, rental and foreign income, scholarships, RDSP income, taxable FHSA withdrawals and workers'
 compensation).
 
-United States, part 1: the federal Form 1040 of a U.S. citizen or resident alien for the whole year, filing single or
-married filing separately, with wages (W-2) and interest (1099-INT), the standard deduction (with the 2025 deduction
+United States: the federal Form 1040 of a U.S. citizen or resident alien for the whole year, filing single, married
+filing jointly (one return with both spouses on it) or married filing separately, with wages (W-2) and interest (1099-INT), the standard deduction (with the 2025 deduction
 for seniors), the Tax Table and Tax Computation Worksheet, the Additional Medicare Tax, the net investment income tax
-and excess social security tax. No state return, no printing and no AI reading yet; a joint return, dependants,
+and excess social security tax. No state return, no printing and no AI reading yet; dependants,
 itemized deductions and tips or overtime say so when they apply.
 
 ## Good to know

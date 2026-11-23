@@ -24,7 +24,7 @@ The base URL is `https://taxi.insulinapps.com`, and every endpoint is under `/ap
 | `GET /api/catalog` | any | The endpoints the caller may use, with request bodies and query parameters as JSON Schema, the two that answer with a file included. |
 | `GET /api/years` | View returns | The people in the profile and tax years, each with its `country` and each adult's return and its steps; `supported` lists the years a return can be started for, by country. |
 | `POST /api/years` | Prepare returns | Start a tax year with the people in it: `{"year": 2025, "country": "ca", "people": ["…"]}`. `country` is `ca` (the default) or `us`. You must be one of them; your spouse in it prepares both returns together. Starting one that exists returns it unchanged; starting it for the other country is refused with 409, since a year is of one country. |
-| `GET /api/years/{year}` | View returns | A tax year: its `country`, who is in it, the marital status, each adult's province (none for a US year) and residency, open issues, and each adult's return with the state of its seven steps (`returns`: personal, upload, income, deductions, credits, confirm, finish). |
+| `GET /api/years/{year}` | View returns | A tax year: its `country`, who is in it, the marital status, a married couple's US `filingStatus` (`joint` or `separate`), each adult's province (none for a US year) and residency, open issues, and each return with who is on it (`members`: one adult, or both spouses on a US joint return, the person preparing's) and the state of its seven steps (`returns`: personal, upload, income, deductions, credits, confirm, finish). |
 | `GET /api/years/{year}/estimate` | View returns | What the engine computes for each return of the year (below). |
 | `GET /api/years/{year}/hints` | View returns | Each return's hints (below), with their state: `open`, `applied` (an accepted saving) or `dismissed`. |
 | `POST /api/years/{year}/hints/{hint}` | Prepare returns | Decide on a hint of an adult's return: `{"revision", "personId", "decision"}`, where `decision` is `accept` (a saving: its answers are saved), `dismiss`, or `undo` (puts back the answers an accepted saving changed while they are still as it set them, or shows a dismissed hint again). A saving is `applied` only while every answer it set is unchanged; after that it is listed `open` again only if it still saves something, it can be dismissed, and `undo` only removes its decision. A saving that no longer applies is refused with 409, and so is dismissing a saving that is still applied. |
@@ -67,6 +67,13 @@ same for `PUT /api/years/{year}/people`). If someone changed the year since, the
 and nothing is changed: read the year again and retry. `maritalStatus` is `married` or `common_law` when the profile
 has a spouse, and `single`, `widowed`, `divorced` or `separated` when it has none; another value is refused with `400`.
 `province` is a two-letter code.
+
+On a US year, `province` is always `null` and `married` is the only status with a spouse. A married couple also sends
+`filingStatus`: `joint` (one return, the person preparing's, with both spouses on it; the spouse must be in the year)
+or `separate` (a return each). Left out, it isn't changed. It is refused with `400` on a Canadian year and when not
+married, and it is cleared when the status changes to one that isn't married. Until it is chosen, the year has a
+`no_filing_status` issue. On a joint return, send both spouses in `adults`, and each spouse's answers under their own
+`personId`.
 
 A year's answer lists `issues`. Those of kind `blocking` keep the step from being done; those of kind `unsupported` say
 what the app can't prepare. Every province and territory is prepared, so today no issue is of that kind.

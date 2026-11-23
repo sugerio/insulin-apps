@@ -23,9 +23,10 @@ export const gettingStarted: DocTopic = {
           </p>
           <p>
             <b>United States:</b> when you start a year, choose Canada or the United States. A US year prepares the federal Form 1040 of a U.S.
-            citizen or resident alien for the whole year, filing single or married filing separately, with wages (W-2) and interest (1099-INT),
-            the standard deduction and the 2025 deduction for seniors. It prepares no state return, can't print the IRS forms or read them by AI
-            yet, and says on the return when something it doesn't handle yet applies, such as dependants or a joint return.
+            citizen or resident alien for the whole year, filing single, married filing jointly (one return with both spouses on it) or married
+            filing separately, with wages (W-2) and interest (1099-INT), the standard deduction and the 2025 deduction for seniors. It prepares
+            no state return, can't print the IRS forms or read them by AI yet, and says on the return when something it doesn't handle yet
+            applies, such as dependants.
           </p>
           <p>
             <b>Who it is for:</b> residents of every province and territory, also in the year they moved to or from Canada (except in Quebec),

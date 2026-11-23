@@ -1,12 +1,13 @@
-import { useId, useMemo, useRef, useState, type ReactNode } from "react";
+import { createContext, useContext, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link, useNavigate } from "react-router";
 import { ChevronRight, FileUp, PencilLine, Plus } from "lucide-react";
-import { canPrepare, isAsked, leftInModule, type Country, type Estimate, type Slip, type SlipList, type Step, type TaxYear } from "#shared";
+import { canPrepare, isAsked, leftInModule, type Country, type Estimate, type Person, type Slip, type SlipList, type Step, type TaxYear } from "#shared";
 import { Badge } from "@/components/ui/badge.tsx";
 import { Button } from "@/components/ui/button.tsx";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card.tsx";
 import { Label } from "@/components/ui/label.tsx";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select.tsx";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group.tsx";
 import { cn } from "@/lib/utils.ts";
 import { ApiError, describeError, fieldIssues } from "../api/client.ts";
 import { useMe } from "../auth/AuthProvider.tsx";
@@ -115,9 +116,23 @@ interface SlipForms {
   fail: (key: string, error: unknown) => void;
 }
 
+/**
+ * Whose items the form shows: on a joint return, the spouse chosen above the form (each spouse answers for their own
+ * income and slips); otherwise the return's owner.
+ */
+const MemberContext = createContext<Person | null>(null);
+function useMember(): { person: Person } {
+  const member = useContext(MemberContext);
+  const { person } = useReturn();
+  return { person: member ?? person };
+}
+
 export function ModuleStep({ module }: { module: ReturnModule }) {
   const { year, replace, reload } = useYear();
-  const { person } = useReturn();
+  const { person, members } = useReturn();
+  const [memberId, setMemberId] = useState(person.id);
+  const member = members.find((each) => each.id === memberId) ?? person;
+  const whose = useId();
   const navigate = useNavigate();
   const estimate = useEstimate();
   const slips = useSlips();
@@ -125,7 +140,9 @@ export function ModuleStep({ module }: { module: ReturnModule }) {
   // step): which slips are open, what was changed and not saved yet, the request running or how the last one ended,
   // and what an upload in a card said. This step is mounted once per return and module, so each has its own.
   const [open, setOpen] = useState<ReadonlySet<string>>(new Set());
-  const draft = useRef<Draft>({ added: {}, amounts: {} });
+  // One draft per person on the return, so switching between spouses keeps what was typed for each.
+  const drafts = useRef<Record<string, Draft>>({});
+  const draft = { current: (drafts.current[member.id] ??= { added: {}, amounts: {} }) };
   const [note, setNote] = useState<string | null>(null);
   const [request, setRequest] = useState<RequestState>({ status: "idle" });
   const [edited, setEdited] = useState<ReadonlySet<string>>(new Set());
@@ -189,12 +206,28 @@ export function ModuleStep({ module }: { module: ReturnModule }) {
   return (
     <StepLayout step={module} title={MODULE_PAGES[module].title}>
       <p className="-mt-3 text-sm text-muted-foreground">{MODULE_PAGES[module].about}</p>
+      {members.length > 1 ? (
+        <fieldset className="flex flex-col gap-2">
+          <legend id={whose} className="mb-2 text-sm font-medium">
+            Whose {MODULE_PAGES[module].title.toLowerCase()}?
+          </legend>
+          <RadioGroup aria-labelledby={whose} value={member.id} onValueChange={setMemberId} className="flex flex-wrap gap-4">
+            {members.map((each) => (
+              <Label key={each.id} className="flex min-w-0 items-center gap-2 font-normal wrap-anywhere">
+                <RadioGroupItem value={each.id} />
+                {each.name}
+              </Label>
+            ))}
+          </RadioGroup>
+        </fieldset>
+      ) : null}
+      <MemberContext value={member}>
       <ResourceView resource={estimate}>
         {(answers) => (
           <ResourceView resource={slips}>
             {(slipList) => (
               <ModuleForm
-                key={year.revision}
+                key={`${year.revision}-${member.id}`}
                 module={module}
                 estimate={answers}
                 slips={slipList}
@@ -210,6 +243,7 @@ export function ModuleStep({ module }: { module: ReturnModule }) {
           </ResourceView>
         )}
       </ResourceView>
+      </MemberContext>
     </StepLayout>
   );
 }
@@ -240,7 +274,7 @@ function ModuleForm({
 }) {
   const me = useMe();
   const { year } = useYear();
-  const { person } = useReturn();
+  const { person } = useMember();
   const editable = canPrepare(me);
   const rules = rulesFor(year.country, year.year)!;
   const given = estimate.input.answers[person.id] ?? {};
@@ -659,7 +693,7 @@ function SlipItem({
   entering: boolean;
   onEntering: (open: boolean) => void;
 }) {
-  const { person } = useReturn();
+  const { person } = useMember();
   const { year } = useYear();
   const name = slipName(year.country, year.year, type);
   return (
@@ -755,7 +789,7 @@ function AmountItem({
   onEntering: (open: boolean) => void;
 }) {
   const { year } = useYear();
-  const { person } = useReturn();
+  const { person } = useMember();
   const type = question.receipts ? rulesFor(year.country, year.year)!.slips.get(question.receipts)! : null;
   const added = type !== null && question.suggest === undefined;
   // A receipt by its title in lower case ("medical expense receipt"), keeping acronyms (RRSP); a slip by its code (T4FHSA).
@@ -832,7 +866,7 @@ function UploadSlip({ label, busy, onFile }: { label: string; busy: boolean; onF
 
 /** The module's amounts the slips already claim (rule lines with this `module`), when not zero. */
 function FromYourSlips({ module, estimate }: { module: ReturnModule; estimate: Estimate }) {
-  const { person } = useReturn();
+  const { person } = useMember();
   const { year } = useYear();
   const rules = rulesFor(year.country, estimate.input.year)!;
   const evaluation = useMemo(() => new Evaluation(rules, estimate.input), [rules, estimate.input]);

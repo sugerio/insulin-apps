@@ -19,6 +19,7 @@ import { parseFormula, references, type Formula } from "./formula.ts";
 //                                 resident all year (the rule set's `residency` says of which country)
 //   person.birthMonth             the month the person was born, 1 to 12 (with person.age, the month they turned an
 //                                 age this year, which prorates CPP in the year they turn 18 or 70)
+//   family.filingStatus           a married couple's filing status where the country has one (US: joint or separate)
 //   family.maritalStatus, family.partnerInYear, family.childrenUnder18, family.childrenUnder19
 //                                 the year's marital status, whether the spouse's return is prepared too, and the
 //                                 number of dependants under 18 (or 19) at the end of the year; also childrenUnder6,
@@ -848,11 +849,11 @@ function refType(ruleSet: RuleSet, path: string[], fail: (message: string) => ne
     }
     case "family":
       if (spouse) return fail(`${name}: the family facts are the same for both spouses; write family.${rest.join(".")}`);
-      if (rest.length === 1 && rest[0] === "maritalStatus") return "string";
+      if (rest.length === 1 && (rest[0] === "maritalStatus" || rest[0] === "filingStatus")) return "string";
       if (rest.length === 1 && rest[0] === "partnerInYear") return "boolean";
       if (rest.length === 1 && ["dependants", "childrenUnder6", "childrenUnder7", "childrenUnder17", "childrenUnder18", "childrenUnder19"].includes(rest[0]!)) return "number";
       if (rest.length === 1 && rest[0] === "childMonthsUnder6") return "list";
-      return fail(`${name}: family has maritalStatus, partnerInYear, dependants, childrenUnder6, childrenUnder7, childrenUnder17, childrenUnder18, childrenUnder19 and childMonthsUnder6`);
+      return fail(`${name}: family has maritalStatus, filingStatus, partnerInYear, dependants, childrenUnder6, childrenUnder7, childrenUnder17, childrenUnder18, childrenUnder19 and childMonthsUnder6`);
     case "person":
       if (rest.length === 1 && (rest[0] === "age" || rest[0] === "birthMonth")) return "number";
       if (rest.length === 1 && (rest[0] === "province" || rest[0] === "role")) return "string";

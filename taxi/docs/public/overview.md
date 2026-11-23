@@ -73,13 +73,15 @@ The US return covers:
 
 - Income: wages on Form W-2, and interest on Form 1099-INT (with savings bond and Treasury interest, and tax-exempt
   interest).
-- Filing status: single, or married filing separately. Each spouse prepared here gets their own return.
+- Filing status: single, married filing jointly, or married filing separately. A married couple chooses on Personal
+  info. Jointly, both spouses are on one return, the person preparing's: each enters their own W-2s and answers on it.
+  Separately, each spouse prepared here gets their own return.
 - Deductions: the standard deduction, with the additional amounts at 65 or older and for blindness, the smaller
   deduction of someone who can be claimed as a dependent, and the 2025 enhanced deduction for seniors.
 - Tax: the IRS Tax Table under $100,000 and the Tax Computation Worksheet from $100,000, the Additional Medicare Tax,
   the net investment income tax, and a credit for excess social security tax withheld by two or more employers.
 
-A joint return, dependants (with head of household, the child tax credit and the earned income credit), itemized
+Dependants (with head of household, the child tax credit and the earned income credit), itemized
 deductions, tips and overtime pay, and other income come in later versions. The app says so when one of them applies,
 instead of giving a wrong amount. A US return can't be printed on the IRS forms yet, and its forms can't be read by AI
 yet: enter each W-2 and 1099-INT on Income, then copy the amounts into the forms or into tax software.

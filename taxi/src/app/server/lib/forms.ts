@@ -1,4 +1,4 @@
-import { PROVINCE_NAMES, filesJointly, formsToAdd, isAdult, printBlockers, returnsOf, type Province, type Slip, type TaxYear } from "#shared";
+import { NO_INCOME_TAX_STATES, PROVINCE_NAMES, US_STATE_NAMES, filesJointly, formsToAdd, isAdult, printBlockers, returnsOf, type Province, type Slip, type TaxYear, type UsState } from "#shared";
 import { Dec } from "../../shared/engine/decimal.ts";
 import { Evaluation } from "../../shared/engine/evaluate.ts";
 import { fillForms, personalFacts } from "../../shared/engine/forms.ts";
@@ -26,11 +26,15 @@ export interface FormSource {
 
 const MAX_FORM_BYTES = 4 * 1024 * 1024;
 
-/** Who publishes a form, for the messages: the CRA on canada.ca, Revenu Québec on revenuquebec.ca, the IRS on irs.gov. */
+/**
+ * Who publishes a form, for the messages: the CRA on canada.ca, Revenu Québec on revenuquebec.ca, the IRS on irs.gov,
+ * California's Franchise Tax Board on ftb.ca.gov.
+ */
 function publisherOf(url: string): { name: string; site: string } {
   const host = new URL(url).hostname;
   if (host.endsWith("revenuquebec.ca")) return { name: "Revenu Québec", site: "revenuquebec.ca" };
   if (host.endsWith("irs.gov")) return { name: "the IRS", site: "irs.gov" };
+  if (host.endsWith("ftb.ca.gov")) return { name: "the Franchise Tax Board", site: "ftb.ca.gov" };
   return { name: "the CRA", site: "canada.ca" };
 }
 const capital = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
@@ -38,8 +42,12 @@ const capital = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
 // canada.ca never answers a request without a User-Agent and revenuquebec.ca refuses it (403); a Worker's fetch sends
 // none of its own. canada.ca also drops a bot's User-Agent that has no contact URL (measured 2026-11-23: "Mozilla/5.0
 // (compatible; Insulin Apps Taxi)" and "Taxi/1.0" are dropped, the same with "+https://…" added are answered), so keep
-// the URL.
+// the URL. ftb.ca.gov is the other way round: it refuses (403) a User-Agent with "https://" in it, and answers the same
+// one naming the site without its scheme (measured 2026-11-24), so it gets that.
 const USER_AGENT = "Mozilla/5.0 (compatible; InsulinAppsTaxi/1.0; +https://taxi.insulinapps.com)";
+const FTB_USER_AGENT = "Mozilla/5.0 (compatible; InsulinAppsTaxi/1.0; +taxi.insulinapps.com)";
+/** The User-Agent a publisher's site answers. */
+export const userAgentFor = (url: string) => (new URL(url).hostname.endsWith("ftb.ca.gov") ? FTB_USER_AGENT : USER_AGENT);
 // One form's download, its body included. The sites answer in a second or two; a first print downloads its few forms
 // one after another, and the whole print has to answer well within the 100 seconds Cloudflare waits for a response.
 const DOWNLOAD_TIMEOUT_MS = 15_000;
@@ -52,7 +60,7 @@ export function officialForms(send: typeof fetch = fetch, timeoutMs = DOWNLOAD_T
       const { name, site } = publisherOf(url);
       const signal = AbortSignal.timeout(timeoutMs);
       const download = async () => {
-        const response = await send(url, { headers: { Accept: "application/pdf", "User-Agent": USER_AGENT }, signal });
+        const response = await send(url, { headers: { Accept: "application/pdf", "User-Agent": userAgentFor(url) }, signal });
         const type = response.headers.get("Content-Type") ?? "";
         if (!response.ok || !type.startsWith("application/pdf")) {
           throw new ApiError("unavailable", `${capital(name)}'s form couldn't be downloaded from ${site} (HTTP ${response.status}). Try again later.`);
@@ -202,7 +210,13 @@ function worksheetOf(rules: RuleSet, evaluation: Evaluation, view: TaxYear, inpu
   const otherForms = toAdd.length > 0 ? 'the forms under "Forms to fill in yourself", below, and any other form not listed above' : "any form not listed above";
   const { intro, result } =
     rules.country === "us"
-      ? usWorksheet(rules, line, { prepared, formNames, otherForms, joint: filesJointly(view) })
+      ? usWorksheet(rules, line, {
+          prepared,
+          formNames,
+          otherForms,
+          joint: filesJointly(view),
+          state: evaluation.input.people.find((each) => each.id === input.personId)?.province ?? null,
+        })
       : canadaWorksheet(rules, evaluation, line, input.personId, { prepared, formNames, otherForms });
   const slips: WorksheetRow[] = input.slips.map((slip) => {
     const type = rules.slips.get(slip.type);
@@ -322,12 +336,14 @@ function canadaWorksheet(
 
 /**
  * A US return's worksheet text: what Taxi filled in, what is left to fill in by hand, and how to file (by mail to the
- * IRS, at the address irs.gov gives for the state, or by e-file); and the result, from the rules' result lines.
+ * IRS, at the address irs.gov gives for the state, or by e-file); for a California return, the same for Form 540, filed
+ * apart with the Franchise Tax Board; for another state, that its return is filed elsewhere; and the result, from the
+ * rules' result lines.
  */
 function usWorksheet(
   rules: RuleSet,
   line: (id: string) => Dec | null,
-  { prepared, formNames, otherForms, joint }: WorksheetText & { joint: boolean },
+  { prepared, formNames, otherForms, joint, state }: WorksheetText & { joint: boolean; state: string | null },
 ): { intro: string[]; result: WorksheetRow[] } {
   const named = (id: string) => `${rules.lines.get(id)!.label} (line ${id.split(".")[1]})`;
   const carLoan = line("S1A.30")?.gt(Dec.ZERO) ?? false;
@@ -338,6 +354,23 @@ function usWorksheet(
     owing && !owing.isZero() ? { text: named("F1040.37"), amount: money(owing) } : { text: named("F1040.34"), amount: money(line("F1040.34") ?? Dec.ZERO) },
     ...["F1040.9", "F1040.11a", "F1040.12e", "F1040.15", "F1040.16", "F1040.24", "F1040.33"].map((id) => ({ text: named(id), amount: money(line(id) ?? Dec.ZERO) })),
   ];
+  const california = line("CAL.files")?.eq(Dec.ONE) ?? false;
+  if (california) {
+    const caOwing = line("F540.111");
+    const caNamed = (id: string) => `California: ${rules.lines.get(id)!.label} (Form 540, line ${id.split(".")[1]})`;
+    result.push(
+      caOwing && !caOwing.isZero() ? { text: caNamed("F540.111"), amount: money(caOwing) } : { text: caNamed("F540.115"), amount: money(line("F540.115") ?? Dec.ZERO) },
+      ...["F540.17", "F540.19", "F540.31", "F540.64", "F540.78"].map((id) => ({ text: caNamed(id), amount: money(line(id) ?? Dec.ZERO) })),
+    );
+  }
+  const otherState =
+    state === null || state === "CA" || !(state in US_STATE_NAMES)
+      ? []
+      : [
+          NO_INCOME_TAX_STATES.includes(state as UsState)
+            ? `${US_STATE_NAMES[state as UsState]} has no state income tax return for wages and interest.`
+            : `Taxi prepares your federal return only: file your ${US_STATE_NAMES[state as UsState]} return with other software.`,
+        ];
   return {
     intro: [
       `Prepared with Taxi on ${prepared}. Taxi doesn't file returns. Before this worksheet are the IRS's own forms, filled in with what Taxi knows: ${formNames}.`,
@@ -345,6 +378,12 @@ function usWorksheet(
       `Still to do by hand before you file on paper: the social security numbers (${joint ? "yours, your spouse's" : "yours"} and each dependent's or child's) on Form 1040 and at the top of each schedule and form; your address; the questions Taxi doesn't ask (the presidential election campaign fund, digital assets, whether your main home was in the U.S., and "And in the U.S." for each dependent); your bank details if you want the refund deposited; on Form 2441, each care provider's name, address and identifying number (Part I);${carLoan ? " on Schedule 1-A, line 22, the vehicle identification number (VIN) of each car whose loan interest you deduct;" : ""}${business ? " on Schedule C, the business's description, code, name, address and accounting method, the questions at the top, Part IV about your vehicle if you deduct car expenses, and what your other expenses are in Part V; on Form 8995, each business's name;" : ""}${education ? " on page 2 of Form 8863, the student's social security number, each school's name, address and EIN with the Form 1098-T questions (line 22), and lines 23 to 26 for a student with the lifetime learning credit;" : ""} and ${otherForms}. Then sign and date Form 1040${joint ? " (both of you)" : ""}, and attach Copy B of each Form W-2. Keep your forms and records; the IRS may ask for them.`,
       "Mail the return to the IRS address for your state on irs.gov/WhereToFile: it is different when you send a payment with it.",
       "To file online: copy the amounts into IRS e-file software (irs.gov/efile) and file there.",
+      ...(california
+        ? [
+            `California: Form 540 and its schedules come after the federal forms, filled in the same way. Still to do by hand: the SSNs or ITINs (${joint ? "yours, your spouse's" : "yours"} and each dependent's), your address and county, ${joint ? "your dates of birth" : "your date of birth"}, any contributions, the care providers on FTB 3506 and each child's details on FTB 3514 if you have them; then sign Form 540${joint ? " (both of you)" : ""} and attach Copy B of each W-2 that shows California wages.`,
+            "Mail Form 540 to the Franchise Tax Board, separately from the federal return: with a payment, to PO Box 942867, Sacramento CA 94267-0001; otherwise to PO Box 942840, Sacramento CA 94240-0001. Or file it free online with CalFile or other e-file software (ftb.ca.gov/file).",
+          ]
+        : otherState),
       "Every line Taxi works out is listed below with how it was worked out.",
     ],
     result,

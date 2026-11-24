@@ -3,7 +3,7 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { OPS, getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { Document, parse, visit } from "yaml";
-import { measureIrsForm, readIrsFields, type IrsPlace } from "./form-irs.ts";
+import { ftbLineOf, measureIrsForm, readFtbFields, readIrsFields, type IrsPlace } from "./form-irs.ts";
 import { measureForm, measureRqForm, type LabelPlace, type PlaceSpec, type Shape, type TextItem } from "./form-measure.ts";
 import { RULES_ROOT } from "./rules-source.ts";
 
@@ -15,7 +15,8 @@ import { RULES_ROOT } from "./rules-source.ts";
 // TP-1.D(2025-12).pdf) is measured again from that PDF as <FORM>-fr: the two versions' boxes are not in the same places. This file reads the PDF (its text, and the lines and boxes it
 // draws); scripts/form-measure.ts says how a place is found from them. The two publishers draw their boxes differently,
 // so a form whose url in forms.yaml is on revenuquebec.ca is measured Revenu Québec's way. An IRS form isn't measured
-// from its drawing: its fields' boxes and labels place it (scripts/form-irs.ts), with the places in IRS_PLACES.
+// from its drawing: its fields' boxes and labels place it (scripts/form-irs.ts), with the places in IRS_PLACES. A
+// California form (its url on ftb.ca.gov) is placed the same way, from its fields' tooltips.
 //
 // The layout records the SHA-256 of the PDF it measured: the app refuses to fill a different file. The PDFs themselves
 // are never committed (the CRA's are Crown copyright; the repository holds no binary files).
@@ -247,6 +248,57 @@ const IRS_PLACES: Record<string, Record<string, IrsPlace>> = {
   },
   F8959: names("f1_1[0]"),
   F8960: names("f1_1[0]"),
+  // California's forms (FTB): the fields are named by FTB, their labels are their tooltips. Form 540's lines 7 to 10
+  // are a count and an amount whose labels say "line 7 box"; its filing status is one radio group, in the order of its
+  // boxes: 1 Single, 2 Married/RDP filing jointly, 4 Head of household, 3 Married/RDP filing separately, 5 Qualifying
+  // surviving spouse/RDP.
+  F540: {
+    firstName: { field: "540_form_1003", label: "Your first name" },
+    lastName: { field: "540_form_1005", label: "Last name" },
+    spouseFirstName: { field: "540_form_1008", label: "spouse’s or Registered Domestic Partner's" },
+    spouseLastName: { field: "540_form_1010", label: "Last name" },
+    ...Object.fromEntries([2, 3, 4, 5, 6].map((page, index) => [`names${page}`, { field: `540_form_2001#${index + 1}`, label: "Your name" }])),
+    single: { field: "540_form_1036 RB#1", label: "Filing status" },
+    joint: { field: "540_form_1036 RB#2", label: "Filing status" },
+    hoh: { field: "540_form_1036 RB#3", label: "Filing status" },
+    separate: { field: "540_form_1036 RB#4", label: "Filing status" },
+    qss: { field: "540_form_1036 RB#5", label: "Filing status" },
+    claimable: { field: "540_form_1040 CB", label: "Line 6. If someone can claim you" },
+    "7box": { field: "540_form_1041", label: "For line 7, line 8, line 9, and line 10", count: true },
+    "8box": { field: "540_form_1043", label: "Line 8. Blind", count: true },
+    "9box": { field: "540_form_1045", label: "Line 9. Senior", count: true },
+    "10box": { field: "540_form_2015", label: "Total dependent exemptions", count: true },
+    "7": { field: "540_form_1042", label: "line 7 box by $153" },
+    "8": { field: "540_form_1044", label: "line 8 box by $153" },
+    "9": { field: "540_form_1046", label: "line 9 box by $153" },
+    "10": { field: "540_form_2016", label: "by $475" },
+    ...columns("firstName", "first name", ["540_form_2003", "540_form_2007", "540_form_2011"]),
+    ...columns("lastName", "Last name", ["540_form_2004", "540_form_2008", "540_form_2012"]),
+    ...columns("relationship", "relationship to you", ["540_form_2006", "540_form_2010", "540_form_2014"]),
+    taxTable: { field: "540_form_2026 CB", label: "tax is from tax table" },
+    rateSchedule: { field: "540_form_2027 CB", label: "Tax Rate Schedule" },
+    noUseTax: { field: "540_form_3020 RB#1", label: "Line 91. If line 91 is zero" },
+    coverage: { field: "540_form_3021 CB", label: "full-year health care coverage" },
+  },
+  SCA540: {
+    names: { field: "540ca_form - 1000", label: "Name or names as shown" },
+    notItemizedFederal: { field: "540ca_form - 5000 CB", label: "did NOT itemize" },
+  },
+  SP540: {
+    names: { field: "540P-1001", label: "Name or names as shown" },
+    // Line 13's total; its item a has a box of its own, which also says line 13.
+    "13": { field: "540P-1027", label: "Add amounts on line a" },
+  },
+  F3506: {
+    names: { field: "3506 - 1000", label: "Name or names as shown" },
+  },
+  F3514: {
+    names: { field: "3514_Form_1000", label: "Name or Names as shown" },
+    // Line 20's label names the worksheet's line too.
+    "20": { field: "3514_Form_2028", label: "Line 20" },
+    ...columns("firstName", "First name", ["3514_Form_1008", "3514_Form_1016", "3514_Form_1024"]),
+    ...columns("lastName", "Last Name", ["3514_Form_1009", "3514_Form_1017", "3514_Form_1025"]),
+  },
 };
 
 /**
@@ -305,7 +357,9 @@ for (const spec of specs) {
   }
   const measured = publishedOn(form, "irs.gov")
     ? measureIrsForm(await readIrsFields(new Uint8Array(bytes)), IRS_PLACES[form])
-    : (publishedOn(form, "revenuquebec.ca") ? measureRqForm : measureForm)(items, shapes, placesOf(form));
+    : publishedOn(form, "ftb.ca.gov")
+      ? measureIrsForm(await readFtbFields(new Uint8Array(bytes)), IRS_PLACES[form], { lineOf: ftbLineOf, pagePrefix: true, skipAmbiguous: true })
+      : (publishedOn(form, "revenuquebec.ca") ? measureRqForm : measureForm)(items, shapes, placesOf(form));
   current[form] = { sha256: createHash("sha256").update(bytes).digest("hex"), pages: doc.numPages, ...measured };
   console.log(`form-layout: ${form}: ${doc.numPages} pages, ${Object.keys(measured.rows).length} rows, ${Object.keys(measured.columns ?? {}).length} rows with columns`);
 }

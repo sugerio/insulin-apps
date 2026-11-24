@@ -14,7 +14,8 @@ Taxi keeps its own database. Each organization has one profile, with:
 - **People:** name, relationship and birth date.
 - **Tax years:** who is in each one, the marital status on December 31, and a revision number that changes with each
   save. Both returns are prepared together when your spouse is in the year.
-- **Returns:** for each adult and year, the province on December 31 and whether they lived in Canada all year.
+- **Returns:** for each adult and year, the province (a US year: the state) on December 31 and whether they lived in
+  the country all year.
 - **Slips:** each adult's slips for the year, box by box as printed, and whether someone confirmed them against the
   paper slip (who and when).
 - **Answers:** each adult's answers to the year's questions, such as an RRSP deduction or whether they had rental
@@ -165,6 +166,13 @@ left under Before you file, and the download is refused.
   worksheet lists the others for the statement the IRS asks for). Each schedule gets the names on the return. On a
   joint return there is one PDF, the person preparing's. The social security numbers, the address and the questions
   Taxi doesn't ask stay blank, as do the care providers on Form 2441.
+- A California return prints after the federal forms on the Franchise Tax Board's own forms: Form 540, then Schedule
+  CA (540) when California changes an amount or Form 540 itemizes, Schedule P (540) when there is a California AMT or
+  the care credit is limited by it, form FTB 3506 for the care credit and form FTB 3514 for the California earned
+  income, Young Child and Foster Youth tax credits. Taxi downloads them from ftb.ca.gov and checks each file the same
+  way. FTB's fill-in fields carry their line in a tooltip, which places each row; FTB's forms are in whole dollars, with
+  the cents printed. Form 540 gets the names, the filing status, the exemption boxes and up to three dependents. The
+  worksheet says where to mail Form 540 (apart from the federal return) and what is left to fill in.
 - A form the return needs that Taxi doesn't print is named under "Forms to fill in yourself", on Finish and on the
   worksheet: for a US return, Schedule B when the taxable interest is more than $1,500; Revenu Québec's Schedule D (the solidarity tax credit) for a resident of Quebec; Schedule 6 for residents
   of Quebec, Alberta or Nunavut (5005-S6, 5009-S6, 5014-S6) when the return gets the Canada workers benefit or reports

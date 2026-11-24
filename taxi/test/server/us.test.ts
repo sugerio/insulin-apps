@@ -2,7 +2,7 @@ import { PDFArray, PDFDocument, PDFName, type PDFPage } from "pdf-lib";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { Estimate, Person, SlipList, TaxYear, YearList } from "#shared";
-import type { FormSource } from "../../src/app/server/lib/forms.ts";
+import { userAgentFor, type FormSource } from "../../src/app/server/lib/forms.ts";
 import type { ReadSlip } from "../../src/app/server/lib/reader.ts";
 import { rulesFor } from "../../src/app/shared/rules/index.ts";
 import { startServer, type TestServer } from "../support/server.ts";
@@ -31,7 +31,7 @@ describe("a United States year", () => {
     const alex = await addPerson("Alex Rivera", "self");
     const year = await json<TaxYear>(server.call("POST", "/api/years", { body: { year: 2025, country: "us", people: [alex.id] } }), 201);
     expect(year.country).toBe("us");
-    expect(year.issues.map((issue) => issue.code).sort()).toEqual(["no_marital_status", "no_residency"]);
+    expect(year.issues.map((issue) => issue.code).sort()).toEqual(["no_marital_status", "no_province", "no_residency"]);
     expect(year.issues.find((issue) => issue.code === "no_residency")?.message).toBe("Say whether Alex Rivera was a U.S. citizen or resident alien all year.");
     // Starting it again for the US gives the same year; for Canada, it is refused.
     expect((await json<TaxYear>(server.call("POST", "/api/years", { body: { year: 2025, country: "us", people: [alex.id] } }))).country).toBe("us");
@@ -46,21 +46,33 @@ describe("a United States year", () => {
     expect((await json<TaxYear>(server.call("POST", "/api/years", { body: { year: 2025, people: [alex.id] } }), 201)).country).toBe("ca");
   });
 
-  it("records no province, and no common-law status", async () => {
+  it("records a state, not a province, and no common-law status", async () => {
     const alex = await addPerson("Alex Rivera", "self");
     const sam = await addPerson("Sam Rivera", "spouse");
     const year = await json<TaxYear>(server.call("POST", "/api/years", { body: { year: 2025, country: "us", people: [alex.id, sam.id] } }), 201);
+    let revision = year.revision;
     const save = (maritalStatus: string, province: string | null) =>
       server.call("PUT", "/api/years/2025/personal-info", {
-        body: { revision: year.revision, maritalStatus, adults: [{ personId: alex.id, province, residentAllYear: true }] },
+        body: { revision, maritalStatus, adults: [{ personId: alex.id, province, residentAllYear: true }] },
       });
     const withProvince = await json<{ error: { issues: { path: string }[] } }>(save("married", "ON"), 400);
     expect(withProvince.error.issues.map((issue) => issue.path)).toEqual(["adults.0.province"]);
     expect((await save("common_law", null)).status).toBe(400);
-    const saved = await json<TaxYear>(save("married", null));
-    expect(saved.adults[0]).toEqual({ personId: alex.id, province: null, residentAllYear: true, prepared: true });
-    // Married, the couple still has to choose to file jointly or separately.
-    expect(saved.issues.map((issue) => issue.code)).toEqual(["no_filing_status", "no_residency"]);
+    const noState = await json<TaxYear>(save("married", null));
+    revision = noState.revision;
+    expect(noState.adults[0]).toEqual({ personId: alex.id, province: null, residentAllYear: true, prepared: true });
+    expect(noState.issues.filter((issue) => issue.personId === alex.id).map((issue) => [issue.code, issue.message])).toEqual([
+      ["no_province", "Choose Alex Rivera's state on December 31."],
+    ]);
+    // Any state is recorded: one whose return the app doesn't prepare isn't an issue, as the federal return is complete.
+    const saved = await json<TaxYear>(save("married", "NY"));
+    expect(saved.adults[0]).toEqual({ personId: alex.id, province: "NY", residentAllYear: true, prepared: true });
+    // Married, the couple still has to choose to file jointly or separately; Sam's state and residency are still to say.
+    expect(saved.issues.map((issue) => [issue.code, issue.personId])).toEqual([
+      ["no_filing_status", null],
+      ["no_province", sam.id],
+      ["no_residency", sam.id],
+    ]);
   });
 
   it("works out the return with the US rules, from a W-2 to the refund, and finishes it", async () => {
@@ -68,7 +80,7 @@ describe("a United States year", () => {
     let year = await json<TaxYear>(server.call("POST", "/api/years", { body: { year: 2025, country: "us", people: [alex.id] } }), 201);
     year = await json<TaxYear>(
       server.call("PUT", "/api/years/2025/personal-info", {
-        body: { revision: year.revision, maritalStatus: "single", adults: [{ personId: alex.id, province: null, residentAllYear: true }] },
+        body: { revision: year.revision, maritalStatus: "single", adults: [{ personId: alex.id, province: "FL", residentAllYear: true }] },
       }),
     );
     // A Canadian slip doesn't belong on a US return.
@@ -131,7 +143,7 @@ describe("printing a US return", () => {
   const ANSWERS = { hasWages: true, hasInterest: false, hasTipsOrOvertime: false, hasCarLoan: false, hasSelfEmployment: false, hasStudentLoan: false, paidForEducation: false, hasDividends: false, hasBrokerSales: false, hasLossCarryover: false, hasIraDistribution: false, hasPension: false, hasSocialSecurity: false, hasOtherIncome: false, hasHsa: false, hasIraContribution: false, hasItemized: false, canBeClaimed: false, isBlind: false, estimatedPayments: "0" };
 
   /** A finished US year: Alex alone, or Alex and Sam filing jointly; each with a W-2 and every answer given. */
-  async function finished(joint: boolean) {
+  async function finished(joint: boolean, state = "FL") {
     const alex = await addPerson("Alex Rivera", "self", "1984-02-02");
     const sam = joint ? await addPerson("Sam Rivera", "spouse", "1986-06-06") : undefined;
     const adults = [alex, ...(sam ? [sam] : [])];
@@ -142,13 +154,16 @@ describe("printing a US return", () => {
           revision: year.revision,
           maritalStatus: joint ? "married" : "single",
           ...(joint ? { filingStatus: "joint" } : {}),
-          adults: adults.map((each) => ({ personId: each.id, province: null, residentAllYear: true })),
+          adults: adults.map((each) => ({ personId: each.id, province: state, residentAllYear: true })),
         },
       }),
     );
     for (const [index, each] of adults.entries()) {
-      year = await json<TaxYear>(server.call("POST", "/api/years/2025/slips", { body: { revision: year.revision, ...W2(each.id, index ? "Initech" : "Acme Tools", index ? "30000" : "40000") } }), 201);
-      year = await json<TaxYear>(server.call("PUT", "/api/years/2025/answers", { body: { revision: year.revision, personId: each.id, answers: ANSWERS } }));
+      const w2 = W2(each.id, index ? "Initech" : "Acme Tools", index ? "30000" : "40000");
+      const boxes = state === "CA" ? { ...w2.boxes, 15: "CA", 16: w2.boxes[1], 17: "1500" } : w2.boxes;
+      year = await json<TaxYear>(server.call("POST", "/api/years/2025/slips", { body: { revision: year.revision, ...w2, boxes } }), 201);
+      const california = state === "CA" ? { livedInCaliforniaAllYear: true, ...(index === 0 ? { caFullYearCoverage: true, caUseTax: "0", caPaidRent: false } : {}), caEstimatedPayments: "0" } : {};
+      year = await json<TaxYear>(server.call("PUT", "/api/years/2025/answers", { body: { revision: year.revision, personId: each.id, answers: { ...ANSWERS, ...california } } }));
     }
     year = await json<TaxYear>(server.call("POST", "/api/years/2025/slips/confirm", { body: { revision: year.revision } }));
     expect(year.returns[0]!.steps.finish).toBe("done");
@@ -186,6 +201,50 @@ describe("printing a US return", () => {
     expect(worksheet).toContain("Refund (line 34)");
     expect(worksheet).toContain("irs.gov/WhereToFile");
     expect(worksheet).toContain("W-2 from Acme Tools");
+  });
+
+  it("prints a California resident's Form 540 after Form 1040, from ftb.ca.gov, in whole dollars, with where to mail it", async () => {
+    server.close();
+    const source = standIn();
+    server = await startServer({ now: () => 1_767_225_600_000, forms: source });
+    const { alex } = await finished(false, "CA");
+    const response = await server.call("GET", `/api/years/2025/returns/${alex.id}/forms`);
+    expect(response.status, await response.clone().text()).toBe(200);
+    expect(source.fetched).toEqual(["https://www.irs.gov/pub/irs-prior/f1040--2025.pdf", "https://www.ftb.ca.gov/forms/2025/2025-540.pdf"]);
+    const pages = await pagesOf(await response.arrayBuffer());
+    const f540 = rules.forms.get("F540")!;
+    const start = rules.forms.get("F1040")!.pages;
+    const place = (key: string) => f540.fields.find((field) => field.key === key)!;
+    const near = (key: string) => pages[start + place(key).page - 1]!.filter((item) => Math.abs(item.y - place(key).y) < 4).map((item) => item.text);
+    // Whole dollars: FTB prints the cents.
+    expect(near("13")).toContain("40,000");
+    expect(near("13")).not.toContain("40,000.00");
+    expect(near("71")).toContain("1,500");
+    const worksheet = pages.slice(start + f540.pages).flat().map((item) => item.text).join(" ");
+    expect(worksheet).toContain("California: Refund or no amount due (Form 540, line 115)");
+    expect(worksheet).toContain("PO Box 942840");
+    // ftb.ca.gov refuses a User-Agent with "https://" in it (canada.ca needs one): it gets the contact without it.
+    expect(userAgentFor(f540.url)).toMatch(/Taxi\/\d.*\+taxi\.insulinapps\.com\)$/);
+    expect(userAgentFor(rules.forms.get("F1040")!.url)).toContain("+https://");
+  });
+
+  it("says a state other than California is filed elsewhere", async () => {
+    const { alex } = await finished(false, "NY");
+    const year = await json<TaxYear>(server.call("GET", "/api/years/2025"));
+    expect(year.issues).toEqual([]);
+    const estimate = await json<{ result: { people: { lines: { id: string }[] }[] } }>(server.call("GET", "/api/years/2025/estimate"));
+    expect(estimate.result.people[0]!.lines.some((line) => line.id.startsWith("F540"))).toBe(false);
+    void alex;
+  });
+
+  it("refuses a province on a US year and a state on a Canadian one", async () => {
+    const alex = await addPerson("Alex Rivera", "self");
+    const year = await json<TaxYear>(server.call("POST", "/api/years", { body: { year: 2025, country: "ca", people: [alex.id] } }), 201);
+    const refused = await json<{ error: { issues: { path: string; message: string }[] } }>(
+      server.call("PUT", "/api/years/2025/personal-info", { body: { revision: year.revision, maritalStatus: "single", adults: [{ personId: alex.id, province: "CA", residentAllYear: true }] } }),
+      400,
+    );
+    expect(refused.error.issues).toEqual([{ path: "adults.0.province", message: "Choose a province or territory" }]);
   });
 
   it("prints a joint return once, as the person preparing's, with both names; the spouse has none to print", async () => {
@@ -254,7 +313,7 @@ describe("a joint return", () => {
   }
   const personal = (revision: number, filingStatus: string | null, adults: { personId: string }[]) =>
     server.call("PUT", "/api/years/2025/personal-info", {
-      body: { revision, maritalStatus: "married", filingStatus, adults: adults.map(({ personId }) => ({ personId, province: null, residentAllYear: true })) },
+      body: { revision, maritalStatus: "married", filingStatus, adults: adults.map(({ personId }) => ({ personId, province: "FL", residentAllYear: true })) },
     });
 
   it("is one return with both spouses on it, and two again when they file separately", async () => {
@@ -341,7 +400,7 @@ describe("dependants on a US return", () => {
           revision: year.revision,
           maritalStatus: sam ? "married" : "single",
           ...(sam ? { filingStatus: "separate" } : {}),
-          adults: [alex, ...(sam ? [sam] : [])].map((each) => ({ personId: each.id, province: null, residentAllYear: true })),
+          adults: [alex, ...(sam ? [sam] : [])].map((each) => ({ personId: each.id, province: "FL", residentAllYear: true })),
         },
       }),
     );
@@ -396,7 +455,7 @@ describe("the earned income credit", () => {
     const rae = await addPerson("Rae Lopez", "self", "1995-04-04");
     let year = await json<TaxYear>(server.call("POST", "/api/years", { body: { year: 2025, country: "us", people: [rae.id] } }), 201);
     year = await json<TaxYear>(
-      server.call("PUT", "/api/years/2025/personal-info", { body: { revision: year.revision, maritalStatus: "single", adults: [{ personId: rae.id, province: null, residentAllYear: true }] } }),
+      server.call("PUT", "/api/years/2025/personal-info", { body: { revision: year.revision, maritalStatus: "single", adults: [{ personId: rae.id, province: "FL", residentAllYear: true }] } }),
     );
     year = await json<TaxYear>(
       server.call("POST", "/api/years/2025/slips", {
@@ -423,7 +482,7 @@ describe("the earned income credit", () => {
     let year = await json<TaxYear>(server.call("POST", "/api/years", { body: { year: 2025, country: "us", people: [max.id, liv.id, kit.id] } }), 201);
     year = await json<TaxYear>(
       server.call("PUT", "/api/years/2025/personal-info", {
-        body: { revision: year.revision, maritalStatus: "married", filingStatus: "separate", adults: [max, liv].map((each) => ({ personId: each.id, province: null, residentAllYear: true })) },
+        body: { revision: year.revision, maritalStatus: "married", filingStatus: "separate", adults: [max, liv].map((each) => ({ personId: each.id, province: "FL", residentAllYear: true })) },
       }),
     );
     year = await json<TaxYear>(
@@ -467,7 +526,7 @@ describe("hints on a US year", () => {
       revision: year.revision,
       maritalStatus: "married",
       filingStatus,
-      adults: [alex, sam].map((each) => ({ personId: each.id, province: null, residentAllYear: true })),
+      adults: [alex, sam].map((each) => ({ personId: each.id, province: "FL", residentAllYear: true })),
     });
     year = await json<TaxYear>(server.call("PUT", "/api/years/2025/personal-info", { body: facts("separate") }));
     const none = { hasWages: true, hasInterest: false, hasTipsOrOvertime: false, hasCarLoan: false, hasSelfEmployment: false, hasStudentLoan: false, paidForEducation: false, hasDividends: false, hasBrokerSales: false, hasLossCarryover: false, hasIraDistribution: false, hasPension: false, hasSocialSecurity: false, hasOtherIncome: false, hasHsa: false, hasIraContribution: false, hasItemized: false, canBeClaimed: false, isBlind: false, estimatedPayments: "0", spouseItemizes: false };

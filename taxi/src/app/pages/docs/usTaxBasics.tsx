@@ -1,11 +1,12 @@
 import { DocLink, InApp, type DocTopic } from "./parts.tsx";
 
-// Docs › US tax basics: the background a person needs to prepare a US federal return. General information.
+// Docs › US tax basics: the background a person needs to prepare a US federal return, and California's. General
+// information.
 
 export const usTaxBasics: DocTopic = {
   slug: "us-tax-basics",
   title: "US tax basics",
-  summary: "Form 1040, the deadline, filing status, the forms you get, the standard deduction and capital gains, in plain words.",
+  summary: "Form 1040, the deadline, filing status, the forms you get, the standard deduction, capital gains and California's Form 540, in plain words.",
   group: "tax",
   generalInformation: true,
   sections: [
@@ -18,7 +19,10 @@ export const usTaxBasics: DocTopic = {
             A U.S. citizen or resident files Form 1040 with the IRS (the Internal Revenue Service) for each calendar year. It reports income, takes
             deductions and credits, and works out the federal tax. Each state has its own return.
           </p>
-          <InApp>a US year prepares the federal Form 1040 only, and prints it on the IRS's own forms to sign and mail.</InApp>
+          <InApp>
+            a US year prepares the federal Form 1040, and California's Form 540 for a California resident, and prints them on the IRS's and the
+            Franchise Tax Board's own forms to sign and mail. For another state, file the state return with other software.
+          </InApp>
         </>
       ),
     },
@@ -120,6 +124,29 @@ export const usTaxBasics: DocTopic = {
           <p>
             The alternative minimum tax (AMT) is a second way of working out the tax, with fewer deductions and tax-free interest from some bonds
             added back. You pay the larger of the two. Few people owe it.
+          </p>
+        </>
+      ),
+    },
+    {
+      id: "california",
+      title: "California's Form 540",
+      body: (
+        <>
+          <p>
+            A full-year resident of California files Form 540 with the Franchise Tax Board (FTB), by the same April 15 deadline. It starts from
+            the federal AGI. Schedule CA then takes out what California doesn't tax, such as social security benefits and Treasury interest, and
+            adds what it taxes and the federal return doesn't, such as interest on other states' bonds and health savings accounts.
+          </p>
+          <p>
+            California has its own standard deduction ($5,706, or $11,412 jointly or as head of household) and its own tax rates, from 1% to
+            12.3%. Instead of personal exemptions, it gives exemption credits, such as $153 for each person and $475 for each dependent. Low-income
+            workers can get the California earned income tax credit, and a parent of a child under 6 the Young Child Tax Credit; both are paid
+            even with no tax to pay. A renter with a modest income gets a small renter's credit.
+          </p>
+          <p>
+            Married couples in California, a community property state, usually file jointly: filing separately splits the income you earned
+            together between you (Form 8958).
           </p>
         </>
       ),

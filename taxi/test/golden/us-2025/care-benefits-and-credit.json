@@ -9,7 +9,7 @@
         "name": "Kay Lund",
         "role": "self",
         "birthDate": "1984-08-08",
-        "province": null,
+        "province": "FL",
         "residentAllYear": true
       },
       {
@@ -17,7 +17,7 @@
         "name": "Eli Lund",
         "role": "spouse",
         "birthDate": "1985-09-09",
-        "province": null,
+        "province": "FL",
         "residentAllYear": true
       }
     ],

@@ -9,7 +9,7 @@
         "name": "Rosa Vega",
         "role": "self",
         "birthDate": "1990-05-05",
-        "province": null,
+        "province": "FL",
         "residentAllYear": true
       }
     ],

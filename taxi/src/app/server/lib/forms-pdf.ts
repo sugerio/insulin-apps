@@ -42,6 +42,12 @@ export async function buildReturnPdf(forms: { filled: FilledForm; template: Uint
       const page = pages[amount.page - 1];
       if (!page) continue;
       const { dollars, cents } = formAmount(amount.value, filled.form.url.includes("revenuquebec.ca") ? "minus" : "brackets", filled.language);
+      // A whole-dollar form (California's) prints its own cents: a whole amount is written as dollars only, and a
+      // decimal (FTB 3506's line 7, FTB 3514's line 26) with its decimal point.
+      if (filled.form.wholeDollars && amount.value.isInteger()) {
+        page.drawText(dollars, { x: amount.x - 2.5 - font.widthOfTextAtSize(dollars, SIZE), y: amount.y, size: SIZE, font, color: INK });
+        continue;
+      }
       if (amount.plain) {
         const text = `${dollars}${filled.language === "fr" ? "," : "."}${cents}`;
         page.drawText(text, { x: amount.x - 2.5 - font.widthOfTextAtSize(text, SIZE), y: amount.y, size: SIZE, font, color: INK });

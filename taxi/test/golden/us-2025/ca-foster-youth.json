@@ -1,0 +1,132 @@
+{
+  "about": "California, single, 22, $14,000 of wages, in California foster care at 13 or older: the California EITC without a child and the Foster Youth Tax Credit",
+  "input": {
+    "country": "us",
+    "year": 2025,
+    "people": [
+      {
+        "id": "p1",
+        "name": "Jay Diaz",
+        "role": "self",
+        "birthDate": "2003-07-07",
+        "province": "CA",
+        "residentAllYear": true
+      }
+    ],
+    "family": {
+      "maritalStatus": "single",
+      "dependants": []
+    },
+    "answers": {
+      "p1": {
+        "hasWages": true,
+        "hasInterest": false,
+        "hasTipsOrOvertime": false,
+        "canBeClaimed": false,
+        "isBlind": false,
+        "estimatedPayments": "0",
+        "hasCarLoan": false,
+        "hasSelfEmployment": false,
+        "hasStudentLoan": false,
+        "paidForEducation": false,
+        "hasDividends": false,
+        "hasBrokerSales": false,
+        "hasIraDistribution": false,
+        "hasPension": false,
+        "hasSocialSecurity": false,
+        "hasLossCarryover": false,
+        "hasHsa": false,
+        "hasIraContribution": false,
+        "hasItemized": false,
+        "hasOtherIncome": false,
+        "paidForCare": false,
+        "livedInCaliforniaAllYear": true,
+        "caFullYearCoverage": true,
+        "caUseTax": "0",
+        "caPaidRent": false,
+        "caEstimatedPayments": "0",
+        "fosterYouth": true
+      }
+    },
+    "slips": [
+      {
+        "id": "p1-w2-0",
+        "person": "p1",
+        "type": "W2",
+        "issuer": "Grocer",
+        "boxes": {
+          "1": "14000",
+          "2": "0",
+          "4": "868",
+          "5": "14000",
+          "6": "203",
+          "15": "CA",
+          "16": "14000",
+          "17": "0"
+        }
+      }
+    ]
+  },
+  "expected": {
+    "p1": {
+      "F1040.19": "0",
+      "F1040.27a": "0",
+      "F1040.28": "0",
+      "S8812.12": "0",
+      "F1040.1a": "14000",
+      "F1040.1e": "0",
+      "S3.2": "0",
+      "F1040.2a": "0",
+      "F1040.2b": "0",
+      "F1040.9": "14000",
+      "F1040.11a": "14000",
+      "F1040.12e": "15750",
+      "F1040.13b": "0",
+      "F1040.13a": "0",
+      "F1040.8": "0",
+      "F1040.10": "0",
+      "F1040.15": "0",
+      "F1040.16": "0",
+      "F8959.7": "0",
+      "F8960.17": "0",
+      "F1040.24": "0",
+      "F1040.25c": "0",
+      "S3.11": "0",
+      "F1040.33": "0",
+      "F1040.34": "0",
+      "F1040.37": "0",
+      "F6251.4": "14000",
+      "F6251.6": "0",
+      "F6251.11": "0",
+      "F1040.18": "0",
+      "F540.13": "14000",
+      "F540.14": "0",
+      "F540.16": "0",
+      "F540.17": "14000",
+      "F540.18": "5706",
+      "F540.19": "8294",
+      "F540.31": "83",
+      "F540.32": "153",
+      "F540.35": "0",
+      "F540.40": "0",
+      "F540.46": "0",
+      "F540.48": "0",
+      "F540.61": "0",
+      "F540.62": "0",
+      "F540.63": "0",
+      "F540.64": "0",
+      "F540.71": "0",
+      "F540.72": "0",
+      "F540.75": "174",
+      "F540.76": "0",
+      "F540.77": "1189",
+      "F540.78": "1363",
+      "F540.91": "0",
+      "F540.115": "1363",
+      "F540.111": "0",
+      "SP.21": "14000",
+      "SP.24": "0",
+      "F3514.19": "14000"
+    }
+  }
+}

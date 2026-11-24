@@ -8,7 +8,9 @@ and the repository's root `AGENTS.md`, before changing code.
 Taxi prepares Canadian T1 returns for one profile per organization: the person preparing and, together, their
 spouse or common-law partner, in any province or territory; a resident of Quebec also gets Revenu Québec's TP-1. A
 tax year is of one country (`tax_years.country`): a US year uses the federal Form 1040 rules in `rules/us/2025/`, and
-`rulesFor(country, year)` picks the rule set. It
+`rulesFor(country, year)` picks the rule set. A US year records each adult's state (`returns.state`, as the API's
+`province`), and a California resident's return adds Form 540 (`california.yaml`, selected by `person.province`, like
+a province's rules in Canada). It
 never files with the CRA: it fills in the CRA's (and Revenu Québec's) own forms for the person to sign and mail. It runs on the Insulin app template: one npm package, Vite + React +
 Nitro, deployed as a Cloudflare Worker with one D1 database. Users, roles and permissions come from the Insulin
 platform; the organization is the tenant.

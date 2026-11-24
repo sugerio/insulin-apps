@@ -99,6 +99,20 @@ describe("2025 US forms", () => {
     ["amt-private-activity-bonds", "F1040,S2,S3,F6251,F8959,F8960"],
     ["eic-dividends-over-limit", "F1040,S8812"],
     ["dividends-mostly-single", "F1040,S1A"],
+    // California: Form 540 after the federal forms, with Schedule CA when it adjusts or itemizes, Schedule P for the AMT,
+    // and the credit forms.
+    ["ca-amt-property-tax", "F1040,S2,SA,F8959,F540,SCA540,SP540"],
+    ["ca-blind-senior", "F1040,S1A,F540"],
+    ["ca-dependent-student", "F1040,F540"],
+    ["ca-early-distribution-owes", "F1040,S2,F540"],
+    ["ca-foster-youth", "F1040,F540,F3514"],
+    ["ca-high-income-itemized", "F1040,S2,SA,F8959,F540,SCA540"],
+    ["ca-hoh-care", "F1040,S3,F2441,S8812,F540,F3506"],
+    ["ca-hsa-wages", "F1040,S1,F8889,F540,SCA540"],
+    ["ca-joint-young-children", "F1040,SEIC,S8812,F540,F3514"],
+    ["ca-retirees-joint", "F1040,S1A,F540,SCA540"],
+    ["ca-self-employed-parent", "F1040,S1,S2,SC,SE,SEIC,S8812,F540,F3514"],
+    ["ca-single-renter", "F1040,F540,SCA540"],
   ] as const) {
     it(`${name}: its forms hold the case's expected lines`, () => {
       const example = golden(name);
@@ -128,6 +142,33 @@ describe("2025 US forms", () => {
       expect(checked).toBeGreaterThan(15);
     });
   }
+
+  it("fills Form 540's names, filing status, exemption boxes, dependents and ticks, in whole dollars", () => {
+    const f540 = formOf(print(golden("ca-joint-young-children").input), "F540");
+    expect(f540.form.wholeDollars).toBe(true);
+    expect(["firstName", "lastName", "spouseFirstName", "joint", "single", "7box", "10box", "names2"].map((key) => at(f540, key))).toEqual([
+      "Ana", "Ruiz", "Ben", "X", undefined, "2", "2", "Ana Ruiz and Ben Ruiz",
+    ]);
+    expect(["firstName@1", "relationship@1", "firstName@2"].map((key) => at(f540, key))).toEqual(["Mia", "Child", "Leo"]);
+    // No use tax: 0 is written, with its box; full-year coverage is ticked.
+    expect(["91", "noUseTax", "coverage"].map((key) => at(f540, key))).toEqual(["0", "X", "X"]);
+    const owes = formOf(print(golden("ca-early-distribution-owes").input), "F540");
+    expect(["91", "noUseTax", "111", "115"].map((key) => at(owes, key))).toEqual(["75", undefined, golden("ca-early-distribution-owes").expected.p1!["F540.111"], undefined]);
+    // Over $100,000 of taxable income, the Tax Rate Schedule's box.
+    const high = formOf(print(golden("ca-high-income-itemized").input), "F540");
+    expect(["taxTable", "rateSchedule"].map((key) => at(high, key))).toEqual([undefined, "X"]);
+  });
+
+  it("fills Schedule CA's columns and Part II, and Schedule P's AMT", () => {
+    const filled = print(golden("ca-amt-property-tax").input);
+    const sca = formOf(filled, "SCA540");
+    const expected = golden("ca-amt-property-tax").expected.p1!;
+    // Part II: federal Schedule A less the state income tax plus the taxes over $40,000, then the limitation.
+    expect(["5aB", "5eC", "18", "29", "30"].map((key) => at(sca, key))).toEqual(["25000", "105000", String(Number(at(sca, "p6:17A")) - 25000 + 105000), at(sca, "29"), expected["F540.18"]]);
+    const sp = formOf(filled, "SP540");
+    expect(["21", "24", "26"].map((key) => at(sp, key))).toEqual([expected["SP.21"], expected["SP.24"], expected["F540.61"]]);
+    expect(Number(at(sp, "18"))).toBeLessThan(0);
+  });
 
   it("fills Form 1040's names, filing status and table of dependants, ticking the child tax credit for each child", () => {
     const f1040 = formOf(print(golden("hoh-two-children").input), "F1040");

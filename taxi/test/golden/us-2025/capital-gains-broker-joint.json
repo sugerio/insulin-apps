@@ -9,7 +9,7 @@
         "name": "Omar Reed",
         "role": "self",
         "birthDate": "1975-03-03",
-        "province": null,
+        "province": "FL",
         "residentAllYear": true
       },
       {
@@ -17,7 +17,7 @@
         "name": "Lena Reed",
         "role": "spouse",
         "birthDate": "1977-04-04",
-        "province": null,
+        "province": "FL",
         "residentAllYear": true
       }
     ],

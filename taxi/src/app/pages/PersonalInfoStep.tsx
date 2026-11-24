@@ -1,8 +1,12 @@
 import { useEffect, useId, useMemo, useState, type ReactNode } from "react";
 import { Link, useNavigate } from "react-router";
 import {
+  NO_INCOME_TAX_STATES,
   PROVINCES,
   SUPPORTED_PROVINCES,
+  SUPPORTED_STATES,
+  US_STATES,
+  US_STATE_NAMES,
   canPrepare,
   isIssueOf,
   maritalStatusesFor,
@@ -11,6 +15,8 @@ import {
   type FilingStatus,
   type MaritalStatus,
   type Province,
+  type Region,
+  type UsState,
   type TaxYear,
 } from "#shared";
 import { Button } from "@/components/ui/button.tsx";
@@ -187,7 +193,8 @@ function TaxNotes({ year }: { year: number }) {
 // The year's facts
 
 interface AdultDraft {
-  province: Province | null;
+  /** The province, or on a US return the state. */
+  province: Region | null;
   residentAllYear: boolean | null;
 }
 
@@ -606,8 +613,9 @@ function YearFacts({
 }
 
 /**
- * The province and residency, then `children`: the questions for someone who didn't live in Canada all year. A US
- * return is federal only: it asks no state, only whether the person was a U.S. citizen or resident all year.
+ * The province (or, on a US return, the state) and residency, then `children`: the questions for someone who didn't live
+ * in Canada all year, or a US return's questions about the person. A state other than California gets the federal
+ * return only, and says so.
  */
 function AdultCard({
   country,
@@ -626,6 +634,8 @@ function AdultCard({
 }) {
   const id = useId();
   const others = PROVINCES.filter((province) => !SUPPORTED_PROVINCES.includes(province));
+  const federalOnly = US_STATES.filter((state) => !SUPPORTED_STATES.includes(state));
+  const state = country === "us" && draft.province !== null ? (draft.province as UsState) : null;
   return (
     <Card>
       <CardHeader>
@@ -660,7 +670,40 @@ function AdultCard({
             ) : null}
           </NativeSelect>
         </div>
-        ) : null}
+        ) : (
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor={`${id}-state`}>State on December 31</Label>
+            <NativeSelect
+              id={`${id}-state`}
+              value={draft.province ?? ""}
+              onChange={(event) => onChange({ province: (event.target.value || null) as Region | null })}
+              disabled={!editable}
+            >
+              <NativeSelectOption value="">Choose…</NativeSelectOption>
+              <NativeSelectOptGroup label="State return prepared here too">
+                {SUPPORTED_STATES.map((each) => (
+                  <NativeSelectOption key={each} value={each}>
+                    {US_STATE_NAMES[each]}
+                  </NativeSelectOption>
+                ))}
+              </NativeSelectOptGroup>
+              <NativeSelectOptGroup label="Federal return only">
+                {federalOnly.map((each) => (
+                  <NativeSelectOption key={each} value={each}>
+                    {US_STATE_NAMES[each]}
+                  </NativeSelectOption>
+                ))}
+              </NativeSelectOptGroup>
+            </NativeSelect>
+            {state !== null && !SUPPORTED_STATES.includes(state) ? (
+              <p className="text-xs text-muted-foreground">
+                {NO_INCOME_TAX_STATES.includes(state)
+                  ? `${US_STATE_NAMES[state]} has no state income tax return for wages and interest. Taxi prepares your federal return.`
+                  : `Taxi prepares your federal return only. File your ${US_STATE_NAMES[state]} return with other software.`}
+              </p>
+            ) : null}
+          </div>
+        )}
         <div className="flex flex-col gap-2">
           <p className="text-sm font-medium" id={`${id}-resident`}>
             {country === "ca" ? "Lived in Canada all year?" : "A U.S. citizen or resident alien all year?"}
@@ -691,6 +734,7 @@ function askedOf(ask: string, name: string): string {
   return ask
     .replace(/^You are\b/, `${name} is`)
     .replace(/^You were\b/, `${name} was`)
+    .replace(/^You have\b/, `${name} has`)
     .replace(/^You\b/, name)
     .replace(/\byou\b/, name);
 }

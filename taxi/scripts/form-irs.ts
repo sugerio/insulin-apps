@@ -1,4 +1,4 @@
-import { PDFArray, PDFCheckBox, PDFDict, PDFDocument, PDFName, PDFRawStream, PDFString, PDFHexString, PDFTextField, decodePDFRawStream } from "pdf-lib";
+import { PDFArray, PDFCheckBox, PDFDict, PDFDocument, PDFName, PDFNumber, PDFRadioGroup, PDFRawStream, PDFString, PDFHexString, PDFTextField, decodePDFRawStream } from "pdf-lib";
 import type { Measured, Point } from "./form-measure.ts";
 
 // How the layout script places things on an IRS form. The IRS publishes its forms as fill-in PDFs: each box is a form
@@ -6,6 +6,10 @@ import type { Measured, Point } from "./form-measure.ts";
 // number ("1a. Total amount from Form(s) W-2, box 1"). So nothing is measured from the drawing: a right-aligned field is
 // an amount row named by the line number in its label, and the other places (names, ticks, a dependant's column) are
 // named in the layout script by their field, with a piece of their label to check that the field is still the one meant.
+//
+// California's Franchise Tax Board publishes fill-in PDFs too, without an XFA part: each field's tooltip is its label
+// ("Line 13. Enter federal adjusted gross income…", "Line 2b. Column B. Subtractions."), and a field set to the right
+// holds an amount. readFtbFields reads them the same way, and ftbLineOf finds the line (and column) a label names.
 
 /** A field's box on the form, with its label. */
 export interface IrsField {
@@ -80,6 +84,58 @@ export async function readIrsFields(bytes: Uint8Array): Promise<IrsField[]> {
     });
   }
   return fields;
+}
+
+/**
+ * Each field of an FTB fill-in PDF, with its label from the field's tooltip (`/TU`). A field with more than one box (a
+ * radio group's choices, a name repeated on each page) is one field per box, named `<field>#<n>` in the order of its
+ * boxes.
+ */
+export async function readFtbFields(bytes: Uint8Array): Promise<IrsField[]> {
+  const doc = await PDFDocument.load(bytes, { updateMetadata: false });
+  const pages = doc.getPages();
+  const fields: IrsField[] = [];
+  for (const field of doc.getForm().getFields()) {
+    if (!(field instanceof PDFTextField) && !(field instanceof PDFCheckBox) && !(field instanceof PDFRadioGroup)) continue;
+    const tooltip = field.acroField.dict.lookup(PDFName.of("TU"));
+    const label = tooltip instanceof PDFString || tooltip instanceof PDFHexString ? tooltip.decodeText().replace(/\s+/g, " ").trim() : "";
+    const widgets = field.acroField.getWidgets();
+    const text = field instanceof PDFTextField;
+    const quadding = (dict: PDFDict) => {
+      const q = dict.lookup(PDFName.of("Q"));
+      return q instanceof PDFNumber ? q.asNumber() : null;
+    };
+    const fieldQ = quadding(field.acroField.dict);
+    widgets.forEach((widget, index) => {
+      const rect = widget.getRectangle();
+      fields.push({
+        name: widgets.length === 1 ? field.getName() : `${field.getName()}#${index + 1}`,
+        kind: text ? "text" : "tick",
+        page: pages.findIndex((each) => each.ref === widget.P()) + 1,
+        x: rect.x,
+        y: rect.y,
+        width: rect.width,
+        height: rect.height,
+        right: (quadding(widget.dict) ?? fieldQ) === 2,
+        comb: text && field.isCombed(),
+        label,
+      });
+    });
+  }
+  return fields;
+}
+
+/**
+ * The line an FTB label names, with its column when it has one: the last "Line …" of the label ("Line 6. Social
+ * security benefits. Line 6b. Column A." is 6bA; "Line 1 h." is 1h; "Line 13 ." is 13). Lower-case "line" is a
+ * reference to another line, never the field's own.
+ */
+export function ftbLineOf(label: string): string | null {
+  const lines = [...label.matchAll(/\bLine (\d{1,3})(?: ?([a-z]\d?)\b)?/g)];
+  const last = lines.at(-1);
+  if (!last) return null;
+  const column = /\bColumn ([A-D])\b/.exec(label)?.[1] ?? "";
+  return `${last[1]}${last[2] ?? ""}${column}`;
 }
 
 /**
@@ -162,7 +218,12 @@ const round = (value: number) => Math.round(value * 10) / 10;
  * and each named place (`places`) by its field. Two amount fields with the same line number are refused unless one is named; a named field whose label doesn't
  * hold the piece given is refused.
  */
-export function measureIrsForm(fields: IrsField[], places: Record<string, IrsPlace> = {}): Measured {
+export function measureIrsForm(
+  fields: IrsField[],
+  places: Record<string, IrsPlace> = {},
+  options: { lineOf?: (label: string) => string | null; pagePrefix?: boolean; skipAmbiguous?: boolean } = {},
+): Measured {
+  const lineFor = options.lineOf ?? lineOf;
   const byName = new Map(fields.map((field) => [field.name, field]));
   const fail = (message: string): never => {
     throw new Error(message);
@@ -196,12 +257,26 @@ export function measureIrsForm(fields: IrsField[], places: Record<string, IrsPla
   const numbered = new Map<string, IrsField[]>();
   for (const field of fields) {
     if (named.has(field.name) || field.kind !== "text" || !field.right || field.comb) continue;
-    const line = lineOf(field.label);
+    const line = lineFor(field.label);
     if (line !== null) numbered.set(line, [...(numbered.get(line) ?? []), field]);
+  }
+  for (const [line, found] of [...numbered]) {
+    if (line in rows) continue;
+    // An FTB form numbers each part from 1 (Schedule P's Part III, Schedule CA's Part II): the same line on a later
+    // page is that page's, `p<page>:<line>`.
+    if (options.pagePrefix && found.length > 1 && new Set(found.map((each) => each.page)).size === found.length) {
+      const [first, ...later] = [...found].sort((a, b) => a.page - b.page);
+      numbered.set(line, [first!]);
+      for (const field of later) numbered.set(`p${field.page}:${line}`, [field]);
+    }
   }
   for (const [line, found] of numbered) {
     if (line in rows) continue;
-    if (found.length > 1) fail(`Line ${line} has ${found.length} amount fields (${found.map((each) => each.name).join(", ")}): name the one meant`);
+    if (found.length > 1) {
+      // An FTB form's table repeats a line for each provider or child: such a line isn't a row unless a place names it.
+      if (options.skipAmbiguous) continue;
+      fail(`Line ${line} has ${found.length} amount fields (${found.map((each) => each.name).join(", ")}): name the one meant`);
+    }
     const field = found[0]!;
     rows[line] = [field.page, round(field.x + field.width - 0.5), BASELINE(field)];
   }

@@ -1,0 +1,152 @@
+{
+  "about": "California, single, 67 and blind, a $40,000 pension and a fund's dividends with California tax-exempt interest: blind and senior exemption credits",
+  "input": {
+    "country": "us",
+    "year": 2025,
+    "people": [
+      {
+        "id": "p1",
+        "name": "Ida Bell",
+        "role": "self",
+        "birthDate": "1958-06-06",
+        "province": "CA",
+        "residentAllYear": true
+      }
+    ],
+    "family": {
+      "maritalStatus": "single",
+      "dependants": []
+    },
+    "answers": {
+      "p1": {
+        "hasWages": false,
+        "hasInterest": false,
+        "hasTipsOrOvertime": false,
+        "canBeClaimed": false,
+        "isBlind": true,
+        "estimatedPayments": "0",
+        "hasCarLoan": false,
+        "hasSelfEmployment": false,
+        "hasStudentLoan": false,
+        "paidForEducation": false,
+        "hasDividends": true,
+        "hasBrokerSales": false,
+        "hasIraDistribution": false,
+        "hasPension": true,
+        "hasSocialSecurity": false,
+        "hasLossCarryover": false,
+        "hasHsa": false,
+        "hasIraContribution": false,
+        "hasItemized": false,
+        "hasOtherIncome": false,
+        "indirectRollover": false,
+        "paidForCare": false,
+        "livedInCaliforniaAllYear": true,
+        "caFullYearCoverage": true,
+        "caUseTax": "0",
+        "caPaidRent": false,
+        "caEstimatedPayments": "0",
+        "caBondInterest": "500"
+      }
+    },
+    "slips": [
+      {
+        "id": "p1-div-0",
+        "person": "p1",
+        "type": "DIV",
+        "issuer": "Muni Fund",
+        "boxes": {
+          "1A": "2000",
+          "1B": "1500",
+          "12": "500"
+        }
+      },
+      {
+        "id": "p1-r-0",
+        "person": "p1",
+        "type": "R",
+        "issuer": "Teachers Pension",
+        "boxes": {
+          "1": "40000",
+          "2A": "40000",
+          "4": "3000",
+          "7": "7",
+          "14": "1000",
+          "15": "CA"
+        }
+      }
+    ]
+  },
+  "expected": {
+    "p1": {
+      "F1040.19": "0",
+      "F1040.27a": "0",
+      "F1040.28": "0",
+      "S8812.12": "0",
+      "F1040.1a": "0",
+      "F1040.1e": "0",
+      "S3.2": "0",
+      "F1040.2a": "500",
+      "F1040.2b": "0",
+      "F1040.9": "42000",
+      "F1040.11a": "42000",
+      "F1040.12e": "19750",
+      "F1040.13b": "6000",
+      "F1040.13a": "0",
+      "F1040.8": "0",
+      "F1040.10": "0",
+      "F1040.15": "16250",
+      "F1040.16": "1535",
+      "F8959.7": "0",
+      "F8960.17": "0",
+      "F1040.24": "1535",
+      "F1040.25c": "0",
+      "S3.11": "0",
+      "F1040.33": "3000",
+      "F1040.34": "1465",
+      "F1040.37": "0",
+      "F1040.3a": "1500",
+      "F1040.3b": "2000",
+      "F1040.7a": "0",
+      "F8960.12": "2000",
+      "QDW.5": "14750",
+      "F1040.4a": "0",
+      "F1040.4b": "0",
+      "F1040.5a": "40000",
+      "F1040.5b": "40000",
+      "S2.8": "0",
+      "F6251.4": "42000",
+      "F6251.6": "0",
+      "F6251.11": "0",
+      "F1040.18": "1535",
+      "F540.13": "42000",
+      "F540.14": "0",
+      "F540.16": "0",
+      "F540.17": "42000",
+      "F540.18": "5706",
+      "F540.19": "36294",
+      "F540.31": "816",
+      "F540.32": "459",
+      "F540.35": "357",
+      "F540.40": "0",
+      "F540.46": "0",
+      "F540.48": "357",
+      "F540.61": "0",
+      "F540.62": "0",
+      "F540.63": "0",
+      "F540.64": "357",
+      "F540.71": "1000",
+      "F540.72": "0",
+      "F540.75": "0",
+      "F540.76": "0",
+      "F540.77": "0",
+      "F540.78": "1000",
+      "F540.91": "0",
+      "F540.115": "643",
+      "F540.111": "0",
+      "SP.21": "42000",
+      "SP.24": "0",
+      "F3514.19": "0"
+    }
+  }
+}

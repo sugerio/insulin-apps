@@ -9,7 +9,7 @@
         "name": "Tom Byrd",
         "role": "self",
         "birthDate": "1989-12-12",
-        "province": null,
+        "province": "FL",
         "residentAllYear": true
       },
       {
@@ -17,7 +17,7 @@
         "name": "Liz Byrd",
         "role": "spouse",
         "birthDate": "1990-01-01",
-        "province": null,
+        "province": "FL",
         "residentAllYear": true
       }
     ],

@@ -261,7 +261,7 @@ describe("the 2025 rules", () => {
     // In no particular order: which fact a formula reads first is the rules' business.
     expect([...evaluation.result().people[0]!.missing].sort((a, b) => a.question.localeCompare(b.question))).toEqual([
       { question: "family.maritalStatus", ask: "Marital status on December 31" },
-      { question: "person.province", ask: "Province on December 31" },
+      { question: "person.province", ask: "Province or state on December 31" },
     ]);
   });
 

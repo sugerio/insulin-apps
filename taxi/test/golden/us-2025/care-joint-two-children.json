@@ -9,7 +9,7 @@
         "name": "Ben Ross",
         "role": "self",
         "birthDate": "1986-03-03",
-        "province": null,
+        "province": "FL",
         "residentAllYear": true
       },
       {
@@ -17,7 +17,7 @@
         "name": "Ada Ross",
         "role": "spouse",
         "birthDate": "1987-04-04",
-        "province": null,
+        "province": "FL",
         "residentAllYear": true
       }
     ],

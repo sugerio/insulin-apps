@@ -9,7 +9,7 @@
         "name": "Jo Banks",
         "role": "self",
         "birthDate": "1980-05-05",
-        "province": null,
+        "province": "FL",
         "residentAllYear": true
       },
       {
@@ -17,7 +17,7 @@
         "name": "Lu Banks",
         "role": "spouse",
         "birthDate": "1982-07-07",
-        "province": null,
+        "province": "FL",
         "residentAllYear": true
       }
     ],

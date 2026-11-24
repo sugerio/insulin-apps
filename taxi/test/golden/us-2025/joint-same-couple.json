@@ -9,7 +9,7 @@
         "name": "Sam Ortiz",
         "role": "self",
         "birthDate": "1984-02-02",
-        "province": null,
+        "province": "FL",
         "residentAllYear": true
       },
       {
@@ -17,7 +17,7 @@
         "name": "Ana Ortiz",
         "role": "spouse",
         "birthDate": "1986-06-06",
-        "province": null,
+        "province": "FL",
         "residentAllYear": true
       }
     ],

@@ -9,7 +9,7 @@
 // Uploaded files are kept as uploaded (document_chunks), so a slip's printed SIN and address are in its bytes.
 import { sql } from "drizzle-orm";
 import { blob, check, index, integer, primaryKey, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
-import { COUNTRIES, FILING_STATUSES, MARITAL_STATUSES, PROVINCES, RELATIONSHIPS } from "../shared/people.ts";
+import { COUNTRIES, FILING_STATUSES, MARITAL_STATUSES, PROVINCES, RELATIONSHIPS, US_STATES } from "../shared/people.ts";
 
 const inList = (column: string, values: readonly string[]) =>
   sql.raw(`${column} IN (${values.map((value) => `'${value}'`).join(", ")})`);
@@ -98,7 +98,10 @@ export const taxYearPeople = sqliteTable(
   (table) => [primaryKey({ columns: [table.taxYearId, table.personId] }), index("tax_year_people_org").on(table.orgId)],
 );
 
-/** An adult's return for a tax year: their province on December 31 and whether they lived in Canada all year. */
+/**
+ * An adult's return for a tax year: their province (a Canadian year) or state (a US year) on December 31, and whether
+ * they lived in the country all year.
+ */
 export const returns = sqliteTable(
   "returns",
   {
@@ -111,6 +114,9 @@ export const returns = sqliteTable(
       .notNull()
       .references(() => people.id, { onDelete: "cascade" }),
     province: text("province", { enum: PROVINCES }),
+    // A US year's state on December 31 (shared/people.ts US_STATES), in its own column because the CHECK on province
+    // names the provinces; checked by the app, as a CHECK added here would make SQLite rebuild the table.
+    state: text("state", { enum: US_STATES }),
     residentAllYear: integer("resident_all_year", { mode: "boolean" }),
     createdAt: integer("created_at").notNull(),
     updatedAt: integer("updated_at").notNull(),

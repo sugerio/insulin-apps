@@ -289,6 +289,8 @@ export interface FormSpec extends FormVersion {
    * its rows out from the spouse's side, and writes the spouse's name where the form asks for the person's.
    */
   side?: "spouse";
+  /** Whole dollars, with the cents printed on the form (California's): a whole amount is written without them. */
+  wholeDollars?: true;
 }
 
 /**
@@ -465,6 +467,7 @@ export const compiledRulesSchema = z.strictObject({
       pages: z.number().int().min(1),
       applies: z.string(),
       side: z.literal("spouse").optional(),
+      wholeDollars: z.literal(true).optional(),
       fields: z.array(compiledFieldSchema),
       dependants: z
         .strictObject({
@@ -644,6 +647,7 @@ export function loadRuleSet(json: unknown, where: (entry: string) => string = ()
           applies: parse(entry, form.applies),
           appliesText: form.applies,
           ...(form.side === undefined ? {} : { side: form.side }),
+          ...(form.wholeDollars ? { wholeDollars: true as const } : {}),
           fields: form.fields.map((field): FormField => {
             const where = `${entry}.fields.${field.key}`;
             const place = placeOf(where, field);
@@ -725,8 +729,14 @@ function checkBrackets(rows: BracketRow[], fail: (message: string) => never) {
     const previous = rows[index - 1]?.upTo ?? null;
     if (row.upTo && previous && !row.upTo.gt(previous)) fail("Brackets must go up");
     if (row.rate.isNegative()) fail("A rate can't be negative");
-    // A printed base is the exact tax below the bracket, rounded to the cent: anything else is a typo.
-    if (row.base !== undefined && !row.base.eq(exact.roundTo(2, "HALF_UP"))) {
+    // A printed base is the exact tax below the bracket, rounded to the cent, or (as California's schedules print it)
+    // the printed base below it plus that bracket's tax, rounded to the cent: anything else is a typo.
+    const below = rows[index - 1];
+    const chained =
+      below?.base !== undefined && below.upTo !== null
+        ? below.base.add(below.upTo.sub(rows[index - 2]?.upTo ?? Dec.ZERO).mul(below.rate)).roundTo(2, "HALF_UP")
+        : null;
+    if (row.base !== undefined && !row.base.eq(exact.roundTo(2, "HALF_UP")) && !(chained !== null && row.base.eq(chained))) {
       fail(`The base of bracket ${index + 1} is ${row.base.toString()}; the brackets below it give ${exact.roundTo(2, "HALF_UP").toString()}`);
     }
     if (row.upTo) exact = exact.add(row.upTo.sub(previous ?? Dec.ZERO).mul(row.rate));

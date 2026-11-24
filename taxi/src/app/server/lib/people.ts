@@ -1,6 +1,7 @@
 import {
   COUNTRY_NAMES,
   SUPPORTED_PROVINCES,
+  isRegionOf,
   maritalStatusesFor,
   isAdult,
   type AdultYear,
@@ -11,6 +12,7 @@ import {
   type MaritalStatus,
   type Person,
   type Province,
+  type Region,
   type Relationship,
   type SavePersonalInfo,
   type SetYearPeople,
@@ -47,6 +49,7 @@ export interface YearRow {
 interface ReturnRow {
   person_id: string;
   province: Province | null;
+  state: Region | null;
   resident_all_year: number | null;
 }
 
@@ -144,12 +147,15 @@ export function assess(
   }
   for (const adult of adults) {
     const name = people.find((person) => person.id === adult.personId)?.name ?? "This person";
-    // A US return is federal only: no state is asked for yet.
     if (country === "ca") {
       if (adult.province === null) add("no_province", "blocking", adult.personId, `Choose ${name}'s province on December 31.`);
-      else if (!SUPPORTED_PROVINCES.includes(adult.province)) {
-        add("unsupported_province", "unsupported", adult.personId, `${name}'s return for ${PROVINCE_NAMES[adult.province]} needs other software.`);
+      else if (!SUPPORTED_PROVINCES.includes(adult.province as Province)) {
+        add("unsupported_province", "unsupported", adult.personId, `${name}'s return for ${PROVINCE_NAMES[adult.province as Province]} needs other software.`);
       }
+    } else if (adult.province === null) {
+      // A US year asks the state: it decides the state return, and the federal rules for a community property state.
+      // A state whose return the app doesn't prepare isn't an issue: the federal return is complete without it.
+      add("no_province", "blocking", adult.personId, `Choose ${name}'s state on December 31.`);
     }
     if (adult.residentAllYear === null) {
       const question = country === "ca" ? `lived in Canada all year` : `was a U.S. citizen or resident alien all year`;
@@ -177,7 +183,7 @@ async function viewOf(db: Db, orgId: string, row: YearRow): Promise<TaxYear> {
     listPeople(db, orgId),
     db.prepare("SELECT person_id FROM tax_year_people WHERE org_id = ? AND tax_year_id = ?").bind(orgId, row.id).all<{ person_id: string }>(),
     db
-      .prepare("SELECT person_id, province, resident_all_year FROM returns WHERE org_id = ? AND tax_year_id = ?")
+      .prepare("SELECT person_id, province, state, resident_all_year FROM returns WHERE org_id = ? AND tax_year_id = ?")
       .bind(orgId, row.id)
       .all<ReturnRow>(),
   ]);
@@ -189,7 +195,7 @@ async function viewOf(db: Db, orgId: string, row: YearRow): Promise<TaxYear> {
       const saved = byPerson.get(person.id);
       return {
         personId: person.id,
-        province: saved?.province ?? null,
+        province: (row.country === "us" ? saved?.state : saved?.province) ?? null,
         residentAllYear: saved?.resident_all_year === null || saved?.resident_all_year === undefined ? null : saved.resident_all_year === 1,
         prepared: true,
       };
@@ -398,29 +404,31 @@ export async function savePersonalInfo(db: Db, caller: Caller, year: number, inp
     ]);
   }
   const filingStatus = input.maritalStatus === "married" ? (input.filingStatus === undefined ? row.filing_status : input.filingStatus) : null;
-  // A US return is federal only: it records no state.
-  if (view.country === "us") {
-    const index = input.adults.findIndex((adult) => adult.province !== null);
-    if (index >= 0) {
-      throw new ApiError("validation_failed", "A US return records no province", [{ path: `adults.${index}.province`, message: "Leave the province empty" }]);
-    }
+  // A Canadian year records a province, a US year a state (in its own column), in the same field.
+  const index = input.adults.findIndex((adult) => adult.province !== null && !isRegionOf(view.country, adult.province));
+  if (index >= 0) {
+    throw new ApiError("validation_failed", view.country === "us" ? "A US year records a state" : "A Canadian year records a province", [
+      { path: `adults.${index}.province`, message: view.country === "us" ? "Choose a US state" : "Choose a province or territory" },
+    ]);
   }
   await runGuarded(db, [
     bumpRevision(db, caller.orgId, row.id, input.revision, now, "marital_status = ?, filing_status = ?, ", [input.maritalStatus, filingStatus]),
     ...input.adults.map((adult) =>
       db
         .prepare(
-          `INSERT INTO returns (id, org_id, tax_year_id, person_id, province, resident_all_year, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+          `INSERT INTO returns (id, org_id, tax_year_id, person_id, province, state, resident_all_year, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
            ON CONFLICT(tax_year_id, person_id) DO UPDATE SET
-             province = excluded.province, resident_all_year = excluded.resident_all_year, updated_at = excluded.updated_at`,
+             province = excluded.province, state = excluded.state, resident_all_year = excluded.resident_all_year,
+             updated_at = excluded.updated_at`,
         )
         .bind(
           crypto.randomUUID(),
           caller.orgId,
           row.id,
           adult.personId,
-          adult.province,
+          view.country === "ca" ? adult.province : null,
+          view.country === "us" ? adult.province : null,
           adult.residentAllYear === null ? null : adult.residentAllYear ? 1 : 0,
           now,
           now,

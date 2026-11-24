@@ -1,0 +1,197 @@
+{
+  "about": "California, married filing jointly, one earner with $21,000 and children of 3 and 8: the California EITC, the Young Child Tax Credit and the renter's credit",
+  "input": {
+    "country": "us",
+    "year": 2025,
+    "people": [
+      {
+        "id": "p1",
+        "name": "Ana Ruiz",
+        "role": "self",
+        "birthDate": "1992-02-02",
+        "province": "CA",
+        "residentAllYear": true
+      },
+      {
+        "id": "p2",
+        "name": "Ben Ruiz",
+        "role": "spouse",
+        "birthDate": "1991-03-03",
+        "province": "CA",
+        "residentAllYear": true
+      }
+    ],
+    "family": {
+      "maritalStatus": "married",
+      "dependants": [
+        {
+          "id": "d1",
+          "name": "Mia Ruiz",
+          "birthDate": "2022-05-05",
+          "answers": {
+            "relationship": "child",
+            "monthsWithYou": "12",
+            "hasSSN": true,
+            "paidOwnSupport": false,
+            "filedJointReturn": false,
+            "citizenOrResident": true
+          }
+        },
+        {
+          "id": "d2",
+          "name": "Leo Ruiz",
+          "birthDate": "2017-06-06",
+          "answers": {
+            "relationship": "child",
+            "monthsWithYou": "12",
+            "hasSSN": true,
+            "paidOwnSupport": false,
+            "filedJointReturn": false,
+            "citizenOrResident": true
+          }
+        }
+      ],
+      "filingStatus": "joint"
+    },
+    "answers": {
+      "p1": {
+        "hasWages": true,
+        "hasInterest": false,
+        "hasTipsOrOvertime": false,
+        "canBeClaimed": false,
+        "isBlind": false,
+        "estimatedPayments": "0",
+        "hasCarLoan": false,
+        "hasSelfEmployment": false,
+        "hasStudentLoan": false,
+        "paidForEducation": false,
+        "hasDividends": false,
+        "hasBrokerSales": false,
+        "hasIraDistribution": false,
+        "hasPension": false,
+        "hasSocialSecurity": false,
+        "hasLossCarryover": false,
+        "hasHsa": false,
+        "hasIraContribution": false,
+        "hasItemized": false,
+        "hasOtherIncome": false,
+        "paidForCare": false,
+        "hasValidSSN": true,
+        "livedInCaliforniaAllYear": true,
+        "caFullYearCoverage": true,
+        "caUseTax": "0",
+        "caPaidRent": true,
+        "caEstimatedPayments": "0"
+      },
+      "p2": {
+        "hasWages": false,
+        "hasInterest": false,
+        "hasTipsOrOvertime": false,
+        "canBeClaimed": false,
+        "isBlind": false,
+        "estimatedPayments": "0",
+        "hasCarLoan": false,
+        "hasSelfEmployment": false,
+        "hasStudentLoan": false,
+        "paidForEducation": false,
+        "hasDividends": false,
+        "hasBrokerSales": false,
+        "hasIraDistribution": false,
+        "hasPension": false,
+        "hasSocialSecurity": false,
+        "hasLossCarryover": false,
+        "hasHsa": false,
+        "hasIraContribution": false,
+        "hasItemized": false,
+        "hasOtherIncome": false,
+        "hasValidSSN": true,
+        "livedInCaliforniaAllYear": true,
+        "caEstimatedPayments": "0"
+      }
+    },
+    "slips": [
+      {
+        "id": "p1-w2-0",
+        "person": "p1",
+        "type": "W2",
+        "issuer": "Farm Co",
+        "boxes": {
+          "1": "21000",
+          "2": "0",
+          "4": "1302",
+          "5": "21000",
+          "6": "304.50",
+          "15": "CA",
+          "16": "21000",
+          "17": "40"
+        }
+      }
+    ]
+  },
+  "expected": {
+    "p1": {
+      "F1040.19": "0",
+      "F1040.27a": "7152",
+      "F1040.28": "2775",
+      "S8812.12": "4400",
+      "F1040.1a": "21000",
+      "F1040.1e": "0",
+      "S3.2": "0",
+      "F1040.2a": "0",
+      "F1040.2b": "0",
+      "F1040.9": "21000",
+      "F1040.11a": "21000",
+      "F1040.12e": "31500",
+      "F1040.13b": "0",
+      "F1040.13a": "0",
+      "F1040.8": "0",
+      "F1040.10": "0",
+      "F1040.15": "0",
+      "F1040.16": "0",
+      "F8959.7": "0",
+      "F8960.17": "0",
+      "F1040.24": "0",
+      "F1040.25c": "0",
+      "S3.11": "0",
+      "F1040.33": "9927",
+      "F1040.34": "9927",
+      "F1040.37": "0",
+      "SA.4": "0",
+      "SA.5e": "40",
+      "SA.17": "40",
+      "US.standard": "31500",
+      "F6251.4": "21000",
+      "F6251.6": "0",
+      "F6251.11": "0",
+      "F1040.18": "0",
+      "F540.13": "21000",
+      "F540.14": "0",
+      "F540.16": "0",
+      "F540.17": "21000",
+      "F540.18": "11412",
+      "F540.19": "9588",
+      "F540.31": "96",
+      "F540.32": "1256",
+      "F540.35": "0",
+      "F540.40": "0",
+      "F540.46": "0",
+      "F540.48": "0",
+      "F540.61": "0",
+      "F540.62": "0",
+      "F540.63": "0",
+      "F540.64": "0",
+      "F540.71": "40",
+      "F540.72": "0",
+      "F540.75": "500",
+      "F540.76": "1189",
+      "F540.77": "0",
+      "F540.78": "1729",
+      "F540.91": "0",
+      "F540.115": "1729",
+      "F540.111": "0",
+      "SP.21": "21000",
+      "SP.24": "0",
+      "F3514.19": "21000"
+    }
+  }
+}

@@ -2,8 +2,8 @@
 
 Taxi prepares Canadian personal income tax returns (the T1): yours, and your spouse's or common-law
 partner's if you prepare them together. It never files with the CRA. When a return is done, you get the CRA's own
-forms, filled in, to sign and mail, or numbers to copy into certified software. It also prepares the first part of the
-United States federal return (Form 1040): a year is started for one country.
+forms, filled in, to sign and mail, or numbers to copy into certified software. It also prepares the United States
+federal return (Form 1040), with California's Form 540 for a California resident: a year is started for one country.
 
 It is an Insulin app: you start from it in the Insulin console, change it with the AppBuilder if you want to, preview it
 and publish it. It brings its own database.
@@ -58,7 +58,8 @@ uploaded slips read by AI (or typed in), income, deductions, credits, the result
   uses. The IRS publishes fill-in PDFs, so nothing is measured from the drawing: `npm run form-layout` reads each
   field's box and the label the IRS gives it (`scripts/form-irs.ts`), and finds a row by the line number the label
   starts with (`rules/us/2025/form-layout.yaml`). A form's table of dependants (`dependants` in `forms.yaml`) fills
-  one column for each dependant.
+  one column for each dependant. California's forms (ftb.ca.gov) are placed the same way, from each field's tooltip
+  ("Line 13.", "Line 2b. Column B."); they are in whole dollars with the cents printed (`wholeDollars`).
 - **Roles.** Owners, admins and editors prepare returns; viewers see everything and change nothing. Custom roles pick
   from two permissions: Prepare returns and View returns.
 - **Built-in Docs.** **Docs**, in everyone's navigation, explains the app and covers Canadian and US tax basics in plain
@@ -89,8 +90,12 @@ and excess social security tax; the 2025 deductions for qualified tips, overtime
 forms; dividends and capital gains (1099-DIV, 1099-B, Schedule D and the capital gain rates), IRA, pension and
 social security income (1099-R, SSA-1099), the IRA and HSA deductions, itemized deductions (Schedule A) and the
 alternative minimum tax (Form 6251). AI reads Forms W-2, 1099, 1098 and SSA-1099, and Finish shows US hints (filing
-jointly or separately, the estimated tax penalty). No state return; allocated tips, a household employee, Form 8949
-adjustments and other income say so when they apply.
+jointly or separately, the estimated tax penalty). Each person's state on December 31 is asked; for a California
+resident the return adds Form 540 (`rules/us/2025/california.yaml`): Schedule CA, the California Tax Table and rates,
+exemption credits, Schedule P, the renter's credit, FTB 3506 and FTB 3514 (the CalEITC, Young Child and Foster Youth
+tax credits), with its own refund or amount owed. Another state's return isn't prepared. Allocated tips, a household
+employee, Form 8949 adjustments, other income, married filing separately in a community property state and a
+part-year California resident say so when they apply.
 
 ## Good to know
 

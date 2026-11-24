@@ -439,7 +439,7 @@ export class Evaluation {
           const resident = person.residentAllYear === undefined ? true : person.residentAllYear;
           return { value: resident, status: resident === null ? "missing" : "complete", label: this.rules.residency, reads: [] };
         }
-        return { value: person.province, status: person.province === null ? "missing" : "complete", label: "Province on December 31", reads: [] };
+        return { value: person.province, status: person.province === null ? "missing" : "complete", label: "Province or state on December 31", reads: [] };
       default: {
         const slip = this.rules.slips.get(head!)!;
         const mine = this.input.slips.filter((each) => each.person === personId && each.type === slip.id);

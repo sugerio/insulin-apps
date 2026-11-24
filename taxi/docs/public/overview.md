@@ -4,7 +4,7 @@ description: What Taxi does, who it is for, what it doesn't do yet, and how it r
 order: 1
 ---
 
-Taxi prepares Canadian personal income tax returns, and the first part of the United States federal return. This
+Taxi prepares Canadian personal income tax returns, and United States federal returns with the California return. This
 page explains what it does today, who it is for, and what it leaves out. Read it first if you are deciding whether Taxi suits you, or if you are an AI agent that
 needs the big picture before calling its API.
 
@@ -64,10 +64,13 @@ The returns cover:
 Taxi doesn't handle a few rare cases, such as property that is treated as sold when you leave Canada, and business and
 investment tax credits. The app says so when a case it doesn't handle applies.
 
-## United States (federal)
+## United States
 
 When you start a year, you choose Canada or the United States. A year is of one country. A US year prepares the
-federal Form 1040 of a U.S. citizen or resident alien for the whole year. It prepares no state return.
+federal Form 1040 of a U.S. citizen or resident alien for the whole year, and Personal info asks each person's state on
+December 31. For a California resident, Taxi also prepares the California return (Form 540). For another state, Taxi
+prepares the federal return only, and says to file the state return with other software. A state with no income tax
+return (such as Texas or Florida) needs none.
 
 The US return covers:
 
@@ -142,8 +145,33 @@ IRS's Form 1040 and the schedules and forms it uses (Schedules 1, 1-A, 2, 3, A, 
 6251, 8863, 8889, 8995, 8959 and 8960), filled in, then a worksheet. Schedule B (more than $1,500 of interest or
 dividends) is named on the worksheet for you to fill in.
 
+### California
+
+For a person who lived in California all year, Taxi also prepares Form 540, from the federal return:
+
+- Schedule CA (540): what California taxes differently. It subtracts social security benefits and interest on U.S.
+  savings bonds and Treasury obligations. It adds tax-exempt interest from other states' bonds (you say how much of it
+  is from California bonds), and the health savings account: the HSA deduction, your employer's contributions and what
+  the HSA earned. Itemized deductions leave out the state income tax and have no $40,000 limit.
+- The California standard deduction ($5,706, or $11,412 jointly or as head of household), or itemized deductions when
+  they are larger, whatever the federal return does. Both are limited over $252,203 of federal AGI ($504,411 jointly).
+- The tax from the California Tax Table or Tax Rate Schedules, the exemption credits ($153 each, $475 for each
+  dependent, smaller at a high income), the Behavioral Health Services Tax over $1,000,000, the 2.5% tax on an early
+  retirement distribution, and the California alternative minimum tax (Schedule P).
+- Credits: the renter's credit ($60, or $120 jointly or as head of household, under an income limit); the child and
+  dependent care credit (form FTB 3506, up to $100,000 of federal AGI, for care in California); and the refundable
+  California earned income tax credit, Young Child Tax Credit and Foster Youth Tax Credit (form FTB 3514).
+- Payments: California tax withheld on each W-2 and 1099 whose state box says CA, and California estimated payments.
+  The use tax is asked, as Form 540 can't leave it blank.
+
+Married filing separately in a community property state (California, Texas and seven others) needs Form 8958, which
+Taxi doesn't prepare: the federal return says so. On the California return, Taxi says so instead of giving a wrong
+amount for: a part-year resident or a spouse in another state (Form 540NR), tax withheld for another state, a year
+without health coverage (form FTB 3853), and the Young Child Tax Credit with no earned income. The California forms are
+printed after the federal ones, from ftb.ca.gov: Form 540, Schedule CA (540), Schedule P (540), FTB 3506 and FTB 3514.
+
 AI reads the US forms you upload: Forms W-2, 1099-INT, 1099-DIV, 1099-B (a broker's summary, one for each part of Form
-8949), 1099-R, 1099-NEC, SSA-1099, 1098, 1098-T and 1098-E. Each one goes to the return of the person named on it. A 1098-E is added to the student loan interest. A 1098-T is not added to the
+8949), 1099-R, 1099-NEC, SSA-1099, 1098, 1098-T and 1098-E, with their state boxes. Each one goes to the return of the person named on it. A 1098-E is added to the student loan interest. A 1098-T is not added to the
 credit as it is: its box 1, less boxes 5 and 10, is offered as the start of that person's education expenses on
 Personal info. A 1098-T for a dependant is not added, because a dependant has no return here: enter its amounts on the
 dependant's card. You can also type each form in on Income or Confirm.
@@ -155,8 +183,8 @@ and interest that is taxable without a 1099-INT.
 ## What it stores
 
 For each person: their name, their relationship to you and their birth date. For each tax year: who is in it (your
-spouse in it means both returns are prepared together), the marital status on December 31, each adult's province
-and whether they lived in Canada all year, their slips and their answers. Every change records who made it and when.
+spouse in it means both returns are prepared together), the marital status on December 31, each adult's province (or
+US state) and whether they lived in the country all year, their slips and their answers. Every change records who made it and when.
 
 Taxi never asks for a social insurance number (SIN), a home address or bank details, and none of its fields holds
 them. You write those on the paper return when you sign it. An uploaded slip is kept as it was uploaded, so the SIN

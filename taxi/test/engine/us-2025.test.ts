@@ -38,9 +38,9 @@ function oneW2(options: {
     country: "us",
     year: 2025,
     people: [
-      { id: "p1", name: "Alex", role: "self", birthDate: options.birthDate ?? "1990-05-05", province: null, residentAllYear: options.resident ?? true },
+      { id: "p1", name: "Alex", role: "self", birthDate: options.birthDate ?? "1990-05-05", province: "FL", residentAllYear: options.resident ?? true },
       // Filing jointly, the spouse is on the return too, here with no income of their own.
-      ...(options.joint ? [{ id: "p2", name: "Sam", role: "spouse" as const, birthDate: "1991-06-06", province: null, residentAllYear: options.spouseResident ?? true }] : []),
+      ...(options.joint ? [{ id: "p2", name: "Sam", role: "spouse" as const, birthDate: "1991-06-06", province: "FL", residentAllYear: options.spouseResident ?? true }] : []),
     ],
     family: {
       maritalStatus: options.maritalStatus === undefined ? (married ? "married" : "single") : options.maritalStatus,
@@ -187,7 +187,7 @@ describe("the 2025 US rules", () => {
     it("give the credit filing separately only to someone treated as unmarried, and exclude $2,500 of benefits", () => {
       const separate = (livedApart: boolean) => {
         const input = withCare({ wages: "30000", married: true, box10: "5000", expenses: "4000", answers: { livedApartLastSixMonths: livedApart, careBenefitsCarriedOver: "0", careBenefitsForfeited: "0" } });
-        input.people.push({ id: "p2", name: "Sam", role: "spouse", birthDate: "1991-06-06", province: null, residentAllYear: true });
+        input.people.push({ id: "p2", name: "Sam", role: "spouse", birthDate: "1991-06-06", province: "FL", residentAllYear: true });
         input.answers.p2 = { hasTipsOrOvertime: false, spouseItemizes: false };
         input.slips.push({ id: "s", person: "p2", type: "W2", issuer: "Initech", boxes: { 1: "20000", 2: "0", 5: "20000", 6: "290" } });
         return input;
@@ -356,9 +356,12 @@ describe("the 2025 US rules", () => {
     expect(credit("2455", 1, false)).toBe("842");
   });
 
-  it("show one federal refund or amount owed, and print on the IRS forms in their attachment order", () => {
-    expect(rules.balances).toEqual([{ name: "Federal", refund: "F1040.34", owing: "F1040.37" }]);
-    expect([...rules.forms.keys()]).toEqual(["F1040", "S1", "S1A", "S2", "S3", "SA", "SC", "SCS", "SD", "SE", "SES", "F2441", "F6251", "SEIC", "S8812", "F8863", "F8889", "F8889S", "F8995", "F8959", "F8960"]);
+  it("show the federal refund or amount owed and California's, and print on the IRS and FTB forms in their attachment order", () => {
+    expect(rules.balances).toEqual([
+      { name: "Federal", refund: "F1040.34", owing: "F1040.37" },
+      { name: "California", refund: "F540.115", owing: "F540.111" },
+    ]);
+    expect([...rules.forms.keys()]).toEqual(["F1040", "S1", "S1A", "S2", "S3", "SA", "SC", "SCS", "SD", "SE", "SES", "F2441", "F6251", "SEIC", "S8812", "F8863", "F8889", "F8889S", "F8995", "F8959", "F8960", "F540", "SCA540", "SP540", "F3506", "F3514"]);
   });
 });
 

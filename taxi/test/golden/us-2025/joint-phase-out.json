@@ -9,7 +9,7 @@
         "name": "Jamie Cole",
         "role": "self",
         "birthDate": "1980-04-04",
-        "province": null,
+        "province": "FL",
         "residentAllYear": true
       },
       {
@@ -17,7 +17,7 @@
         "name": "Robin Cole",
         "role": "spouse",
         "birthDate": "1981-05-05",
-        "province": null,
+        "province": "FL",
         "residentAllYear": true
       }
     ],

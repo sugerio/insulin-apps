@@ -127,6 +127,8 @@ const sourceForm = z.strictObject({
   side: z.literal("spouse").optional(),
   /** Placed by another form's layout: a second copy of the same PDF. */
   layout: z.string().min(1).optional(),
+  /** A form in whole dollars, its cents printed on it (California's): a whole amount is written without cents. */
+  wholeDollars: z.literal(true).optional(),
   fields: z.record(z.string(), sourceField),
   /** The form's table of dependants: who is in it, how many columns it has, its "more" tick, and each column's fields. */
   dependants: z
@@ -332,6 +334,7 @@ function placeForm(form: z.infer<typeof sourceForm>, layout: z.infer<typeof sour
     pages: layout!.pages,
     applies: form.applies,
     ...(form.side === undefined ? {} : { side: form.side }),
+    ...(form.wholeDollars ? { wholeDollars: true as const } : {}),
     fields: Object.entries(form.fields).map(([key, field]): CompiledRules["forms"][string]["fields"][number] => {
       const spec = typeof field === "string" ? { value: field } : field;
       if ("text" in spec) {

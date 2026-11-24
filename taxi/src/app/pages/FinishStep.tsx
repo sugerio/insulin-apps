@@ -120,6 +120,7 @@ function Results({ estimate, slips }: { estimate: Estimate; slips: SlipList }) {
           ready={checks.length === 0}
           country={year.country}
           quebec={balances.some((balance) => balance.name === "Quebec")}
+          california={balances.some((balance) => balance.name === "California")}
           toAdd={formsToAdd(rules, evaluation, owner.id)}
           href={`/api/years/${year.year}/returns/${owner.id}/forms`}
           fileName={`Taxi ${year.year} return - ${owner.name}.pdf`}
@@ -150,8 +151,8 @@ function Headline({ title, refund, owing }: { title?: string; refund: string | n
 }
 
 /**
- * The return on the CRA's forms (and, for a resident of Quebec, on Revenu Québec's TP-1 after them), with its
- * worksheet: only a finished return can be printed. Revenu Québec's forms print in English or in French. `toAdd` are
+ * The return on the CRA's forms (and, for a resident of Quebec, on Revenu Québec's TP-1 after them), or on the IRS's (and
+ * for a California resident the FTB's after them), with its worksheet: only a finished return can be printed. Revenu Québec's forms print in English or in French. `toAdd` are
  * the forms the return needs that aren't printed. The PDF is fetched here and saved, so the page can say it is being
  * prepared (a first print downloads each official form) and why it couldn't be.
  */
@@ -159,6 +160,7 @@ function Download({
   ready,
   country,
   quebec,
+  california,
   toAdd,
   href,
   fileName,
@@ -166,6 +168,8 @@ function Download({
   ready: boolean;
   country: string;
   quebec: boolean;
+  /** A California resident's US return: California's Form 540 is printed after the federal forms. */
+  california: boolean;
   toAdd: { form: string; why: string }[];
   href: string;
   fileName: string;
@@ -192,6 +196,9 @@ function Download({
           Form 1040 and the schedules and forms your return uses, filled in with what Taxi knows, and a worksheet that shows how each amount was worked
           out. Add the social security numbers, your address and the other answers Taxi doesn't ask by hand. Attach Copy B of each W-2, sign Form 1040
           and mail it to the IRS; or copy the amounts into IRS e-file software.
+          {california
+            ? " After them comes California's Form 540 with its schedules and credit forms: sign it and mail it to the Franchise Tax Board apart from the federal return (the worksheet gives the address), or file it with CalFile or e-file software."
+            : ""}
         </p>
       ) : quebec ? (
         <p className="text-xs text-muted-foreground">

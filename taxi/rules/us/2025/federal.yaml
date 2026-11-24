@@ -477,20 +477,34 @@ lines:
     formula: "max(0, line.F1040.24 - line.F1040.33)"
   RESULT.net:
     label: Refund, less the amount owed
-    formula: 'if(person.role == "self" or line.US.joint == 0, line.F1040.34 - line.F1040.37, 0)'
-    source: "On a joint return the spouse has no refund or amount owed of their own: hints add this line over both returns"
+    formula: >-
+      if(person.role == "self" or line.US.joint == 0, line.F1040.34 - line.F1040.37
+      + if(line.CAL.files == 1, line.F540.115 - line.F540.111, 0), 0)
+    source: >-
+      The federal refund less the amount owed, and California's for a California return (california.yaml). On a joint
+      return the spouse has no refund or amount owed of their own: hints add this line over both returns
 
   # What this part of the app doesn't prepare: each one says so on the return instead of giving a wrong amount.
   SCOPE.return:
     label: Situations this app doesn't handle yet
     formula: >-
       line.SCOPE.residency + line.SCOPE.widowed + line.SCOPE.kiddie + line.SCOPE.care + line.SCOPE.otherIncome + line.SCOPE.investments + line.SCOPE.retirement
+      + line.SCOPE.communityProperty
   SCOPE.residency:
     label: A nonresident or dual-status alien
     formula: >-
       if(person.residentAllYear, 0, unsupported("A nonresident or dual-status alien files Form 1040-NR or a dual-status return, which this app doesn't prepare"))
       + if(line.US.joint == 1, if(spouse.person.residentAllYear, 0,
       unsupported("Your spouse wasn't a U.S. citizen or resident alien all year: filing jointly then takes an election to treat them as a resident, which this app doesn't handle")), 0)
+  # Married filing separately while living in a community property state, each spouse reports half of the community
+  # income (Pub. 555 and Form 8958), which this app doesn't split.
+  SCOPE.communityProperty:
+    label: Married filing separately in a community property state
+    formula: >-
+      if(line.US.separate == 0, 0, if(person.province == "AZ" or person.province == "CA" or person.province == "ID" or person.province == "LA"
+      or person.province == "NV" or person.province == "NM" or person.province == "TX" or person.province == "WA" or person.province == "WI",
+      unsupported("Filing separately in a community property state, each spouse reports half of the income you earned together (Form 8958), which this app doesn't work out"), 0))
+    source: "Instructions, Married Filing Separately, and Pub. 555: Arizona, California, Idaho, Louisiana, Nevada, New Mexico, Texas, Washington and Wisconsin"
   SCOPE.widowed:
     label: A spouse who died in 2025
     formula: 'if(family.maritalStatus == "widowed", if(answer.spouseDiedIn2025, unsupported("Your spouse died in 2025, so you can file jointly for 2025; this app doesn''t prepare that return yet"), 0), 0)'

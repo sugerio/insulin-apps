@@ -3,8 +3,8 @@ import { z } from "zod";
 // The people and their tax years, as the browser, the server and API clients see them. The people (the profile)
 // belong to one organization and are the same every year. Each tax year names who is in it (the person preparing always; their spouse
 // when the two returns are prepared together; the dependants who lived with them) and records the facts that can
-// change from year to year: marital status on December 31, each adult's province, whether they lived in Canada all
-// year.
+// change from year to year: marital status on December 31, each adult's province (or US state), whether they lived in
+// the country all year.
 
 /**
  * The countries the app prepares returns for: Canada (the CRA's T1, and Revenu Québec's TP-1) and the United States
@@ -76,6 +76,37 @@ export const PROVINCE_NAMES: Record<Province, string> = {
 /** The provinces whose tax this app works out: all of them. A Quebec resident also files Revenu Québec's TP-1. */
 export const SUPPORTED_PROVINCES: readonly Province[] = ["ON", "BC", "AB", "MB", "SK", "NB", "NL", "NS", "PE", "YT", "NT", "NU", "QC"];
 
+/** A US year's state (or the District of Columbia) on December 31, by its two-letter postal code. */
+export const US_STATES = [
+  "AL", "AK", "AZ", "AR", "CA", "CO", "CT", "DE", "DC", "FL", "GA", "HI", "ID", "IL", "IN", "IA", "KS", "KY", "LA", "ME", "MD", "MA",
+  "MI", "MN", "MS", "MO", "MT", "NE", "NV", "NH", "NJ", "NM", "NY", "NC", "ND", "OH", "OK", "OR", "PA", "RI", "SC", "SD", "TN", "TX",
+  "UT", "VT", "VA", "WA", "WV", "WI", "WY",
+] as const;
+export const usStateSchema = z.enum(US_STATES);
+export type UsState = z.infer<typeof usStateSchema>;
+export const US_STATE_NAMES: Record<UsState, string> = {
+  AL: "Alabama", AK: "Alaska", AZ: "Arizona", AR: "Arkansas", CA: "California", CO: "Colorado", CT: "Connecticut", DE: "Delaware",
+  DC: "District of Columbia", FL: "Florida", GA: "Georgia", HI: "Hawaii", ID: "Idaho", IL: "Illinois", IN: "Indiana", IA: "Iowa",
+  KS: "Kansas", KY: "Kentucky", LA: "Louisiana", ME: "Maine", MD: "Maryland", MA: "Massachusetts", MI: "Michigan", MN: "Minnesota",
+  MS: "Mississippi", MO: "Missouri", MT: "Montana", NE: "Nebraska", NV: "Nevada", NH: "New Hampshire", NJ: "New Jersey",
+  NM: "New Mexico", NY: "New York", NC: "North Carolina", ND: "North Dakota", OH: "Ohio", OK: "Oklahoma", OR: "Oregon",
+  PA: "Pennsylvania", RI: "Rhode Island", SC: "South Carolina", SD: "South Dakota", TN: "Tennessee", TX: "Texas", UT: "Utah",
+  VT: "Vermont", VA: "Virginia", WA: "Washington", WV: "West Virginia", WI: "Wisconsin", WY: "Wyoming",
+};
+/** The states whose return this app prepares with the federal one: California (Form 540). */
+export const SUPPORTED_STATES: readonly UsState[] = ["CA"];
+/**
+ * The states with no income tax return for wages and interest in 2025 (New Hampshire's tax on interest and dividends
+ * ended with 2024; Washington taxes only large capital gains, on its own return).
+ */
+export const NO_INCOME_TAX_STATES: readonly UsState[] = ["AK", "FL", "NV", "NH", "SD", "TN", "TX", "WA", "WY"];
+/** Where an adult lived on December 31: a province in a Canadian year, a state in a US year. */
+export const regionSchema = z.enum([...PROVINCES, ...US_STATES]);
+export type Region = z.infer<typeof regionSchema>;
+/** Whether a code is a region of the year's country. */
+export const isRegionOf = (country: Country, region: Region): boolean =>
+  country === "ca" ? (PROVINCES as readonly string[]).includes(region) : (US_STATES as readonly string[]).includes(region);
+
 export const idSchema = z.uuid();
 const isoDateSchema = z.iso.date();
 /** A birth date: a real date, not in the future, and after 1900. */
@@ -106,7 +137,8 @@ export type UpdatePerson = z.infer<typeof updatePersonSchema>;
 /** One adult's facts for the year, and whether their return is prepared here. */
 export const adultYearSchema = z.strictObject({
   personId: idSchema,
-  province: provinceSchema.nullable(),
+  /** The province on December 31 in a Canadian year, the state in a US year. */
+  province: regionSchema.nullable(),
   residentAllYear: z.boolean().nullable(),
   /** Prepared in this app: the person preparing, and their spouse when the spouse is in the year. */
   prepared: z.boolean(),
@@ -201,7 +233,8 @@ export const savePersonalInfoSchema = z.strictObject({
     .array(
       z.strictObject({
         personId: idSchema,
-        province: provinceSchema.nullable(),
+        /** The province (a Canadian year) or state (a US year) on December 31. */
+        province: regionSchema.nullable(),
         residentAllYear: z.boolean().nullable(),
       }),
     )

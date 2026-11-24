@@ -9,7 +9,7 @@
         "name": "Max Ford",
         "role": "self",
         "birthDate": "1992-10-10",
-        "province": null,
+        "province": "FL",
         "residentAllYear": true
       },
       {
@@ -17,7 +17,7 @@
         "name": "Liv Ford",
         "role": "spouse",
         "birthDate": "1993-11-11",
-        "province": null,
+        "province": "FL",
         "residentAllYear": true
       }
     ],

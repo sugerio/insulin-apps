@@ -9,7 +9,7 @@
         "name": "Ada Wynn",
         "role": "self",
         "birthDate": "1978-03-03",
-        "province": null,
+        "province": "FL",
         "residentAllYear": true
       },
       {
@@ -17,7 +17,7 @@
         "name": "Ben Wynn",
         "role": "spouse",
         "birthDate": "1979-04-04",
-        "province": null,
+        "province": "FL",
         "residentAllYear": true
       }
     ],

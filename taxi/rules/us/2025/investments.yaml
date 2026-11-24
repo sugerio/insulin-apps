@@ -31,6 +31,11 @@ slips:
       10: Noncash liquidation distributions
       12: Exempt-interest dividends
       13: Specified private activity bond interest dividends
+      14: State
+      16: State tax withheld
+    # Box 14 is the state's code; box 16, with it, is California's withholding (california.yaml).
+    codes:
+      14: [AL, AK, AZ, AR, CA, CO, CT, DE, DC, FL, GA, HI, ID, IL, IN, IA, KS, KY, LA, ME, MD, MA, MI, MN, MS, MO, MT, NE, NV, NH, NJ, NM, NY, NC, ND, OH, OK, OR, PA, RI, SC, SD, TN, TX, UT, VT, VA, WA, WV, WI, WY]
     # 2E and 2F are parts of 1a and 2a that matter only to a foreign person; box 3 lowers the basis of the shares, and box
     # 6 is already in 1a. Boxes 2B to 2D, 9 and 10 aren't read: an amount in them says so.
     informational: [2E, 2F, 3, 6]

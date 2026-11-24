@@ -9,7 +9,7 @@
         "name": "Tom Park",
         "role": "self",
         "birthDate": "1996-08-08",
-        "province": null,
+        "province": "FL",
         "residentAllYear": true
       }
     ],

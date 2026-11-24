@@ -5,8 +5,8 @@ import type { Person, TaxYear } from "#shared";
 import type { TestServer } from "../support/server.ts";
 import { renderApp } from "./support.tsx";
 
-// A United States year in the browser: chosen when the year is started, asked without a province, worked out with the
-// US rules, and not printed yet.
+// A United States year in the browser: chosen when the year is started, asked the state instead of a province, worked
+// out with the US rules, and printed on the IRS's forms.
 
 async function seedAlex(server: TestServer): Promise<Person> {
   const response = await server.call("POST", "/api/people", { body: { name: "Alex Rivera", relationship: "self", birthDate: "1991-03-03" } });
@@ -18,7 +18,7 @@ async function seedFinishedUs(server: TestServer) {
   const alex = await seedAlex(server);
   const call = async (method: string, path: string, body: object) => (await (await server.call(method, path, { body })).json()) as TaxYear;
   let year = await call("POST", "/api/years", { year: 2025, country: "us", people: [alex.id] });
-  year = await call("PUT", "/api/years/2025/personal-info", { revision: year.revision, maritalStatus: "single", adults: [{ personId: alex.id, province: null, residentAllYear: true }] });
+  year = await call("PUT", "/api/years/2025/personal-info", { revision: year.revision, maritalStatus: "single", adults: [{ personId: alex.id, province: "FL", residentAllYear: true }] });
   year = await call("POST", "/api/years/2025/slips", { revision: year.revision, personId: alex.id, type: "W2", issuer: "Acme Tools", boxes: { 1: "40000", 2: "3500", 4: "2480", 5: "40000", 6: "580" } });
   year = await call("PUT", "/api/years/2025/answers", {
     revision: year.revision,
@@ -54,6 +54,16 @@ describe("a United States year", () => {
     expect(await screen.findByRole("heading", { name: "Personal info" })).toBeTruthy();
     expect(screen.queryByLabelText("Province on December 31")).toBeNull();
     expect(screen.getByRole("radiogroup", { name: "A U.S. citizen or resident alien all year?" })).toBeTruthy();
+    // The state: California's return is prepared too; another state's says where to file it, or that it has none.
+    const state = screen.getByLabelText("State on December 31") as HTMLSelectElement;
+    expect(within(state).getByRole("group", { name: "State return prepared here too" }).textContent).toBe("California");
+    expect(within(state).getAllByRole("option")).toHaveLength(52);
+    fireEvent.change(state, { target: { value: "NY" } });
+    expect(screen.getByText("Taxi prepares your federal return only. File your New York return with other software.")).toBeTruthy();
+    fireEvent.change(state, { target: { value: "TX" } });
+    expect(screen.getByText("Texas has no state income tax return for wages and interest. Taxi prepares your federal return.")).toBeTruthy();
+    fireEvent.change(state, { target: { value: "CA" } });
+    expect(screen.queryByText(/Taxi prepares your federal return only/)).toBeNull();
     const statuses = screen.getByRole("radiogroup", { name: "Marital status on December 31, 2025" });
     expect(within(statuses).getAllByRole("radio").map((radio) => radio.closest("label")?.textContent)).toEqual(["Single", "Widowed", "Divorced", "Legally separated"]);
     expect(screen.getByText(/Filing status\./).closest("p")?.textContent).toMatch(/A married couple chooses: jointly, one return with both incomes/);
@@ -88,7 +98,7 @@ async function seedCouple(server: TestServer, joint: boolean) {
         revision: year.revision,
         maritalStatus: "married",
         filingStatus: "joint",
-        adults: [alex, sam].map((person) => ({ personId: person.id, province: null, residentAllYear: true })),
+        adults: [alex, sam].map((person) => ({ personId: person.id, province: "FL", residentAllYear: true })),
       },
     });
   }
@@ -148,7 +158,7 @@ describe("dependants in the browser", () => {
         ids = { alex: alex.id, ava: ava.id };
         const call = async (method: string, path: string, body: object) => (await (await s.call(method, path, { body })).json()) as TaxYear;
         let year = await call("POST", "/api/years", { year: 2025, country: "us", people: [alex.id, ava.id] });
-        year = await call("PUT", "/api/years/2025/personal-info", { revision: year.revision, maritalStatus: "single", adults: [{ personId: alex.id, province: null, residentAllYear: true }] });
+        year = await call("PUT", "/api/years/2025/personal-info", { revision: year.revision, maritalStatus: "single", adults: [{ personId: alex.id, province: "FL", residentAllYear: true }] });
         year = await call("POST", "/api/years/2025/slips", {
           revision: year.revision,
           personId: alex.id,

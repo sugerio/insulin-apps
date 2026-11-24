@@ -9,7 +9,7 @@
         "name": "Lee Park",
         "role": "self",
         "birthDate": "1957-04-04",
-        "province": null,
+        "province": "FL",
         "residentAllYear": true
       },
       {
@@ -17,7 +17,7 @@
         "name": "Kim Park",
         "role": "spouse",
         "birthDate": "1959-09-09",
-        "province": null,
+        "province": "FL",
         "residentAllYear": true
       }
     ],

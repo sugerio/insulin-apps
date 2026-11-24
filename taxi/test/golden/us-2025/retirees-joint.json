@@ -9,7 +9,7 @@
         "name": "Gus Hale",
         "role": "self",
         "birthDate": "1955-02-02",
-        "province": null,
+        "province": "FL",
         "residentAllYear": true
       },
       {
@@ -17,7 +17,7 @@
         "name": "May Hale",
         "role": "spouse",
         "birthDate": "1957-03-03",
-        "province": null,
+        "province": "FL",
         "residentAllYear": true
       }
     ],

@@ -9,7 +9,7 @@
         "name": "Chris Patel",
         "role": "self",
         "birthDate": "1985-01-01",
-        "province": null,
+        "province": "FL",
         "residentAllYear": true
       },
       {
@@ -17,7 +17,7 @@
         "name": "Riya Patel",
         "role": "spouse",
         "birthDate": "1987-02-02",
-        "province": null,
+        "province": "FL",
         "residentAllYear": true
       }
     ],

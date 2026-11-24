@@ -32,7 +32,9 @@ export const gettingStarted: DocTopic = {
             the social security numbers and your address by hand, attach Copy B of each W-2, sign and mail it to the IRS. Investments (1099-DIV, 1099-B and
             Schedule D), retirement income (1099-R, SSA-1099), IRA and HSA contributions, itemized deductions (Schedule A) and the alternative
             minimum tax are worked out too. AI reads the W-2, 1099, 1098 and SSA-1099 forms you upload. Finish shows hints, such as what filing jointly or separately would save a married couple.
-            It prepares no state return, and says on the return when something it doesn't handle yet applies, such as itemized deductions. See{" "}
+            Personal info asks each person's state. For a California resident, Taxi also prepares California's Form 540 (with Schedule CA, the
+            California earned income tax credit and the renter's credit), printed after the federal forms on the FTB's own forms and mailed apart.
+            For another state, it prepares the federal return only. It says on the return when something it doesn't handle yet applies. See{" "}
             <DocLink to="us-tax-basics">US tax basics</DocLink>.
           </p>
           <p>

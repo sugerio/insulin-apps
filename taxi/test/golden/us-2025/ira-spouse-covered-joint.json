@@ -9,7 +9,7 @@
         "name": "Paul Moss",
         "role": "self",
         "birthDate": "1969-01-15",
-        "province": null,
+        "province": "FL",
         "residentAllYear": true
       },
       {
@@ -17,7 +17,7 @@
         "name": "Jade Moss",
         "role": "spouse",
         "birthDate": "1971-02-20",
-        "province": null,
+        "province": "FL",
         "residentAllYear": true
       }
     ],

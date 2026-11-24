@@ -669,6 +669,248 @@ forms:
       "16": "min(line.F8960.12, max(0, line.F8960.13 - line.F8960.14))"
       "17": line.F8960.17
 
+  # California (FTB): printed after the federal forms for a California return, in the order the 2025 Booklet's "Assembling
+  # Your Tax Return" gives: Form 540, Schedule CA (540), Schedule P (540), then the credit forms. FTB's forms are in
+  # whole dollars with the cents printed (wholeDollars). The SSN or ITIN, address, county, date of birth, signature and
+  # the contributions stay for the person to fill in; Schedule CA is printed when it has an adjustment or Form 540 itemizes.
+  F540:
+    title: Form 540, California Resident Income Tax Return
+    url: https://www.ftb.ca.gov/forms/2025/2025-540.pdf
+    applies: "line.CAL.files == 1"
+    wholeDollars: true
+    fields:
+      firstName: { text: firstName }
+      lastName: { text: lastName }
+      spouseFirstName: { text: spouseFirstName, when: "line.US.joint == 1" }
+      spouseLastName: { text: spouseLastName, when: "line.US.joint == 1" }
+      names2: { text: returnNames }
+      names3: { text: returnNames }
+      names4: { text: returnNames }
+      names5: { text: returnNames }
+      names6: { text: returnNames }
+      single: { tick: "line.US.single == 1" }
+      joint: { tick: "line.US.joint == 1" }
+      separate: { tick: "line.US.separate == 1" }
+      hoh: { tick: "line.US.hoh == 1" }
+      qss: { tick: "line.US.qss == 1" }
+      claimable: { tick: "line.US.claimable == 1" }
+      7box: { count: line.F540.7box }
+      8box: { count: line.F540.8box }
+      9box: { count: line.F540.9box }
+      10box: { count: line.F540.10box }
+      "7": line.F540.7
+      "8": line.F540.8
+      "9": line.F540.9
+      "10": line.F540.10
+      "11": line.F540.11
+      "12": line.F540.12
+      "13": line.F540.13
+      "14": line.F540.14
+      "15": { value: line.F540.15, zero: true }
+      "16": line.F540.16
+      "17": { value: line.F540.17, zero: true }
+      "18": line.F540.18
+      "19": { value: line.F540.19, zero: true }
+      taxTable: { tick: "line.F540.19 > 0 and line.F540.19 <= param.caTaxTableLimit" }
+      rateSchedule: { tick: "line.F540.19 > param.caTaxTableLimit" }
+      "31": { value: line.F540.31, zero: true }
+      "32": line.F540.32
+      "33": { value: line.F540.33, zero: true }
+      "35": { value: line.F540.35, zero: true }
+      "40": line.F540.40
+      "46": line.F540.46
+      "47": line.F540.47
+      "48": { value: line.F540.48, zero: true }
+      "61": line.F540.61
+      "62": line.F540.62
+      "63": line.F540.63
+      "64": { value: line.F540.64, zero: true }
+      "71": line.F540.71
+      "72": line.F540.72
+      "75": line.F540.75
+      "76": line.F540.76
+      "77": line.F540.77
+      "78": { value: line.F540.78, zero: true }
+      # "Do not leave blank": 0, with the box for no use tax owed.
+      "91": { value: line.F540.91, zero: true }
+      noUseTax: { tick: "line.F540.91 == 0" }
+      coverage: { tick: answer.caFullYearCoverage }
+      "93": line.F540.93
+      "94": line.F540.94
+      "95": line.F540.95
+      "97": line.F540.97
+      "99": line.F540.99
+      "100": line.F540.100
+      "111": line.F540.111
+      "115": line.F540.115
+    # Line 10: up to three dependents, the same as on Form 1040 (more need a statement: formsToAdd). The SSN and any
+    # relationship other than child or foster child stay for the person to write.
+    dependants:
+      when: "line.US.claimsDependants == 1"
+      which: "line.DEP.dependent == 1"
+      columns: 3
+      fields:
+        firstName: { text: firstName }
+        lastName: { text: lastName }
+        relationship: { choice: relationship, labels: { child: Child, foster: Foster child } }
+
+  SCA540:
+    title: Schedule CA (540), California Adjustments — Residents
+    url: https://www.ftb.ca.gov/forms/2025/2025-540-ca.pdf
+    applies: "line.CAL.files == 1 and (line.F540.14 > 0 or line.F540.16 > 0 or line.CAL.itemizes == 1)"
+    wholeDollars: true
+    fields:
+      names: { text: returnNames }
+      # Part I, column A: the federal amounts of Form 1040 and Schedule 1; columns B and C: what California changes.
+      1aA: "round(line.F1040.1a, 0)"
+      1eA: "round(line.F1040.1e, 0)"
+      1hC: line.SCA.1h
+      1zA: "round(line.F1040.1z, 0)"
+      1zC: line.SCA.1h
+      2a: "round(line.F1040.2a, 0)"
+      2bA: "round(line.F1040.2b, 0)"
+      2bB: line.SCA.2B
+      2bC: line.SCA.2C
+      3a: "round(line.F1040.3a, 0)"
+      3bA: "round(line.F1040.3b, 0)"
+      4a: "round(line.F1040.4a, 0)"
+      4bA: "round(line.F1040.4b, 0)"
+      5a: "round(line.F1040.5a, 0)"
+      5bA: "round(line.F1040.5b, 0)"
+      6a: "round(line.F1040.6a, 0)"
+      6bA: "round(line.F1040.6b, 0)"
+      6bB: line.SCA.6B
+      7aA: "round(line.F1040.7a, 0)"
+      3A: "round(line.S1.3, 0)"
+      10A: "round(line.F1040.9, 0)"
+      10B: line.SCA.10B
+      10C: line.SCA.10C
+      # Section C: the adjustments of Schedule 1; California doesn't allow the HSA deduction (column B).
+      13A: "round(line.S1.13, 0)"
+      13B: line.SCA.13B
+      15A: "round(line.S1.15, 0)"
+      20A: "round(line.S1.20, 0)"
+      21A: "round(line.S1.21, 0)"
+      26A: "round(line.F1040.10, 0)"
+      26B: line.SCA.13B
+      27A: "round(line.F1040.11a, 0)"
+      27B: line.SCA.27B
+      27C: line.SCA.27C
+      # Part II, when Form 540 itemizes: federal Schedule A in column A, the state and local income tax taken out
+      # (column B) and the taxes over the federal $40,000 limit put back (column C).
+      notItemizedFederal: { tick: "line.CAL.itemizes == 1 and line.US.itemizes == 0" }
+      "1": { value: "round(line.SA.1, 0)", when: "line.CAL.itemizes == 1" }
+      "2": { value: "round(line.F1040.11a, 0)", when: "line.CAL.itemizes == 1" }
+      "3": { value: "round(line.SA.3, 0)", when: "line.CAL.itemizes == 1" }
+      p5:4A: { value: line.SCA.4, when: "line.CAL.itemizes == 1" }
+      5aA: { value: "round(line.SA.5a, 0)", when: "line.CAL.itemizes == 1" }
+      5aB: { value: line.SCA.17B, when: "line.CAL.itemizes == 1" }
+      p5:5bA: { value: "round(line.SA.5b, 0)", when: "line.CAL.itemizes == 1" }
+      5cA: { value: "round(line.SA.5c, 0)", when: "line.CAL.itemizes == 1" }
+      5dA: { value: "round(line.SA.5d, 0)", when: "line.CAL.itemizes == 1" }
+      5eA: { value: "round(line.SA.5e, 0)", when: "line.CAL.itemizes == 1" }
+      5eC: { value: line.SCA.17C, when: "line.CAL.itemizes == 1" }
+      p5:7A: { value: "round(line.SA.7, 0)", when: "line.CAL.itemizes == 1" }
+      p5:7B: { value: line.SCA.17B, when: "line.CAL.itemizes == 1" }
+      7C: { value: line.SCA.17C, when: "line.CAL.itemizes == 1" }
+      p5:8aA: { value: "round(line.SA.8a, 0)", when: "line.CAL.itemizes == 1" }
+      p5:8eA: { value: "round(line.SA.8a, 0)", when: "line.CAL.itemizes == 1" }
+      p5:10A: { value: "round(line.SA.10, 0)", when: "line.CAL.itemizes == 1" }
+      p6:11A: { value: "round(line.SA.11, 0)", when: "line.CAL.itemizes == 1" }
+      p6:12A: { value: "round(line.SA.12, 0)", when: "line.CAL.itemizes == 1" }
+      p6:14A: { value: "round(line.SA.14, 0)", when: "line.CAL.itemizes == 1" }
+      p6:17A: { value: line.SCA.17A, when: "line.CAL.itemizes == 1" }
+      p6:17B: { value: line.SCA.17B, when: "line.CAL.itemizes == 1" }
+      17C: { value: line.SCA.17C, when: "line.CAL.itemizes == 1" }
+      "18": { value: line.SCA.18, when: "line.CAL.itemizes == 1" }
+      "26": { value: line.SCA.28, when: "line.CAL.itemizes == 1" }
+      "28": { value: line.SCA.28, when: "line.CAL.itemizes == 1" }
+      "29": { value: line.SCA.29, when: "line.CAL.itemizes == 1" }
+      "30": { value: line.F540.18, when: "line.CAL.itemizes == 1" }
+
+  SP540:
+    title: Schedule P (540), Alternative Minimum Tax and Credit Limitations — Residents
+    url: https://www.ftb.ca.gov/forms/2025/2025-540-p.pdf
+    applies: "line.CAL.files == 1 and (line.SP.26 > 0 or line.F3506.12 > line.F540.40)"
+    wholeDollars: true
+    fields:
+      names: { text: returnNames }
+      "1": line.SP.1
+      "2": line.SP.2
+      "3": line.SP.3
+      "14": line.SP.14
+      "15": { value: line.SP.15, zero: true }
+      "18": line.SP.18
+      "19": line.SP.21
+      "21": line.SP.21
+      "22": line.SP.22
+      "23": line.SP.23
+      "24": line.SP.24
+      "25": line.F540.31
+      "26": { value: line.SP.26, zero: true }
+      # Part III: the care credit, which can't take the tax below the tentative minimum tax.
+      p2:1: { value: line.F540.35, when: "line.F3506.12 > 0" }
+      p2:2: { value: line.SP.24, when: "line.F3506.12 > 0" }
+      3C: { value: line.SP.excess, when: "line.F3506.12 > 0", zero: true }
+      5A: line.F3506.12
+      5B: line.F540.40
+      5C: { value: "line.SP.excess - line.F540.40", when: "line.F3506.12 > 0", zero: true }
+
+  F3506:
+    title: Form FTB 3506, Child and Dependent Care Expenses Credit
+    url: https://www.ftb.ca.gov/forms/2025/2025-3506.pdf
+    applies: "line.CAL.files == 1 and line.F3506.12 > 0"
+    wholeDollars: true
+    fields:
+      names: { text: returnNames }
+      # Parts I and II and line 2 (the care providers and the qualifying persons) stay for the person to fill in.
+      "3": line.F3506.3
+      "4": line.F3506.4
+      "5": line.F3506.5
+      "6": line.F3506.6
+      "7": line.F3506.7
+      "8": line.F3506.8
+      "9": line.F3506.9
+      "10": line.F3506.10
+      "12": line.F3506.12
+
+  F3514:
+    title: Form FTB 3514, California Earned Income Tax Credit
+    url: https://www.ftb.ca.gov/forms/2025/2025-3514.pdf
+    applies: "line.CAL.files == 1 and line.F3514.20 + line.F3514.28 + line.F3514.39 > 0"
+    wholeDollars: true
+    fields:
+      names: { text: returnNames }
+      "2": line.F540.13
+      "3": "round(line.F1040.27a, 0)"
+      "4": { value: line.F3514.4, zero: true }
+      "13": line.F3514.13
+      "16": line.F3514.13
+      "18": "line.F3514.19 - line.F3514.13"
+      "19": line.F3514.19
+      "20": line.F3514.20
+      # Part VII, the Young Child Tax Credit, and Part IX, the Foster Youth Tax Credit (each to the cent where the form
+      # says "do not round").
+      "23": { value: line.F3514.19, when: "line.F3514.28 > 0" }
+      "25": { value: "line.F3514.19 - param.calYoungChildThreshold", when: "line.F3514.28 > 0 and line.F3514.19 > param.calYoungChildThreshold" }
+      "26": { value: "floor((line.F3514.19 - param.calYoungChildThreshold) / 100, 0.01)", when: "line.F3514.28 > 0 and line.F3514.19 > param.calYoungChildThreshold" }
+      "27": { value: line.CAL.youngReduction, when: "line.F3514.28 > 0" }
+      "28": line.F3514.28
+      "34": { value: line.F3514.19, when: "line.F3514.39 > 0" }
+      "35": { value: "line.CAL.fosterYouths * param.calYoungChildCredit", when: "line.F3514.39 > 0" }
+      "36": { value: "line.F3514.19 - param.calYoungChildThreshold", when: "line.F3514.39 > 0 and line.F3514.19 > param.calYoungChildThreshold" }
+      "37": { value: "floor((line.F3514.19 - param.calYoungChildThreshold) / 100, 0.01)", when: "line.F3514.39 > 0 and line.F3514.19 > param.calYoungChildThreshold" }
+      "38": { value: "line.CAL.fosterYouths * line.CAL.youngReduction", when: "line.F3514.39 > 0" }
+      "39": line.F3514.39
+    # Part III: each qualifying child's name; the SSN, date of birth, relationship, days in California and address stay
+    # for the person to fill in.
+    dependants:
+      which: "line.DEP.calEitcChild == 1"
+      columns: 3
+      fields:
+        firstName: { text: firstName }
+        lastName: { text: lastName }
+
 # Forms a return needs that aren't printed, in the order they're attached: the worksheet and Finish name them, for the
 # person to fill in and file with the forms. Each applies when its formula is yes.
 formsToAdd:
@@ -687,3 +929,9 @@ formsToAdd:
       to $4,000 and line 30 the credit (all of the first $2,000 and 25% of the rest); for one with the lifetime learning
       credit, line 31 is their expenses. "How each line is worked out", below, has each student's amounts.
     applies: "line.US.students > 1"
+  CA540DEP:
+    form: A statement of your other dependents, for Form 540, line 10
+    why: >-
+      because you claim more than three dependents: list each other dependent's name, SSN or ITIN and relationship to
+      you, and attach it to Form 540
+    applies: "line.CAL.files == 1 and line.F540.10box > 3"

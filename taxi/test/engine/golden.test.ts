@@ -34,6 +34,13 @@ const ALWAYS_ZERO: Record<string, string> = {
   "US.ownBrokerUnsupported": "one person's 1099-B summaries that need Form 8949: zero, or says so",
   "US.ownRetirementScope": "one person's Forms 1099-R this app doesn't work out: zero, or says so",
   "SA.8b": "mortgage interest not on a Form 1098: zero, or says so",
+  "SCOPE.communityProperty": "married filing separately in a community property state: zero, or says so",
+  // California: each CALSCOPE line is zero, or says what the California return doesn't handle (test/engine/california.test.ts).
+  "CALSCOPE.return": "situations the California return doesn't handle yet: zero, or says so",
+  "CALSCOPE.residency": "a nonresident or part-year resident of California (Form 540NR): zero, or says so",
+  "CALSCOPE.withholding": "state tax withheld for another state: zero, or says so",
+  "CALSCOPE.coverage": "the health coverage penalty (FTB 3853): zero, or says so",
+  "CALSCOPE.youngChild": "the Young Child Tax Credit with no earned income: zero, or says so",
 };
 
 for (const folder of readdirSync(ROOT, { withFileTypes: true }).filter((entry) => entry.isDirectory()).map((entry) => entry.name)) {

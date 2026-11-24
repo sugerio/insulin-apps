@@ -9,7 +9,7 @@
         "name": "Drew Hall",
         "role": "self",
         "birthDate": "1980-01-15",
-        "province": null,
+        "province": "FL",
         "residentAllYear": true
       },
       {
@@ -17,7 +17,7 @@
         "name": "Jesse Hall",
         "role": "spouse",
         "birthDate": "1982-05-20",
-        "province": null,
+        "province": "FL",
         "residentAllYear": true
       }
     ],

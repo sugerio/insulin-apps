@@ -139,7 +139,10 @@ export const gettingStarted: DocTopic = {
       body: (
         <>
           <p>
-            Above each step but Finish, <b>Estimate</b> shows the refund or balance owing; <b>Details</b> opens the return's key lines: total income, net income, taxable income, net
+            On a wide screen, a column beside each step shows whose return it is and the <b>Estimate</b>: the refund or balance owing, then the return's key lines. The arrow at the
+            top of the column collapses it into a bar above the step, and the arrow in that bar opens it again; this browser remembers the choice. On a narrower screen, or with the
+            column collapsed, the bar shows the refund or balance owing, and <b>Details</b> opens the key lines. On Finish, which shows the lines itself, the column keeps only
+            the result. The key lines are total income, net income, taxable income, net
             federal tax, provincial or territorial tax (for a Quebec resident, the Quebec refund or balance instead), the total payable, the tax already deducted, and the refund or
             balance owing. When both returns are prepared together, each uses the other's numbers, such as the spouse amount; the line's
             "why" shows them.

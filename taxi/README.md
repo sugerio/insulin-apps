@@ -28,8 +28,10 @@ uploaded slips read by AI (or typed in), income, deductions, credits, the result
   for an answer) or missing, and explains any number down to the slip boxes. The 2025 rules cover the T1 for
   employment, interest, dividends, trust income and capital gains (T4, T5, T3, T5008), RRSP, FHSA, RPP and union dues,
   the federal credits, transfers between spouses (Schedule 2), the Form 428 and 479 of every province and territory,
-  and, for a resident of Quebec, the 5005-R and the TP-1 (`qc.yaml`, `qc-credits.yaml`). Above each step but
-  Finish, the estimate shows the refund or balance owing; Details opens each result line, and selecting a line shows why.
+  and, for a resident of Quebec, the 5005-R and the TP-1 (`qc.yaml`, `qc-credits.yaml`). On a wide screen a column
+  beside each step shows whose return it is, the refund or balance owing and every result line (selecting a line shows
+  why); it collapses into a bar above the step, remembered in this browser. On a narrower screen that bar shows the result
+  and Details opens the lines. On Finish the column keeps only the result.
 - **Step 2, AI reading.** Upload a folder or files into a return; Claude reads each one into slips, receipts (RRSP, donation,
   medical) and last year's notice of assessment (a document with the other person's name goes to their return), using
   the organization's Anthropic credential (Settings › Integrations, key `anthropic`). A file with the same name as one in the

@@ -1,5 +1,5 @@
-import { useMemo, useState } from "react";
-import { ChevronRight } from "lucide-react";
+import { useMemo, useState, type ReactNode } from "react";
+import { ChevronRight, ChevronUp } from "lucide-react";
 import { balancesOf, type Estimate } from "#shared";
 import { Button } from "@/components/ui/button.tsx";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet.tsx";
@@ -12,26 +12,37 @@ import { useEstimate } from "../lib/useYearData.ts";
 import { ResourceView } from "./Feedback.tsx";
 import { useReturn, useYear } from "./YearFrame.tsx";
 
-// The open return's estimate above each step: its refund or balance owing in one line, and on "Details" its result
-// lines in a panel from the side, with "why" for each line, which the browser works out with the same engine and the
-// input the server sent (both adults' returns are worked out together, so what one adult's return takes from the
-// other's shows in the "why").
+// The open return's estimate beside or above each step: its refund or balance owing, and its result lines with "why"
+// for each, which the browser works out with the same engine and the input the server sent (both adults' returns are
+// worked out together, so what one adult's return takes from the other's shows in the "why"). On a wide screen the lines
+// show in a column beside the step (EstimateColumn); otherwise, or with that column collapsed, the bar above the step
+// says the result in one line and "Details" opens the lines in a panel from the side (EstimateSummary).
 
-export function EstimateSummary() {
+/** The result in one line, as "Estimate" over the refund or balance owing. */
+function Headline({ large = false }: { large?: boolean }) {
   const resource = useEstimate();
   const { owner } = useReturn();
   const { year } = useYear();
   const result = resource.status === "ready" ? headline(rulesFor(year.country, year.year)!, resource.data, owner.id) : null;
   return (
+    <span className={cn("flex flex-col leading-tight", !large && "items-end")}>
+      <span className="text-xs text-muted-foreground">Estimate</span>
+      <span className={cn("font-semibold tabular-nums", large && "text-lg")}>
+        {resource.status === "loading" ? "…" : result ? result.text : "Not worked out yet"}
+        {result?.estimate ? <span className="ml-1 text-xs font-normal text-muted-foreground">est.</span> : null}
+      </span>
+    </span>
+  );
+}
+
+/** The bar's estimate: the result in one line, and "Details" opening its lines in a panel from the side. */
+export function EstimateSummary() {
+  const resource = useEstimate();
+  const { owner } = useReturn();
+  return (
     <Sheet>
       <div className="flex items-center gap-3" role="group" aria-label="Estimate">
-        <span className="flex flex-col items-end leading-tight">
-          <span className="text-xs text-muted-foreground">Estimate</span>
-          <span className="font-semibold tabular-nums">
-            {resource.status === "loading" ? "…" : result ? result.text : "Not worked out yet"}
-            {result?.estimate ? <span className="ml-1 text-xs font-normal text-muted-foreground">est.</span> : null}
-          </span>
-        </span>
+        <Headline />
         <SheetTrigger asChild>
           <Button variant="outline" size="sm" aria-label="Estimate details">
             Details
@@ -48,6 +59,34 @@ export function EstimateSummary() {
         </div>
       </SheetContent>
     </Sheet>
+  );
+}
+
+/**
+ * The column beside a step on a wide screen: whose return it is, then its estimate with every result line, kept in
+ * view as the step scrolls. `lines={false}` shows only the result (Finish shows the lines itself). It collapses into
+ * the bar above the step.
+ */
+export function EstimateColumn({ switcher, lines, onCollapse }: { switcher: ReactNode; lines: boolean; onCollapse: () => void }) {
+  const resource = useEstimate();
+  return (
+    <aside aria-label="Return and estimate" className="sticky top-4 flex max-h-[calc(100svh-2rem)] min-w-0 flex-col gap-3 overflow-y-auto rounded-xl border bg-card p-3">
+      <div className="flex items-start justify-between gap-1">
+        <div className="min-w-0 flex-1">{switcher}</div>
+        <Button variant="ghost" size="icon-sm" onClick={onCollapse} aria-label="Collapse the estimate" title="Collapse the estimate">
+          <ChevronUp aria-hidden="true" />
+        </Button>
+      </div>
+      <div className="flex flex-col gap-2 border-t px-1 pt-3" role="group" aria-label="Estimate">
+        <Headline large />
+        {lines ? (
+          <>
+            <p className="text-xs text-muted-foreground">Select a line to see why.</p>
+            <ResourceView resource={resource}>{(estimate) => <EstimateBody estimate={estimate} />}</ResourceView>
+          </>
+        ) : null}
+      </div>
+    </aside>
   );
 }
 

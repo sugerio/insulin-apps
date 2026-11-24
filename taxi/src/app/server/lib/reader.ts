@@ -96,7 +96,7 @@ export function promptFor(context: ReadContext): string {
   const types = [...context.rules.slips.values()].map(
     (slip) =>
       `- ${slip.id}, ${slip.title}: ${slip.about}. Boxes: ${Object.entries(slip.boxes)
-        .map(([box, label]) => `${box} (${label})`)
+        .map(([box, label]) => (slip.codes[box] ? `${box} (${label}; a code, one of ${slip.codes[box].join(", ")})` : `${box} (${label})`))
         .join(", ")}.`,
   );
   return [
@@ -110,7 +110,7 @@ export function promptFor(context: ReadContext): string {
     "- type: one of the slip types above.",
     "- person: the recipient's or student's name as printed on the slip.",
     "- issuer: who issued the slip (the employer, payer, trust, broker or institution).",
-    "- boxes: each box from that type's list that shows an amount, with the amount exactly as printed but without $ signs, spaces or thousands separators, and a point as the decimal mark (for example 60000.00). Leave out empty boxes and boxes not in the list. Copy amounts; never add them up.",
+    "- boxes: each box from that type's list that shows an amount, with the amount exactly as printed but without $ signs, spaces or thousands separators, and a point as the decimal mark (for example 60000.00). A box marked as a code holds its code instead (for example G). Leave out empty boxes and boxes not in the list. Copy amounts; never add them up.",
     "- unsure: the numbers of any boxes you could not read clearly.",
     ...reading.notes.map(withYears),
     "taxYear: the tax year printed on the document, or null if none is printed.",

@@ -1,0 +1,157 @@
+# The alternative minimum tax (Form 6251, Schedule 2 line 2, Form 1040 line 17). "Form 6251" is the 2025 form; "6251
+# instructions" the 2025 Instructions for Form 6251. Of the adjustments on lines 2b to 3, only private activity bond
+# interest (line 2g) is worked out: the others (incentive stock options, depreciation, a tax refund, a net operating
+# loss and the like) come from income this app doesn't take yet. Part III uses the regular tax's Qualified Dividends
+# and Capital Gain Tax Worksheet (investments.yaml); no Schedule D Tax Worksheet (line 14 is 0).
+
+params:
+  amtExemptionSingle:
+    label: AMT exemption, single or head of household
+    source: "Form 6251, line 5: $88,100 if line 4 is not over $626,350"
+    value: 88100
+  amtExemptionJoint:
+    label: AMT exemption, married filing jointly or qualifying surviving spouse
+    source: "Form 6251, line 5: $137,000 if line 4 is not over $1,252,700"
+    value: 137000
+  amtExemptionSeparate:
+    label: AMT exemption, married filing separately
+    source: "Form 6251, line 5: $68,500 if line 4 is not over $626,350"
+    value: 68500
+  amtPhaseOutSingle:
+    label: AMTI over which the exemption is reduced, single, head of household or married filing separately
+    source: "6251 instructions, Exemption Worksheet, line 3: $626,350 if single, head of household or married filing separately"
+    value: 626350
+  amtPhaseOutJoint:
+    label: AMTI over which the exemption is reduced, married filing jointly or qualifying surviving spouse
+    source: "6251 instructions, Exemption Worksheet, line 3: $1,252,700"
+    value: 1252700
+  amtPhaseOutRate:
+    label: Reduction of the exemption for each dollar of AMTI over the threshold
+    source: "6251 instructions, Exemption Worksheet, line 5: 25%"
+    value: 25%
+  amtBracket:
+    label: Amount taxed at 26% before the 28% rate
+    source: "Form 6251, line 7: $239,100 or less ($119,550 if married filing separately) at 26%"
+    value: 239100
+  amtBracketSeparate:
+    label: Amount taxed at 26% before the 28% rate, married filing separately
+    source: "Form 6251, line 7: $119,550 if married filing separately"
+    value: 119550
+  amtBracketAdjust:
+    label: Subtracted after 28% above the 26% band
+    source: "Form 6251, line 7: multiply by 28% and subtract $4,782 ($2,391 if married filing separately)"
+    value: 4782
+  amtBracketAdjustSeparate:
+    label: Subtracted after 28% above the 26% band, married filing separately
+    source: "Form 6251, line 7: $2,391 if married filing separately"
+    value: 2391
+  amtLowRate:
+    label: AMT rate on the first band
+    source: "Form 6251, line 7: 26%"
+    value: 26%
+  amtHighRate:
+    label: AMT rate above the first band
+    source: "Form 6251, line 7: 28%"
+    value: 28%
+
+lines:
+  US.ownPrivateActivityInterest:
+    label: Specified private activity bond interest on this person's Forms 1099-INT (box 9) and 1099-DIV (box 13)
+    formula: "sum(INT.box9) + sum(DIV.box13)"
+  F6251.1a:
+    label: Deductions less the enhanced deduction for seniors
+    formula: "line.F1040.14 - line.S1A.37"
+    source: "Form 6251, line 1a: Form 1040 line 14 less Schedule 1-A line 37"
+  F6251.1b:
+    label: AGI less line 1a
+    formula: "line.F1040.11a - line.F6251.1a"
+  F6251.2a:
+    label: Taxes, or the standard deduction
+    formula: "if(line.US.itemizes == 1, line.SA.7, line.F1040.12e)"
+    source: "Form 6251, line 2a: the taxes of Schedule A line 7; without Schedule A, Form 1040 line 12e"
+  F6251.2g:
+    label: Interest from specified private activity bonds
+    formula: "line.US.ownPrivateActivityInterest + if(line.US.joint == 1, spouse.line.US.ownPrivateActivityInterest, 0)"
+    source: "6251 instructions, line 2g: Form 1099-INT box 9 and Form 1099-DIV box 13"
+  F6251.4:
+    label: Alternative minimum taxable income
+    formula: "line.F6251.1b + line.F6251.2a + line.F6251.2g"
+  F6251.5:
+    label: Exemption
+    formula: >-
+      max(0, if(line.US.jointRates == 1, param.amtExemptionJoint, if(line.US.separate == 1, param.amtExemptionSeparate, param.amtExemptionSingle))
+      - round(max(0, line.F6251.4 - if(line.US.jointRates == 1, param.amtPhaseOutJoint, param.amtPhaseOutSingle)) * param.amtPhaseOutRate, 2))
+    source: "Form 6251, line 5, and the Exemption Worksheet"
+  F6251.6:
+    label: AMTI over the exemption
+    formula: "max(0, line.F6251.4 - line.F6251.5)"
+  F6251.39:
+    label: Tentative tax on line 6 at the AMT rates
+    formula: >-
+      round(if(line.F6251.6 <= if(line.US.separate == 1, param.amtBracketSeparate, param.amtBracket), line.F6251.6 * param.amtLowRate,
+      line.F6251.6 * param.amtHighRate - if(line.US.separate == 1, param.amtBracketAdjustSeparate, param.amtBracketAdjust)), 2)
+    source: "Form 6251, lines 7 and 39"
+
+  # Part III, when the regular tax used the Qualified Dividends and Capital Gain Tax Worksheet.
+  F6251.13:
+    label: Qualified dividends and net capital gain
+    formula: "line.QDW.4"
+    source: "Form 6251, lines 13 to 15: line 4 of the Qualified Dividends and Capital Gain Tax Worksheet (no Schedule D Tax Worksheet, line 14 is 0)"
+  F6251.16:
+    label: Smaller of line 12 and line 15
+    formula: "min(line.F6251.6, line.F6251.13)"
+  F6251.17:
+    label: AMTI taxed at the AMT rates
+    formula: "line.F6251.6 - line.F6251.16"
+  F6251.18:
+    label: Tax on line 17 at the AMT rates
+    formula: >-
+      round(if(line.F6251.17 <= if(line.US.separate == 1, param.amtBracketSeparate, param.amtBracket), line.F6251.17 * param.amtLowRate,
+      line.F6251.17 * param.amtHighRate - if(line.US.separate == 1, param.amtBracketAdjustSeparate, param.amtBracketAdjust)), 2)
+  F6251.21:
+    label: Room in the 0% band
+    formula: "max(0, line.QDW.6 - line.QDW.5)"
+    source: "Form 6251, lines 19 to 21: the 0% band less line 5 of the worksheet"
+  F6251.22:
+    label: Smaller of line 12 and line 13
+    formula: "min(line.F6251.6, line.F6251.13)"
+  F6251.23:
+    label: Taxed at 0%
+    formula: "min(line.F6251.21, line.F6251.22)"
+  F6251.30:
+    label: Taxed at 15%
+    formula: "min(line.F6251.22 - line.F6251.23, max(0, line.QDW.13 - (line.F6251.21 + line.QDW.5)))"
+    source: "Form 6251, lines 24 to 30"
+  F6251.31:
+    label: Tax at 15%
+    formula: "round(line.F6251.30 * param.capitalGainRateMiddle, 2)"
+  F6251.34:
+    label: Tax at 20%
+    formula: "round((line.F6251.22 - (line.F6251.23 + line.F6251.30)) * param.capitalGainRateTop, 2)"
+    source: "Form 6251, lines 32 to 34"
+  F6251.40:
+    label: Tentative tax with the capital gain rates
+    formula: "min(line.F6251.18 + line.F6251.31 + line.F6251.34, line.F6251.39)"
+    source: "Form 6251, lines 38 to 40 (line 37 is 0 without unrecaptured section 1250 gain)"
+
+  F6251.7:
+    label: Tentative tax before the AMT foreign tax credit
+    formula: "if(line.QDW.applies == 1, line.F6251.40, line.F6251.39)"
+  F6251.10:
+    label: Regular tax less the foreign tax credit
+    formula: "max(0, line.F1040.16 - line.S3.1)"
+    source: "Form 6251, line 10: Form 1040 line 16 and Schedule 2 line 1z (none here), less Schedule 3 line 1"
+  F6251.8:
+    label: AMT foreign tax credit
+    formula: "if(line.F6251.7 > line.F6251.10, min(line.S3.1, line.F6251.7), 0)"
+    source: "6251 instructions, line 8: with the foreign tax credit claimed without Form 1116, the same amount as Schedule 3 line 1"
+  F6251.9:
+    label: Tentative minimum tax
+    formula: "line.F6251.7 - line.F6251.8"
+  F6251.11:
+    label: Alternative minimum tax
+    formula: "max(0, line.F6251.9 - line.F6251.10)"
+  F1040.17:
+    label: Alternative minimum tax (Schedule 2, line 3)
+    formula: "line.F6251.11"
+    source: "Schedule 2, lines 2 and 3: Form 6251, line 11 (no additions to tax on lines 1a to 1y)"

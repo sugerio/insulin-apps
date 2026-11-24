@@ -9,7 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { cn } from "@/lib/utils.ts";
 import { apiRequest, describeError, fieldIssues, saveFile } from "../api/client.ts";
 import { byBox, formatBox } from "../lib/format.ts";
-import { normalizeAmount } from "../shared/amount.ts";
+import { normalizeAmount, sameBoxValue } from "../shared/amount.ts";
 import { rulesFor } from "../shared/rules/index.ts";
 import type { SlipType } from "../shared/engine/rules.ts";
 import { Banner, RefusedBanner } from "./Feedback.tsx";
@@ -62,7 +62,24 @@ export function SlipBoxTable({
                 {issue ? <p className="text-xs text-destructive">{issue}</p> : null}
               </TableCell>
               <TableCell className="text-right tabular-nums">
-                {onChange ? (
+                {onChange && slipType.codes[box] ? (
+                  <NativeSelect
+                    id={`${id}-${box}`}
+                    className="h-8"
+                    value={boxes[box] ?? ""}
+                    onChange={(event) => onChange(box, event.target.value)}
+                    disabled={disabled}
+                    aria-label={`Box ${box} ${label}`}
+                    aria-invalid={issue ? true : undefined}
+                  >
+                    <NativeSelectOption value="">—</NativeSelectOption>
+                    {slipType.codes[box]!.map((code) => (
+                      <NativeSelectOption key={code} value={code}>
+                        {code}
+                      </NativeSelectOption>
+                    ))}
+                  </NativeSelect>
+                ) : onChange ? (
                   <Input
                     id={`${id}-${box}`}
                     inputMode="decimal"
@@ -127,7 +144,7 @@ function filled(boxes: Record<string, string>): Record<string, string> {
 function sameBoxes(a: Record<string, string>, b: Record<string, string>): boolean {
   const left = Object.entries(filled(a));
   const right = filled(b);
-  return left.length === Object.keys(right).length && left.every(([box, amount]) => right[box] !== undefined && Number(right[box]) === Number(amount));
+  return left.length === Object.keys(right).length && left.every(([box, amount]) => right[box] !== undefined && sameBoxValue(right[box], amount));
 }
 
 /** What a slip form holds: its type, issuer and boxes as typed, over the version of the slip they were typed on. */

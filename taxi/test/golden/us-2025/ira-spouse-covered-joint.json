@@ -1,0 +1,149 @@
+{
+  "about": "Married filing jointly, only the spouse covered by a plan, $244,000 of wages: a $7,000 IRA contribution cut by the $236,000 to $246,000 phase-out, and a 56-year-old's family HSA",
+  "input": {
+    "country": "us",
+    "year": 2025,
+    "people": [
+      {
+        "id": "p1",
+        "name": "Paul Moss",
+        "role": "self",
+        "birthDate": "1969-01-15",
+        "province": null,
+        "residentAllYear": true
+      },
+      {
+        "id": "p2",
+        "name": "Jade Moss",
+        "role": "spouse",
+        "birthDate": "1971-02-20",
+        "province": null,
+        "residentAllYear": true
+      }
+    ],
+    "family": {
+      "maritalStatus": "married",
+      "dependants": [],
+      "filingStatus": "joint"
+    },
+    "answers": {
+      "p1": {
+        "hasWages": true,
+        "hasInterest": false,
+        "hasTipsOrOvertime": false,
+        "canBeClaimed": false,
+        "isBlind": false,
+        "estimatedPayments": "0",
+        "hasCarLoan": false,
+        "hasSelfEmployment": false,
+        "hasStudentLoan": false,
+        "paidForEducation": false,
+        "hasDividends": false,
+        "hasBrokerSales": false,
+        "hasIraDistribution": false,
+        "hasPension": false,
+        "hasSocialSecurity": false,
+        "hasLossCarryover": false,
+        "hasHsa": true,
+        "hasIraContribution": true,
+        "hasItemized": false,
+        "hasOtherIncome": false,
+        "hsaContributions": "6000",
+        "hsaCoverage": "family",
+        "hsaAllYear": "yes",
+        "hsaNonMedical": "no",
+        "iraContribution": "7000",
+        "coveredByPlan": false,
+        "paidForCare": false
+      },
+      "p2": {
+        "hasWages": true,
+        "hasInterest": false,
+        "hasTipsOrOvertime": false,
+        "canBeClaimed": false,
+        "isBlind": false,
+        "estimatedPayments": "0",
+        "hasCarLoan": false,
+        "hasSelfEmployment": false,
+        "hasStudentLoan": false,
+        "paidForEducation": false,
+        "hasDividends": false,
+        "hasBrokerSales": false,
+        "hasIraDistribution": false,
+        "hasPension": false,
+        "hasSocialSecurity": false,
+        "hasLossCarryover": false,
+        "hasHsa": false,
+        "hasIraContribution": false,
+        "hasItemized": false,
+        "hasOtherIncome": false,
+        "coveredByPlan": true
+      }
+    },
+    "slips": [
+      {
+        "id": "p1-w2-0",
+        "person": "p1",
+        "type": "W2",
+        "issuer": "Acme",
+        "boxes": {
+          "1": "150000",
+          "2": "25000",
+          "4": "9300",
+          "5": "150000",
+          "6": "2175",
+          "12W": "2000"
+        }
+      },
+      {
+        "id": "p2-w2-0",
+        "person": "p2",
+        "type": "W2",
+        "issuer": "Big Corp",
+        "boxes": {
+          "1": "94000",
+          "2": "12000",
+          "4": "5828",
+          "5": "94000",
+          "6": "1363"
+        }
+      }
+    ]
+  },
+  "expected": {
+    "p1": {
+      "F1040.19": "0",
+      "F1040.27a": "0",
+      "F1040.28": "0",
+      "S8812.12": "0",
+      "F1040.1a": "244000",
+      "F1040.1e": "0",
+      "S3.2": "0",
+      "F1040.2a": "0",
+      "F1040.2b": "0",
+      "F1040.9": "244000",
+      "F1040.11a": "231600",
+      "F1040.12e": "31500",
+      "F1040.13b": "0",
+      "F1040.13a": "0",
+      "F1040.8": "0",
+      "F1040.10": "12400",
+      "F1040.15": "200100",
+      "F1040.16": "33850",
+      "F8959.7": "0",
+      "F8960.17": "0",
+      "F1040.24": "33850",
+      "F1040.25c": "0",
+      "S3.11": "0",
+      "F1040.33": "37000",
+      "F1040.34": "3150",
+      "F1040.37": "0",
+      "S1.13": "6000",
+      "S1.20": "6400",
+      "F6251.4": "231600",
+      "F6251.6": "94600",
+      "F6251.11": "0",
+      "F1040.18": "33850"
+    }
+  }
+}

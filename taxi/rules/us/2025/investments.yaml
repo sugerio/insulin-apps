@@ -1,0 +1,346 @@
+# Investment income: dividends (Form 1099-DIV), sales of stocks, bonds and funds (Form 1099-B, as a broker's summary
+# for each part of Form 8949), Schedule D, the Qualified Dividends and Capital Gain Tax Worksheet for line 16, and a
+# small foreign tax credit taken without Form 1116. "Instructions" is the 2025 Instructions for Form 1040.
+#
+# A 1099-B is entered as one summary for each part of Form 8949 (box A or D: basis reported to the IRS). A part whose
+# totals need no adjustment goes straight to Schedule D, lines 1a and 8a (Instructions, line 7a, Exception 2); any
+# other (basis not reported, box B or E; a wash sale or market discount) needs Form 8949, which this app doesn't
+# prepare: the return says so. Not worked out: the 28% rate and unrecaptured section 1250 gain (the Schedule D Tax
+# Worksheet), section 1202 gain, and the capital loss carryover to 2026.
+
+slips:
+  DIV:
+    title: Form 1099-DIV Dividends and Distributions
+    name: 1099-DIV
+    about: Dividends and capital gain distributions a fund, broker or company paid you, and any federal income tax withheld
+    boxes:
+      1A: Total ordinary dividends
+      1B: Qualified dividends
+      2A: Total capital gain distributions
+      2B: Unrecap. Sec. 1250 gain
+      2C: Section 1202 gain
+      2D: Collectibles (28%) gain
+      2E: Section 897 ordinary dividends
+      2F: Section 897 capital gain
+      3: Nondividend distributions
+      4: Federal income tax withheld
+      5: Section 199A dividends
+      6: Investment expenses
+      7: Foreign tax paid
+      9: Cash liquidation distributions
+      10: Noncash liquidation distributions
+      12: Exempt-interest dividends
+      13: Specified private activity bond interest dividends
+    # 2E and 2F are parts of 1a and 2a that matter only to a foreign person; box 3 lowers the basis of the shares, and box
+    # 6 is already in 1a. Boxes 2B to 2D, 9 and 10 aren't read: an amount in them says so.
+    informational: [2E, 2F, 3, 6]
+
+  B:
+    title: Form 1099-B Proceeds From Broker Transactions
+    name: 1099-B
+    about: >-
+      What a broker reports of sales of stocks, bonds, funds or other securities. Enter one summary for each part of
+      Form 8949 the broker's statement names (box A, B, D or E)
+    boxes:
+      CAT: The part of Form 8949 (A, B, D or E)
+      1D: Proceeds
+      1E: Cost or other basis
+      1F: Accrued market discount
+      1G: Wash sale loss disallowed
+      4: Federal income tax withheld
+    codes:
+      CAT: [A, B, D, E]
+    # 1F and 1G need Form 8949: they aren't read, so an amount in them says so.
+
+params:
+  zeroRateTopSingle:
+    label: Taxable income up to which qualified dividends and capital gains are taxed at 0%, Single or Married filing separately
+    source: "Instructions, Qualified Dividends and Capital Gain Tax Worksheet, line 6: $48,350 if single or married filing separately"
+    value: 48350
+  zeroRateTopJoint:
+    label: The same, Married filing jointly or Qualifying surviving spouse
+    source: "Instructions, the same worksheet, line 6: $96,700 if married filing jointly or qualifying surviving spouse"
+    value: 96700
+  zeroRateTopHead:
+    label: The same, Head of household
+    source: "Instructions, the same worksheet, line 6: $64,750 if head of household"
+    value: 64750
+  fifteenRateTopSingle:
+    label: Taxable income up to which qualified dividends and capital gains are taxed at 15%, Single
+    source: "Instructions, the same worksheet, line 13: $533,400 if single"
+    value: 533400
+  fifteenRateTopSeparate:
+    label: The same, Married filing separately
+    source: "Instructions, the same worksheet, line 13: $300,000 if married filing separately"
+    value: 300000
+  fifteenRateTopJoint:
+    label: The same, Married filing jointly or Qualifying surviving spouse
+    source: "Instructions, the same worksheet, line 13: $600,050 if married filing jointly or qualifying surviving spouse"
+    value: 600050
+  fifteenRateTopHead:
+    label: The same, Head of household
+    source: "Instructions, the same worksheet, line 13: $566,700 if head of household"
+    value: 566700
+  capitalGainRateMiddle:
+    label: Rate on qualified dividends and capital gains in the middle band
+    source: "Instructions, the same worksheet, line 18: 15%"
+    value: 15%
+  capitalGainRateTop:
+    label: Rate on qualified dividends and capital gains in the top band
+    source: "Instructions, the same worksheet, line 21: 20%"
+    value: 20%
+  capitalLossLimit:
+    label: Most capital loss deducted in a year
+    source: "Schedule D, line 21: the smaller of the loss on line 16 or ($3,000)"
+    value: 3000
+  capitalLossLimitSeparate:
+    label: Most capital loss deducted in a year, Married filing separately
+    source: "Schedule D, line 21: ($1,500) if married filing separately"
+    value: 1500
+  foreignTaxSimpleLimit:
+    label: Most foreign tax taken as a credit without Form 1116
+    source: "Instructions, Schedule 3, line 1: $300 or less ($600 or less if married filing jointly), all of it on qualified payee statements such as Forms 1099-DIV and 1099-INT"
+    value: 300
+  foreignTaxSimpleLimitJoint:
+    label: Most foreign tax taken as a credit without Form 1116, Married filing jointly
+    source: "Instructions, Schedule 3, line 1: $600 or less if married filing jointly"
+    value: 600
+
+questions:
+  # Income: each a kind of income a form shows (`slip`), asked when the return reads that form's boxes.
+  hasDividends:
+    type: boolean
+    module: income
+    slip: DIV
+    ask: Dividends
+    help: A Form 1099-DIV from each fund, broker or company that paid you $10 or more of dividends or capital gain distributions.
+  hasBrokerSales:
+    type: boolean
+    module: income
+    slip: B
+    ask: Sales of stocks, bonds or funds
+    help: >-
+      A Form 1099-B from each broker. A broker's yearly statement usually sums the sales up by part of Form 8949 (box A,
+      B, D or E): enter one 1099-B for each part, with its proceeds and cost.
+  hasLossCarryover:
+    type: boolean
+    module: income
+    ask: A capital loss carried over from 2024
+    help: >-
+      A capital loss larger than the $3,000 ($1,500 filing separately) you could deduct in an earlier year carries over.
+      Your 2024 Schedule D, or its Capital Loss Carryover Worksheet, shows it.
+    default: false
+  shortLossCarryover:
+    type: money
+    module: income
+    parent: hasLossCarryover
+    ask: Short-term capital loss carryover
+    help: Schedule D, line 6. Enter it as a positive amount.
+  longLossCarryover:
+    type: money
+    module: income
+    parent: hasLossCarryover
+    ask: Long-term capital loss carryover
+    help: Schedule D, line 14. Enter it as a positive amount.
+
+lines:
+  # Each person's own amounts; a joint return adds the spouse's.
+  US.ownOrdinaryDividends:
+    label: Ordinary dividends on this person's Forms 1099-DIV, box 1a
+    formula: "sum(DIV.box1A)"
+  US.ownQualifiedDividends:
+    label: Qualified dividends on this person's Forms 1099-DIV, box 1b
+    formula: "sum(DIV.box1B)"
+  US.ownCapitalGainDistributions:
+    label: Capital gain distributions on this person's Forms 1099-DIV, box 2a
+    formula: "sum(DIV.box2A)"
+  US.ownReitDividends:
+    label: Section 199A dividends on this person's Forms 1099-DIV, box 5
+    formula: "sum(DIV.box5)"
+  US.ownForeignTax:
+    label: Foreign tax paid on this person's Forms 1099-DIV (box 7) and 1099-INT (box 6)
+    formula: "sum(DIV.box7) + sum(INT.box6)"
+  US.ownShortProceeds:
+    label: Short-term proceeds on this person's 1099-B summaries for Form 8949 box A
+    formula: 'sumWhere(B.box1D, B.boxCAT, "A")'
+  US.ownShortCost:
+    label: Short-term cost on this person's 1099-B summaries for Form 8949 box A
+    formula: 'sumWhere(B.box1E, B.boxCAT, "A")'
+  US.ownLongProceeds:
+    label: Long-term proceeds on this person's 1099-B summaries for Form 8949 box D
+    formula: 'sumWhere(B.box1D, B.boxCAT, "D")'
+  US.ownLongCost:
+    label: Long-term cost on this person's 1099-B summaries for Form 8949 box D
+    formula: 'sumWhere(B.box1E, B.boxCAT, "D")'
+  US.ownCarryoverShort:
+    label: This person's short-term capital loss carryover
+    formula: "if(answer.hasLossCarryover, answer.shortLossCarryover, 0)"
+  US.ownCarryoverLong:
+    label: This person's long-term capital loss carryover
+    formula: "if(answer.hasLossCarryover, answer.longLossCarryover, 0)"
+  US.ownBrokerSummaries:
+    label: This person's 1099-B summaries
+    formula: "count(B.box1D)"
+  US.ownBrokerUnsupported:
+    label: Sales this person's 1099-B summaries report that need Form 8949
+    formula: >-
+      if(count(B.box1D) > countWhere(B.box1D, B.boxCAT, "A", "B", "D", "E"),
+      unsupported("A 1099-B doesn't say which part of Form 8949 it is for (box A, B, D or E): enter it at Confirm"),
+      if(countWhere(B.box1D, B.boxCAT, "B", "E") > 0,
+      unsupported("Sales whose basis wasn't reported to the IRS (Form 8949 box B or E) go on Form 8949, which this app doesn't prepare yet"), 0))
+    source: "Instructions, line 7a, Exception 2, and Schedule D, lines 1a and 8a: only sales with basis reported to the IRS and no adjustments go straight there"
+
+  F1040.3a:
+    label: Qualified dividends
+    formula: "line.US.ownQualifiedDividends + if(line.US.joint == 1, spouse.line.US.ownQualifiedDividends, 0)"
+  F1040.3b:
+    label: Ordinary dividends
+    formula: "line.US.ownOrdinaryDividends + if(line.US.joint == 1, spouse.line.US.ownOrdinaryDividends, 0)"
+
+  # Schedule D
+  US.capitalGainDistributions:
+    label: Capital gain distributions
+    formula: "line.US.ownCapitalGainDistributions + if(line.US.joint == 1, spouse.line.US.ownCapitalGainDistributions, 0)"
+  US.scheduleD:
+    label: This return files Schedule D (1 for yes)
+    formula: >-
+      if(line.US.ownBrokerSummaries + line.US.ownCarryoverShort + line.US.ownCarryoverLong
+      + if(line.US.joint == 1, spouse.line.US.ownBrokerSummaries + spouse.line.US.ownCarryoverShort + spouse.line.US.ownCarryoverLong, 0) > 0, 1, 0)
+    source: "Instructions, line 7a, Exception 1: no Schedule D when the only capital gains are capital gain distributions"
+  SD.1ad:
+    label: Short-term proceeds reported with basis (Form 8949 box A)
+    formula: "line.US.ownShortProceeds + if(line.US.joint == 1, spouse.line.US.ownShortProceeds, 0)"
+  SD.1ae:
+    label: Short-term cost (Form 8949 box A)
+    formula: "line.US.ownShortCost + if(line.US.joint == 1, spouse.line.US.ownShortCost, 0)"
+  SD.1ah:
+    label: Short-term gain or loss on line 1a
+    formula: "line.SD.1ad - line.SD.1ae"
+  SD.6:
+    label: Short-term capital loss carryover
+    formula: "line.US.ownCarryoverShort + if(line.US.joint == 1, spouse.line.US.ownCarryoverShort, 0)"
+  SD.7:
+    label: Net short-term capital gain or loss
+    formula: "line.SD.1ah - line.SD.6"
+  SD.8ad:
+    label: Long-term proceeds reported with basis (Form 8949 box D)
+    formula: "line.US.ownLongProceeds + if(line.US.joint == 1, spouse.line.US.ownLongProceeds, 0)"
+  SD.8ae:
+    label: Long-term cost (Form 8949 box D)
+    formula: "line.US.ownLongCost + if(line.US.joint == 1, spouse.line.US.ownLongCost, 0)"
+  SD.8ah:
+    label: Long-term gain or loss on line 8a
+    formula: "line.SD.8ad - line.SD.8ae"
+  SD.13:
+    label: Capital gain distributions
+    formula: "line.US.capitalGainDistributions"
+  SD.14:
+    label: Long-term capital loss carryover
+    formula: "line.US.ownCarryoverLong + if(line.US.joint == 1, spouse.line.US.ownCarryoverLong, 0)"
+  SD.15:
+    label: Net long-term capital gain or loss
+    formula: "line.SD.8ah + line.SD.13 - line.SD.14"
+  SD.16:
+    label: Capital gain or loss
+    formula: "line.SD.7 + line.SD.15"
+  SD.21:
+    label: Capital loss deducted
+    formula: "if(line.SD.16 >= 0, 0, max(line.SD.16, 0 - if(line.US.separate == 1, param.capitalLossLimitSeparate, param.capitalLossLimit)))"
+    source: "Schedule D, line 21: the smaller loss of line 16 or ($3,000), ($1,500) if married filing separately"
+  F1040.7a:
+    label: Capital gain or loss
+    formula: "if(line.US.scheduleD == 1, if(line.SD.16 >= 0, line.SD.16, line.SD.21), line.US.capitalGainDistributions)"
+    source: "Form 1040, line 7a: Schedule D, line 16 or 21; without Schedule D, the capital gain distributions (and the box on line 7b)"
+
+  # Qualified Dividends and Capital Gain Tax Worksheet (line 16)
+  QDW.1:
+    label: Taxable income
+    formula: "line.F1040.15"
+  QDW.3:
+    label: Net capital gain taxed at the capital gain rates
+    formula: "if(line.US.scheduleD == 1, if(line.SD.15 > 0 and line.SD.16 > 0, min(line.SD.15, line.SD.16), 0), line.F1040.7a)"
+    source: "Worksheet, line 3: with Schedule D, the smaller of its lines 15 and 16 (0 when either is a loss); without it, line 7a"
+  QDW.4:
+    label: Qualified dividends and net capital gain
+    formula: "line.F1040.3a + line.QDW.3"
+  QDW.applies:
+    label: The worksheet figures line 16 (1 for yes)
+    formula: "if(line.QDW.4 > 0, 1, 0)"
+    source: "Instructions, line 16: use the worksheet if you have qualified dividends or capital gain distributions, or Schedule D lines 15 and 16 are both gains"
+  QDW.5:
+    label: Taxable income other than qualified dividends and capital gains
+    formula: "max(0, line.QDW.1 - line.QDW.4)"
+  QDW.6:
+    label: Top of the 0% band
+    formula: "if(line.US.jointRates == 1, param.zeroRateTopJoint, if(line.US.hoh == 1, param.zeroRateTopHead, param.zeroRateTopSingle))"
+  QDW.7:
+    label: Taxable income up to the top of the 0% band
+    formula: "min(line.QDW.1, line.QDW.6)"
+  QDW.9:
+    label: Taxed at 0%
+    formula: "line.QDW.7 - min(line.QDW.5, line.QDW.7)"
+    source: "Worksheet, lines 8 and 9"
+  QDW.10:
+    label: Qualified dividends and capital gains in taxable income
+    formula: "min(line.QDW.1, line.QDW.4)"
+  QDW.12:
+    label: Left after the 0% band
+    formula: "line.QDW.10 - line.QDW.9"
+    source: "Worksheet, lines 11 and 12"
+  QDW.13:
+    label: Top of the 15% band
+    formula: >-
+      if(line.US.jointRates == 1, param.fifteenRateTopJoint, if(line.US.hoh == 1, param.fifteenRateTopHead,
+      if(line.US.separate == 1, param.fifteenRateTopSeparate, param.fifteenRateTopSingle)))
+  QDW.16:
+    label: Room in the 15% band
+    formula: "max(0, min(line.QDW.1, line.QDW.13) - (line.QDW.5 + line.QDW.9))"
+    source: "Worksheet, lines 14 to 16"
+  QDW.17:
+    label: Taxed at 15%
+    formula: "min(line.QDW.12, line.QDW.16)"
+  QDW.18:
+    label: Tax at 15%
+    formula: "round(line.QDW.17 * param.capitalGainRateMiddle, 2)"
+  QDW.20:
+    label: Taxed at 20%
+    formula: "line.QDW.10 - (line.QDW.9 + line.QDW.17)"
+    source: "Worksheet, lines 19 and 20"
+  QDW.21:
+    label: Tax at 20%
+    formula: "round(line.QDW.20 * param.capitalGainRateTop, 2)"
+  # Line 22 is the tax on line 5 as line 16 figures tax: the Tax Table's row middle under $100,000 (US.tableRow).
+  QDW.22row:
+    label: The middle of the Tax Table's row for line 5
+    formula: >-
+      if(line.QDW.5 < 5, 2.5, if(line.QDW.5 < 15, 10, if(line.QDW.5 < 25, 20,
+      if(line.QDW.5 < 3000, floor(line.QDW.5, 25) + 12.5, floor(line.QDW.5, 50) + 25))))
+    source: "2025 Tax Table, as US.tableRow"
+  QDW.22:
+    label: Tax on line 5
+    formula: >-
+      if(line.QDW.5 < param.taxTableLimit,
+      round(if(line.US.jointRates == 1, bracket(param.bracketsJoint, line.QDW.22row), if(line.US.hoh == 1, bracket(param.bracketsHead, line.QDW.22row),
+      if(line.US.single == 1, bracket(param.bracketsSingle, line.QDW.22row), bracket(param.bracketsSeparate, line.QDW.22row)))), 0),
+      round(if(line.US.jointRates == 1, bracket(param.bracketsJoint, line.QDW.5), if(line.US.hoh == 1, bracket(param.bracketsHead, line.QDW.5),
+      if(line.US.single == 1, bracket(param.bracketsSingle, line.QDW.5), bracket(param.bracketsSeparate, line.QDW.5)))), 2))
+    source: "Worksheet, line 22: the Tax Table under $100,000, the Tax Computation Worksheet from $100,000"
+  QDW.23:
+    label: Tax with qualified dividends and capital gains at their rates
+    formula: "line.QDW.18 + line.QDW.21 + line.QDW.22"
+  QDW.25:
+    label: Tax on all taxable income
+    formula: "min(line.QDW.23, line.US.regularTax)"
+    source: "Worksheet, lines 24 and 25: the smaller of line 23 and the tax on line 1"
+
+  # Schedule 3, line 1: the foreign tax credit, without Form 1116 when it is small.
+  US.foreignTax:
+    label: Foreign tax paid on Forms 1099-DIV and 1099-INT
+    formula: "line.US.ownForeignTax + if(line.US.joint == 1, spouse.line.US.ownForeignTax, 0)"
+  S3.1:
+    label: Foreign tax credit
+    formula: >-
+      if(line.US.foreignTax == 0, 0, if(line.US.foreignTax > if(line.US.joint == 1, param.foreignTaxSimpleLimitJoint, param.foreignTaxSimpleLimit),
+      unsupported("Foreign tax over $300 ($600 jointly) is figured on Form 1116, which this app doesn't prepare"),
+      min(line.US.foreignTax, line.F1040.16)))
+    source: "Instructions, Schedule 3, line 1: the foreign tax paid, without Form 1116 when it is $300 or less ($600 jointly) and all on Forms 1099; it can't be more than the regular tax (line 16)"

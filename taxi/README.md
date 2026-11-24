@@ -86,9 +86,11 @@ and SE, Schedule 1, Form 8995), the standard deduction (with the 2025 deduction
 for seniors), the Tax Table and Tax Computation Worksheet, the Additional Medicare Tax, the net investment income tax
 and excess social security tax; the 2025 deductions for qualified tips, overtime pay and car loan interest
 (Schedule 1-A); the education credits (Form 8863) and the student loan interest deduction; printed on the IRS's
-forms. AI reads Forms W-2, 1099-INT, 1099-NEC, 1098-T and 1098-E, and Finish shows US hints (filing jointly or
-separately, the estimated tax penalty). No state return; itemized deductions, allocated tips and a household employee
-say so when they apply.
+forms; dividends and capital gains (1099-DIV, 1099-B, Schedule D and the capital gain rates), IRA, pension and
+social security income (1099-R, SSA-1099), the IRA and HSA deductions, itemized deductions (Schedule A) and the
+alternative minimum tax (Form 6251). AI reads Forms W-2, 1099, 1098 and SSA-1099, and Finish shows US hints (filing
+jointly or separately, the estimated tax penalty). No state return; allocated tips, a household employee, Form 8949
+adjustments and other income say so when they apply.
 
 ## Good to know
 

@@ -1,0 +1,195 @@
+# Adjustments to income on Schedule 1: the health savings account deduction (line 13, Form 8889) and the traditional IRA
+# deduction (line 20, the IRA Deduction Worksheet). "Instructions" is the 2025 Instructions for Form 1040; "8889
+# instructions" the 2025 Instructions for Form 8889.
+#
+# Not worked out, each said on the return: HSA coverage for part of the year (the last-month rule), family coverage of
+# both spouses (the limit split between them), an excess contribution (Form 5329), distributions not for medical
+# expenses; and an IRA deduction phased out when you also have social security benefits (Pub. 590-A, Appendix B).
+
+params:
+  hsaSelfOnly:
+    label: Most HSA contributions, self-only coverage
+    source: "8889 instructions, line 3: $4,300 for self-only coverage for all of 2025"
+    value: 4300
+  hsaFamily:
+    label: Most HSA contributions, family coverage
+    source: "8889 instructions, line 3: $8,550 for family coverage for all of 2025"
+    value: 8550
+  hsaCatchUp:
+    label: Additional HSA contribution at 55 or older
+    source: "8889 instructions, line 7: $1,000 if 55 or older at the end of 2025"
+    value: 1000
+  iraLimit:
+    label: Most traditional IRA contributions deducted
+    source: "Instructions, Schedule 1, line 20, IRA Deduction Worksheet: $7,000"
+    value: 7000
+  iraLimitOlder:
+    label: Most traditional IRA contributions deducted at 50 or older
+    source: "Instructions, the same worksheet: $8,000 if age 50 or older at the end of 2025"
+    value: 8000
+  iraPhaseOutSingle:
+    label: Modified AGI from which the IRA deduction is reduced, covered by a plan, single or head of household
+    source: "Instructions, the same worksheet: $79,000, none left at $89,000"
+    value: 79000
+  iraPhaseOutJoint:
+    label: Modified AGI from which the IRA deduction is reduced, covered by a plan, married filing jointly or qualifying surviving spouse
+    source: "Instructions, the same worksheet: $126,000, none left at $146,000"
+    value: 126000
+  iraPhaseOutSpouseCovered:
+    label: Modified AGI from which the IRA deduction is reduced, not covered but the spouse is, married filing jointly
+    source: "Instructions, the same worksheet: $236,000, none left at $246,000"
+    value: 236000
+  iraPhaseOutRange:
+    label: Width of the IRA deduction's phase-out
+    source: "Instructions, the same worksheet: $10,000 ($20,000 married filing jointly, covered by a plan)"
+    value: 10000
+  iraPhaseOutRangeJoint:
+    label: Width of the IRA deduction's phase-out, married filing jointly, covered by a plan
+    source: "Instructions, the same worksheet: $20,000"
+    value: 20000
+  iraMinimum:
+    label: Smallest IRA deduction left in the phase-out
+    source: "Instructions, the same worksheet: if the result is more than zero but less than $200, enter $200"
+    value: 200
+
+questions:
+  hasHsa:
+    type: boolean
+    module: deductions
+    ask: Contributions to a health savings account (HSA)
+    help: >-
+      Money you put into an HSA yourself for 2025, not through your employer's payroll (that is in box 12 of your W-2,
+      code W, and isn't deducted again). You need a high-deductible health plan (Form 8889).
+    default: false
+  hsaContributions:
+    type: money
+    module: deductions
+    parent: hasHsa
+    ask: HSA contributions you made yourself for 2025
+    help: Including what you add by April 15, 2026 for 2025. Your HSA's Form 5498-SA shows them.
+  hsaCoverage:
+    type: choice
+    module: deductions
+    parent: hasHsa
+    ask: Your high-deductible health plan covered
+    options: [self, family]
+    optionLabels:
+      self: Only you (self-only coverage)
+      family: You and at least one other person (family coverage)
+  hsaAllYear:
+    type: choice
+    module: deductions
+    parent: hasHsa
+    ask: Did the plan cover you in every month of 2025?
+    options: [yes, no]
+    optionLabels:
+      yes: Yes, all 12 months
+      no: No, only part of the year
+  hsaNonMedical:
+    type: choice
+    module: deductions
+    parent: hasHsa
+    ask: Did you take money out of the HSA for anything other than medical expenses?
+    options: [no, yes]
+    optionLabels:
+      no: No
+      yes: Yes
+    help: A Form 1099-SA shows distributions. Ones not for qualified medical expenses are taxed, with 20% more, on Form 8889.
+  hasIraContribution:
+    type: boolean
+    module: deductions
+    ask: Contributions to a traditional IRA
+    help: >-
+      Money you put into a traditional IRA for 2025, by April 15, 2026 (Schedule 1, line 20). Not a Roth IRA, and not a
+      rollover.
+    default: false
+  iraContribution:
+    type: money
+    module: deductions
+    parent: hasIraContribution
+    ask: Traditional IRA contributions for 2025
+    help: Your IRA's Form 5498 shows them, or your statements if you contributed in 2026.
+  coveredByPlan:
+    type: boolean
+    module: deductions
+    ask: An employer's retirement plan covered you in 2025
+    help: >-
+      The "Retirement plan" box in box 13 of your W-2 is checked (a 401(k), 403(b), pension or the like). It can make
+      your IRA deduction smaller.
+
+lines:
+  # Form 8889, Part I, for each person: their own HSA.
+  F8889.2:
+    label: HSA contributions you made
+    formula: "if(answer.hasHsa, answer.hsaContributions, 0)"
+  F8889.8:
+    label: HSA contribution limit
+    formula: >-
+      if(answer.hasHsa, if(answer.hsaAllYear == "yes", if(answer.hsaCoverage == "family", param.hsaFamily, param.hsaSelfOnly) + if(person.age >= 55, param.hsaCatchUp, 0),
+      unsupported("HSA coverage for only part of 2025 is figured with the Line 3 Limitation Chart and the last-month rule, which this app doesn't work out")), 0)
+    source: "Form 8889, lines 3 to 8: the limit for coverage all year, plus $1,000 at 55 or older; no Archer MSA"
+  F8889.9:
+    label: Employer contributions to your HSA
+    formula: "sum(W2.box12W)"
+    source: "Form 8889, line 9: Form W-2, box 12, code W"
+  F8889.13:
+    label: HSA deduction
+    formula: >-
+      if(line.F8889.2 + line.F8889.9 == 0, 0,
+      if(line.F8889.2 + line.F8889.9 > line.F8889.8, unsupported("HSA contributions over the limit are an excess contribution (Form 5329), which this app doesn't work out"),
+      if(answer.hsaNonMedical == "yes", unsupported("HSA distributions not for medical expenses are taxed on Form 8889, Part II, which this app doesn't prepare yet"),
+      if(line.US.joint == 1 and answer.hsaCoverage == "family" and spouse.answer.hasHsa and spouse.answer.hsaCoverage == "family",
+      unsupported("Both spouses with family HSA coverage share one limit, which this app doesn't split yet"),
+      min(line.F8889.2, max(0, line.F8889.8 - line.F8889.9))))))
+    source: "Form 8889, lines 10 to 13: the smaller of your contributions and the limit less employer contributions"
+  S1.13:
+    label: Health savings account deduction
+    formula: "line.F8889.13 + if(line.US.joint == 1, spouse.line.F8889.13, 0)"
+    source: "Schedule 1, line 13: Form 8889, line 13 (each spouse's on a joint return)"
+
+  # Schedule 1, line 20: the IRA Deduction Worksheet, for each person.
+  US.ownCompensation:
+    label: This person's compensation for an IRA
+    formula: "line.US.ownWages + max(0, line.SC.31 - line.SE.13)"
+    source: "Instructions, IRA Deduction Worksheet, line 7: wages, plus self-employment income less the deductible part of self-employment tax"
+  US.iraMagi:
+    label: Modified AGI for the IRA deduction
+    formula: >-
+      line.F1040.1z + line.F1040.2b + line.F1040.3b + line.F1040.4b + line.F1040.5b + line.F1040.7a + line.F1040.8
+      - line.S1.13 - line.S1.15
+    source: >-
+      Instructions, IRA Deduction Worksheet, line 3: Form 1040 line 9 less Schedule 1 lines 11 to 19, 23 and 25, without
+      the IRA and student loan interest deductions. Social security benefits are left out: with them, a phase-out is
+      figured with Pub. 590-A, which this app doesn't do
+  US.iraLimit:
+    label: This person's IRA contribution limit
+    formula: "if(person.age >= 50, param.iraLimitOlder, param.iraLimit)"
+  US.iraPhaseOutStart:
+    label: Where this person's IRA deduction starts to be reduced (0 if it isn't)
+    formula: >-
+      if(answer.coveredByPlan, if(line.US.joint == 1, param.iraPhaseOutJoint, if(line.US.separate == 1, 0, param.iraPhaseOutSingle)),
+      if(line.US.joint == 1, if(spouse.answer.coveredByPlan, param.iraPhaseOutSpouseCovered, 0), 0))
+    source: "Instructions, IRA Deduction Worksheet, lines 1 and 2 (married filing separately and covered: from $0; a separate spouse who lived apart all year files as single, not worked out)"
+  US.iraReduced:
+    label: This person's IRA limit after the phase-out
+    formula: >-
+      if(line.US.iraPhaseOutStart == 0 and line.US.separate == 0, line.US.iraLimit,
+      if(line.US.separate == 0 and line.US.iraMagi <= line.US.iraPhaseOutStart, line.US.iraLimit,
+      if(sum(SSA.box5) + if(line.US.joint == 1, sum(spouse.SSA.box5), 0) > 0,
+      unsupported("With social security benefits and a retirement plan at work, the IRA deduction is figured with Pub. 590-A, which this app doesn't do"),
+      if(line.US.iraMagi >= line.US.iraPhaseOutStart + if(line.US.joint == 1 and answer.coveredByPlan, param.iraPhaseOutRangeJoint, param.iraPhaseOutRange), 0,
+      max(param.iraMinimum, 0 - floor(0 - line.US.iraLimit * (line.US.iraPhaseOutStart + if(line.US.joint == 1 and answer.coveredByPlan, param.iraPhaseOutRangeJoint, param.iraPhaseOutRange) - line.US.iraMagi)
+      / if(line.US.joint == 1 and answer.coveredByPlan, param.iraPhaseOutRangeJoint, param.iraPhaseOutRange), 10))))))
+    source: "Instructions, IRA Deduction Worksheet, lines 3 to 6: the limit times the part of the range left, rounded up to $10, and at least $200"
+  US.ownIraDeduction:
+    label: This person's IRA deduction
+    formula: >-
+      if(answer.hasIraContribution, min(answer.iraContribution, line.US.iraReduced,
+      line.US.ownCompensation + if(line.US.joint == 1, max(0, spouse.line.US.ownCompensation - spouse.line.US.ownIraContribution), 0)), 0)
+    source: "Instructions, IRA Deduction Worksheet, lines 7 to 9: the smallest of the contributions, the limit and the compensation (with a spouse's, less their contributions, on a joint return)"
+  US.ownIraContribution:
+    label: This person's traditional IRA contributions
+    formula: "if(answer.hasIraContribution, answer.iraContribution, 0)"
+  S1.20:
+    label: IRA deduction
+    formula: "line.US.ownIraDeduction + if(line.US.joint == 1, spouse.line.US.ownIraDeduction, 0)"

@@ -285,8 +285,8 @@ lines:
     formula: "line.SE.13 + if(line.US.joint == 1, spouse.line.SE.13, 0)"
   S1.26:
     label: Adjustments to income
-    formula: "line.S1.15 + line.S1.21"
-    source: "Schedule 1, line 26: the deductible part of self-employment tax and the student loan interest deduction (education.yaml); no other adjustment is worked out"
+    formula: "line.S1.13 + line.S1.15 + line.S1.20 + line.S1.21"
+    source: "Schedule 1, line 26: the HSA deduction and the IRA deduction (adjustments.yaml), the deductible part of self-employment tax, and the student loan interest deduction (education.yaml); no other adjustment is worked out"
 
   # Form 8995: qualified business income deduction, at or below the threshold.
   F8995.2:
@@ -297,18 +297,35 @@ lines:
     label: Qualified business income component
     formula: "round(max(0, line.F8995.2) * param.qbiRate, 2)"
     source: "Form 8995, lines 3 to 5: no loss carried forward"
+  F8995.6:
+    label: Qualified REIT dividends
+    formula: "line.US.ownReitDividends + if(line.US.joint == 1, spouse.line.US.ownReitDividends, 0)"
+    source: "Form 8995, line 6: Form 1099-DIV, box 5 (investments.yaml); no publicly traded partnership income"
+  F8995.9:
+    label: REIT dividends component
+    formula: "round(max(0, line.F8995.6) * param.qbiRate, 2)"
+    source: "Form 8995, lines 7 to 9: no carryforward"
+  F8995.10:
+    label: Qualified business income deduction before the income limitation
+    formula: "line.F8995.5 + line.F8995.9"
   F8995.11:
     label: Taxable income before the qualified business income deduction
     formula: "max(0, line.F1040.11a - line.F1040.12e - line.F1040.13b)"
     source: "Instructions for Form 8995, line 11: Form 1040, line 11a, minus lines 12e and 13b"
+  F8995.12:
+    label: Qualified dividends and net capital gain
+    formula: "line.QDW.4"
+    source: "Instructions for Form 8995, line 12: Form 1040 line 3a plus the net capital gain (the smaller of Schedule D lines 15 and 16 when both are gains, or line 7a without Schedule D)"
+  F8995.13:
+    label: Taxable income less qualified dividends and net capital gain
+    formula: "max(0, line.F8995.11 - line.F8995.12)"
   F8995.14:
     label: Income limitation
-    formula: "round(line.F8995.11 * param.qbiRate, 2)"
-    source: "Form 8995, lines 12 to 14: no net capital gain or qualified dividends"
+    formula: "round(line.F8995.13 * param.qbiRate, 2)"
   F8995.15:
     label: Qualified business income deduction
     formula: >-
-      if(line.F8995.5 == 0, 0, if(line.F8995.11 > if(line.US.joint == 1, param.qbiThresholdJoint, param.qbiThreshold),
-      unsupported("Taxable income over $197,300 ($394,600 jointly) with business income: the deduction is figured on Form 8995-A, which this app doesn't prepare yet"),
-      min(line.F8995.5, line.F8995.14)))
-    source: "Form 8995, line 15 (lines 6 to 10: no REIT dividends or PTP income)"
+      if(line.F8995.10 == 0, 0, if(line.F8995.11 > if(line.US.joint == 1, param.qbiThresholdJoint, param.qbiThreshold),
+      unsupported("Taxable income over $197,300 ($394,600 jointly) with business income or REIT dividends: the deduction is figured on Form 8995-A, which this app doesn't prepare yet"),
+      min(line.F8995.10, line.F8995.14)))
+    source: "Form 8995, line 15: the smaller of lines 10 and 14"

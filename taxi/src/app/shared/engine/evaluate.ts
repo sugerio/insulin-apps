@@ -127,7 +127,7 @@ interface Node extends Computed {
   /** The keys of the nodes it read, in order. */
   reads: string[];
   /** For a slip box: one entry per slip that has it. */
-  items?: { label: string; value: Dec; issuer?: string }[];
+  items?: { label: string; value: Dec; issuer?: string; boxes?: Record<string, string> }[];
   /** Why the value is missing when the rules can't compute it (`unsupported`). */
   notes?: string[];
 }
@@ -155,7 +155,11 @@ export class Evaluation {
     for (const slip of this.input.slips) {
       if (!ids.has(slip.person)) throw new EngineError("ENGINE_INPUT", `Slip ${slip.id} belongs to no one in the input`);
       if (!rules.slips.has(slip.type)) throw new EngineError("ENGINE_INPUT", `Slip ${slip.id} has an unknown type ${slip.type}`);
-      for (const amount of Object.values(slip.boxes)) Dec.from(amount);
+      const type = rules.slips.get(slip.type)!;
+      for (const [box, value] of Object.entries(slip.boxes)) {
+        if (!(box in type.codes)) Dec.from(value);
+        else if (!type.codes[box]!.includes(value)) throw new EngineError("ENGINE_INPUT", `Slip ${slip.id} box ${box} holds ${value}, not one of ${type.codes[box]!.join(", ")}`);
+      }
     }
     for (const dependant of this.input.family.dependants) {
       if (dependant.claimedBy != null && !ids.has(dependant.claimedBy)) {
@@ -268,7 +272,9 @@ export class Evaluation {
         const unhandled: string[] = [];
         for (const slip of this.input.slips.filter((each) => each.person === person.id)) {
           const used = this.rules.usedBoxes.get(slip.type) ?? new Set();
+          const codes = this.rules.slips.get(slip.type)?.codes ?? {};
           for (const [box, amount] of Object.entries(slip.boxes)) {
+            if (box in codes) continue;
             // A box blank on the paper slip is entered as 0: it adds nothing, so it needs no handling.
             if (!used.has(box) && !Dec.from(amount).isZero()) unhandled.push(`${this.rules.slips.get(slip.type)?.name ?? slip.type} from ${slip.issuer}: box ${box} isn't handled by this app`);
           }
@@ -439,9 +445,10 @@ export class Evaluation {
         const mine = this.input.slips.filter((each) => each.person === personId && each.type === slip.id);
         if (rest[0] === "slips") return { value: Dec.of(mine.length), status: "complete", label: `${slip.id} slips`, reads: [] };
         const box = rest[0]!.slice("box".length);
+        // A code box is read only through sumWhere and countWhere, from its amount box's slips: it has no amounts.
         const items = mine
-          .filter((each) => box in each.boxes)
-          .map((each) => ({ label: `${slip.id} from ${each.issuer}`, value: Dec.from(each.boxes[box]!), issuer: each.issuer }));
+          .filter((each) => box in each.boxes && !(box in slip.codes))
+          .map((each) => ({ label: `${slip.id} from ${each.issuer}`, value: Dec.from(each.boxes[box]!), issuer: each.issuer, boxes: each.boxes }));
         return {
           value: items.map((item) => item.value),
           status: "complete",
@@ -545,6 +552,17 @@ export class Evaluation {
           const node = this.node(key);
           const issuers = new Set((node.items ?? []).filter((item) => !item.value.isZero()).map((item) => item.issuer!.trim().toLowerCase()));
           return { value: Dec.of(issuers.size), status: node.status };
+        }
+        if (formula.name === "sumWhere" || formula.name === "countWhere") {
+          // The amount box's slips, kept when their code box holds one of the codes.
+          const amountKey = this.key(personId, (formula.args[0] as Extract<Formula, { kind: "ref" }>).path);
+          const codePath = (formula.args[1] as Extract<Formula, { kind: "ref" }>).path;
+          const codeBox = codePath[codePath.length - 1]!.slice("box".length);
+          const codes = (formula.args.slice(2) as Extract<Formula, { kind: "string" }>[]).map((arg) => arg.value);
+          reads.push(amountKey);
+          const node = this.node(amountKey);
+          const kept = (node.items ?? []).filter((item) => codes.includes(item.boxes?.[codeBox] ?? ""));
+          return { value: formula.name === "countWhere" ? Dec.of(kept.length) : Dec.sum(kept.map((item) => item.value)), status: node.status };
         }
         if (formula.name === "if") {
           const condition = evaluate(formula.args[0]!);

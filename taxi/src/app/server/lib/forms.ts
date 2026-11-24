@@ -208,7 +208,7 @@ function worksheetOf(rules: RuleSet, evaluation: Evaluation, view: TaxYear, inpu
     const type = rules.slips.get(slip.type);
     return {
       text: `${documentName(type, slip.type)} from ${slip.issuer}`,
-      notes: Object.entries(slip.boxes).map(([box, amount]) => `${type?.receipt ? "" : `Box ${box} `}${type?.boxes[box] ?? ""}: ${type?.counts.includes(box) ? amount : money(Dec.from(amount))}`),
+      notes: Object.entries(slip.boxes).map(([box, amount]) => `${type?.receipt ? "" : `Box ${box} `}${type?.boxes[box] ?? ""}: ${type?.counts.includes(box) || type?.codes[box] ? amount : money(Dec.from(amount))}`),
     };
   });
 

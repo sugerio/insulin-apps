@@ -11,7 +11,9 @@
     "F1040.13b",
     "F1040.15",
     "F1040.16",
+    "F1040.17",
     "F1040.19",
+    "S3.1",
     "S3.2",
     "S3.3",
     "F1040.23",
@@ -32,7 +34,9 @@
     "F1040.13b": "person.role == \"self\" or line.US.joint == 0",
     "F1040.15": "person.role == \"self\" or line.US.joint == 0",
     "F1040.16": "person.role == \"self\" or line.US.joint == 0",
+    "F1040.17": "person.role == \"self\" or line.US.joint == 0",
     "F1040.19": "person.role == \"self\" or line.US.joint == 0",
+    "S3.1": "person.role == \"self\" or line.US.joint == 0",
     "S3.2": "person.role == \"self\" or line.US.joint == 0",
     "S3.3": "person.role == \"self\" or line.US.joint == 0",
     "F1040.23": "person.role == \"self\" or line.US.joint == 0",
@@ -45,6 +49,113 @@
     "F1040.37": "person.role == \"self\" or line.US.joint == 0"
   },
   "params": {
+    "hsaSelfOnly": {
+      "label": "Most HSA contributions, self-only coverage",
+      "value": "4300",
+      "source": "8889 instructions, line 3: $4,300 for self-only coverage for all of 2025"
+    },
+    "hsaFamily": {
+      "label": "Most HSA contributions, family coverage",
+      "value": "8550",
+      "source": "8889 instructions, line 3: $8,550 for family coverage for all of 2025"
+    },
+    "hsaCatchUp": {
+      "label": "Additional HSA contribution at 55 or older",
+      "value": "1000",
+      "source": "8889 instructions, line 7: $1,000 if 55 or older at the end of 2025"
+    },
+    "iraLimit": {
+      "label": "Most traditional IRA contributions deducted",
+      "value": "7000",
+      "source": "Instructions, Schedule 1, line 20, IRA Deduction Worksheet: $7,000"
+    },
+    "iraLimitOlder": {
+      "label": "Most traditional IRA contributions deducted at 50 or older",
+      "value": "8000",
+      "source": "Instructions, the same worksheet: $8,000 if age 50 or older at the end of 2025"
+    },
+    "iraPhaseOutSingle": {
+      "label": "Modified AGI from which the IRA deduction is reduced, covered by a plan, single or head of household",
+      "value": "79000",
+      "source": "Instructions, the same worksheet: $79,000, none left at $89,000"
+    },
+    "iraPhaseOutJoint": {
+      "label": "Modified AGI from which the IRA deduction is reduced, covered by a plan, married filing jointly or qualifying surviving spouse",
+      "value": "126000",
+      "source": "Instructions, the same worksheet: $126,000, none left at $146,000"
+    },
+    "iraPhaseOutSpouseCovered": {
+      "label": "Modified AGI from which the IRA deduction is reduced, not covered but the spouse is, married filing jointly",
+      "value": "236000",
+      "source": "Instructions, the same worksheet: $236,000, none left at $246,000"
+    },
+    "iraPhaseOutRange": {
+      "label": "Width of the IRA deduction's phase-out",
+      "value": "10000",
+      "source": "Instructions, the same worksheet: $10,000 ($20,000 married filing jointly, covered by a plan)"
+    },
+    "iraPhaseOutRangeJoint": {
+      "label": "Width of the IRA deduction's phase-out, married filing jointly, covered by a plan",
+      "value": "20000",
+      "source": "Instructions, the same worksheet: $20,000"
+    },
+    "iraMinimum": {
+      "label": "Smallest IRA deduction left in the phase-out",
+      "value": "200",
+      "source": "Instructions, the same worksheet: if the result is more than zero but less than $200, enter $200"
+    },
+    "amtExemptionSingle": {
+      "label": "AMT exemption, single or head of household",
+      "value": "88100",
+      "source": "Form 6251, line 5: $88,100 if line 4 is not over $626,350"
+    },
+    "amtExemptionJoint": {
+      "label": "AMT exemption, married filing jointly or qualifying surviving spouse",
+      "value": "137000",
+      "source": "Form 6251, line 5: $137,000 if line 4 is not over $1,252,700"
+    },
+    "amtExemptionSeparate": {
+      "label": "AMT exemption, married filing separately",
+      "value": "68500",
+      "source": "Form 6251, line 5: $68,500 if line 4 is not over $626,350"
+    },
+    "amtPhaseOutSingle": {
+      "label": "AMTI over which the exemption is reduced, single, head of household or married filing separately",
+      "value": "626350",
+      "source": "6251 instructions, Exemption Worksheet, line 3: $626,350 if single, head of household or married filing separately"
+    },
+    "amtPhaseOutJoint": {
+      "label": "AMTI over which the exemption is reduced, married filing jointly or qualifying surviving spouse",
+      "value": "1252700",
+      "source": "6251 instructions, Exemption Worksheet, line 3: $1,252,700"
+    },
+    "amtPhaseOutRate": {
+      "label": "Reduction of the exemption for each dollar of AMTI over the threshold",
+      "value": "0.25",
+      "source": "6251 instructions, Exemption Worksheet, line 5: 25%"
+    },
+    "amtBracket": {
+      "label": "Amount taxed at 26% before the 28% rate",
+      "value": "239100",
+      "source": "Form 6251, line 7: $239,100 or less ($119,550 if married filing separately) at 26%"
+    },
+    "amtBracketSeparate": {
+      "label": "Amount taxed at 26% before the 28% rate, married filing separately",
+      "value": "119550",
+      "source": "Form 6251, line 7: $119,550 if married filing separately"
+    },
+    "amtBracketAdjust": {
+      "label": "Subtracted after 28% above the 26% band",
+      "value": "4782",
+      "source": "Form 6251, line 7: multiply by 28% and subtract $4,782 ($2,391 if married filing separately)"
+    },
+    "amtBracketAdjustSeparate": {
+      "label": "Subtracted after 28% above the 26% band, married filing separately",
+      "value": "2391",
+      "source": "Form 6251, line 7: $2,391 if married filing separately"
+    },
+    "amtLowRate": {"label":"AMT rate on the first band","value":"0.26","source":"Form 6251, line 7: 26%"},
+    "amtHighRate": {"label":"AMT rate above the first band","value":"0.28","source":"Form 6251, line 7: 28%"},
     "careLimitOne": {
       "label": "Most care expenses the credit counts for one qualifying person",
       "value": "3000",
@@ -529,6 +640,162 @@
       "value": "2700",
       "source": "Instructions, line 16, Form 8615: unearned income over $2,700"
     },
+    "zeroRateTopSingle": {
+      "label": "Taxable income up to which qualified dividends and capital gains are taxed at 0%, Single or Married filing separately",
+      "value": "48350",
+      "source": "Instructions, Qualified Dividends and Capital Gain Tax Worksheet, line 6: $48,350 if single or married filing separately"
+    },
+    "zeroRateTopJoint": {
+      "label": "The same, Married filing jointly or Qualifying surviving spouse",
+      "value": "96700",
+      "source": "Instructions, the same worksheet, line 6: $96,700 if married filing jointly or qualifying surviving spouse"
+    },
+    "zeroRateTopHead": {
+      "label": "The same, Head of household",
+      "value": "64750",
+      "source": "Instructions, the same worksheet, line 6: $64,750 if head of household"
+    },
+    "fifteenRateTopSingle": {
+      "label": "Taxable income up to which qualified dividends and capital gains are taxed at 15%, Single",
+      "value": "533400",
+      "source": "Instructions, the same worksheet, line 13: $533,400 if single"
+    },
+    "fifteenRateTopSeparate": {
+      "label": "The same, Married filing separately",
+      "value": "300000",
+      "source": "Instructions, the same worksheet, line 13: $300,000 if married filing separately"
+    },
+    "fifteenRateTopJoint": {
+      "label": "The same, Married filing jointly or Qualifying surviving spouse",
+      "value": "600050",
+      "source": "Instructions, the same worksheet, line 13: $600,050 if married filing jointly or qualifying surviving spouse"
+    },
+    "fifteenRateTopHead": {
+      "label": "The same, Head of household",
+      "value": "566700",
+      "source": "Instructions, the same worksheet, line 13: $566,700 if head of household"
+    },
+    "capitalGainRateMiddle": {
+      "label": "Rate on qualified dividends and capital gains in the middle band",
+      "value": "0.15",
+      "source": "Instructions, the same worksheet, line 18: 15%"
+    },
+    "capitalGainRateTop": {
+      "label": "Rate on qualified dividends and capital gains in the top band",
+      "value": "0.2",
+      "source": "Instructions, the same worksheet, line 21: 20%"
+    },
+    "capitalLossLimit": {
+      "label": "Most capital loss deducted in a year",
+      "value": "3000",
+      "source": "Schedule D, line 21: the smaller of the loss on line 16 or ($3,000)"
+    },
+    "capitalLossLimitSeparate": {
+      "label": "Most capital loss deducted in a year, Married filing separately",
+      "value": "1500",
+      "source": "Schedule D, line 21: ($1,500) if married filing separately"
+    },
+    "foreignTaxSimpleLimit": {
+      "label": "Most foreign tax taken as a credit without Form 1116",
+      "value": "300",
+      "source": "Instructions, Schedule 3, line 1: $300 or less ($600 or less if married filing jointly), all of it on qualified payee statements such as Forms 1099-DIV and 1099-INT"
+    },
+    "foreignTaxSimpleLimitJoint": {
+      "label": "Most foreign tax taken as a credit without Form 1116, Married filing jointly",
+      "value": "600",
+      "source": "Instructions, Schedule 3, line 1: $600 or less if married filing jointly"
+    },
+    "medicalFloor": {
+      "label": "Share of AGI medical expenses must be over",
+      "value": "0.075",
+      "source": "Schedule A, line 3: line 2 multiplied by 7.5% (0.075)"
+    },
+    "saltCap": {
+      "label": "Most state and local taxes deducted",
+      "value": "40000",
+      "source": "Schedule A instructions, State and Local Tax Deduction Worksheet, line 1: $40,000 (halved on line 10 if married filing separately)"
+    },
+    "saltPhaseOutStart": {
+      "label": "Modified AGI over which the state and local tax limit is reduced",
+      "value": "500000",
+      "source": "Schedule A instructions, State and Local Tax Deduction Worksheet, line 5: $500,000 ($250,000 if married filing separately)"
+    },
+    "saltPhaseOutStartSeparate": {
+      "label": "Modified AGI over which the state and local tax limit is reduced, Married filing separately",
+      "value": "250000",
+      "source": "Schedule A instructions, line 5e: $250,000 if married filing separately"
+    },
+    "saltPhaseOutRate": {
+      "label": "Reduction of the state and local tax limit for each dollar of modified AGI over the threshold",
+      "value": "0.3",
+      "source": "Schedule A instructions, State and Local Tax Deduction Worksheet, line 7: 30% of line 6"
+    },
+    "saltFloor": {
+      "label": "Smallest state and local tax limit",
+      "value": "10000",
+      "source": "Schedule A instructions, State and Local Tax Deduction Worksheet, line 9: the larger of line 8 or $10,000"
+    },
+    "saltHalfSeparate": {
+      "label": "Share of the limit when married filing separately",
+      "value": "0.5",
+      "source": "Schedule A instructions, State and Local Tax Deduction Worksheet, line 10: half the amount on line 9 if married filing separately"
+    },
+    "mortgageDebtLimit": {
+      "label": "Most home acquisition debt whose interest is deducted",
+      "value": "750000",
+      "source": "Schedule A instructions, line 8: $750,000 ($375,000 if married filing separately) of debt taken out after December 15, 2017"
+    },
+    "mortgageDebtLimitSeparate": {
+      "label": "Most home acquisition debt whose interest is deducted, Married filing separately",
+      "value": "375000",
+      "source": "Schedule A instructions, line 8: $375,000 if married filing separately"
+    },
+    "cashGiftLimit": {
+      "label": "Most cash gifts deducted, as a share of AGI",
+      "value": "0.6",
+      "source": "Schedule A instructions, line 11: cash gifts to most charities are limited to 60% of AGI"
+    },
+    "noncashGiftForm": {
+      "label": "Noncash gifts over which Form 8283 is needed",
+      "value": "500",
+      "source": "Schedule A instructions, line 12: if the total is over $500, you must file Form 8283"
+    },
+    "noncashGiftLimit": {
+      "label": "Noncash gifts this app deducts, as a share of AGI",
+      "value": "0.2",
+      "source": "Schedule A instructions, line 12: gifts of property are limited to 20% to 50% of AGI; over 20% this app doesn't decide which"
+    },
+    "earlyDistributionRate": {
+      "label": "Additional tax on an early distribution from a retirement plan",
+      "value": "0.1",
+      "source": "Instructions, Schedule 2, line 8: 10% of the taxable amount of a distribution with code 1 in box 7, without Form 5329 when no exception applies"
+    },
+    "benefitsBase": {
+      "label": "Base amount of the Social Security Benefits Worksheet",
+      "value": "25000",
+      "source": "Instructions, Social Security Benefits Worksheet, line 8: $25,000 if single, head of household, qualifying surviving spouse, or married filing separately and lived apart all year"
+    },
+    "benefitsBaseJoint": {
+      "label": "Base amount of the Social Security Benefits Worksheet, Married filing jointly",
+      "value": "32000",
+      "source": "Instructions, the same worksheet, line 8: $32,000 if married filing jointly"
+    },
+    "benefitsSecond": {
+      "label": "Second amount of the Social Security Benefits Worksheet",
+      "value": "9000",
+      "source": "Instructions, the same worksheet, line 10: $9,000 if single, head of household, qualifying surviving spouse, or married filing separately and lived apart all year"
+    },
+    "benefitsSecondJoint": {
+      "label": "Second amount of the Social Security Benefits Worksheet, Married filing jointly",
+      "value": "12000",
+      "source": "Instructions, the same worksheet, line 10: $12,000 if married filing jointly"
+    },
+    "benefitsHalf": {"label":"Half of the benefits","value":"0.5","source":"Instructions, the same worksheet, lines 2 and 13: 50%"},
+    "benefitsMost": {
+      "label": "Most of the benefits that are taxable",
+      "value": "0.85",
+      "source": "Instructions, the same worksheet, lines 15 and 17: 85%"
+    },
     "tipsMax": {
       "label": "Most qualified tips deducted",
       "value": "25000",
@@ -611,6 +878,151 @@
     }
   },
   "lines": {
+    "F8889.2": {"label":"HSA contributions you made","formula":"if(answer.hasHsa, answer.hsaContributions, 0)"},
+    "F8889.8": {
+      "label": "HSA contribution limit",
+      "formula": "if(answer.hasHsa, if(answer.hsaAllYear == \"yes\", if(answer.hsaCoverage == \"family\", param.hsaFamily, param.hsaSelfOnly) + if(person.age >= 55, param.hsaCatchUp, 0), unsupported(\"HSA coverage for only part of 2025 is figured with the Line 3 Limitation Chart and the last-month rule, which this app doesn't work out\")), 0)",
+      "source": "Form 8889, lines 3 to 8: the limit for coverage all year, plus $1,000 at 55 or older; no Archer MSA"
+    },
+    "F8889.9": {
+      "label": "Employer contributions to your HSA",
+      "formula": "sum(W2.box12W)",
+      "source": "Form 8889, line 9: Form W-2, box 12, code W"
+    },
+    "F8889.13": {
+      "label": "HSA deduction",
+      "formula": "if(line.F8889.2 + line.F8889.9 == 0, 0, if(line.F8889.2 + line.F8889.9 > line.F8889.8, unsupported(\"HSA contributions over the limit are an excess contribution (Form 5329), which this app doesn't work out\"), if(answer.hsaNonMedical == \"yes\", unsupported(\"HSA distributions not for medical expenses are taxed on Form 8889, Part II, which this app doesn't prepare yet\"), if(line.US.joint == 1 and answer.hsaCoverage == \"family\" and spouse.answer.hasHsa and spouse.answer.hsaCoverage == \"family\", unsupported(\"Both spouses with family HSA coverage share one limit, which this app doesn't split yet\"), min(line.F8889.2, max(0, line.F8889.8 - line.F8889.9))))))",
+      "source": "Form 8889, lines 10 to 13: the smaller of your contributions and the limit less employer contributions"
+    },
+    "S1.13": {
+      "label": "Health savings account deduction",
+      "formula": "line.F8889.13 + if(line.US.joint == 1, spouse.line.F8889.13, 0)",
+      "source": "Schedule 1, line 13: Form 8889, line 13 (each spouse's on a joint return)"
+    },
+    "US.ownCompensation": {
+      "label": "This person's compensation for an IRA",
+      "formula": "line.US.ownWages + max(0, line.SC.31 - line.SE.13)",
+      "source": "Instructions, IRA Deduction Worksheet, line 7: wages, plus self-employment income less the deductible part of self-employment tax"
+    },
+    "US.iraMagi": {
+      "label": "Modified AGI for the IRA deduction",
+      "formula": "line.F1040.1z + line.F1040.2b + line.F1040.3b + line.F1040.4b + line.F1040.5b + line.F1040.7a + line.F1040.8 - line.S1.13 - line.S1.15",
+      "source": "Instructions, IRA Deduction Worksheet, line 3: Form 1040 line 9 less Schedule 1 lines 11 to 19, 23 and 25, without the IRA and student loan interest deductions. Social security benefits are left out: with them, a phase-out is figured with Pub. 590-A, which this app doesn't do"
+    },
+    "US.iraLimit": {
+      "label": "This person's IRA contribution limit",
+      "formula": "if(person.age >= 50, param.iraLimitOlder, param.iraLimit)"
+    },
+    "US.iraPhaseOutStart": {
+      "label": "Where this person's IRA deduction starts to be reduced (0 if it isn't)",
+      "formula": "if(answer.coveredByPlan, if(line.US.joint == 1, param.iraPhaseOutJoint, if(line.US.separate == 1, 0, param.iraPhaseOutSingle)), if(line.US.joint == 1, if(spouse.answer.coveredByPlan, param.iraPhaseOutSpouseCovered, 0), 0))",
+      "source": "Instructions, IRA Deduction Worksheet, lines 1 and 2 (married filing separately and covered: from $0; a separate spouse who lived apart all year files as single, not worked out)"
+    },
+    "US.iraReduced": {
+      "label": "This person's IRA limit after the phase-out",
+      "formula": "if(line.US.iraPhaseOutStart == 0 and line.US.separate == 0, line.US.iraLimit, if(line.US.separate == 0 and line.US.iraMagi <= line.US.iraPhaseOutStart, line.US.iraLimit, if(sum(SSA.box5) + if(line.US.joint == 1, sum(spouse.SSA.box5), 0) > 0, unsupported(\"With social security benefits and a retirement plan at work, the IRA deduction is figured with Pub. 590-A, which this app doesn't do\"), if(line.US.iraMagi >= line.US.iraPhaseOutStart + if(line.US.joint == 1 and answer.coveredByPlan, param.iraPhaseOutRangeJoint, param.iraPhaseOutRange), 0, max(param.iraMinimum, 0 - floor(0 - line.US.iraLimit * (line.US.iraPhaseOutStart + if(line.US.joint == 1 and answer.coveredByPlan, param.iraPhaseOutRangeJoint, param.iraPhaseOutRange) - line.US.iraMagi) / if(line.US.joint == 1 and answer.coveredByPlan, param.iraPhaseOutRangeJoint, param.iraPhaseOutRange), 10))))))",
+      "source": "Instructions, IRA Deduction Worksheet, lines 3 to 6: the limit times the part of the range left, rounded up to $10, and at least $200"
+    },
+    "US.ownIraDeduction": {
+      "label": "This person's IRA deduction",
+      "formula": "if(answer.hasIraContribution, min(answer.iraContribution, line.US.iraReduced, line.US.ownCompensation + if(line.US.joint == 1, max(0, spouse.line.US.ownCompensation - spouse.line.US.ownIraContribution), 0)), 0)",
+      "source": "Instructions, IRA Deduction Worksheet, lines 7 to 9: the smallest of the contributions, the limit and the compensation (with a spouse's, less their contributions, on a joint return)"
+    },
+    "US.ownIraContribution": {
+      "label": "This person's traditional IRA contributions",
+      "formula": "if(answer.hasIraContribution, answer.iraContribution, 0)"
+    },
+    "S1.20": {
+      "label": "IRA deduction",
+      "formula": "line.US.ownIraDeduction + if(line.US.joint == 1, spouse.line.US.ownIraDeduction, 0)"
+    },
+    "US.ownPrivateActivityInterest": {
+      "label": "Specified private activity bond interest on this person's Forms 1099-INT (box 9) and 1099-DIV (box 13)",
+      "formula": "sum(INT.box9) + sum(DIV.box13)"
+    },
+    "F6251.1a": {
+      "label": "Deductions less the enhanced deduction for seniors",
+      "formula": "line.F1040.14 - line.S1A.37",
+      "source": "Form 6251, line 1a: Form 1040 line 14 less Schedule 1-A line 37"
+    },
+    "F6251.1b": {"label":"AGI less line 1a","formula":"line.F1040.11a - line.F6251.1a"},
+    "F6251.2a": {
+      "label": "Taxes, or the standard deduction",
+      "formula": "if(line.US.itemizes == 1, line.SA.7, line.F1040.12e)",
+      "source": "Form 6251, line 2a: the taxes of Schedule A line 7; without Schedule A, Form 1040 line 12e"
+    },
+    "F6251.2g": {
+      "label": "Interest from specified private activity bonds",
+      "formula": "line.US.ownPrivateActivityInterest + if(line.US.joint == 1, spouse.line.US.ownPrivateActivityInterest, 0)",
+      "source": "6251 instructions, line 2g: Form 1099-INT box 9 and Form 1099-DIV box 13"
+    },
+    "F6251.4": {"label":"Alternative minimum taxable income","formula":"line.F6251.1b + line.F6251.2a + line.F6251.2g"},
+    "F6251.5": {
+      "label": "Exemption",
+      "formula": "max(0, if(line.US.jointRates == 1, param.amtExemptionJoint, if(line.US.separate == 1, param.amtExemptionSeparate, param.amtExemptionSingle)) - round(max(0, line.F6251.4 - if(line.US.jointRates == 1, param.amtPhaseOutJoint, param.amtPhaseOutSingle)) * param.amtPhaseOutRate, 2))",
+      "source": "Form 6251, line 5, and the Exemption Worksheet"
+    },
+    "F6251.6": {"label":"AMTI over the exemption","formula":"max(0, line.F6251.4 - line.F6251.5)"},
+    "F6251.39": {
+      "label": "Tentative tax on line 6 at the AMT rates",
+      "formula": "round(if(line.F6251.6 <= if(line.US.separate == 1, param.amtBracketSeparate, param.amtBracket), line.F6251.6 * param.amtLowRate, line.F6251.6 * param.amtHighRate - if(line.US.separate == 1, param.amtBracketAdjustSeparate, param.amtBracketAdjust)), 2)",
+      "source": "Form 6251, lines 7 and 39"
+    },
+    "F6251.13": {
+      "label": "Qualified dividends and net capital gain",
+      "formula": "line.QDW.4",
+      "source": "Form 6251, lines 13 to 15: line 4 of the Qualified Dividends and Capital Gain Tax Worksheet (no Schedule D Tax Worksheet, line 14 is 0)"
+    },
+    "F6251.16": {"label":"Smaller of line 12 and line 15","formula":"min(line.F6251.6, line.F6251.13)"},
+    "F6251.17": {"label":"AMTI taxed at the AMT rates","formula":"line.F6251.6 - line.F6251.16"},
+    "F6251.18": {
+      "label": "Tax on line 17 at the AMT rates",
+      "formula": "round(if(line.F6251.17 <= if(line.US.separate == 1, param.amtBracketSeparate, param.amtBracket), line.F6251.17 * param.amtLowRate, line.F6251.17 * param.amtHighRate - if(line.US.separate == 1, param.amtBracketAdjustSeparate, param.amtBracketAdjust)), 2)"
+    },
+    "F6251.21": {
+      "label": "Room in the 0% band",
+      "formula": "max(0, line.QDW.6 - line.QDW.5)",
+      "source": "Form 6251, lines 19 to 21: the 0% band less line 5 of the worksheet"
+    },
+    "F6251.22": {"label":"Smaller of line 12 and line 13","formula":"min(line.F6251.6, line.F6251.13)"},
+    "F6251.23": {"label":"Taxed at 0%","formula":"min(line.F6251.21, line.F6251.22)"},
+    "F6251.30": {
+      "label": "Taxed at 15%",
+      "formula": "min(line.F6251.22 - line.F6251.23, max(0, line.QDW.13 - (line.F6251.21 + line.QDW.5)))",
+      "source": "Form 6251, lines 24 to 30"
+    },
+    "F6251.31": {"label":"Tax at 15%","formula":"round(line.F6251.30 * param.capitalGainRateMiddle, 2)"},
+    "F6251.34": {
+      "label": "Tax at 20%",
+      "formula": "round((line.F6251.22 - (line.F6251.23 + line.F6251.30)) * param.capitalGainRateTop, 2)",
+      "source": "Form 6251, lines 32 to 34"
+    },
+    "F6251.40": {
+      "label": "Tentative tax with the capital gain rates",
+      "formula": "min(line.F6251.18 + line.F6251.31 + line.F6251.34, line.F6251.39)",
+      "source": "Form 6251, lines 38 to 40 (line 37 is 0 without unrecaptured section 1250 gain)"
+    },
+    "F6251.7": {
+      "label": "Tentative tax before the AMT foreign tax credit",
+      "formula": "if(line.QDW.applies == 1, line.F6251.40, line.F6251.39)"
+    },
+    "F6251.10": {
+      "label": "Regular tax less the foreign tax credit",
+      "formula": "max(0, line.F1040.16 - line.S3.1)",
+      "source": "Form 6251, line 10: Form 1040 line 16 and Schedule 2 line 1z (none here), less Schedule 3 line 1"
+    },
+    "F6251.8": {
+      "label": "AMT foreign tax credit",
+      "formula": "if(line.F6251.7 > line.F6251.10, min(line.S3.1, line.F6251.7), 0)",
+      "source": "6251 instructions, line 8: with the foreign tax credit claimed without Form 1116, the same amount as Schedule 3 line 1"
+    },
+    "F6251.9": {"label":"Tentative minimum tax","formula":"line.F6251.7 - line.F6251.8"},
+    "F6251.11": {"label":"Alternative minimum tax","formula":"max(0, line.F6251.9 - line.F6251.10)"},
+    "F1040.17": {
+      "label": "Alternative minimum tax (Schedule 2, line 3)",
+      "formula": "line.F6251.11",
+      "source": "Schedule 2, lines 2 and 3: Form 6251, line 11 (no additions to tax on lines 1a to 1y)"
+    },
     "DEP.livedWithYou": {
       "label": "Lived with you more than half of 2025 (1 for yes)",
       "formula": "if(dependant.answer.monthsWithYou >= 7, 1, 0)",
@@ -780,8 +1192,8 @@
     "F2441.9a": {"label":"Credit before the tax limit","formula":"round(line.F2441.6 * line.F2441.8, 2)"},
     "F2441.10": {
       "label": "Tax liability limit",
-      "formula": "line.F1040.18",
-      "source": "2441 instructions, Credit Limit Worksheet: Form 1040 line 18, less Schedule 3 lines 1 and 6l (no such credit is worked out by this app)"
+      "formula": "max(0, line.F1040.18 - line.S3.1)",
+      "source": "2441 instructions, Credit Limit Worksheet: Form 1040 line 18, less Schedule 3 lines 1 (the foreign tax credit, investments.yaml) and 6l (not worked out by this app)"
     },
     "F2441.11": {
       "label": "Credit for child and dependent care expenses",
@@ -795,8 +1207,8 @@
     },
     "S3.8": {
       "label": "Total nonrefundable credits from Schedule 3",
-      "formula": "line.S3.2 + line.S3.3",
-      "source": "Schedule 3, line 8: lines 2 and 3 (education.yaml); no other nonrefundable credit is worked out by this app"
+      "formula": "line.S3.1 + line.S3.2 + line.S3.3",
+      "source": "Schedule 3, line 8: lines 1 (investments.yaml), 2 and 3 (education.yaml); no other nonrefundable credit is worked out by this app"
     },
     "SCOPE.care": {
       "label": "Care this app doesn't handle yet",
@@ -890,8 +1302,8 @@
     "S8812.12": {"label":"Credits after the reduction","formula":"max(0, line.S8812.8 - line.S8812.11)"},
     "S8812.13": {
       "label": "Credit limit",
-      "formula": "max(0, line.F1040.18 - line.S3.2 - line.S3.3)",
-      "source": "8812 instructions, Credit Limit Worksheet A: Form 1040 line 18, less Schedule 3 lines 2 and 3 (the credits for child and dependent care expenses and for education); the other credits it lists aren't worked out by this app"
+      "formula": "max(0, line.F1040.18 - line.S3.1 - line.S3.2 - line.S3.3)",
+      "source": "8812 instructions, Credit Limit Worksheet A: Form 1040 line 18, less Schedule 3 lines 1 to 3 (the foreign tax credit and the credits for child and dependent care expenses and for education); the other credits it lists aren't worked out by this app"
     },
     "S8812.14": {"label":"Child tax credit and credit for other dependents","formula":"min(line.S8812.12, line.S8812.13)"},
     "S8812.16a": {"label":"Credits more than the tax","formula":"max(0, line.S8812.12 - line.S8812.14)"},
@@ -1085,7 +1497,7 @@
     "F8863.18": {"label":"Lifetime learning credit","formula":"round(line.F8863.12 * line.F8863.17, 2)"},
     "F8863.19": {
       "label": "Nonrefundable education credits",
-      "formula": "min(line.F8863.18 + line.F8863.9, max(0, line.F1040.18 - line.S3.2))",
+      "formula": "min(line.F8863.18 + line.F8863.9, max(0, line.F1040.18 - line.S3.1 - line.S3.2))",
       "source": "8863 instructions, Credit Limit Worksheet: lines 18 and 9, up to Form 1040 line 18 less Schedule 3 lines 1, 2, 6d and 6l (only line 2, the credit for child and dependent care expenses, is worked out by this app)"
     },
     "S3.3": {"label":"Education credits","formula":"line.F8863.19","source":"Schedule 3, line 3: Form 8863, line 19"},
@@ -1101,7 +1513,7 @@
     },
     "SLW.4": {
       "label": "Modified adjusted gross income",
-      "formula": "line.F1040.9 - line.S1.15",
+      "formula": "line.F1040.9 - line.S1.13 - line.S1.15 - line.S1.20",
       "source": "Student Loan Interest Deduction Worksheet, lines 2 to 4: Form 1040 line 9, less Schedule 1 lines 11 to 20, 23 and 25 (only line 15 is worked out by this app)"
     },
     "SLW.5": {
@@ -1167,8 +1579,8 @@
     },
     "US.eicEligible": {
       "label": "Can take the earned income credit (1 for yes)",
-      "formula": "if(line.US.claimable == 1, 0, if(line.US.earnedIncome < 1, 0, if(line.F1040.2a + line.F1040.2b > param.eicInvestmentLimit, 0, if(line.F1040.11a >= line.US.eicLimit or line.US.earnedIncome >= line.US.eicLimit, 0, if(line.US.eicKids == 0, if(line.US.separate == 1 or line.US.hoh == 1, 0, if(line.US.eicAge > 0, line.US.eicSSN, 0)), if(line.US.separate == 1, if(answer.livedApartLastSixMonths, line.US.eicSSN, 0), line.US.eicSSN))))))",
-      "source": "Instructions, line 27a: Step 1 (AGI under the limit, valid SSNs), Step 2 (investment income: lines 2a and 2b), Step 3 (filing separately: a qualifying child and living apart for the last 6 months; not someone else's qualifying child, which the app takes as not being someone's dependent), Step 4 (no qualifying child: 25 to 64, not separately or head of household) and Step 5 (earned income under the limit)"
+      "formula": "if(line.US.claimable == 1, 0, if(line.US.earnedIncome < 1, 0, if(line.F1040.2a + line.F1040.2b + line.F1040.3b + max(0, line.F1040.7a) > param.eicInvestmentLimit, 0, if(line.F1040.11a >= line.US.eicLimit or line.US.earnedIncome >= line.US.eicLimit, 0, if(line.US.eicKids == 0, if(line.US.separate == 1 or line.US.hoh == 1, 0, if(line.US.eicAge > 0, line.US.eicSSN, 0)), if(line.US.separate == 1, if(answer.livedApartLastSixMonths, line.US.eicSSN, 0), line.US.eicSSN))))))",
+      "source": "Instructions, line 27a: Step 1 (AGI under the limit, valid SSNs), Step 2 (investment income: lines 2a, 2b and 3b, and line 7a when a gain), Step 3 (filing separately: a qualifying child and living apart for the last 6 months; not someone else's qualifying child, which the app takes as not being someone's dependent), Step 4 (no qualifying child: 25 to 64, not separately or head of household) and Step 5 (earned income under the limit)"
     },
     "US.eicRowEarned": {
       "label": "Start of the EIC Table's row for earned income",
@@ -1238,11 +1650,17 @@
     },
     "US.ownWages": {"label":"Wages on this person's Forms W-2, box 1","formula":"sum(W2.box1)"},
     "US.ownTaxableInterest": {"label":"This person's taxable interest, Forms 1099-INT boxes 1 and 3","formula":"sum(INT.box1) + sum(INT.box3)"},
-    "US.ownExemptInterest": {"label":"This person's tax-exempt interest, Forms 1099-INT box 8","formula":"sum(INT.box8)"},
+    "US.ownExemptInterest": {
+      "label": "This person's tax-exempt interest, Forms 1099-INT box 8 and 1099-DIV box 12",
+      "formula": "sum(INT.box8) + sum(DIV.box12)"
+    },
     "US.ownMedicareWages": {"label":"This person's Medicare wages and tips, Forms W-2 box 5","formula":"sum(W2.box5)"},
     "US.ownMedicareTax": {"label":"This person's Medicare tax withheld, Forms W-2 box 6","formula":"sum(W2.box6)"},
     "US.ownWithheldW2": {"label":"Federal income tax withheld on this person's Forms W-2","formula":"sum(W2.box2)"},
-    "US.ownWithheld1099": {"label":"Federal income tax withheld on this person's Forms 1099","formula":"sum(INT.box4) + sum(NEC.box4)"},
+    "US.ownWithheld1099": {
+      "label": "Federal income tax withheld on this person's Forms 1099",
+      "formula": "sum(INT.box4) + sum(NEC.box4) + sum(DIV.box4) + sum(B.box4) + sum(RIRA.box4) + sum(R.box4) + sum(SSA.box6)"
+    },
     "US.ownEstimated": {"label":"This person's estimated tax payments","formula":"answer.estimatedPayments"},
     "US.ownBoxes": {
       "label": "This person's boxes on line 12d (born before January 2, 1961; blind)",
@@ -1267,7 +1685,7 @@
     "F1040.2a": {
       "label": "Tax-exempt interest",
       "formula": "line.US.ownExemptInterest + if(line.US.joint == 1, spouse.line.US.ownExemptInterest, 0)",
-      "source": "Form 1040, line 2a: Form 1099-INT, box 8. It isn't taxed; it is reported"
+      "source": "Form 1040, line 2a: Form 1099-INT, box 8, and Form 1099-DIV, box 12. It isn't taxed; it is reported"
     },
     "F1040.2b": {
       "label": "Taxable interest",
@@ -1275,7 +1693,11 @@
       "source": "Form 1040, line 2b: Form 1099-INT, boxes 1 and 3 (savings bond and Treasury interest is taxed federally)"
     },
     "F1040.8": {"label":"Additional income from Schedule 1","formula":"line.S1.10"},
-    "F1040.9": {"label":"Total income","formula":"line.F1040.1z + line.F1040.2b + line.F1040.8"},
+    "F1040.9": {
+      "label": "Total income",
+      "formula": "line.F1040.1z + line.F1040.2b + line.F1040.3b + line.F1040.4b + line.F1040.5b + line.F1040.6b + line.F1040.7a + line.F1040.8",
+      "source": "Form 1040, line 9: lines 1z, 2b, 3b, 4b, 5b, 6b, 7a and 8 (investments.yaml, retirement.yaml)"
+    },
     "F1040.10": {"label":"Adjustments to income from Schedule 1","formula":"line.S1.26"},
     "F1040.11a": {"label":"Adjusted gross income","formula":"line.F1040.9 - line.F1040.10"},
     "US.earnedIncome": {
@@ -1306,8 +1728,9 @@
       "formula": "if(line.US.claimable == 1, line.US.dependentStandard, line.US.basicStandard) + line.US.boxes * if(line.US.single == 1 or line.US.hoh == 1, param.additionalUnmarried, param.additionalMarried)"
     },
     "F1040.12e": {
-      "label": "Standard deduction",
-      "formula": "if(line.US.separate == 1, if(answer.spouseItemizes, unsupported(\"Your spouse itemizes, so you must itemize too (Schedule A); this app doesn't itemize deductions yet\"), line.US.standard), line.US.standard)"
+      "label": "Standard deduction or itemized deductions",
+      "formula": "if(line.US.itemizes == 1, line.SA.17, line.US.standard)",
+      "source": "Form 1040, line 12e: the standard deduction, or itemized deductions from Schedule A (itemized.yaml)"
     },
     "S1A.3": {
       "label": "Modified adjusted gross income",
@@ -1353,12 +1776,16 @@
       "label": "Tax from the Tax Computation Worksheet",
       "formula": "round(if(line.US.jointRates == 1, bracket(param.bracketsJoint, line.F1040.15), if(line.US.hoh == 1, bracket(param.bracketsHead, line.F1040.15), if(line.US.single == 1, bracket(param.bracketsSingle, line.F1040.15), bracket(param.bracketsSeparate, line.F1040.15)))), 2)"
     },
+    "US.regularTax": {
+      "label": "Tax on taxable income at the regular rates",
+      "formula": "if(line.F1040.15 < param.taxTableLimit, line.US.tableTax, line.US.worksheetTax)"
+    },
     "F1040.16": {
       "label": "Tax",
-      "formula": "if(line.F1040.15 < param.taxTableLimit, line.US.tableTax, line.US.worksheetTax)",
-      "source": "Instructions, line 16: the Tax Table under $100,000, the Tax Computation Worksheet from $100,000. Line 17 (the alternative minimum tax, Schedule 2 line 3) is 0 here: with only wages, interest and the standard deduction, the tentative minimum tax of Form 6251 stays below this tax"
+      "formula": "if(line.QDW.applies == 1, line.QDW.25, line.US.regularTax)",
+      "source": "Instructions, line 16: the Tax Table under $100,000, the Tax Computation Worksheet from $100,000, or the Qualified Dividends and Capital Gain Tax Worksheet (investments.yaml) with qualified dividends or capital gains"
     },
-    "F1040.18": {"label":"Tax and the alternative minimum tax","formula":"line.F1040.16"},
+    "F1040.18": {"label":"Tax and the alternative minimum tax","formula":"line.F1040.16 + line.F1040.17"},
     "F1040.19": {
       "label": "Child tax credit and credit for other dependents",
       "formula": "line.S8812.14",
@@ -1402,6 +1829,16 @@
       "formula": "line.F8959.7 + line.F8959.13",
       "source": "Form 8959, line 18: lines 7 and 13 (no railroad retirement compensation, line 17)"
     },
+    "F8960.8": {
+      "label": "Total investment income",
+      "formula": "line.F1040.2b + line.F1040.3b + line.F1040.7a",
+      "source": "Form 8960, lines 1, 2, 5a and 8: taxable interest, ordinary dividends, and the net gain or loss of Form 1040 line 7a; no annuities, rents or business income here"
+    },
+    "F8960.12": {
+      "label": "Net investment income",
+      "formula": "max(0, line.F8960.8)",
+      "source": "Form 8960, line 12: line 8 less the deductions of lines 9 to 11 (none worked out); if zero or less, 0"
+    },
     "F8960.13": {"label":"Modified adjusted gross income","formula":"line.F1040.11a"},
     "F8960.14": {
       "label": "Threshold for the net investment income tax",
@@ -1410,8 +1847,8 @@
     },
     "F8960.17": {
       "label": "Net investment income tax",
-      "formula": "round(min(line.F1040.2b, max(0, line.F8960.13 - line.F8960.14)) * param.niitRate, 2)",
-      "source": "Form 8960, lines 8 and 13 to 17: the smaller of the net investment income (here, taxable interest) and the MAGI over the threshold, times 3.8%"
+      "formula": "round(min(line.F8960.12, max(0, line.F8960.13 - line.F8960.14)) * param.niitRate, 2)",
+      "source": "Form 8960, lines 13 to 17: the smaller of the net investment income and the MAGI over the threshold, times 3.8%"
     },
     "S2.4": {
       "label": "Self-employment tax",
@@ -1420,8 +1857,8 @@
     },
     "S2.21": {
       "label": "Total other taxes",
-      "formula": "line.S2.4 + line.F8959.18 + line.F8960.17",
-      "source": "Schedule 2, line 21: lines 4 (Schedule SE), 11 (Form 8959) and 12 (Form 8960)"
+      "formula": "line.S2.4 + line.S2.8 + line.F8959.18 + line.F8960.17",
+      "source": "Schedule 2, line 21: lines 4 (Schedule SE), 8 (the 10% tax on early distributions, retirement.yaml), 11 (Form 8959) and 12 (Form 8960)"
     },
     "F1040.23": {"label":"Other taxes","formula":"line.S2.21"},
     "F1040.24": {"label":"Total tax","formula":"line.F1040.22 + line.F1040.23 + line.SCOPE.return"},
@@ -1482,7 +1919,7 @@
     },
     "SCOPE.return": {
       "label": "Situations this app doesn't handle yet",
-      "formula": "line.SCOPE.residency + line.SCOPE.widowed + line.SCOPE.kiddie + line.SCOPE.care"
+      "formula": "line.SCOPE.residency + line.SCOPE.widowed + line.SCOPE.kiddie + line.SCOPE.care + line.SCOPE.otherIncome + line.SCOPE.investments + line.SCOPE.retirement"
     },
     "SCOPE.residency": {
       "label": "A nonresident or dual-status alien",
@@ -1493,9 +1930,369 @@
       "formula": "if(family.maritalStatus == \"widowed\", if(answer.spouseDiedIn2025, unsupported(\"Your spouse died in 2025, so you can file jointly for 2025; this app doesn't prepare that return yet\"), 0), 0)"
     },
     "SCOPE.kiddie": {
-      "label": "A child's interest taxed at the parent's rate",
-      "formula": "if(line.US.joint == 1, 0, if(person.age < 24 and line.F1040.2b > param.kiddieThreshold, unsupported(\"Interest over $2,700 for someone under 24 may be taxed on Form 8615 (the kiddie tax), which this app doesn't prepare\"), 0))",
-      "source": "Instructions, line 16, Form 8615: not for someone filing a joint return"
+      "label": "A child's investment income taxed at the parent's rate",
+      "formula": "if(line.US.joint == 1, 0, if(person.age < 24 and line.US.unearnedIncome > param.kiddieThreshold, unsupported(\"Unearned income (interest, dividends, capital gains, pensions, taxable benefits) over $2,700 for someone under 24 may be taxed on Form 8615 (the kiddie tax), which this app doesn't prepare\"), 0))",
+      "source": "Instructions, line 16, Form 8615: unearned income over $2,700; not for someone filing a joint return"
+    },
+    "US.unearnedIncome": {
+      "label": "Unearned income",
+      "formula": "line.F1040.2b + line.F1040.3b + line.F1040.4b + line.F1040.5b + line.F1040.6b + max(0, line.F1040.7a)",
+      "source": "Form 8615 instructions: unearned income is income other than earned income, such as taxable interest, dividends, capital gains, pensions and taxable social security benefits"
+    },
+    "SCOPE.otherIncome": {
+      "label": "Other income this app doesn't take yet",
+      "formula": "if(answer.hasOtherIncome, unsupported(\"Other income (unemployment, rent, alimony, gambling and the like) isn't worked out yet: this return would leave it out\"), 0) + if(line.US.joint == 1, if(spouse.answer.hasOtherIncome, unsupported(\"Your spouse has other income (unemployment, rent, alimony, gambling and the like), which isn't worked out yet\"), 0), 0)"
+    },
+    "SCOPE.investments": {
+      "label": "Investment income this app doesn't take yet",
+      "formula": "line.US.ownBrokerUnsupported + if(line.US.joint == 1, spouse.line.US.ownBrokerUnsupported, 0)"
+    },
+    "SCOPE.retirement": {
+      "label": "Retirement income this app doesn't take yet",
+      "formula": "line.US.ownRetirementScope + if(line.US.joint == 1, spouse.line.US.ownRetirementScope, 0)"
+    },
+    "US.ownOrdinaryDividends": {"label":"Ordinary dividends on this person's Forms 1099-DIV, box 1a","formula":"sum(DIV.box1A)"},
+    "US.ownQualifiedDividends": {"label":"Qualified dividends on this person's Forms 1099-DIV, box 1b","formula":"sum(DIV.box1B)"},
+    "US.ownCapitalGainDistributions": {"label":"Capital gain distributions on this person's Forms 1099-DIV, box 2a","formula":"sum(DIV.box2A)"},
+    "US.ownReitDividends": {"label":"Section 199A dividends on this person's Forms 1099-DIV, box 5","formula":"sum(DIV.box5)"},
+    "US.ownForeignTax": {
+      "label": "Foreign tax paid on this person's Forms 1099-DIV (box 7) and 1099-INT (box 6)",
+      "formula": "sum(DIV.box7) + sum(INT.box6)"
+    },
+    "US.ownShortProceeds": {
+      "label": "Short-term proceeds on this person's 1099-B summaries for Form 8949 box A",
+      "formula": "sumWhere(B.box1D, B.boxCAT, \"A\")"
+    },
+    "US.ownShortCost": {
+      "label": "Short-term cost on this person's 1099-B summaries for Form 8949 box A",
+      "formula": "sumWhere(B.box1E, B.boxCAT, \"A\")"
+    },
+    "US.ownLongProceeds": {
+      "label": "Long-term proceeds on this person's 1099-B summaries for Form 8949 box D",
+      "formula": "sumWhere(B.box1D, B.boxCAT, \"D\")"
+    },
+    "US.ownLongCost": {
+      "label": "Long-term cost on this person's 1099-B summaries for Form 8949 box D",
+      "formula": "sumWhere(B.box1E, B.boxCAT, \"D\")"
+    },
+    "US.ownCarryoverShort": {
+      "label": "This person's short-term capital loss carryover",
+      "formula": "if(answer.hasLossCarryover, answer.shortLossCarryover, 0)"
+    },
+    "US.ownCarryoverLong": {
+      "label": "This person's long-term capital loss carryover",
+      "formula": "if(answer.hasLossCarryover, answer.longLossCarryover, 0)"
+    },
+    "US.ownBrokerSummaries": {"label":"This person's 1099-B summaries","formula":"count(B.box1D)"},
+    "US.ownBrokerUnsupported": {
+      "label": "Sales this person's 1099-B summaries report that need Form 8949",
+      "formula": "if(count(B.box1D) > countWhere(B.box1D, B.boxCAT, \"A\", \"B\", \"D\", \"E\"), unsupported(\"A 1099-B doesn't say which part of Form 8949 it is for (box A, B, D or E): enter it at Confirm\"), if(countWhere(B.box1D, B.boxCAT, \"B\", \"E\") > 0, unsupported(\"Sales whose basis wasn't reported to the IRS (Form 8949 box B or E) go on Form 8949, which this app doesn't prepare yet\"), 0))",
+      "source": "Instructions, line 7a, Exception 2, and Schedule D, lines 1a and 8a: only sales with basis reported to the IRS and no adjustments go straight there"
+    },
+    "F1040.3a": {
+      "label": "Qualified dividends",
+      "formula": "line.US.ownQualifiedDividends + if(line.US.joint == 1, spouse.line.US.ownQualifiedDividends, 0)"
+    },
+    "F1040.3b": {
+      "label": "Ordinary dividends",
+      "formula": "line.US.ownOrdinaryDividends + if(line.US.joint == 1, spouse.line.US.ownOrdinaryDividends, 0)"
+    },
+    "US.capitalGainDistributions": {
+      "label": "Capital gain distributions",
+      "formula": "line.US.ownCapitalGainDistributions + if(line.US.joint == 1, spouse.line.US.ownCapitalGainDistributions, 0)"
+    },
+    "US.scheduleD": {
+      "label": "This return files Schedule D (1 for yes)",
+      "formula": "if(line.US.ownBrokerSummaries + line.US.ownCarryoverShort + line.US.ownCarryoverLong + if(line.US.joint == 1, spouse.line.US.ownBrokerSummaries + spouse.line.US.ownCarryoverShort + spouse.line.US.ownCarryoverLong, 0) > 0, 1, 0)",
+      "source": "Instructions, line 7a, Exception 1: no Schedule D when the only capital gains are capital gain distributions"
+    },
+    "SD.1ad": {
+      "label": "Short-term proceeds reported with basis (Form 8949 box A)",
+      "formula": "line.US.ownShortProceeds + if(line.US.joint == 1, spouse.line.US.ownShortProceeds, 0)"
+    },
+    "SD.1ae": {
+      "label": "Short-term cost (Form 8949 box A)",
+      "formula": "line.US.ownShortCost + if(line.US.joint == 1, spouse.line.US.ownShortCost, 0)"
+    },
+    "SD.1ah": {"label":"Short-term gain or loss on line 1a","formula":"line.SD.1ad - line.SD.1ae"},
+    "SD.6": {
+      "label": "Short-term capital loss carryover",
+      "formula": "line.US.ownCarryoverShort + if(line.US.joint == 1, spouse.line.US.ownCarryoverShort, 0)"
+    },
+    "SD.7": {"label":"Net short-term capital gain or loss","formula":"line.SD.1ah - line.SD.6"},
+    "SD.8ad": {
+      "label": "Long-term proceeds reported with basis (Form 8949 box D)",
+      "formula": "line.US.ownLongProceeds + if(line.US.joint == 1, spouse.line.US.ownLongProceeds, 0)"
+    },
+    "SD.8ae": {
+      "label": "Long-term cost (Form 8949 box D)",
+      "formula": "line.US.ownLongCost + if(line.US.joint == 1, spouse.line.US.ownLongCost, 0)"
+    },
+    "SD.8ah": {"label":"Long-term gain or loss on line 8a","formula":"line.SD.8ad - line.SD.8ae"},
+    "SD.13": {"label":"Capital gain distributions","formula":"line.US.capitalGainDistributions"},
+    "SD.14": {
+      "label": "Long-term capital loss carryover",
+      "formula": "line.US.ownCarryoverLong + if(line.US.joint == 1, spouse.line.US.ownCarryoverLong, 0)"
+    },
+    "SD.15": {"label":"Net long-term capital gain or loss","formula":"line.SD.8ah + line.SD.13 - line.SD.14"},
+    "SD.16": {"label":"Capital gain or loss","formula":"line.SD.7 + line.SD.15"},
+    "SD.21": {
+      "label": "Capital loss deducted",
+      "formula": "if(line.SD.16 >= 0, 0, max(line.SD.16, 0 - if(line.US.separate == 1, param.capitalLossLimitSeparate, param.capitalLossLimit)))",
+      "source": "Schedule D, line 21: the smaller loss of line 16 or ($3,000), ($1,500) if married filing separately"
+    },
+    "F1040.7a": {
+      "label": "Capital gain or loss",
+      "formula": "if(line.US.scheduleD == 1, if(line.SD.16 >= 0, line.SD.16, line.SD.21), line.US.capitalGainDistributions)",
+      "source": "Form 1040, line 7a: Schedule D, line 16 or 21; without Schedule D, the capital gain distributions (and the box on line 7b)"
+    },
+    "QDW.1": {"label":"Taxable income","formula":"line.F1040.15"},
+    "QDW.3": {
+      "label": "Net capital gain taxed at the capital gain rates",
+      "formula": "if(line.US.scheduleD == 1, if(line.SD.15 > 0 and line.SD.16 > 0, min(line.SD.15, line.SD.16), 0), line.F1040.7a)",
+      "source": "Worksheet, line 3: with Schedule D, the smaller of its lines 15 and 16 (0 when either is a loss); without it, line 7a"
+    },
+    "QDW.4": {"label":"Qualified dividends and net capital gain","formula":"line.F1040.3a + line.QDW.3"},
+    "QDW.applies": {
+      "label": "The worksheet figures line 16 (1 for yes)",
+      "formula": "if(line.QDW.4 > 0, 1, 0)",
+      "source": "Instructions, line 16: use the worksheet if you have qualified dividends or capital gain distributions, or Schedule D lines 15 and 16 are both gains"
+    },
+    "QDW.5": {
+      "label": "Taxable income other than qualified dividends and capital gains",
+      "formula": "max(0, line.QDW.1 - line.QDW.4)"
+    },
+    "QDW.6": {
+      "label": "Top of the 0% band",
+      "formula": "if(line.US.jointRates == 1, param.zeroRateTopJoint, if(line.US.hoh == 1, param.zeroRateTopHead, param.zeroRateTopSingle))"
+    },
+    "QDW.7": {"label":"Taxable income up to the top of the 0% band","formula":"min(line.QDW.1, line.QDW.6)"},
+    "QDW.9": {"label":"Taxed at 0%","formula":"line.QDW.7 - min(line.QDW.5, line.QDW.7)","source":"Worksheet, lines 8 and 9"},
+    "QDW.10": {"label":"Qualified dividends and capital gains in taxable income","formula":"min(line.QDW.1, line.QDW.4)"},
+    "QDW.12": {"label":"Left after the 0% band","formula":"line.QDW.10 - line.QDW.9","source":"Worksheet, lines 11 and 12"},
+    "QDW.13": {
+      "label": "Top of the 15% band",
+      "formula": "if(line.US.jointRates == 1, param.fifteenRateTopJoint, if(line.US.hoh == 1, param.fifteenRateTopHead, if(line.US.separate == 1, param.fifteenRateTopSeparate, param.fifteenRateTopSingle)))"
+    },
+    "QDW.16": {
+      "label": "Room in the 15% band",
+      "formula": "max(0, min(line.QDW.1, line.QDW.13) - (line.QDW.5 + line.QDW.9))",
+      "source": "Worksheet, lines 14 to 16"
+    },
+    "QDW.17": {"label":"Taxed at 15%","formula":"min(line.QDW.12, line.QDW.16)"},
+    "QDW.18": {"label":"Tax at 15%","formula":"round(line.QDW.17 * param.capitalGainRateMiddle, 2)"},
+    "QDW.20": {"label":"Taxed at 20%","formula":"line.QDW.10 - (line.QDW.9 + line.QDW.17)","source":"Worksheet, lines 19 and 20"},
+    "QDW.21": {"label":"Tax at 20%","formula":"round(line.QDW.20 * param.capitalGainRateTop, 2)"},
+    "QDW.22row": {
+      "label": "The middle of the Tax Table's row for line 5",
+      "formula": "if(line.QDW.5 < 5, 2.5, if(line.QDW.5 < 15, 10, if(line.QDW.5 < 25, 20, if(line.QDW.5 < 3000, floor(line.QDW.5, 25) + 12.5, floor(line.QDW.5, 50) + 25))))",
+      "source": "2025 Tax Table, as US.tableRow"
+    },
+    "QDW.22": {
+      "label": "Tax on line 5",
+      "formula": "if(line.QDW.5 < param.taxTableLimit, round(if(line.US.jointRates == 1, bracket(param.bracketsJoint, line.QDW.22row), if(line.US.hoh == 1, bracket(param.bracketsHead, line.QDW.22row), if(line.US.single == 1, bracket(param.bracketsSingle, line.QDW.22row), bracket(param.bracketsSeparate, line.QDW.22row)))), 0), round(if(line.US.jointRates == 1, bracket(param.bracketsJoint, line.QDW.5), if(line.US.hoh == 1, bracket(param.bracketsHead, line.QDW.5), if(line.US.single == 1, bracket(param.bracketsSingle, line.QDW.5), bracket(param.bracketsSeparate, line.QDW.5)))), 2))",
+      "source": "Worksheet, line 22: the Tax Table under $100,000, the Tax Computation Worksheet from $100,000"
+    },
+    "QDW.23": {
+      "label": "Tax with qualified dividends and capital gains at their rates",
+      "formula": "line.QDW.18 + line.QDW.21 + line.QDW.22"
+    },
+    "QDW.25": {
+      "label": "Tax on all taxable income",
+      "formula": "min(line.QDW.23, line.US.regularTax)",
+      "source": "Worksheet, lines 24 and 25: the smaller of line 23 and the tax on line 1"
+    },
+    "US.foreignTax": {
+      "label": "Foreign tax paid on Forms 1099-DIV and 1099-INT",
+      "formula": "line.US.ownForeignTax + if(line.US.joint == 1, spouse.line.US.ownForeignTax, 0)"
+    },
+    "S3.1": {
+      "label": "Foreign tax credit",
+      "formula": "if(line.US.foreignTax == 0, 0, if(line.US.foreignTax > if(line.US.joint == 1, param.foreignTaxSimpleLimitJoint, param.foreignTaxSimpleLimit), unsupported(\"Foreign tax over $300 ($600 jointly) is figured on Form 1116, which this app doesn't prepare\"), min(line.US.foreignTax, line.F1040.16)))",
+      "source": "Instructions, Schedule 3, line 1: the foreign tax paid, without Form 1116 when it is $300 or less ($600 jointly) and all on Forms 1099; it can't be more than the regular tax (line 16)"
+    },
+    "US.ownMedical": {"label":"This person's medical and dental expenses","formula":"if(answer.hasItemized, answer.itemMedical, 0)"},
+    "US.ownIncomeTaxes": {
+      "label": "State and local income taxes this person paid",
+      "formula": "sum(W2.box17) + if(answer.hasItemized, answer.itemStateTax, 0)",
+      "source": "Schedule A instructions, line 5a: state and local income taxes withheld (Form W-2, box 17) and paid in 2025"
+    },
+    "US.ownRealEstateTax": {"label":"Real estate taxes this person paid","formula":"if(answer.hasItemized, answer.itemRealEstateTax, 0)"},
+    "US.ownPersonalPropertyTax": {
+      "label": "Personal property taxes this person paid",
+      "formula": "if(answer.hasItemized, answer.itemPersonalPropertyTax, 0)"
+    },
+    "US.ownMortgage": {"label":"Mortgage interest and points on this person's Forms 1098","formula":"sum(F1098.box1) + sum(F1098.box6)"},
+    "US.ownMortgageDebt": {"label":"Outstanding principal on this person's Forms 1098","formula":"sum(F1098.box2)"},
+    "US.ownGifts": {
+      "label": "This person's gifts to charity",
+      "formula": "if(answer.hasItemized, answer.itemCashGifts + answer.itemNoncashGifts, 0)"
+    },
+    "US.ownCashGifts": {"label":"This person's cash gifts to charity","formula":"if(answer.hasItemized, answer.itemCashGifts, 0)"},
+    "US.ownNoncashGifts": {"label":"This person's noncash gifts to charity","formula":"if(answer.hasItemized, answer.itemNoncashGifts, 0)"},
+    "SA.1": {
+      "label": "Medical and dental expenses",
+      "formula": "line.US.ownMedical + if(line.US.joint == 1, spouse.line.US.ownMedical, 0)"
+    },
+    "SA.3": {
+      "label": "7.5% of AGI",
+      "formula": "round(line.F1040.11a * param.medicalFloor, 2)",
+      "source": "Schedule A, lines 2 and 3"
+    },
+    "SA.4": {"label":"Medical and dental expenses deducted","formula":"max(0, line.SA.1 - line.SA.3)"},
+    "SA.5a": {
+      "label": "State and local income taxes",
+      "formula": "line.US.ownIncomeTaxes + if(line.US.joint == 1, spouse.line.US.ownIncomeTaxes, 0)"
+    },
+    "SA.5b": {
+      "label": "State and local real estate taxes",
+      "formula": "line.US.ownRealEstateTax + if(line.US.joint == 1, spouse.line.US.ownRealEstateTax, 0)"
+    },
+    "SA.5c": {
+      "label": "State and local personal property taxes",
+      "formula": "line.US.ownPersonalPropertyTax + if(line.US.joint == 1, spouse.line.US.ownPersonalPropertyTax, 0)"
+    },
+    "SA.5d": {"label":"State and local taxes","formula":"line.SA.5a + line.SA.5b + line.SA.5c"},
+    "SA.saltLimit": {
+      "label": "Limit on state and local taxes",
+      "formula": "round(max(param.saltFloor, param.saltCap - round(max(0, line.F1040.11a - if(line.US.separate == 1, param.saltPhaseOutStartSeparate, param.saltPhaseOutStart)) * param.saltPhaseOutRate, 2)) * if(line.US.separate == 1, param.saltHalfSeparate, 1), 2)",
+      "source": "Schedule A instructions, State and Local Tax Deduction Worksheet, lines 1 to 10: $40,000 less 30% of modified AGI (here, line 11b) over $500,000 ($250,000 if married filing separately), at least $10,000, and half of that if married filing separately"
+    },
+    "SA.5e": {"label":"State and local taxes deducted","formula":"min(line.SA.5d, line.SA.saltLimit)"},
+    "SA.7": {"label":"Taxes you paid","formula":"line.SA.5e","source":"Schedule A, line 7: line 5e (no other taxes on line 6)"},
+    "SA.8a": {
+      "label": "Home mortgage interest and points on Form 1098",
+      "formula": "if(line.US.ownMortgage + if(line.US.joint == 1, spouse.line.US.ownMortgage, 0) == 0, 0, if(line.US.ownMortgageDebt + if(line.US.joint == 1, spouse.line.US.ownMortgageDebt, 0) > if(line.US.separate == 1, param.mortgageDebtLimitSeparate, param.mortgageDebtLimit) or answer.mortgageQualifies == \"no\", unsupported(\"Mortgage interest on more than $750,000 of debt, or on a loan not used to buy, build or improve the home, is limited with Pub. 936, which this app doesn't work out\"), line.US.ownMortgage + if(line.US.joint == 1, spouse.line.US.ownMortgage, 0)))",
+      "source": "Schedule A, line 8a: Form 1098, boxes 1 and 6"
+    },
+    "SA.8b": {
+      "label": "Mortgage interest not on Form 1098",
+      "formula": "if(answer.hasItemized, if(answer.itemMortgageOther > 0, unsupported(\"Mortgage interest paid to a person goes on Schedule A line 8b with their name and address, which this app doesn't fill in yet\"), 0), 0)"
+    },
+    "SA.10": {
+      "label": "Interest you paid",
+      "formula": "line.SA.8a + line.SA.8b",
+      "source": "Schedule A, lines 8e and 10 (no investment interest, line 9)"
+    },
+    "SA.11": {
+      "label": "Gifts by cash or check",
+      "formula": "if(line.US.ownCashGifts + if(line.US.joint == 1, spouse.line.US.ownCashGifts, 0) > round(line.F1040.11a * param.cashGiftLimit, 2), unsupported(\"Cash gifts over 60% of AGI are limited and carried over, which this app doesn't work out\"), line.US.ownCashGifts + if(line.US.joint == 1, spouse.line.US.ownCashGifts, 0))"
+    },
+    "SA.12": {
+      "label": "Gifts other than by cash or check",
+      "formula": "if(line.US.ownNoncashGifts + if(line.US.joint == 1, spouse.line.US.ownNoncashGifts, 0) > param.noncashGiftForm, unsupported(\"Noncash gifts over $500 need Form 8283, which this app doesn't prepare\"), if(line.US.ownNoncashGifts + if(line.US.joint == 1, spouse.line.US.ownNoncashGifts, 0) > round(line.F1040.11a * param.noncashGiftLimit, 2), unsupported(\"Noncash gifts over 20% of AGI may be limited, which this app doesn't work out\"), line.US.ownNoncashGifts + if(line.US.joint == 1, spouse.line.US.ownNoncashGifts, 0)))"
+    },
+    "SA.14": {
+      "label": "Gifts to charity",
+      "formula": "line.SA.11 + line.SA.12",
+      "source": "Schedule A, line 14: lines 11 and 12 (no carryover, line 13)"
+    },
+    "SA.17": {
+      "label": "Total itemized deductions",
+      "formula": "line.SA.4 + line.SA.7 + line.SA.10 + line.SA.14",
+      "source": "Schedule A, line 17: lines 4, 7, 10 and 14 (no casualty or other deductions, lines 15 and 16)"
+    },
+    "US.itemizes": {
+      "label": "The return itemizes (1 for yes)",
+      "formula": "if(line.US.separate == 1, if(answer.spouseItemizes, 1, if(line.SA.17 > line.US.standard, 1, 0)), if(line.SA.17 > line.US.standard, 1, 0))",
+      "source": "Instructions, line 12e: the larger of the standard deduction and the itemized deductions; filing separately, itemize if your spouse does (line 12b)"
+    },
+    "US.ownIraGross": {"label":"IRA distributions on this person's Forms 1099-R, box 1","formula":"sum(RIRA.box1)"},
+    "US.ownIraTaxable": {
+      "label": "Taxable IRA distributions on this person's Forms 1099-R, box 2a",
+      "formula": "sumWhere(RIRA.box2A, RIRA.box7, \"1\", \"2\", \"3\", \"4\", \"7\")",
+      "source": "Instructions, lines 4a and 4b: box 2a of each distribution not rolled over; a direct rollover (code G or H) is 0"
+    },
+    "US.ownPensionGross": {"label":"Pensions and annuities on this person's Forms 1099-R, box 1","formula":"sum(R.box1)"},
+    "US.ownPensionTaxable": {
+      "label": "Taxable pensions and annuities on this person's Forms 1099-R, box 2a",
+      "formula": "sumWhere(R.box2A, R.box7, \"1\", \"2\", \"3\", \"4\", \"7\")"
+    },
+    "US.ownIraRollover": {
+      "label": "This person rolled an IRA distribution over directly (1 for yes)",
+      "formula": "if(countWhere(RIRA.box1, RIRA.box7, \"G\", \"H\") > 0, 1, 0)"
+    },
+    "US.ownPensionRollover": {
+      "label": "This person rolled a plan distribution over directly (1 for yes)",
+      "formula": "if(countWhere(R.box1, R.box7, \"G\", \"H\") > 0, 1, 0)"
+    },
+    "US.ownEarlyDistribution": {
+      "label": "Taxable early distributions (code 1) on this person's Forms 1099-R",
+      "formula": "sumWhere(RIRA.box2A, RIRA.box7, \"1\") + sumWhere(R.box2A, R.box7, \"1\")"
+    },
+    "US.ownRetirementScope": {
+      "label": "This person's Forms 1099-R this app doesn't work out",
+      "formula": "if(count(RIRA.box1) + count(R.box1) > countWhere(RIRA.box1, RIRA.box7, \"1\", \"2\", \"3\", \"4\", \"7\", \"G\", \"H\") + countWhere(R.box1, R.box7, \"1\", \"2\", \"3\", \"4\", \"7\", \"G\", \"H\"), unsupported(\"A Form 1099-R has a distribution code in box 7 this app doesn't work out yet (only 1, 2, 3, 4, 7, G and H), or none: check box 7 at Confirm\"), if(countWhere(RIRA.box1, RIRA.box7B, \"1\", \"2\", \"3\", \"4\", \"5\", \"6\", \"7\", \"8\", \"9\", \"A\", \"B\", \"C\", \"D\", \"E\", \"F\", \"G\", \"H\", \"J\", \"K\", \"L\", \"M\", \"N\", \"P\", \"Q\", \"R\", \"S\", \"T\", \"U\", \"W\", \"Y\") + countWhere(R.box1, R.box7B, \"1\", \"2\", \"3\", \"4\", \"5\", \"6\", \"7\", \"8\", \"9\", \"A\", \"B\", \"C\", \"D\", \"E\", \"F\", \"G\", \"H\", \"J\", \"K\", \"L\", \"M\", \"N\", \"P\", \"Q\", \"R\", \"S\", \"T\", \"U\", \"W\", \"Y\") > 0, unsupported(\"A Form 1099-R has two codes in box 7, which this app doesn't work out yet\"), if(countWhere(RIRA.box1, RIRA.box7, \"1\", \"2\", \"3\", \"4\", \"7\") + countWhere(R.box1, R.box7, \"1\", \"2\", \"3\", \"4\", \"7\") > countWhere(RIRA.box2A, RIRA.box7, \"1\", \"2\", \"3\", \"4\", \"7\") + countWhere(R.box2A, R.box7, \"1\", \"2\", \"3\", \"4\", \"7\"), unsupported(\"A Form 1099-R has no taxable amount in box 2a: enter it at Confirm (for a traditional IRA without nondeductible contributions, box 1). A pension's taxable part may need the Simplified Method, which this app doesn't work out\"), if(count(RIRA.box1) + count(R.box1) == 0, 0, if(line.US.ownIraTaxable > 0 and answer.iraBasis, unsupported(\"Nondeductible contributions make part of an IRA distribution tax free, figured on Form 8606, which this app doesn't prepare\"), if(answer.indirectRollover, unsupported(\"A rollover you made yourself within 60 days isn't worked out yet\"), if(line.US.ownEarlyDistribution > 0 and answer.earlyException, unsupported(\"An exception to the 10% additional tax is claimed on Form 5329, which this app doesn't prepare\"), 0)))))))",
+      "source": "Instructions, lines 4a to 5b and Schedule 2, line 8"
+    },
+    "F1040.4a": {
+      "label": "IRA distributions",
+      "formula": "line.US.ownIraGross + if(line.US.joint == 1, spouse.line.US.ownIraGross, 0)"
+    },
+    "F1040.4b": {
+      "label": "Taxable IRA distributions",
+      "formula": "line.US.ownIraTaxable + if(line.US.joint == 1, spouse.line.US.ownIraTaxable, 0)"
+    },
+    "F1040.5a": {
+      "label": "Pensions and annuities",
+      "formula": "line.US.ownPensionGross + if(line.US.joint == 1, spouse.line.US.ownPensionGross, 0)"
+    },
+    "F1040.5b": {
+      "label": "Taxable pensions and annuities",
+      "formula": "line.US.ownPensionTaxable + if(line.US.joint == 1, spouse.line.US.ownPensionTaxable, 0)"
+    },
+    "US.iraRollover": {
+      "label": "An IRA distribution was rolled over (1 for yes)",
+      "formula": "if(line.US.ownIraRollover + if(line.US.joint == 1, spouse.line.US.ownIraRollover, 0) > 0, 1, 0)",
+      "source": "Instructions, lines 4a and 4b, Exception 1: check box 1 (Rollover) on line 4c"
+    },
+    "US.pensionRollover": {
+      "label": "A pension or plan distribution was rolled over (1 for yes)",
+      "formula": "if(line.US.ownPensionRollover + if(line.US.joint == 1, spouse.line.US.ownPensionRollover, 0) > 0, 1, 0)",
+      "source": "Instructions, lines 5a and 5b: check box 1 (Rollover) on line 5c"
+    },
+    "S2.8": {
+      "label": "Additional tax on early distributions",
+      "formula": "round((line.US.ownEarlyDistribution + if(line.US.joint == 1, spouse.line.US.ownEarlyDistribution, 0)) * param.earlyDistributionRate, 2)",
+      "source": "Instructions, Schedule 2, line 8: 10% of the taxable amount with code 1, when no exception applies and Form 5329 isn't needed"
+    },
+    "US.ownBenefits": {"label":"Net social security benefits on this person's Form SSA-1099, box 5","formula":"sum(SSA.box5)"},
+    "SSW.1": {
+      "label": "Net social security benefits",
+      "formula": "line.US.ownBenefits + if(line.US.joint == 1, spouse.line.US.ownBenefits, 0)"
+    },
+    "SSW.5": {
+      "label": "Half the benefits plus other income",
+      "formula": "round(line.SSW.1 * param.benefitsHalf, 2) + line.F1040.1z + line.F1040.2b + line.F1040.3b + line.F1040.4b + line.F1040.5b + line.F1040.7a + line.F1040.8 + line.F1040.2a",
+      "source": "Worksheet, lines 2 to 5: half of line 1, Form 1040 lines 1z, 2b, 3b, 4b, 5b, 7a and 8, and line 2a"
+    },
+    "SSW.6": {
+      "label": "Adjustments from Schedule 1",
+      "formula": "line.S1.13 + line.S1.15 + line.S1.20",
+      "source": "Worksheet, line 6: Schedule 1, lines 11 to 20, 23 and 25 (lines 13, 15 and 20 are the ones this app works out)"
+    },
+    "SSW.7": {"label":"Income over the adjustments","formula":"max(0, line.SSW.5 - line.SSW.6)"},
+    "US.livedWithSpouse": {
+      "label": "Married filing separately and lived with the spouse at some time in 2025 (1 for yes)",
+      "formula": "if(line.US.separate == 0, 0, if(line.SSW.1 == 0, 0, if(answer.livedApartAllYear, 0, 1)))",
+      "source": "Instructions, line 6d: married filing separately, check the box if you lived apart from your spouse all of 2025"
+    },
+    "SSW.9": {
+      "label": "Income over the base amount",
+      "formula": "max(0, line.SSW.7 - if(line.US.joint == 1, param.benefitsBaseJoint, param.benefitsBase))",
+      "source": "Worksheet, lines 8 and 9: $32,000 jointly, else $25,000"
+    },
+    "SSW.10": {"label":"Second amount","formula":"if(line.US.joint == 1, param.benefitsSecondJoint, param.benefitsSecond)"},
+    "SSW.16": {
+      "label": "Taxable benefits before the 85% limit",
+      "formula": "if(line.US.livedWithSpouse == 1, round(line.SSW.7 * param.benefitsMost, 2), min(round(line.SSW.1 * param.benefitsHalf, 2), round(min(line.SSW.9, line.SSW.10) * param.benefitsHalf, 2)) + round(max(0, line.SSW.9 - line.SSW.10) * param.benefitsMost, 2))",
+      "source": "Worksheet, lines 11 to 16 (married filing separately and living together: 85% of line 7)"
+    },
+    "F1040.6a": {"label":"Social security benefits","formula":"line.SSW.1"},
+    "F1040.6b": {
+      "label": "Taxable social security benefits",
+      "formula": "if(line.SSW.1 == 0, 0, if(line.SSW.7 == 0, 0, min(line.SSW.16, round(line.SSW.1 * param.benefitsMost, 2))))",
+      "source": "Worksheet, lines 17 and 18: the smaller of line 16 and 85% of the benefits"
     },
     "US.boxTips": {
       "label": "Social security tips on this person's Forms W-2",
@@ -1672,8 +2469,8 @@
     },
     "S1.26": {
       "label": "Adjustments to income",
-      "formula": "line.S1.15 + line.S1.21",
-      "source": "Schedule 1, line 26: the deductible part of self-employment tax and the student loan interest deduction (education.yaml); no other adjustment is worked out"
+      "formula": "line.S1.13 + line.S1.15 + line.S1.20 + line.S1.21",
+      "source": "Schedule 1, line 26: the HSA deduction and the IRA deduction (adjustments.yaml), the deductible part of self-employment tax, and the student loan interest deduction (education.yaml); no other adjustment is worked out"
     },
     "F8995.2": {
       "label": "Qualified business income",
@@ -1685,23 +2482,98 @@
       "formula": "round(max(0, line.F8995.2) * param.qbiRate, 2)",
       "source": "Form 8995, lines 3 to 5: no loss carried forward"
     },
+    "F8995.6": {
+      "label": "Qualified REIT dividends",
+      "formula": "line.US.ownReitDividends + if(line.US.joint == 1, spouse.line.US.ownReitDividends, 0)",
+      "source": "Form 8995, line 6: Form 1099-DIV, box 5 (investments.yaml); no publicly traded partnership income"
+    },
+    "F8995.9": {
+      "label": "REIT dividends component",
+      "formula": "round(max(0, line.F8995.6) * param.qbiRate, 2)",
+      "source": "Form 8995, lines 7 to 9: no carryforward"
+    },
+    "F8995.10": {"label":"Qualified business income deduction before the income limitation","formula":"line.F8995.5 + line.F8995.9"},
     "F8995.11": {
       "label": "Taxable income before the qualified business income deduction",
       "formula": "max(0, line.F1040.11a - line.F1040.12e - line.F1040.13b)",
       "source": "Instructions for Form 8995, line 11: Form 1040, line 11a, minus lines 12e and 13b"
     },
-    "F8995.14": {
-      "label": "Income limitation",
-      "formula": "round(line.F8995.11 * param.qbiRate, 2)",
-      "source": "Form 8995, lines 12 to 14: no net capital gain or qualified dividends"
+    "F8995.12": {
+      "label": "Qualified dividends and net capital gain",
+      "formula": "line.QDW.4",
+      "source": "Instructions for Form 8995, line 12: Form 1040 line 3a plus the net capital gain (the smaller of Schedule D lines 15 and 16 when both are gains, or line 7a without Schedule D)"
     },
+    "F8995.13": {
+      "label": "Taxable income less qualified dividends and net capital gain",
+      "formula": "max(0, line.F8995.11 - line.F8995.12)"
+    },
+    "F8995.14": {"label":"Income limitation","formula":"round(line.F8995.13 * param.qbiRate, 2)"},
     "F8995.15": {
       "label": "Qualified business income deduction",
-      "formula": "if(line.F8995.5 == 0, 0, if(line.F8995.11 > if(line.US.joint == 1, param.qbiThresholdJoint, param.qbiThreshold), unsupported(\"Taxable income over $197,300 ($394,600 jointly) with business income: the deduction is figured on Form 8995-A, which this app doesn't prepare yet\"), min(line.F8995.5, line.F8995.14)))",
-      "source": "Form 8995, line 15 (lines 6 to 10: no REIT dividends or PTP income)"
+      "formula": "if(line.F8995.10 == 0, 0, if(line.F8995.11 > if(line.US.joint == 1, param.qbiThresholdJoint, param.qbiThreshold), unsupported(\"Taxable income over $197,300 ($394,600 jointly) with business income or REIT dividends: the deduction is figured on Form 8995-A, which this app doesn't prepare yet\"), min(line.F8995.10, line.F8995.14)))",
+      "source": "Form 8995, line 15: the smaller of lines 10 and 14"
     }
   },
   "questions": {
+    "hasHsa": {
+      "type": "boolean",
+      "ask": "Contributions to a health savings account (HSA)",
+      "module": "deductions",
+      "help": "Money you put into an HSA yourself for 2025, not through your employer's payroll (that is in box 12 of your W-2, code W, and isn't deducted again). You need a high-deductible health plan (Form 8889).",
+      "default": false
+    },
+    "hsaContributions": {
+      "type": "money",
+      "ask": "HSA contributions you made yourself for 2025",
+      "module": "deductions",
+      "help": "Including what you add by April 15, 2026 for 2025. Your HSA's Form 5498-SA shows them.",
+      "parent": "hasHsa"
+    },
+    "hsaCoverage": {
+      "type": "choice",
+      "ask": "Your high-deductible health plan covered",
+      "module": "deductions",
+      "parent": "hasHsa",
+      "optionLabels": {"self":"Only you (self-only coverage)","family":"You and at least one other person (family coverage)"},
+      "options": ["self","family"]
+    },
+    "hsaAllYear": {
+      "type": "choice",
+      "ask": "Did the plan cover you in every month of 2025?",
+      "module": "deductions",
+      "parent": "hasHsa",
+      "optionLabels": {"yes":"Yes, all 12 months","no":"No, only part of the year"},
+      "options": ["yes","no"]
+    },
+    "hsaNonMedical": {
+      "type": "choice",
+      "ask": "Did you take money out of the HSA for anything other than medical expenses?",
+      "module": "deductions",
+      "help": "A Form 1099-SA shows distributions. Ones not for qualified medical expenses are taxed, with 20% more, on Form 8889.",
+      "parent": "hasHsa",
+      "optionLabels": {"no":"No","yes":"Yes"},
+      "options": ["no","yes"]
+    },
+    "hasIraContribution": {
+      "type": "boolean",
+      "ask": "Contributions to a traditional IRA",
+      "module": "deductions",
+      "help": "Money you put into a traditional IRA for 2025, by April 15, 2026 (Schedule 1, line 20). Not a Roth IRA, and not a rollover.",
+      "default": false
+    },
+    "iraContribution": {
+      "type": "money",
+      "ask": "Traditional IRA contributions for 2025",
+      "module": "deductions",
+      "help": "Your IRA's Form 5498 shows them, or your statements if you contributed in 2026.",
+      "parent": "hasIraContribution"
+    },
+    "coveredByPlan": {
+      "type": "boolean",
+      "ask": "An employer's retirement plan covered you in 2025",
+      "module": "deductions",
+      "help": "The \"Retirement plan\" box in box 13 of your W-2 is checked (a 401(k), 403(b), pension or the like). It can make your IRA deduction smaller."
+    },
     "paidForCare": {
       "type": "boolean",
       "ask": "You paid for the care of a child under 13, or of a dependant who can't care for themselves, so you could work",
@@ -1923,6 +2795,107 @@
       "module": "about",
       "help": "Filing separately, you can get the earned income credit (with a qualifying child) or the credit for child care only if you didn't share a home with your spouse for the last 6 months of 2025."
     },
+    "hasDividends": {
+      "type": "boolean",
+      "ask": "Dividends",
+      "module": "income",
+      "help": "A Form 1099-DIV from each fund, broker or company that paid you $10 or more of dividends or capital gain distributions.",
+      "slip": "DIV"
+    },
+    "hasBrokerSales": {
+      "type": "boolean",
+      "ask": "Sales of stocks, bonds or funds",
+      "module": "income",
+      "help": "A Form 1099-B from each broker. A broker's yearly statement usually sums the sales up by part of Form 8949 (box A, B, D or E): enter one 1099-B for each part, with its proceeds and cost.",
+      "slip": "B"
+    },
+    "hasLossCarryover": {
+      "type": "boolean",
+      "ask": "A capital loss carried over from 2024",
+      "module": "income",
+      "help": "A capital loss larger than the $3,000 ($1,500 filing separately) you could deduct in an earlier year carries over. Your 2024 Schedule D, or its Capital Loss Carryover Worksheet, shows it.",
+      "default": false
+    },
+    "shortLossCarryover": {
+      "type": "money",
+      "ask": "Short-term capital loss carryover",
+      "module": "income",
+      "help": "Schedule D, line 6. Enter it as a positive amount.",
+      "parent": "hasLossCarryover"
+    },
+    "longLossCarryover": {
+      "type": "money",
+      "ask": "Long-term capital loss carryover",
+      "module": "income",
+      "help": "Schedule D, line 14. Enter it as a positive amount.",
+      "parent": "hasLossCarryover"
+    },
+    "hasItemized": {
+      "type": "boolean",
+      "ask": "Expenses you can itemize",
+      "module": "deductions",
+      "help": "Mortgage interest on your home, state and local taxes (income or property), gifts to charity and medical expenses (Schedule A). The app takes them instead of the standard deduction when they are larger. Your W-2s' state income tax (box 17) is counted for you.",
+      "default": false
+    },
+    "itemMedical": {
+      "type": "money",
+      "ask": "Medical and dental expenses",
+      "module": "deductions",
+      "help": "What you paid in 2025 for medical and dental care, prescriptions and health insurance premiums for you and your family, less what insurance or anyone else paid back. Only the part over 7.5% of your AGI counts.",
+      "parent": "hasItemized"
+    },
+    "itemStateTax": {
+      "type": "money",
+      "ask": "State and local income tax paid in 2025, not on a W-2",
+      "module": "deductions",
+      "help": "Estimated state tax payments for 2025, and a balance you paid in 2025 for 2024. Box 17 of your W-2s is already counted.",
+      "parent": "hasItemized"
+    },
+    "itemRealEstateTax": {
+      "type": "money",
+      "ask": "Real estate taxes",
+      "module": "deductions",
+      "help": "Property tax you paid in 2025 on your home or land, yourself or through your lender (box 10 of a Form 1098 often shows it).",
+      "parent": "hasItemized"
+    },
+    "itemPersonalPropertyTax": {
+      "type": "money",
+      "ask": "Personal property taxes",
+      "module": "deductions",
+      "help": "A yearly tax based on the value of a car or boat, for example.",
+      "parent": "hasItemized"
+    },
+    "itemMortgageOther": {
+      "type": "money",
+      "ask": "Mortgage interest not on a Form 1098",
+      "module": "deductions",
+      "help": "Uploaded Forms 1098 are counted. Enter 0 unless you paid interest to a person rather than a lender.",
+      "receipts": "F1098",
+      "parent": "hasItemized"
+    },
+    "mortgageQualifies": {
+      "type": "choice",
+      "ask": "Do your mortgages qualify?",
+      "module": "deductions",
+      "help": "Each loan was taken out to buy, build or improve the home it is secured by (your main home or a second home), and all of them together are $750,000 or less ($375,000 filing separately; $1,000,000 for loans before December 16, 2017).",
+      "parent": "hasItemized",
+      "optionLabels": {"yes":"Yes, both of these are true","no":"No"},
+      "options": ["yes","no"]
+    },
+    "itemCashGifts": {
+      "type": "money",
+      "ask": "Gifts to charity by cash, check or card",
+      "module": "deductions",
+      "help": "To churches, schools, charities and other qualified organizations, with a receipt or bank record for each.",
+      "parent": "hasItemized"
+    },
+    "itemNoncashGifts": {
+      "type": "money",
+      "ask": "Gifts to charity of things, not money",
+      "module": "deductions",
+      "help": "The fair market value of clothes, furniture or other things you gave. Over $500 in all needs Form 8283.",
+      "parent": "hasItemized"
+    },
     "canBeClaimed": {
       "type": "boolean",
       "ask": "Someone can claim you as a dependent",
@@ -1970,12 +2943,67 @@
       "help": "Tips you received in a tipped job, or overtime pay for hours over 40 a week. For 2025 you can deduct qualified tips and the \"half\" of time-and-a-half overtime on Schedule 1-A; filing separately, you can't.",
       "default": false
     },
+    "hasOtherIncome": {
+      "type": "boolean",
+      "ask": "Other income",
+      "module": "income",
+      "help": "Income not asked above, such as unemployment compensation (Form 1099-G), a state tax refund that is taxable, rent or royalties (Schedule E), alimony, gambling winnings (Form W-2G), prizes, jury duty pay, a canceled debt, or income from a partnership, S corporation, estate or trust (Schedule K-1). This app doesn't take it yet: the return says so instead of leaving it out.",
+      "default": false
+    },
     "estimatedPayments": {
       "type": "money",
       "ask": "Estimated tax payments",
       "module": "credits",
       "help": "Estimated tax you paid for 2025, and any 2024 refund you applied to 2025 (Form 1040, line 26).",
       "default": "0"
+    },
+    "hasIraDistribution": {
+      "type": "boolean",
+      "ask": "Distributions from an IRA",
+      "module": "income",
+      "help": "A Form 1099-R from each IRA you took money out of, rolled over or converted, with the IRA/SEP/SIMPLE box checked.",
+      "slip": "RIRA"
+    },
+    "hasPension": {
+      "type": "boolean",
+      "ask": "Pensions, annuities or retirement plan distributions",
+      "module": "income",
+      "help": "A Form 1099-R from each pension, annuity, 401(k), 403(b) or other plan that paid you, with the IRA/SEP/SIMPLE box not checked.",
+      "slip": "R"
+    },
+    "hasSocialSecurity": {
+      "type": "boolean",
+      "ask": "Social security benefits",
+      "module": "income",
+      "help": "The Form SSA-1099 the Social Security Administration sends each January.",
+      "slip": "SSA"
+    },
+    "iraBasis": {
+      "type": "boolean",
+      "ask": "You made nondeductible contributions to a traditional IRA (Form 8606)",
+      "module": "income",
+      "help": "Contributions you made in any year without deducting them are your basis: part of each distribution is then tax free, figured on Form 8606. Your earlier Forms 8606 show it. Most people answer No.",
+      "default": false
+    },
+    "indirectRollover": {
+      "type": "boolean",
+      "ask": "You put money from a distribution back into an IRA or plan yourself, within 60 days",
+      "module": "income",
+      "help": "A rollover the payer didn't make for you (box 7 isn't G or H). The amount you put back isn't taxed, which this app doesn't work out yet.",
+      "default": false
+    },
+    "earlyException": {
+      "type": "boolean",
+      "ask": "An exception to the 10% additional tax applies to a distribution with code 1",
+      "module": "income",
+      "help": "Code 1 in box 7 means you were under 59½. You owe 10% more on the taxable amount, unless an exception applies (such as disability, medical expenses over 7.5% of AGI, a first home up to $10,000 from an IRA, higher education from an IRA, or a separation from service in or after the year you turned 55). An exception is claimed on Form 5329, which this app doesn't prepare.",
+      "default": false
+    },
+    "livedApartAllYear": {
+      "type": "boolean",
+      "ask": "You and your spouse lived apart all of 2025",
+      "module": "about",
+      "help": "Filing separately, more of your social security benefits are taxable if you lived with your spouse at any time in 2025 (Form 1040, line 6d)."
     },
     "qualifiedTips": {
       "type": "money",
@@ -2120,6 +3148,7 @@
       "name": "1098-T",
       "informational": [],
       "counts": [],
+      "codes": {},
       "receipt": false,
       "printedYears": [0]
     },
@@ -2130,6 +3159,254 @@
       "name": "1098-E",
       "informational": [],
       "counts": [],
+      "codes": {},
+      "receipt": false,
+      "printedYears": [0]
+    },
+    "DIV": {
+      "title": "Form 1099-DIV Dividends and Distributions",
+      "about": "Dividends and capital gain distributions a fund, broker or company paid you, and any federal income tax withheld",
+      "boxes": {
+        "3": "Nondividend distributions",
+        "4": "Federal income tax withheld",
+        "5": "Section 199A dividends",
+        "6": "Investment expenses",
+        "7": "Foreign tax paid",
+        "9": "Cash liquidation distributions",
+        "10": "Noncash liquidation distributions",
+        "12": "Exempt-interest dividends",
+        "13": "Specified private activity bond interest dividends",
+        "1A": "Total ordinary dividends",
+        "1B": "Qualified dividends",
+        "2A": "Total capital gain distributions",
+        "2B": "Unrecap. Sec. 1250 gain",
+        "2C": "Section 1202 gain",
+        "2D": "Collectibles (28%) gain",
+        "2E": "Section 897 ordinary dividends",
+        "2F": "Section 897 capital gain"
+      },
+      "informational": ["2E","2F","3","6"],
+      "name": "1099-DIV",
+      "counts": [],
+      "codes": {},
+      "receipt": false,
+      "printedYears": [0]
+    },
+    "B": {
+      "title": "Form 1099-B Proceeds From Broker Transactions",
+      "about": "What a broker reports of sales of stocks, bonds, funds or other securities. Enter one summary for each part of Form 8949 the broker's statement names (box A, B, D or E)",
+      "boxes": {
+        "4": "Federal income tax withheld",
+        "CAT": "The part of Form 8949 (A, B, D or E)",
+        "1D": "Proceeds",
+        "1E": "Cost or other basis",
+        "1F": "Accrued market discount",
+        "1G": "Wash sale loss disallowed"
+      },
+      "codes": {"CAT":["A","B","D","E"]},
+      "name": "1099-B",
+      "informational": [],
+      "counts": [],
+      "receipt": false,
+      "printedYears": [0]
+    },
+    "F1098": {
+      "title": "Form 1098 Mortgage Interest Statement",
+      "about": "From a lender, the interest and points you paid in 2025 on a mortgage on your home",
+      "boxes": {
+        "1": "Mortgage interest received from payer(s)/borrower(s)",
+        "2": "Outstanding mortgage principal",
+        "4": "Refund of overpaid interest",
+        "5": "Mortgage insurance premiums",
+        "6": "Points paid on purchase of principal residence",
+        "10": "Other"
+      },
+      "informational": ["5","10"],
+      "name": "1098",
+      "counts": [],
+      "codes": {},
+      "receipt": false,
+      "printedYears": [0]
+    },
+    "RIRA": {
+      "title": "Form 1099-R from an IRA (the IRA/SEP/SIMPLE box checked)",
+      "about": "A distribution from a traditional, Roth, SEP or SIMPLE IRA, with the IRA/SEP/SIMPLE box checked",
+      "boxes": {
+        "1": "Gross distribution",
+        "4": "Federal income tax withheld",
+        "5": "Employee contributions/Designated Roth contributions or insurance premiums",
+        "7": "Distribution code(s)",
+        "2A": "Taxable amount",
+        "7B": "Second distribution code"
+      },
+      "informational": ["5"],
+      "codes": {
+        "7": [
+          "1",
+          "2",
+          "3",
+          "4",
+          "5",
+          "6",
+          "7",
+          "8",
+          "9",
+          "A",
+          "B",
+          "C",
+          "D",
+          "E",
+          "F",
+          "G",
+          "H",
+          "J",
+          "K",
+          "L",
+          "M",
+          "N",
+          "P",
+          "Q",
+          "R",
+          "S",
+          "T",
+          "U",
+          "W",
+          "Y"
+        ],
+        "7B": [
+          "1",
+          "2",
+          "3",
+          "4",
+          "5",
+          "6",
+          "7",
+          "8",
+          "9",
+          "A",
+          "B",
+          "C",
+          "D",
+          "E",
+          "F",
+          "G",
+          "H",
+          "J",
+          "K",
+          "L",
+          "M",
+          "N",
+          "P",
+          "Q",
+          "R",
+          "S",
+          "T",
+          "U",
+          "W",
+          "Y"
+        ]
+      },
+      "name": "1099-R (IRA)",
+      "counts": [],
+      "receipt": false,
+      "printedYears": [0]
+    },
+    "R": {
+      "title": "Form 1099-R Distributions From Pensions, Annuities, Retirement Plans",
+      "about": "A pension, an annuity, or a distribution from a 401(k), 403(b) or other retirement plan, with the IRA/SEP/SIMPLE box not checked",
+      "boxes": {
+        "1": "Gross distribution",
+        "4": "Federal income tax withheld",
+        "5": "Employee contributions/Designated Roth contributions or insurance premiums",
+        "7": "Distribution code(s)",
+        "2A": "Taxable amount",
+        "7B": "Second distribution code"
+      },
+      "informational": ["5"],
+      "codes": {
+        "7": [
+          "1",
+          "2",
+          "3",
+          "4",
+          "5",
+          "6",
+          "7",
+          "8",
+          "9",
+          "A",
+          "B",
+          "C",
+          "D",
+          "E",
+          "F",
+          "G",
+          "H",
+          "J",
+          "K",
+          "L",
+          "M",
+          "N",
+          "P",
+          "Q",
+          "R",
+          "S",
+          "T",
+          "U",
+          "W",
+          "Y"
+        ],
+        "7B": [
+          "1",
+          "2",
+          "3",
+          "4",
+          "5",
+          "6",
+          "7",
+          "8",
+          "9",
+          "A",
+          "B",
+          "C",
+          "D",
+          "E",
+          "F",
+          "G",
+          "H",
+          "J",
+          "K",
+          "L",
+          "M",
+          "N",
+          "P",
+          "Q",
+          "R",
+          "S",
+          "T",
+          "U",
+          "W",
+          "Y"
+        ]
+      },
+      "name": "1099-R",
+      "counts": [],
+      "receipt": false,
+      "printedYears": [0]
+    },
+    "SSA": {
+      "title": "Form SSA-1099 Social Security Benefit Statement",
+      "about": "The social security benefits paid to you in 2025, and any federal income tax withheld from them",
+      "boxes": {
+        "3": "Benefits paid in 2025",
+        "4": "Benefits repaid to SSA in 2025",
+        "5": "Net benefits for 2025",
+        "6": "Voluntary federal income tax withheld"
+      },
+      "informational": ["3","4"],
+      "name": "SSA-1099",
+      "counts": [],
+      "codes": {},
       "receipt": false,
       "printedYears": [0]
     },
@@ -2146,6 +3423,7 @@
       "informational": ["5","6","7"],
       "name": "1099-NEC",
       "counts": [],
+      "codes": {},
       "receipt": false,
       "printedYears": [0]
     },
@@ -2164,11 +3442,13 @@
         "10": "Dependent care benefits",
         "11": "Nonqualified plans",
         "16": "State wages, tips, etc.",
-        "17": "State income tax"
+        "17": "State income tax",
+        "12W": "Box 12, code W: employer contributions to your health savings account"
       },
-      "informational": ["3","11","16","17"],
+      "informational": ["3","11","16"],
       "name": "W-2",
       "counts": [],
+      "codes": {},
       "receipt": false,
       "printedYears": [0]
     },
@@ -2189,6 +3469,7 @@
       "name": "1099-INT",
       "informational": [],
       "counts": [],
+      "codes": {},
       "receipt": false,
       "printedYears": [0]
     }
@@ -2242,6 +3523,7 @@
         {"key":"14","kind":"amount","page":2,"x":575.5,"y":650.7,"value":"line.F1040.14","plain":true},
         {"key":"15","kind":"amount","page":2,"x":575.5,"y":638.8,"value":"line.F1040.15","zero":true,"plain":true},
         {"key":"16","kind":"amount","page":2,"x":575.5,"y":626.8,"value":"line.F1040.16","plain":true},
+        {"key":"17","kind":"amount","page":2,"x":575.5,"y":614.7,"value":"line.F1040.17","plain":true},
         {"key":"18","kind":"amount","page":2,"x":575.5,"y":602.8,"value":"line.F1040.18","plain":true},
         {"key":"19","kind":"amount","page":2,"x":575.5,"y":590.8,"value":"line.F1040.19","plain":true},
         {"key":"20","kind":"amount","page":2,"x":575.5,"y":578.7,"value":"line.F1040.20","plain":true},
@@ -2307,6 +3589,61 @@
         {"key":"1z","kind":"amount","page":1,"x":575.5,"y":224.8,"value":"line.F1040.1z","plain":true},
         {"key":"2a","kind":"amount","page":1,"x":322.8,"y":212.8,"value":"line.F1040.2a","plain":true},
         {"key":"2b","kind":"amount","page":1,"x":575.5,"y":212.8,"value":"line.F1040.2b","plain":true},
+        {"key":"3a","kind":"amount","page":1,"x":322.8,"y":200.7,"value":"line.F1040.3a","plain":true},
+        {"key":"3b","kind":"amount","page":1,"x":575.5,"y":200.7,"value":"line.F1040.3b","plain":true},
+        {
+          "key": "4a",
+          "kind": "amount",
+          "page": 1,
+          "x": 322.8,
+          "y": 176.8,
+          "value": "line.F1040.4a",
+          "when": "line.F1040.4a > line.F1040.4b",
+          "plain": true
+        },
+        {"key":"4b","kind":"amount","page":1,"x":575.5,"y":176.8,"value":"line.F1040.4b","plain":true},
+        {"key":"iraRollover","kind":"tick","page":1,"x":287.8,"y":167.5,"value":"line.US.iraRollover == 1"},
+        {
+          "key": "5a",
+          "kind": "amount",
+          "page": 1,
+          "x": 322.8,
+          "y": 152.8,
+          "value": "line.F1040.5a",
+          "when": "line.F1040.5a > line.F1040.5b",
+          "plain": true
+        },
+        {"key":"5b","kind":"amount","page":1,"x":575.5,"y":152.8,"value":"line.F1040.5b","plain":true},
+        {"key":"pensionRollover","kind":"tick","page":1,"x":287.8,"y":143.5,"value":"line.US.pensionRollover == 1"},
+        {"key":"6a","kind":"amount","page":1,"x":322.8,"y":128.7,"value":"line.F1040.6a","plain":true},
+        {
+          "key": "6b",
+          "kind": "amount",
+          "page": 1,
+          "x": 575.5,
+          "y": 128.7,
+          "value": "line.F1040.6b",
+          "when": "line.F1040.6a > 0",
+          "zero": true,
+          "plain": true
+        },
+        {
+          "key": "benefitsLivedApart",
+          "kind": "tick",
+          "page": 1,
+          "x": 471.2,
+          "y": 108,
+          "value": "line.US.separate == 1 and line.F1040.6a > 0 and answer.livedApartAllYear"
+        },
+        {"key":"7a","kind":"amount","page":1,"x":575.5,"y":92.7,"value":"line.F1040.7a","plain":true},
+        {
+          "key": "noScheduleD",
+          "kind": "tick",
+          "page": 1,
+          "x": 157.2,
+          "y": 83.5,
+          "value": "line.US.scheduleD == 0 and line.F1040.7a > 0"
+        },
         {"key":"11a","kind":"amount","page":1,"x":575.5,"y":32.8,"value":"line.F1040.11a","plain":true},
         {"key":"11b","kind":"amount","page":2,"x":575.5,"y":746.8,"value":"line.F1040.11a","plain":true},
         {"key":"claimYou","kind":"tick","page":2,"x":207.6,"y":738,"value":"answer.canBeClaimed"},
@@ -2335,6 +3672,14 @@
           "x": 315.6,
           "y": 702,
           "value": "line.US.joint == 1 and spouse.answer.isBlind"
+        },
+        {
+          "key": "spouseItemizes",
+          "kind": "tick",
+          "page": 2,
+          "x": 119.2,
+          "y": 726,
+          "value": "line.US.separate == 1 and answer.spouseItemizes"
         },
         {"key":"12e","kind":"amount","page":2,"x":575.5,"y":686.7,"value":"line.F1040.12e","plain":true},
         {"key":"13a","kind":"amount","page":2,"x":575.5,"y":674.8,"value":"line.F1040.13a","plain":true},
@@ -2609,7 +3954,9 @@
       "fields": [
         {"key":"3","kind":"amount","page":1,"x":575.5,"y":572.8,"value":"line.S1.3","plain":true},
         {"key":"10","kind":"amount","page":1,"x":575.5,"y":116.8,"value":"line.S1.10","plain":true},
+        {"key":"13","kind":"amount","page":2,"x":575.5,"y":686.7,"value":"line.S1.13","plain":true},
         {"key":"15","kind":"amount","page":2,"x":575.5,"y":650.7,"value":"line.S1.15","plain":true},
+        {"key":"20","kind":"amount","page":2,"x":575.5,"y":554.8,"value":"line.S1.20","plain":true},
         {"key":"21","kind":"amount","page":2,"x":575.5,"y":542.7,"value":"line.S1.21","plain":true},
         {"key":"26","kind":"amount","page":2,"x":575.5,"y":242.8,"value":"line.S1.26","plain":true},
         {"key":"names","kind":"text","page":1,"x":38,"y":687.8,"value":"returnNames","width":405.7}
@@ -2872,13 +4219,17 @@
       "url": "https://www.irs.gov/pub/irs-prior/f1040s2--2025.pdf",
       "sha256": "64d867b683334cfc533993e37ccb0d143449ec29428a78206be2e4de333941e8",
       "pages": 2,
-      "applies": "line.S2.21 > 0",
+      "applies": "line.S2.21 > 0 or line.F1040.17 > 0",
       "fields": [
+        {"key":"2","kind":"amount","page":1,"x":575.5,"y":374.8,"value":"line.F1040.17","plain":true},
+        {"key":"3","kind":"amount","page":1,"x":575.5,"y":356.8,"value":"line.F1040.17","plain":true},
         {"key":"4","kind":"amount","page":1,"x":575.5,"y":314.8,"value":"line.S2.4","plain":true},
+        {"key":"8","kind":"amount","page":1,"x":575.5,"y":230.8,"value":"line.S2.8","plain":true},
         {"key":"11","kind":"amount","page":1,"x":575.5,"y":176.8,"value":"line.F8959.18","plain":true},
         {"key":"12","kind":"amount","page":1,"x":575.5,"y":158.8,"value":"line.F8960.17","plain":true},
         {"key":"21","kind":"amount","page":2,"x":575.5,"y":200.7,"value":"line.S2.21","plain":true},
-        {"key":"names","kind":"text","page":1,"x":38,"y":687.8,"value":"returnNames","width":405.7}
+        {"key":"names","kind":"text","page":1,"x":38,"y":687.8,"value":"returnNames","width":405.7},
+        {"key":"line8NoForm","kind":"tick","page":1,"x":470.8,"y":234,"value":"line.S2.8 > 0"}
       ],
       "tables": []
     },
@@ -2889,12 +4240,50 @@
       "pages": 1,
       "applies": "line.S3.8 > 0 or line.S3.11 > 0",
       "fields": [
+        {"key":"1","kind":"amount","page":1,"x":575.5,"y":662.8,"value":"line.S3.1","plain":true},
         {"key":"2","kind":"amount","page":1,"x":575.5,"y":650.7,"value":"line.S3.2","plain":true},
         {"key":"3","kind":"amount","page":1,"x":575.5,"y":638.8,"value":"line.S3.3","plain":true},
         {"key":"8","kind":"amount","page":1,"x":575.5,"y":374.8,"value":"line.S3.8","plain":true},
         {"key":"11","kind":"amount","page":1,"x":575.5,"y":326.7,"value":"line.S3.11","plain":true},
         {"key":"15","kind":"amount","page":1,"x":575.5,"y":182.7,"value":"line.S3.11","plain":true},
         {"key":"names","kind":"text","page":1,"x":38,"y":687.8,"value":"returnNames","width":405.7}
+      ],
+      "tables": []
+    },
+    "SA": {
+      "title": "Schedule A (Form 1040), Itemized Deductions",
+      "url": "https://www.irs.gov/pub/irs-prior/f1040sa--2025.pdf",
+      "sha256": "c14acf3478f4c33f27ac6e8ecd9f94b6fb25b16745b341728bd27847d2ef56bb",
+      "pages": 1,
+      "applies": "line.US.itemizes == 1",
+      "fields": [
+        {"key":"1","kind":"amount","page":1,"x":481.2,"y":662.8,"value":"line.SA.1","plain":true},
+        {
+          "key": "2",
+          "kind": "amount",
+          "page": 1,
+          "x": 387.6,
+          "y": 638.8,
+          "value": "line.F1040.11a",
+          "when": "line.SA.1 > 0",
+          "plain": true
+        },
+        {"key":"3","kind":"amount","page":1,"x":481.2,"y":626.8,"value":"line.SA.3","when":"line.SA.1 > 0","plain":true},
+        {"key":"4","kind":"amount","page":1,"x":575.5,"y":614.7,"value":"line.SA.4","plain":true},
+        {"key":"7","kind":"amount","page":1,"x":575.5,"y":428.8,"value":"line.SA.7","plain":true},
+        {"key":"10","kind":"amount","page":1,"x":575.5,"y":230.8,"value":"line.SA.10","plain":true},
+        {"key":"11","kind":"amount","page":1,"x":481.2,"y":206.8,"value":"line.SA.11","plain":true},
+        {"key":"12","kind":"amount","page":1,"x":481.2,"y":182.7,"value":"line.SA.12","plain":true},
+        {"key":"14","kind":"amount","page":1,"x":575.5,"y":158.8,"value":"line.SA.14","plain":true},
+        {"key":"17","kind":"amount","page":1,"x":575.5,"y":62.8,"value":"line.SA.17","plain":true},
+        {"key":"names","kind":"text","page":1,"x":38,"y":687.8,"value":"returnNames","width":434.5},
+        {"key":"5a","kind":"amount","page":1,"x":481.2,"y":560.7,"value":"line.SA.5a","plain":true},
+        {"key":"5b","kind":"amount","page":1,"x":481.2,"y":548.8,"value":"line.SA.5b","plain":true},
+        {"key":"5c","kind":"amount","page":1,"x":481.2,"y":536.8,"value":"line.SA.5c","plain":true},
+        {"key":"5d","kind":"amount","page":1,"x":481.2,"y":524.7,"value":"line.SA.5d","plain":true},
+        {"key":"5e","kind":"amount","page":1,"x":481.2,"y":476.8,"value":"line.SA.5e","plain":true},
+        {"key":"8a","kind":"amount","page":1,"x":481.2,"y":368.8,"value":"line.SA.8a","plain":true},
+        {"key":"8e","kind":"amount","page":1,"x":481.2,"y":254.7,"value":"line.SA.8a","plain":true}
       ],
       "tables": []
     },
@@ -2960,6 +4349,54 @@
         {"key":"24b","kind":"amount","page":1,"x":575.5,"y":302.8,"value":"line.SC.24b","plain":true},
         {"key":"27b","kind":"amount","page":1,"x":575.5,"y":242.8,"value":"line.SC.27b","plain":true},
         {"key":"otherAmount","kind":"amount","page":2,"x":575.5,"y":242.7,"value":"line.SC.27b","plain":true}
+      ],
+      "tables": []
+    },
+    "SD": {
+      "title": "Schedule D (Form 1040), Capital Gains and Losses",
+      "url": "https://www.irs.gov/pub/irs-prior/f1040sd--2025.pdf",
+      "sha256": "90564c8b7e49280363612639b804d113ebedb516c2e87c70649f29c844da1d2e",
+      "pages": 2,
+      "applies": "line.US.scheduleD == 1",
+      "fields": [
+        {"key":"6","kind":"amount","page":1,"x":572.5,"y":386.8,"value":"line.SD.6","plain":true},
+        {"key":"7","kind":"amount","page":1,"x":575.5,"y":362.7,"value":"line.SD.7","plain":true},
+        {"key":"13","kind":"amount","page":1,"x":575.5,"y":98.8,"value":"line.SD.13","plain":true},
+        {"key":"14","kind":"amount","page":1,"x":572.5,"y":74.7,"value":"line.SD.14","plain":true},
+        {"key":"15","kind":"amount","page":1,"x":575.5,"y":50.8,"value":"line.SD.15","plain":true},
+        {"key":"16","kind":"amount","page":2,"x":575.5,"y":698.8,"value":"line.SD.16","zero":true,"plain":true},
+        {"key":"21","kind":"amount","page":2,"x":572.5,"y":362.7,"value":"0 - line.SD.21","plain":true},
+        {"key":"names","kind":"text","page":1,"x":38,"y":675.7,"value":"returnNames","width":412.9},
+        {"key":"qofNo","kind":"tick","page":1,"x":544,"y":666,"value":"line.US.scheduleD == 1"},
+        {"key":"1aD","kind":"amount","page":1,"x":358.8,"y":506.8,"value":"line.SD.1ad","plain":true},
+        {"key":"1aE","kind":"amount","page":1,"x":430.8,"y":506.8,"value":"line.SD.1ae","plain":true},
+        {
+          "key": "1aH",
+          "kind": "amount",
+          "page": 1,
+          "x": 575.5,
+          "y": 506.8,
+          "value": "line.SD.1ah",
+          "when": "line.SD.1ad > 0",
+          "plain": true
+        },
+        {"key":"8aD","kind":"amount","page":1,"x":358.8,"y":218.8,"value":"line.SD.8ad","plain":true},
+        {"key":"8aE","kind":"amount","page":1,"x":430.8,"y":218.8,"value":"line.SD.8ae","plain":true},
+        {
+          "key": "8aH",
+          "kind": "amount",
+          "page": 1,
+          "x": 575.5,
+          "y": 218.8,
+          "value": "line.SD.8ah",
+          "when": "line.SD.8ad > 0",
+          "plain": true
+        },
+        {"key":"line17Yes","kind":"tick","page":2,"x":70.8,"y":582,"value":"line.SD.15 > 0 and line.SD.16 > 0"},
+        {"key":"line17No","kind":"tick","page":2,"x":70.8,"y":570,"value":"line.SD.15 <= 0 or line.SD.16 <= 0"},
+        {"key":"line20Yes","kind":"tick","page":2,"x":70.8,"y":462,"value":"line.SD.15 > 0 and line.SD.16 > 0"},
+        {"key":"line22Yes","kind":"tick","page":2,"x":70.8,"y":282,"value":"line.SD.16 <= 0 and line.F1040.3a > 0"},
+        {"key":"line22No","kind":"tick","page":2,"x":70.8,"y":246,"value":"line.SD.16 <= 0 and line.F1040.3a == 0"}
       ],
       "tables": []
     },
@@ -3276,6 +4713,279 @@
           }
         ]
       },
+      "tables": []
+    },
+    "F6251": {
+      "title": "Form 6251, Alternative Minimum Tax—Individuals",
+      "url": "https://www.irs.gov/pub/irs-prior/f6251--2025.pdf",
+      "sha256": "6995bfd29c6fe1b80fdc396c9c4796c7cef58a966070db0346721eae815fea3f",
+      "pages": 2,
+      "applies": "line.F6251.11 > 0",
+      "fields": [
+        {"key":"4","kind":"amount","page":1,"x":575.5,"y":338.8,"value":"line.F6251.4","plain":true},
+        {"key":"5","kind":"amount","page":1,"x":575.5,"y":266.8,"value":"line.F6251.5","plain":true},
+        {"key":"6","kind":"amount","page":1,"x":575.5,"y":230.8,"value":"line.F6251.6","plain":true},
+        {"key":"7","kind":"amount","page":1,"x":575.5,"y":182.7,"value":"line.F6251.7","plain":true},
+        {"key":"8","kind":"amount","page":1,"x":575.5,"y":122.8,"value":"line.F6251.8","plain":true},
+        {"key":"9","kind":"amount","page":1,"x":575.5,"y":110.7,"value":"line.F6251.9","plain":true},
+        {"key":"10","kind":"amount","page":1,"x":575.5,"y":50.8,"value":"line.F6251.10","plain":true},
+        {"key":"11","kind":"amount","page":1,"x":575.5,"y":38.7,"value":"line.F6251.11","plain":true},
+        {
+          "key": "12",
+          "kind": "amount",
+          "page": 2,
+          "x": 575.5,
+          "y": 698.8,
+          "value": "line.F6251.6",
+          "when": "line.QDW.applies == 1",
+          "plain": true
+        },
+        {
+          "key": "13",
+          "kind": "amount",
+          "page": 2,
+          "x": 575.5,
+          "y": 650.7,
+          "value": "line.F6251.13",
+          "when": "line.QDW.applies == 1",
+          "plain": true
+        },
+        {
+          "key": "15",
+          "kind": "amount",
+          "page": 2,
+          "x": 575.5,
+          "y": 578.7,
+          "value": "line.F6251.13",
+          "when": "line.QDW.applies == 1",
+          "plain": true
+        },
+        {
+          "key": "16",
+          "kind": "amount",
+          "page": 2,
+          "x": 575.5,
+          "y": 566.8,
+          "value": "line.F6251.16",
+          "when": "line.QDW.applies == 1",
+          "plain": true
+        },
+        {
+          "key": "17",
+          "kind": "amount",
+          "page": 2,
+          "x": 575.5,
+          "y": 554.8,
+          "value": "line.F6251.17",
+          "when": "line.QDW.applies == 1",
+          "plain": true
+        },
+        {
+          "key": "18",
+          "kind": "amount",
+          "page": 2,
+          "x": 575.5,
+          "y": 530.8,
+          "value": "line.F6251.18",
+          "when": "line.QDW.applies == 1",
+          "plain": true
+        },
+        {
+          "key": "19",
+          "kind": "amount",
+          "page": 2,
+          "x": 575.5,
+          "y": 494.8,
+          "value": "line.QDW.6",
+          "when": "line.QDW.applies == 1",
+          "plain": true
+        },
+        {
+          "key": "20",
+          "kind": "amount",
+          "page": 2,
+          "x": 575.5,
+          "y": 434.7,
+          "value": "line.QDW.5",
+          "when": "line.QDW.applies == 1",
+          "plain": true
+        },
+        {
+          "key": "21",
+          "kind": "amount",
+          "page": 2,
+          "x": 575.5,
+          "y": 422.8,
+          "value": "line.F6251.21",
+          "when": "line.QDW.applies == 1",
+          "plain": true
+        },
+        {
+          "key": "22",
+          "kind": "amount",
+          "page": 2,
+          "x": 575.5,
+          "y": 410.8,
+          "value": "line.F6251.22",
+          "when": "line.QDW.applies == 1",
+          "plain": true
+        },
+        {
+          "key": "23",
+          "kind": "amount",
+          "page": 2,
+          "x": 575.5,
+          "y": 398.7,
+          "value": "line.F6251.23",
+          "when": "line.QDW.applies == 1",
+          "plain": true
+        },
+        {
+          "key": "24",
+          "kind": "amount",
+          "page": 2,
+          "x": 575.5,
+          "y": 386.8,
+          "value": "line.F6251.22 - line.F6251.23",
+          "when": "line.QDW.applies == 1",
+          "plain": true
+        },
+        {
+          "key": "25",
+          "kind": "amount",
+          "page": 2,
+          "x": 575.5,
+          "y": 350.8,
+          "value": "line.QDW.13",
+          "when": "line.QDW.applies == 1",
+          "plain": true
+        },
+        {
+          "key": "26",
+          "kind": "amount",
+          "page": 2,
+          "x": 575.5,
+          "y": 314.8,
+          "value": "line.F6251.21",
+          "when": "line.QDW.applies == 1",
+          "plain": true
+        },
+        {
+          "key": "27",
+          "kind": "amount",
+          "page": 2,
+          "x": 575.5,
+          "y": 266.8,
+          "value": "line.QDW.5",
+          "when": "line.QDW.applies == 1",
+          "plain": true
+        },
+        {
+          "key": "28",
+          "kind": "amount",
+          "page": 2,
+          "x": 575.5,
+          "y": 254.7,
+          "value": "line.F6251.21 + line.QDW.5",
+          "when": "line.QDW.applies == 1",
+          "plain": true
+        },
+        {
+          "key": "29",
+          "kind": "amount",
+          "page": 2,
+          "x": 575.5,
+          "y": 242.8,
+          "value": "max(0, line.QDW.13 - (line.F6251.21 + line.QDW.5))",
+          "when": "line.QDW.applies == 1",
+          "plain": true
+        },
+        {
+          "key": "30",
+          "kind": "amount",
+          "page": 2,
+          "x": 575.5,
+          "y": 230.8,
+          "value": "line.F6251.30",
+          "when": "line.QDW.applies == 1",
+          "plain": true
+        },
+        {
+          "key": "31",
+          "kind": "amount",
+          "page": 2,
+          "x": 575.5,
+          "y": 218.7,
+          "value": "line.F6251.31",
+          "when": "line.QDW.applies == 1",
+          "plain": true
+        },
+        {
+          "key": "32",
+          "kind": "amount",
+          "page": 2,
+          "x": 575.5,
+          "y": 206.8,
+          "value": "line.F6251.23 + line.F6251.30",
+          "when": "line.QDW.applies == 1",
+          "plain": true
+        },
+        {
+          "key": "33",
+          "kind": "amount",
+          "page": 2,
+          "x": 575.5,
+          "y": 182.7,
+          "value": "line.F6251.22 - (line.F6251.23 + line.F6251.30)",
+          "when": "line.QDW.applies == 1",
+          "plain": true
+        },
+        {
+          "key": "34",
+          "kind": "amount",
+          "page": 2,
+          "x": 575.5,
+          "y": 170.8,
+          "value": "line.F6251.34",
+          "when": "line.QDW.applies == 1",
+          "plain": true
+        },
+        {
+          "key": "38",
+          "kind": "amount",
+          "page": 2,
+          "x": 575.5,
+          "y": 110.7,
+          "value": "line.F6251.18 + line.F6251.31 + line.F6251.34",
+          "when": "line.QDW.applies == 1",
+          "plain": true
+        },
+        {
+          "key": "39",
+          "kind": "amount",
+          "page": 2,
+          "x": 575.5,
+          "y": 86.8,
+          "value": "line.F6251.39",
+          "when": "line.QDW.applies == 1",
+          "plain": true
+        },
+        {
+          "key": "40",
+          "kind": "amount",
+          "page": 2,
+          "x": 575.5,
+          "y": 62.8,
+          "value": "line.F6251.40",
+          "when": "line.QDW.applies == 1",
+          "plain": true
+        },
+        {"key":"names","kind":"text","page":1,"x":38,"y":687.8,"value":"returnNames","width":405.7},
+        {"key":"1a","kind":"amount","page":1,"x":481.2,"y":650.7,"value":"line.F6251.1a","plain":true},
+        {"key":"1b","kind":"amount","page":1,"x":575.5,"y":626.8,"value":"line.F6251.1b","plain":true},
+        {"key":"2a","kind":"amount","page":1,"x":575.5,"y":602.8,"value":"line.F6251.2a","plain":true},
+        {"key":"2g","kind":"amount","page":1,"x":575.5,"y":530.8,"value":"line.F6251.2g","plain":true}
+      ],
       "tables": []
     },
     "SEIC": {
@@ -3884,6 +5594,141 @@
       },
       "tables": []
     },
+    "F8889": {
+      "title": "Form 8889, Health Savings Accounts (HSAs)",
+      "url": "https://www.irs.gov/pub/irs-prior/f8889--2025.pdf",
+      "sha256": "15ed4587f75bec57b0b343dfd001b4016f09698af970afee633ca1a364d5f49f",
+      "pages": 1,
+      "applies": "line.F8889.13 > 0 or line.F8889.9 > 0",
+      "fields": [
+        {"key":"2","kind":"amount","page":1,"x":575.5,"y":578.7,"value":"line.F8889.2","plain":true},
+        {
+          "key": "3",
+          "kind": "amount",
+          "page": 1,
+          "x": 575.5,
+          "y": 542.7,
+          "value": "if(answer.hsaCoverage == \"family\", param.hsaFamily, param.hsaSelfOnly)",
+          "when": "answer.hasHsa",
+          "plain": true
+        },
+        {
+          "key": "5",
+          "kind": "amount",
+          "page": 1,
+          "x": 575.5,
+          "y": 494.7,
+          "value": "if(answer.hsaCoverage == \"family\", param.hsaFamily, param.hsaSelfOnly)",
+          "when": "answer.hasHsa",
+          "plain": true
+        },
+        {
+          "key": "6",
+          "kind": "amount",
+          "page": 1,
+          "x": 575.5,
+          "y": 470.7,
+          "value": "if(answer.hsaCoverage == \"family\", param.hsaFamily, param.hsaSelfOnly)",
+          "when": "answer.hasHsa",
+          "plain": true
+        },
+        {
+          "key": "7",
+          "kind": "amount",
+          "page": 1,
+          "x": 575.5,
+          "y": 446.7,
+          "value": "param.hsaCatchUp",
+          "when": "answer.hasHsa and person.age >= 55",
+          "plain": true
+        },
+        {"key":"8","kind":"amount","page":1,"x":575.5,"y":434.7,"value":"line.F8889.8","plain":true},
+        {"key":"9","kind":"amount","page":1,"x":481.2,"y":422.7,"value":"line.F8889.9","plain":true},
+        {"key":"11","kind":"amount","page":1,"x":575.5,"y":398.7,"value":"line.F8889.9","plain":true},
+        {
+          "key": "12",
+          "kind": "amount",
+          "page": 1,
+          "x": 575.5,
+          "y": 386.7,
+          "value": "max(0, line.F8889.8 - line.F8889.9)",
+          "plain": true
+        },
+        {"key":"13","kind":"amount","page":1,"x":575.5,"y":374.7,"value":"line.F8889.13","plain":true},
+        {"key":"names","kind":"text","page":1,"x":38,"y":680.7,"value":"name","width":384.1},
+        {"key":"selfOnly","kind":"tick","page":1,"x":486.4,"y":618.5,"value":"answer.hsaCoverage == \"self\""},
+        {"key":"family","kind":"tick","page":1,"x":540.8,"y":618.5,"value":"answer.hsaCoverage == \"family\""}
+      ],
+      "tables": []
+    },
+    "F8889S": {
+      "title": "Form 8889, Health Savings Accounts (HSAs) (spouse)",
+      "url": "https://www.irs.gov/pub/irs-prior/f8889--2025.pdf",
+      "sha256": "15ed4587f75bec57b0b343dfd001b4016f09698af970afee633ca1a364d5f49f",
+      "pages": 1,
+      "applies": "line.US.joint == 1 and (spouse.line.F8889.13 > 0 or spouse.line.F8889.9 > 0)",
+      "side": "spouse",
+      "fields": [
+        {"key":"2","kind":"amount","page":1,"x":575.5,"y":578.7,"value":"line.F8889.2","plain":true},
+        {
+          "key": "3",
+          "kind": "amount",
+          "page": 1,
+          "x": 575.5,
+          "y": 542.7,
+          "value": "if(answer.hsaCoverage == \"family\", param.hsaFamily, param.hsaSelfOnly)",
+          "when": "answer.hasHsa",
+          "plain": true
+        },
+        {
+          "key": "5",
+          "kind": "amount",
+          "page": 1,
+          "x": 575.5,
+          "y": 494.7,
+          "value": "if(answer.hsaCoverage == \"family\", param.hsaFamily, param.hsaSelfOnly)",
+          "when": "answer.hasHsa",
+          "plain": true
+        },
+        {
+          "key": "6",
+          "kind": "amount",
+          "page": 1,
+          "x": 575.5,
+          "y": 470.7,
+          "value": "if(answer.hsaCoverage == \"family\", param.hsaFamily, param.hsaSelfOnly)",
+          "when": "answer.hasHsa",
+          "plain": true
+        },
+        {
+          "key": "7",
+          "kind": "amount",
+          "page": 1,
+          "x": 575.5,
+          "y": 446.7,
+          "value": "param.hsaCatchUp",
+          "when": "answer.hasHsa and person.age >= 55",
+          "plain": true
+        },
+        {"key":"8","kind":"amount","page":1,"x":575.5,"y":434.7,"value":"line.F8889.8","plain":true},
+        {"key":"9","kind":"amount","page":1,"x":481.2,"y":422.7,"value":"line.F8889.9","plain":true},
+        {"key":"11","kind":"amount","page":1,"x":575.5,"y":398.7,"value":"line.F8889.9","plain":true},
+        {
+          "key": "12",
+          "kind": "amount",
+          "page": 1,
+          "x": 575.5,
+          "y": 386.7,
+          "value": "max(0, line.F8889.8 - line.F8889.9)",
+          "plain": true
+        },
+        {"key":"13","kind":"amount","page":1,"x":575.5,"y":374.7,"value":"line.F8889.13","plain":true},
+        {"key":"names","kind":"text","page":1,"x":38,"y":680.7,"value":"name","width":384.1},
+        {"key":"selfOnly","kind":"tick","page":1,"x":486.4,"y":618.5,"value":"answer.hsaCoverage == \"self\""},
+        {"key":"family","kind":"tick","page":1,"x":540.8,"y":618.5,"value":"answer.hsaCoverage == \"family\""}
+      ],
+      "tables": []
+    },
     "F8995": {
       "title": "Form 8995, Qualified Business Income Deduction Simplified Computation",
       "url": "https://www.irs.gov/pub/irs-prior/f8995--2025.pdf",
@@ -3894,9 +5739,13 @@
         {"key":"2","kind":"amount","page":1,"x":481.2,"y":434.7,"value":"line.F8995.2","plain":true},
         {"key":"4","kind":"amount","page":1,"x":481.2,"y":410.7,"value":"line.F8995.2","plain":true},
         {"key":"5","kind":"amount","page":1,"x":575.5,"y":398.7,"value":"line.F8995.5","plain":true},
-        {"key":"10","kind":"amount","page":1,"x":575.5,"y":302.7,"value":"line.F8995.5","plain":true},
+        {"key":"6","kind":"amount","page":1,"x":481.2,"y":374.7,"value":"line.F8995.6","plain":true},
+        {"key":"8","kind":"amount","page":1,"x":481.2,"y":326.7,"value":"line.F8995.6","plain":true},
+        {"key":"9","kind":"amount","page":1,"x":575.5,"y":314.7,"value":"line.F8995.9","plain":true},
+        {"key":"10","kind":"amount","page":1,"x":575.5,"y":302.7,"value":"line.F8995.10","plain":true},
         {"key":"11","kind":"amount","page":1,"x":481.2,"y":290.7,"value":"line.F8995.11","plain":true},
-        {"key":"13","kind":"amount","page":1,"x":481.2,"y":254.7,"value":"line.F8995.11","plain":true},
+        {"key":"12","kind":"amount","page":1,"x":481.2,"y":266.7,"value":"line.F8995.12","plain":true},
+        {"key":"13","kind":"amount","page":1,"x":481.2,"y":254.7,"value":"line.F8995.13","plain":true},
         {"key":"14","kind":"amount","page":1,"x":575.5,"y":242.7,"value":"line.F8995.14","plain":true},
         {"key":"15","kind":"amount","page":1,"x":575.5,"y":218.7,"value":"line.F8995.15","plain":true},
         {"key":"names","kind":"text","page":1,"x":38,"y":675.7,"value":"returnNames","width":398.5},
@@ -4002,8 +5851,9 @@
       "applies": "line.F8960.17 > 0",
       "fields": [
         {"key":"1","kind":"amount","page":1,"x":575.5,"y":638.8,"value":"line.F1040.2b","plain":true},
-        {"key":"8","kind":"amount","page":1,"x":575.5,"y":446.8,"value":"line.F1040.2b","plain":true},
-        {"key":"12","kind":"amount","page":1,"x":575.5,"y":326.7,"value":"line.F1040.2b","plain":true},
+        {"key":"2","kind":"amount","page":1,"x":575.5,"y":626.8,"value":"line.F1040.3b","plain":true},
+        {"key":"8","kind":"amount","page":1,"x":575.5,"y":446.8,"value":"line.F8960.8","plain":true},
+        {"key":"12","kind":"amount","page":1,"x":575.5,"y":326.7,"value":"line.F8960.12","plain":true},
         {"key":"13","kind":"amount","page":1,"x":481.2,"y":302.8,"value":"line.F8960.13","plain":true},
         {"key":"14","kind":"amount","page":1,"x":481.2,"y":290.7,"value":"line.F8960.14","plain":true},
         {
@@ -4021,11 +5871,13 @@
           "page": 1,
           "x": 575.5,
           "y": 266.8,
-          "value": "min(line.F1040.2b, max(0, line.F8960.13 - line.F8960.14))",
+          "value": "min(line.F8960.12, max(0, line.F8960.13 - line.F8960.14))",
           "plain": true
         },
         {"key":"17","kind":"amount","page":1,"x":575.5,"y":242.8,"value":"line.F8960.17","plain":true},
-        {"key":"names","kind":"text","page":1,"x":38,"y":687.8,"value":"returnNames","width":412.9}
+        {"key":"names","kind":"text","page":1,"x":38,"y":687.8,"value":"returnNames","width":412.9},
+        {"key":"5a","kind":"amount","page":1,"x":481.2,"y":542.7,"value":"line.F1040.7a","plain":true},
+        {"key":"5d","kind":"amount","page":1,"x":575.5,"y":482.8,"value":"line.F1040.7a","plain":true}
       ],
       "tables": []
     }
@@ -4034,8 +5886,8 @@
     {
       "id": "SB",
       "form": "Schedule B (Form 1040), Interest and Ordinary Dividends",
-      "why": "because your taxable interest is more than $1,500: list each payer and amount (your 1099-INT forms, below) in Part I, and answer the questions about foreign accounts and trusts in Part III",
-      "applies": "line.F1040.2b > 1500"
+      "why": "because your taxable interest or your ordinary dividends are more than $1,500: list each payer and amount (your 1099-INT and 1099-DIV forms, below) in Parts I and II, and answer the questions about foreign accounts and trusts in Part III",
+      "applies": "line.F1040.2b > 1500 or line.F1040.3b > 1500"
     },
     {
       "id": "F8863P2",
@@ -4048,13 +5900,17 @@
   "balances": [{"name":"Federal","refund":"F1040.34","owing":"F1040.37"}],
   "residency": "A U.S. citizen or resident alien all year",
   "reading": {
-    "documents": "United States information returns (Forms W-2, 1099 and 1098)",
+    "documents": "United States information returns (Forms W-2, 1099, 1098 and SSA-1099)",
     "notes": [
-      "A W-2 prints boxes 1 to 20; box 12 holds codes, and boxes 13 and 14 are not amounts this app reads: leave them out. The 'a' to 'f' boxes hold numbers, names and addresses, never amounts: leave them out too.",
-      "On a 1099 or 1098, report the payer's or lender's or school's name as issuer. A form can print a box that is a checkbox (such as boxes 7, 8 and 9 of a 1098-T): leave checkboxes out.",
-      "For a Form 1098-T, person is the student, and issuer the school. For a Form 1098-E, person is the borrower, and issuer the lender.",
+      "Box numbers with a letter are written in capitals: box 1a of a 1099-DIV is 1A, box 2a of a 1099-R is 2A, box 1d of a 1099-B is 1D.",
+      "A W-2 prints boxes 1 to 20. Box 12 holds codes with amounts: report only the amount with code W, under 12W. Boxes 13 and 14 aren't read. The 'a' to 'f' boxes hold numbers, names and addresses, never amounts: leave them out.",
+      "On a 1099 or 1098, report the payer's, lender's or school's name as issuer. A form can print a box that is a checkbox (such as boxes 7, 8 and 9 of a 1098-T): leave checkboxes out, unless the list names one.",
+      "A Form 1099-R is type RIRA when its IRA/SEP/SIMPLE box is checked, and type R when it isn't. Its box 7 holds one or two distribution codes: report the first under 7 and a second, if any, under 7B (box 7 of 7D is 7, and D under 7B).",
+      "A broker's Form 1099-B usually comes as a yearly statement that sums the sales up by part of Form 8949: 'Box A' (short-term, basis reported to the IRS), 'Box B' (short-term, not reported), 'Box D' (long-term, reported), 'Box E' (long-term, not reported). Return one 1099-B for each part that has sales, with that letter under CAT and the part's totals: proceeds (1D), cost or other basis (1E), accrued market discount (1F) and wash sale loss disallowed (1G). Federal income tax withheld (box 4) goes on the first.",
+      "A broker's statement often holds a 1099-DIV and a 1099-INT too: return them as well.",
+      "For a Form 1098-T, person is the student, and issuer the school. For a Form 1098-E, person is the borrower, and issuer the lender. For a Form 1098, person is the borrower, and issuer the lender. For a Form SSA-1099, person is the beneficiary, and issuer is Social Security Administration.",
       "A corrected form (marked CORRECTED) replaces the first one: read it like any other."
     ]
   },
-  "version": "456137ea168f2c32"
+  "version": "c370819e96a07a99"
 }

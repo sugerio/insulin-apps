@@ -9340,6 +9340,7 @@
       },
       "informational": ["52"],
       "counts": [],
+      "codes": {},
       "receipt": false,
       "printedYears": [0]
     },
@@ -9362,6 +9363,7 @@
       },
       "informational": ["10","24"],
       "counts": [],
+      "codes": {},
       "receipt": false,
       "printedYears": [0]
     },
@@ -9382,6 +9384,7 @@
       },
       "informational": ["23","49"],
       "counts": [],
+      "codes": {},
       "receipt": false,
       "printedYears": [0]
     },
@@ -9391,6 +9394,7 @@
       "boxes": {"20":"Cost or book value","21":"Proceeds of disposition or settlement amount"},
       "informational": [],
       "counts": [],
+      "codes": {},
       "receipt": false,
       "printedYears": [0]
     },
@@ -9400,6 +9404,7 @@
       "boxes": {"24":"Number of months part-time","25":"Number of months full-time","26":"Eligible tuition fees"},
       "counts": ["24","25"],
       "informational": [],
+      "codes": {},
       "receipt": false,
       "printedYears": [0]
     },
@@ -9416,6 +9421,7 @@
       "informational": ["19"],
       "name": "T4A(OAS)",
       "counts": [],
+      "codes": {},
       "receipt": false,
       "printedYears": [0]
     },
@@ -9434,6 +9440,7 @@
       "informational": ["14","15","16","17","18"],
       "name": "T4A(P)",
       "counts": [],
+      "codes": {},
       "receipt": false,
       "printedYears": [0]
     },
@@ -9453,6 +9460,7 @@
       },
       "informational": [],
       "counts": [],
+      "codes": {},
       "receipt": false,
       "printedYears": [0]
     },
@@ -9462,6 +9470,7 @@
       "boxes": {"16":"Taxable amounts","18":"Amounts deemed received on death","24":"Excess amount","28":"Income tax deducted"},
       "informational": [],
       "counts": [],
+      "codes": {},
       "receipt": false,
       "printedYears": [0]
     },
@@ -9482,6 +9491,7 @@
       },
       "informational": ["25","27"],
       "counts": [],
+      "codes": {},
       "receipt": false,
       "printedYears": [0]
     },
@@ -9500,6 +9510,7 @@
       },
       "informational": ["20","32","34"],
       "counts": [],
+      "codes": {},
       "receipt": false,
       "printedYears": [0]
     },
@@ -9509,6 +9520,7 @@
       "boxes": {"10":"Workers' compensation benefits","11":"Social assistance payments"},
       "informational": [],
       "counts": [],
+      "codes": {},
       "receipt": false,
       "printedYears": [0]
     },
@@ -9518,6 +9530,7 @@
       "boxes": {"10":"Basic advanced Canada workers benefit","11":"Advanced Canada workers benefit disability supplement"},
       "informational": [],
       "counts": [],
+      "codes": {},
       "receipt": false,
       "printedYears": [0]
     },
@@ -9533,6 +9546,7 @@
       },
       "counts": ["7"],
       "informational": [],
+      "codes": {},
       "receipt": false,
       "printedYears": [0]
     },
@@ -9561,6 +9575,7 @@
       "informational": ["C","L","M"],
       "name": "RL-1",
       "counts": [],
+      "codes": {},
       "receipt": false,
       "printedYears": [0]
     },
@@ -9579,6 +9594,7 @@
       "name": "RL-2",
       "informational": [],
       "counts": [],
+      "codes": {},
       "receipt": false,
       "printedYears": [0]
     },
@@ -9598,6 +9614,7 @@
       "name": "RL-3",
       "informational": [],
       "counts": [],
+      "codes": {},
       "receipt": false,
       "printedYears": [0]
     },
@@ -9612,6 +9629,7 @@
       "name": "RL-5",
       "informational": [],
       "counts": [],
+      "codes": {},
       "receipt": false,
       "printedYears": [0]
     },
@@ -9622,6 +9640,7 @@
       "name": "RL-6",
       "informational": [],
       "counts": [],
+      "codes": {},
       "receipt": false,
       "printedYears": [0]
     },
@@ -9632,6 +9651,7 @@
       "informational": ["A"],
       "name": "RL-8",
       "counts": [],
+      "codes": {},
       "receipt": false,
       "printedYears": [0]
     },
@@ -9651,6 +9671,7 @@
       "name": "RL-16",
       "informational": [],
       "counts": [],
+      "codes": {},
       "receipt": false,
       "printedYears": [0]
     },
@@ -9668,6 +9689,7 @@
       "name": "RL-19",
       "informational": [],
       "counts": [],
+      "codes": {},
       "receipt": false,
       "printedYears": [0]
     },
@@ -9682,6 +9704,7 @@
       "informational": ["C","D"],
       "name": "RL-24",
       "counts": [],
+      "codes": {},
       "receipt": false,
       "printedYears": [0]
     },
@@ -9692,6 +9715,7 @@
       "counts": ["B"],
       "name": "RL-31",
       "informational": [],
+      "codes": {},
       "receipt": false,
       "printedYears": [0]
     },
@@ -9702,7 +9726,8 @@
       "receipt": true,
       "printedYears": [0,1],
       "informational": [],
-      "counts": []
+      "counts": [],
+      "codes": {}
     },
     "DONATION": {
       "title": "Official donation receipt",
@@ -9711,6 +9736,7 @@
       "receipt": true,
       "informational": [],
       "counts": [],
+      "codes": {},
       "printedYears": [0]
     },
     "CHILDCARE": {
@@ -9720,6 +9746,7 @@
       "receipt": true,
       "informational": [],
       "counts": [],
+      "codes": {},
       "printedYears": [0]
     },
     "MEDICAL": {
@@ -9729,6 +9756,7 @@
       "receipt": true,
       "informational": [],
       "counts": [],
+      "codes": {},
       "printedYears": [0]
     },
     "NOA": {
@@ -9743,7 +9771,8 @@
       "receipt": true,
       "printedYears": [-1],
       "informational": [],
-      "counts": []
+      "counts": [],
+      "codes": {}
     }
   },
   "hints": {
@@ -18189,5 +18218,5 @@
       "For a notice of assessment, taxYear is the year it assesses, such as {lastYear}; for an RRSP receipt, the year of the contributions."
     ]
   },
-  "version": "de8d3a7903193b7a"
+  "version": "e83015f8fbf586ee"
 }

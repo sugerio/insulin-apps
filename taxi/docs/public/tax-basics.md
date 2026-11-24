@@ -62,11 +62,19 @@ state has its own return. Taxi prepares only the federal one.
   surviving spouse. Your status on December 31 and the people who live with you decide which ones you can use. Filing
   jointly, a married couple files one return with both incomes, and usually pays less.
 - **Forms you get.** A Form W-2 from each employer, by January 31. A Form 1099-INT from a bank that paid you $10 or
-  more of interest. A Form 1099-NEC from a business that paid you $600 or more as a contractor. A Form 1098-T from a
-  college, and a Form 1098-E from a lender that received $600 or more of student loan interest.
-- **The standard deduction.** Most people take it instead of listing their deductions (itemizing). For 2025 it is
-  $15,750 for a single person or for each spouse filing separately, $31,500 for a married couple filing jointly, and
-  $23,625 for a head of household. It is larger at 65 or older and for a blind person.
+  more of interest, and a Form 1099-DIV for dividends. A Form 1099-B from a broker for what you sold. A Form 1099-R for
+  money from an IRA or pension, and a Form SSA-1099 for social security benefits. A Form 1099-NEC from a business that
+  paid you $600 or more as a contractor. A Form 1098 for mortgage interest, a Form 1098-T from a college, and a Form
+  1098-E from a lender that received $600 or more of student loan interest.
+- **The standard deduction or itemizing.** Most people take the standard deduction. For 2025 it is $15,750 for a
+  single person or for each spouse filing separately, $31,500 for a married couple filing jointly, and $23,625 for a
+  head of household. It is larger at 65 or older and for a blind person. You itemize instead (Schedule A) when your
+  mortgage interest, state and local taxes, gifts to charity and large medical expenses add up to more. If one spouse
+  filing separately itemizes, the other must too.
+- **Capital gains.** A gain on something you held more than a year, and qualified dividends, are taxed at 0%, 15% or
+  20%, less than other income. A capital loss lowers your income by $3,000 at most in a year; the rest carries over.
+- **The alternative minimum tax.** A second way of working out the tax, with fewer deductions. You pay the larger of
+  the two. Few people owe it.
 - **Credits.** A credit lowers the tax itself. Some are refundable: you get them even when they are more than your
   tax, such as the earned income credit and part of the child tax credit.
 - **The social security number.** Each person on the return, and each dependant, needs one (or a taxpayer

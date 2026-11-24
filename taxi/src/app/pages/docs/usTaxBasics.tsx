@@ -5,7 +5,7 @@ import { DocLink, InApp, type DocTopic } from "./parts.tsx";
 export const usTaxBasics: DocTopic = {
   slug: "us-tax-basics",
   title: "US tax basics",
-  summary: "Form 1040, the deadline, filing status, the forms you get and the standard deduction, in plain words.",
+  summary: "Form 1040, the deadline, filing status, the forms you get, the standard deduction and capital gains, in plain words.",
   group: "tax",
   generalInformation: true,
   sections: [
@@ -63,6 +63,21 @@ export const usTaxBasics: DocTopic = {
               <b>Form 1099-INT:</b> interest from a bank, sent when it paid you $10 or more.
             </li>
             <li>
+              <b>Form 1099-DIV:</b> dividends and capital gain distributions from a fund or company.
+            </li>
+            <li>
+              <b>Form 1099-B:</b> what a broker sold for you. Its yearly statement sums the sales up by part of Form 8949 (box A, B, D or E).
+            </li>
+            <li>
+              <b>Form 1099-R:</b> money from an IRA, a pension or a 401(k). Box 7 holds a code that says what kind of distribution it was.
+            </li>
+            <li>
+              <b>Form SSA-1099:</b> social security benefits. Up to 85% of them can be taxable.
+            </li>
+            <li>
+              <b>Form 1098:</b> the interest you paid on a mortgage.
+            </li>
+            <li>
               <b>Form 1099-NEC:</b> pay from a business for work as a contractor, sent when it paid you $600 or more.
             </li>
             <li>
@@ -78,13 +93,35 @@ export const usTaxBasics: DocTopic = {
     },
     {
       id: "standard-deduction",
-      title: "The standard deduction",
+      title: "The standard deduction or itemizing",
       body: (
-        <p>
-          Most people take the standard deduction instead of listing their deductions (itemizing). For 2025 it is $15,750 for a single person or for
-          each spouse filing separately, $31,500 for a married couple filing jointly, and $23,625 for a head of household. It is larger at 65 or
-          older and for a blind person.
-        </p>
+        <>
+          <p>
+            Most people take the standard deduction. For 2025 it is $15,750 for a single person or for each spouse filing separately, $31,500 for a
+            married couple filing jointly, and $23,625 for a head of household. It is larger at 65 or older and for a blind person.
+          </p>
+          <p>
+            You itemize instead (Schedule A) when your mortgage interest, state and local taxes (up to $40,000 for 2025), gifts to charity and
+            medical expenses over 7.5% of your income add up to more. If one spouse filing separately itemizes, the other must too.
+          </p>
+          <InApp>enter the expenses under "Expenses you can itemize" on Deductions: the app takes the larger of the two.</InApp>
+        </>
+      ),
+    },
+    {
+      id: "capital-gains",
+      title: "Capital gains and the alternative minimum tax",
+      body: (
+        <>
+          <p>
+            A gain on something you held more than a year, and qualified dividends, are taxed at 0%, 15% or 20%, less than other income. A capital
+            loss lowers your income by $3,000 at most in a year ($1,500 filing separately); the rest carries over to the next year.
+          </p>
+          <p>
+            The alternative minimum tax (AMT) is a second way of working out the tax, with fewer deductions and tax-free interest from some bonds
+            added back. You pay the larger of the two. Few people owe it.
+          </p>
+        </>
       ),
     },
     {

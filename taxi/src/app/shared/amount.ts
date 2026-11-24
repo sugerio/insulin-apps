@@ -1,3 +1,5 @@
+import { Dec } from "./engine/decimal.ts";
+
 /**
  * An amount as a person types it or a slip prints it, written the way the API takes it: no `$`, `%`, spaces or
  * thousands separators, and a point as the decimal mark. A comma followed by one or two digits at the end, with no
@@ -11,4 +13,10 @@ export function normalizeAmount(value: string): string {
     return `${compact.slice(0, mark).replace(/,/g, "")}.${compact.slice(mark + 1)}`;
   }
   return compact.replace(/,/g, "");
+}
+
+/** Two values of one slip box are the same: equal amounts ("1200" and "1200.00"), or the same code. */
+export function sameBoxValue(a: string, b: string): boolean {
+  const amount = /^-?\d+(\.\d+)?$/;
+  return amount.test(a) && amount.test(b) ? Dec.from(a).eq(b) : a === b;
 }

@@ -36,7 +36,9 @@ never holds it. Without that credential, files are stored but not read, and slip
 
 With the file, Claude gets the year, the names of the people in the year, the slip types the app reads with their
 boxes, and notes on reading the documents of the year's country (`reading` in `year.yaml`). On a US year these are
-Forms W-2, 1099-INT, 1099-NEC, 1098-T and 1098-E. It answers in a fixed shape: each slip's type, the name on it, the
+Forms W-2, 1099-INT, 1099-DIV, 1099-B, 1099-R, 1099-NEC, SSA-1099, 1098, 1098-T and 1098-E. A box that holds a code,
+not an amount (a 1099-R's distribution code, the part of Form 8949 a 1099-B summary is for), is kept only when the
+code is one the form can have; any other is marked for a person to enter at Confirm. It answers in a fixed shape: each slip's type, the name on it, the
 issuer, its boxes and the boxes it couldn't read clearly. It is told never to return an identification number (a
 social insurance, social security or employer identification number), and no field of the answer can hold one. Taxi then checks the answer itself: only known
 slip types and boxes are kept, amounts must be numbers, a slip for another year is left out (the message says which),
@@ -152,8 +154,9 @@ left under Before you file, and the download is refused.
 - A row Taxi doesn't know (a dependant's details, each expense category, a property's address) is left blank. The
   worksheet lists the slips, the answers, the hints applied and every line with its formula.
 - A US return prints on the IRS's own forms: Form 1040, then each schedule and form the return uses, in the order the
-  IRS asks them attached (Schedules 1, 1-A, 2, 3, C and SE, Form 2441, Schedule EIC, Schedule 8812, and Forms 8863,
-  8995, 8959 and 8960). On a joint return each spouse with a business gets their own Schedule C and SE. Form 8863 has
+  IRS asks them attached (Schedules 1, 1-A, 2, 3, A, C, D and SE, Forms 2441 and 6251, Schedule EIC, Schedule 8812,
+  and Forms 8863, 8889, 8995, 8959 and 8960). On a joint return each spouse with a business gets their own Schedule C
+  and SE, and each spouse with an HSA their own Form 8889. Form 6251 prints when there is an AMT to pay. Form 8863 has
   one page 2 for each student: Taxi fills it in for one student (you, else your spouse, else the first dependant), and
   the worksheet asks for a copy for each other student. Lines 6 and 17 of Form 8863 are decimals: the digit before the
   point and the three after it are written in their own boxes.

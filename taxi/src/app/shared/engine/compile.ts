@@ -69,6 +69,8 @@ const sourceSlip = z.strictObject({
   boxes: z.record(z.string(), z.string()),
   informational: z.array(sourceNumber).optional(),
   counts: z.array(sourceNumber).optional(),
+  /** Boxes that hold a code from the list (a 1099-R's box 7), each read only by sumWhere and countWhere. */
+  codes: z.record(z.string(), z.array(sourceNumber)).optional(),
   receipt: z.boolean().optional(),
   printedYears: z.array(z.number().int()).optional(),
   name: z.string().min(1).optional(),
@@ -273,6 +275,7 @@ export function compileRules(chain: SourceYear[], hash: (text: string) => string
       ...slip,
       informational: (slip.informational ?? []).map(String),
       counts: (slip.counts ?? []).map(String),
+      codes: Object.fromEntries(Object.entries(slip.codes ?? {}).map(([box, codes]) => [box, codes.map(String)])),
       receipt: slip.receipt ?? false,
       printedYears: slip.printedYears ?? [0],
     })),

@@ -308,8 +308,8 @@ lines:
     formula: "round(line.F2441.6 * line.F2441.8, 2)"
   F2441.10:
     label: Tax liability limit
-    formula: "line.F1040.18"
-    source: "2441 instructions, Credit Limit Worksheet: Form 1040 line 18, less Schedule 3 lines 1 and 6l (no such credit is worked out by this app)"
+    formula: "max(0, line.F1040.18 - line.S3.1)"
+    source: "2441 instructions, Credit Limit Worksheet: Form 1040 line 18, less Schedule 3 lines 1 (the foreign tax credit, investments.yaml) and 6l (not worked out by this app)"
   F2441.11:
     label: Credit for child and dependent care expenses
     formula: >-
@@ -325,8 +325,8 @@ lines:
     source: "Schedule 3, line 2: Form 2441, line 11"
   S3.8:
     label: Total nonrefundable credits from Schedule 3
-    formula: "line.S3.2 + line.S3.3"
-    source: "Schedule 3, line 8: lines 2 and 3 (education.yaml); no other nonrefundable credit is worked out by this app"
+    formula: "line.S3.1 + line.S3.2 + line.S3.3"
+    source: "Schedule 3, line 8: lines 1 (investments.yaml), 2 and 3 (education.yaml); no other nonrefundable credit is worked out by this app"
 
   # Asked as soon as you say you paid for care, with the care for each person.
   SCOPE.care:

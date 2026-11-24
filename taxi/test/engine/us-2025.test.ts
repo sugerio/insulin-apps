@@ -54,8 +54,8 @@ function oneW2(options: {
       })),
     },
     answers: {
-      p1: { hasTipsOrOvertime: false, hasCarLoan: false, hasSelfEmployment: false, hasStudentLoan: false, paidForEducation: false, spouseItemizes: false, hasValidSSN: true, paidHalfOfHome: true, paidForCare: false, ...options.answers },
-      ...(options.joint ? { p2: { hasTipsOrOvertime: false, hasCarLoan: false, hasSelfEmployment: false, hasStudentLoan: false, paidForEducation: false, hasValidSSN: true, ...options.spouseAnswers } } : {}),
+      p1: { hasTipsOrOvertime: false, hasCarLoan: false, hasSelfEmployment: false, hasStudentLoan: false, paidForEducation: false, hasDividends: false, hasBrokerSales: false, hasLossCarryover: false, hasIraDistribution: false, hasPension: false, hasSocialSecurity: false, hasOtherIncome: false, hasHsa: false, hasIraContribution: false, hasItemized: false, spouseItemizes: false, hasValidSSN: true, paidHalfOfHome: true, paidForCare: false, ...options.answers },
+      ...(options.joint ? { p2: { hasTipsOrOvertime: false, hasCarLoan: false, hasSelfEmployment: false, hasStudentLoan: false, paidForEducation: false, hasDividends: false, hasBrokerSales: false, hasLossCarryover: false, hasIraDistribution: false, hasPension: false, hasSocialSecurity: false, hasOtherIncome: false, hasHsa: false, hasIraContribution: false, hasItemized: false, hasValidSSN: true, ...options.spouseAnswers } } : {}),
     },
     slips: [
       {
@@ -91,7 +91,8 @@ describe("the 2025 US rules", () => {
     }
     expect(table.rows).toHaveLength(2062);
     expect(wrong).toEqual([]);
-  });
+    // 16,496 returns worked out: longer than a test usually takes.
+  }, 60_000);
 
   it("use the Tax Computation Worksheet from $100,000, to the cent", () => {
     const tax = (taxable: string, married = false) => new Evaluation(rules, oneW2({ taxable, married })).line("p1", "F1040.16").value?.toString();
@@ -124,7 +125,7 @@ describe("the 2025 US rules", () => {
       ["a dual-status alien", oneW2({ taxable: "30000", resident: false }), /Form 1040-NR/],
       ["a spouse who died in 2025", oneW2({ taxable: "30000", maritalStatus: "widowed", answers: { spouseDiedIn2025: true } }), /file jointly for 2025/],
       ["a child's interest over $2,700", oneW2({ wages: "1000", birthDate: "2010-01-01", interest: "3000", answers: { canBeClaimed: true } }), /Form 8615/],
-      ["a spouse who itemizes", oneW2({ taxable: "30000", married: true, answers: { spouseItemizes: true } }), /itemize/],
+      ["other income", oneW2({ taxable: "30000", answers: { hasOtherIncome: true } }), /Other income .* isn't worked out yet/],
     ];
     for (const [what, input, message] of cases) {
       const { total, unhandled } = notHandled(input);
@@ -357,7 +358,7 @@ describe("the 2025 US rules", () => {
 
   it("show one federal refund or amount owed, and print on the IRS forms in their attachment order", () => {
     expect(rules.balances).toEqual([{ name: "Federal", refund: "F1040.34", owing: "F1040.37" }]);
-    expect([...rules.forms.keys()]).toEqual(["F1040", "S1", "S1A", "S2", "S3", "SC", "SCS", "SE", "SES", "F2441", "SEIC", "S8812", "F8863", "F8995", "F8959", "F8960"]);
+    expect([...rules.forms.keys()]).toEqual(["F1040", "S1", "S1A", "S2", "S3", "SA", "SC", "SCS", "SD", "SE", "SES", "F2441", "F6251", "SEIC", "S8812", "F8863", "F8889", "F8889S", "F8995", "F8959", "F8960"]);
   });
 });
 
@@ -614,5 +615,104 @@ describe("education: Form 8863 and the student loan interest deduction", () => {
     expect(line(withForms({ 1: "6000" }), "F8863.1")).toBe("0");
     // A prior year's adjustments change an earlier credit, which isn't worked out: the return says so.
     expect(evaluation(withForms({ 1: "6000", 4: "500" })).result().people[0]!.unhandled.join(" ")).toMatch(/1098-T/);
+  });
+});
+
+describe("part 6: investments, retirement income, adjustments, itemized deductions and the AMT", () => {
+  const evaluation = (input: EngineInput) => new Evaluation(rules, input);
+  const line = (input: EngineInput, id: string) => evaluation(input).line("p1", id).value?.toString() ?? null;
+  const notes = (input: EngineInput) => evaluation(input).result().people[0]!.unhandled.join(" ");
+  type Slip = EngineInput["slips"][number];
+  const withSlips = (input: EngineInput, ...slips: Omit<Slip, "id" | "person">[]): EngineInput => ({
+    ...input,
+    slips: [...input.slips, ...slips.map((slip, index) => ({ id: `s${index}`, person: "p1", ...slip }))],
+  });
+  const broker = (CAT: string, proceeds: string, cost: string, extra: Record<string, string> = {}) => ({ type: "B", issuer: "Broker", boxes: { CAT, "1D": proceeds, "1E": cost, ...extra } });
+  const r = (type: "R" | "RIRA", code: string, gross: string, taxable?: string) => ({ type, issuer: "Plan", boxes: { 1: gross, 7: code, ...(taxable === undefined ? {} : { "2A": taxable }) } });
+
+  it("sums a code box's slips with sumWhere and countWhere: a 1099-B summary goes to its part of Schedule D", () => {
+    const input = withSlips(oneW2({ wages: "50000", answers: { hasBrokerSales: true } }), broker("A", "10000", "8000"), broker("D", "30000", "20000"), broker("D", "5000", "6000"));
+    expect([line(input, "SD.1ad"), line(input, "SD.1ah"), line(input, "SD.8ad"), line(input, "SD.8ah"), line(input, "F1040.7a")]).toEqual(["10000", "2000", "35000", "9000", "11000"]);
+  });
+
+  it("says a 1099-B needs Form 8949 when its basis wasn't reported, it has no part, or it has a wash sale", () => {
+    const base = oneW2({ wages: "50000", answers: { hasBrokerSales: true } });
+    expect(notes(withSlips(base, broker("E", "1000", "500")))).toMatch(/Form 8949 box B or E/);
+    expect(notes(withSlips(base, { type: "B", issuer: "Broker", boxes: { "1D": "1000", "1E": "500" } }))).toMatch(/doesn't say which part of Form 8949/);
+    expect(notes(withSlips(base, broker("A", "1000", "1500", { "1G": "300" })))).toMatch(/1099-B from Broker: box 1G isn't handled/);
+  });
+
+  it("takes capital gain distributions without Schedule D, and limits a capital loss to $3,000 ($1,500 separately)", () => {
+    const div = (answers = {}) => withSlips(oneW2({ wages: "50000", answers: { hasDividends: true, ...answers } }), { type: "DIV", issuer: "Fund", boxes: { "1A": "100", "2A": "700" } });
+    expect([line(div(), "US.scheduleD"), line(div(), "F1040.7a")]).toEqual(["0", "700"]);
+    const loss = (married: boolean) => withSlips(oneW2({ wages: "50000", married, answers: { hasBrokerSales: true } }), broker("A", "1000", "9000"));
+    expect([line(loss(false), "SD.16"), line(loss(false), "F1040.7a"), line(loss(true), "F1040.7a")]).toEqual(["-8000", "-3000", "-1500"]);
+  });
+
+  it("takes foreign tax as a credit up to $300 without Form 1116, and says so above", () => {
+    const foreign = (tax: string) => withSlips(oneW2({ wages: "50000", answers: { hasDividends: true } }), { type: "DIV", issuer: "Fund", boxes: { "1A": "1000", "7": tax } });
+    expect(line(foreign("300"), "S3.1")).toBe("300");
+    expect(notes(foreign("301"))).toMatch(/Form 1116/);
+  });
+
+  it("works out 1099-R codes 1 to 7 and direct rollovers, and says what it doesn't", () => {
+    const base = oneW2({ wages: "50000", answers: { hasIraDistribution: true, hasPension: true, indirectRollover: false, iraBasis: false, earlyException: false } });
+    const input = withSlips(base, r("RIRA", "7", "5000", "5000"), r("RIRA", "G", "20000", "0"), r("R", "1", "4000", "4000"));
+    expect([line(input, "F1040.4a"), line(input, "F1040.4b"), line(input, "F1040.5b"), line(input, "US.iraRollover"), line(input, "US.pensionRollover"), line(input, "S2.8")]).toEqual(["25000", "5000", "4000", "1", "0", "400"]);
+    expect(notes(withSlips(base, r("RIRA", "Q", "1000", "0")))).toMatch(/distribution code in box 7 this app doesn't work out/);
+    expect(notes(withSlips(base, { type: "R", issuer: "Plan", boxes: { 1: "1000", "2A": "1000", 7: "7", "7B": "D" } }))).toMatch(/two codes in box 7/);
+    expect(notes(withSlips(base, r("R", "7", "1000")))).toMatch(/no taxable amount in box 2a/);
+    expect(notes(withSlips({ ...base, answers: { ...base.answers, p1: { ...base.answers.p1!, iraBasis: true } } }, r("RIRA", "7", "1000", "1000")))).toMatch(/Form 8606/);
+    expect(notes(withSlips({ ...base, answers: { ...base.answers, p1: { ...base.answers.p1!, earlyException: true } } }, r("R", "1", "1000", "1000")))).toMatch(/Form 5329/);
+  });
+
+  it("taxes social security benefits by the worksheet: none under the base amount, up to 85%", () => {
+    const benefits = (wages: string, amount: string) =>
+      withSlips(oneW2({ wages, answers: { hasSocialSecurity: true } }), { type: "SSA", issuer: "Social Security Administration", boxes: { 5: amount } });
+    expect(line(benefits("10000", "20000"), "F1040.6b")).toBe("0");
+    // $40,000 + $10,000 = $50,000: $25,000 over the base; $4,500 (half of $9,000) + 85% of $16,000 = $18,100, capped at 85% of $20,000.
+    expect(line(benefits("40000", "20000"), "F1040.6b")).toBe("17000");
+  });
+
+  it("deducts an HSA up to the limit less the employer's part, and says what it doesn't work out", () => {
+    const hsa = (answers: Record<string, string | boolean>) =>
+      oneW2({ wages: "50000", answers: { hasHsa: true, hsaContributions: "3000", hsaCoverage: "self", hsaAllYear: "yes", hsaNonMedical: "no", ...answers } });
+    expect(line(hsa({}), "S1.13")).toBe("3000");
+    expect(notes(hsa({ hsaContributions: "5000" }))).toMatch(/excess contribution/);
+    expect(notes(hsa({ hsaAllYear: "no" }))).toMatch(/last-month rule/);
+    expect(notes(hsa({ hsaNonMedical: "yes" }))).toMatch(/not for medical expenses/);
+  });
+
+  it("phases the IRA deduction out for someone covered by a plan, and leaves it whole for someone who isn't", () => {
+    const ira = (wages: string, covered: boolean, married = false) =>
+      oneW2({ wages, married, answers: { hasIraContribution: true, iraContribution: "7000", coveredByPlan: covered } });
+    expect(line(ira("100000", false), "S1.20")).toBe("7000");
+    expect(line(ira("84321", true), "S1.20")).toBe("3280"); // $7,000 x $4,679 / $10,000 = $3,275.30, rounded up to $3,280
+    expect(line(ira("88900", true), "S1.20")).toBe("200"); // $70, raised to the $200 minimum
+    expect(line(ira("89000", true), "S1.20")).toBe("0");
+    expect(line(ira("5000", true, true), "S1.20")).toBe("3500"); // filing separately and covered: phased out from $0
+    const withBenefits = withSlips(ira("84321", true), { type: "SSA", issuer: "Social Security Administration", boxes: { 5: "1000" } });
+    expect(notes({ ...withBenefits, answers: { ...withBenefits.answers, p1: { ...withBenefits.answers.p1!, hasSocialSecurity: true } } })).toMatch(/Pub. 590-A/);
+  });
+
+  it("itemizes when it is more than the standard deduction, or when a spouse filing separately itemizes", () => {
+    const itemized = (married: boolean, answers: Record<string, string | boolean>) =>
+      oneW2({
+        wages: "80000",
+        married,
+        answers: { hasItemized: true, itemMedical: "0", itemStateTax: "0", itemRealEstateTax: "0", itemPersonalPropertyTax: "0", itemMortgageOther: "0", itemCashGifts: "0", itemNoncashGifts: "0", ...answers },
+      });
+    expect(line(itemized(false, { itemRealEstateTax: "3000" }), "F1040.12e")).toBe("15750");
+    expect(line(itemized(true, { itemRealEstateTax: "3000", spouseItemizes: true }), "F1040.12e")).toBe("3000");
+    expect(line(itemized(false, { itemRealEstateTax: "30000", itemCashGifts: "2000" }), "F1040.12e")).toBe("32000");
+    expect(notes(itemized(false, { itemNoncashGifts: "600" }))).toMatch(/Form 8283/);
+    expect(notes(itemized(false, { itemCashGifts: "50000" }))).toMatch(/60% of AGI/);
+    const mortgage = withSlips(itemized(false, { mortgageQualifies: "yes" }), { type: "F1098", issuer: "Lender", boxes: { 1: "40000", 2: "900000" } });
+    expect(notes(mortgage)).toMatch(/Pub. 936/);
+  });
+
+  it("asks about a child's dividends for the kiddie tax, not only interest", () => {
+    const child = withSlips(oneW2({ wages: "1000", birthDate: "2010-01-01", answers: { canBeClaimed: true, hasDividends: true } }), { type: "DIV", issuer: "Fund", boxes: { "1A": "3000" } });
+    expect(notes(child)).toMatch(/Form 8615/);
   });
 });

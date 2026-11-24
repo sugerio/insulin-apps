@@ -189,12 +189,12 @@ lines:
   US.eicEligible:
     label: Can take the earned income credit (1 for yes)
     formula: >-
-      if(line.US.claimable == 1, 0, if(line.US.earnedIncome < 1, 0, if(line.F1040.2a + line.F1040.2b > param.eicInvestmentLimit, 0,
+      if(line.US.claimable == 1, 0, if(line.US.earnedIncome < 1, 0, if(line.F1040.2a + line.F1040.2b + line.F1040.3b + max(0, line.F1040.7a) > param.eicInvestmentLimit, 0,
       if(line.F1040.11a >= line.US.eicLimit or line.US.earnedIncome >= line.US.eicLimit, 0,
       if(line.US.eicKids == 0, if(line.US.separate == 1 or line.US.hoh == 1, 0, if(line.US.eicAge > 0, line.US.eicSSN, 0)),
       if(line.US.separate == 1, if(answer.livedApartLastSixMonths, line.US.eicSSN, 0), line.US.eicSSN))))))
     source: >-
-      Instructions, line 27a: Step 1 (AGI under the limit, valid SSNs), Step 2 (investment income: lines 2a and 2b), Step
+      Instructions, line 27a: Step 1 (AGI under the limit, valid SSNs), Step 2 (investment income: lines 2a, 2b and 3b, and line 7a when a gain), Step
       3 (filing separately: a qualifying child and living apart for the last 6 months; not someone else's qualifying
       child, which the app takes as not being someone's dependent), Step 4 (no qualifying child: 25 to 64, not
       separately or head of household) and Step 5 (earned income under the limit)

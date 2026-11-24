@@ -29,6 +29,16 @@
         "hasSelfEmployment": true,
         "hasStudentLoan": false,
         "paidForEducation": false,
+        "hasDividends": false,
+        "hasBrokerSales": false,
+        "hasIraDistribution": false,
+        "hasPension": false,
+        "hasSocialSecurity": false,
+        "hasLossCarryover": false,
+        "hasHsa": false,
+        "hasIraContribution": false,
+        "hasItemized": false,
+        "hasOtherIncome": false,
         "businessIncome": "8000",
         "businessExtras": "none",
         "businessAdvertising": "0",
@@ -102,7 +112,11 @@
       "S1.15": "3701.94",
       "S2.4": "7403.88",
       "F8995.15": "6589.61",
-      "F8959.18": "0"
+      "F8959.18": "0",
+      "F6251.4": "42108.45",
+      "F6251.6": "0",
+      "F6251.11": "0",
+      "F1040.18": "2927"
     }
   }
 }

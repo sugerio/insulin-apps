@@ -28,6 +28,12 @@ const ALWAYS_ZERO: Record<string, string> = {
   "SCOPE.widowed": "a spouse who died in 2025: zero, or says so",
   "SCOPE.kiddie": "the kiddie tax: zero, or says so",
   "SCOPE.care": "a household employee (Schedule H), or 2024 care paid in 2025: zero, or says so",
+  "SCOPE.otherIncome": "other income (unemployment, rent and the like): zero, or says so",
+  "SCOPE.investments": "1099-B summaries that need Form 8949: zero, or says so",
+  "SCOPE.retirement": "Forms 1099-R this app doesn't work out: zero, or says so",
+  "US.ownBrokerUnsupported": "one person's 1099-B summaries that need Form 8949: zero, or says so",
+  "US.ownRetirementScope": "one person's Forms 1099-R this app doesn't work out: zero, or says so",
+  "SA.8b": "mortgage interest not on a Form 1098: zero, or says so",
 };
 
 for (const folder of readdirSync(ROOT, { withFileTypes: true }).filter((entry) => entry.isDirectory()).map((entry) => entry.name)) {

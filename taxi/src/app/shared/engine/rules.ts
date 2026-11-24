@@ -125,6 +125,11 @@ export interface SlipType {
   informational: string[];
   /** Boxes that hold a count (months of study), not an amount of money. */
   counts: string[];
+  /**
+   * Boxes that hold a code from a list, not an amount: a 1099-R's distribution code (box 7), which part of Form 8949 a
+   * 1099-B summary is for. A formula reads them only through sumWhere and countWhere.
+   */
+  codes: Record<string, string[]>;
   /** A receipt or notice rather than a numbered slip: its "boxes" are amounts with no number printed beside them. */
   receipt: boolean;
   /** The years it may carry, relative to the tax year (0 the year itself; -1 last year's notice of assessment). */
@@ -508,6 +513,7 @@ export const compiledRulesSchema = z.strictObject({
       boxes: z.record(z.string(), z.string()),
       informational: z.array(z.string()),
       counts: z.array(z.string()),
+      codes: z.record(z.string(), z.array(z.string())).default({}),
       receipt: z.boolean(),
       printedYears: z.array(z.number().int()).min(1),
       name: z.string().optional(),
@@ -596,6 +602,11 @@ export function loadRuleSet(json: unknown, where: (entry: string) => string = ()
   for (const slip of slips.values()) {
     for (const box of slip.informational) if (!(box in slip.boxes)) fail(`slips.${slip.id}`, `informational box ${box} isn't one of its boxes`);
     for (const box of slip.counts) if (!(box in slip.boxes)) fail(`slips.${slip.id}`, `count box ${box} isn't one of its boxes`);
+    for (const [box, codes] of Object.entries(slip.codes)) {
+      if (!(box in slip.boxes)) fail(`slips.${slip.id}`, `code box ${box} isn't one of its boxes`);
+      if (codes.length === 0 || codes.some((code) => !/^[0-9A-Z]{1,2}$/.test(code))) fail(`slips.${slip.id}`, `code box ${box} needs codes of one or two capital letters or digits`);
+      if (slip.counts.includes(box) || slip.informational.includes(box)) fail(`slips.${slip.id}`, `code box ${box} can't also be a count or informational`);
+    }
     usedBoxes.set(slip.id, new Set(slip.informational));
   }
   for (const line of lines.values()) {
@@ -725,7 +736,8 @@ function checkBrackets(rows: BracketRow[], fail: (message: string) => never) {
 // ---------------------------------------------------------------------------
 // Checks: every name exists, types agree, and no line depends on itself
 
-type Type = "number" | "string" | "boolean" | "list" | "table";
+// "codes": a slip box holding a code, which only sumWhere and countWhere read.
+type Type = "number" | "string" | "boolean" | "list" | "table" | "codes";
 
 const FUNCTIONS: Record<string, { args: [number, number]; check: (types: Type[], args: Formula[]) => Type | string }> = {
   min: { args: [1, 20], check: (types) => (types.every((t) => t === "number" || t === "list") ? "number" : "takes numbers or slip boxes") },
@@ -772,6 +784,10 @@ const FUNCTIONS: Record<string, { args: [number, number]; check: (types: Type[],
   // A chart of rates by amount (a rate that steps down as income goes up), read as a bracket table: the rate of the
   // row the amount falls in, not a progressive tax.
   step: { args: [2, 2], check: (types) => (types[0] === "table" && types[1] === "number" ? "number" : "takes a bracket table and an amount") },
+  // sumWhere(B.box1D, B.boxCAT, "A", "D"): the amounts of the slips whose code box holds one of the codes;
+  // countWhere(...) the number of those slips. The amount and the code are boxes of one slip type, on one side.
+  sumWhere: { args: [3, 40], check: whereCheck },
+  countWhere: { args: [3, 40], check: whereCheck },
   // A case the rules know about but the app can't compute yet: the value is missing, and the text says why.
   unsupported: {
     args: [1, 1],
@@ -780,6 +796,15 @@ const FUNCTIONS: Record<string, { args: [number, number]; check: (types: Type[],
 };
 
 export const FUNCTION_NAMES = Object.keys(FUNCTIONS);
+
+function whereCheck(types: Type[], args: Formula[]): Type | string {
+  const [amount, code] = args;
+  const usage = "takes a slip box of amounts, a code box of the same slip type, then the codes in quotes";
+  if (types[0] !== "list" || types[1] !== "codes" || amount?.kind !== "ref" || code?.kind !== "ref") return usage;
+  if (args.slice(2).some((arg) => arg.kind !== "string")) return usage;
+  const slipOf = (path: string[]) => (path[0] === "spouse" ? path.slice(1, 2).concat("spouse") : path.slice(0, 1)).join(".");
+  return slipOf(amount.path) === slipOf(code.path) ? "number" : usage;
+}
 
 function checkRuleSet(ruleSet: RuleSet, fail: (entry: string, message: string, column?: number) => never) {
   for (const id of ruleSet.result) if (!ruleSet.lines.has(id)) fail("result", `No line ${id}`);
@@ -982,6 +1007,15 @@ function formulaType(ruleSet: RuleSet, formula: Formula, fail: (message: string,
       }
       const type = fn.check(formula.args.map(typeOf), formula.args);
       if (!["number", "string", "boolean", "list", "table"].includes(type)) fail(`${formula.name} ${type}`, formula.column);
+      if (formula.name === "sumWhere" || formula.name === "countWhere") {
+        // Each code must be one the code box can hold.
+        const path = (formula.args[1] as Extract<Formula, { kind: "ref" }>).path;
+        const [slipId, boxRef] = path[0] === "spouse" ? path.slice(1) : path;
+        const codes = ruleSet.slips.get(slipId!)!.codes[boxRef!.slice(3)]!;
+        for (const arg of formula.args.slice(2) as Extract<Formula, { kind: "string" }>[]) {
+          if (!codes.includes(arg.value)) fail(`${formula.name}: ${slipId} box ${boxRef!.slice(3)} holds ${codes.join(", ")}, not ${arg.value}`, formula.column);
+        }
+      }
       return type as Type;
     }
   }
@@ -1085,7 +1119,7 @@ function refType(ruleSet: RuleSet, path: string[], fail: (message: string) => ne
       if (rest.length === 1 && rest[0] === "slips") return "number";
       const box = rest.length === 1 && rest[0]!.startsWith("box") ? rest[0]!.slice(3) : undefined;
       if (box === undefined || !(box in slip.boxes)) return fail(`${name}: ${slip.id} has boxes ${Object.keys(slip.boxes).join(", ")} (and ${slip.id}.slips counts them)`);
-      return "list";
+      return box in slip.codes ? "codes" : "list";
     }
   }
 }

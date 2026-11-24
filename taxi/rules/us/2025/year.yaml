@@ -1,5 +1,5 @@
 # The 2025 United States federal rules (Form 1040): wages and interest, filing Single, Married filing jointly, Married
-# filing separately, Head of household or Qualifying surviving spouse; dependants and their credits (Schedule 8812); the earned income credit; child and dependent care (Form 2441); the education credits (Form 8863) and the student loan interest deduction; the standard deduction, the enhanced deduction for seniors, and the tax. Each number names its source in
+# filing separately, Head of household or Qualifying surviving spouse; dependants and their credits (Schedule 8812); the earned income credit; child and dependent care (Form 2441); the education credits (Form 8863) and the student loan interest deduction; dividends, capital gains, IRA, pension and social security income; the IRA and HSA deductions; the standard or itemized deductions, the enhanced deduction for seniors, and the tax with the capital gain rates and the AMT. Each number names its source in
 # the 2025 Instructions for Form 1040 (i1040gi, February 25, 2026) or on the 2025 form; check it there before changing it.
 country: us
 year: 2025
@@ -16,7 +16,9 @@ result:
   - F1040.13b
   - F1040.15
   - F1040.16
+  - F1040.17
   - F1040.19
+  - S3.1
   - S3.2
   - S3.3
   - F1040.23
@@ -38,7 +40,9 @@ resultWhen:
   F1040.13b: *ownReturn
   F1040.15: *ownReturn
   F1040.16: *ownReturn
+  F1040.17: *ownReturn
   F1040.19: *ownReturn
+  S3.1: *ownReturn
   S3.2: *ownReturn
   S3.3: *ownReturn
   F1040.23: *ownReturn
@@ -63,9 +67,13 @@ residency: A U.S. citizen or resident alien all year
 # What AI reading is told about US documents (server/lib/reader.ts adds the slip types of slips.yaml). {year} is the
 # tax year.
 reading:
-  documents: United States information returns (Forms W-2, 1099 and 1098)
+  documents: United States information returns (Forms W-2, 1099, 1098 and SSA-1099)
   notes:
-    - "A W-2 prints boxes 1 to 20; box 12 holds codes, and boxes 13 and 14 are not amounts this app reads: leave them out. The 'a' to 'f' boxes hold numbers, names and addresses, never amounts: leave them out too."
-    - "On a 1099 or 1098, report the payer's or lender's or school's name as issuer. A form can print a box that is a checkbox (such as boxes 7, 8 and 9 of a 1098-T): leave checkboxes out."
-    - "For a Form 1098-T, person is the student, and issuer the school. For a Form 1098-E, person is the borrower, and issuer the lender."
+    - "Box numbers with a letter are written in capitals: box 1a of a 1099-DIV is 1A, box 2a of a 1099-R is 2A, box 1d of a 1099-B is 1D."
+    - "A W-2 prints boxes 1 to 20. Box 12 holds codes with amounts: report only the amount with code W, under 12W. Boxes 13 and 14 aren't read. The 'a' to 'f' boxes hold numbers, names and addresses, never amounts: leave them out."
+    - "On a 1099 or 1098, report the payer's, lender's or school's name as issuer. A form can print a box that is a checkbox (such as boxes 7, 8 and 9 of a 1098-T): leave checkboxes out, unless the list names one."
+    - "A Form 1099-R is type RIRA when its IRA/SEP/SIMPLE box is checked, and type R when it isn't. Its box 7 holds one or two distribution codes: report the first under 7 and a second, if any, under 7B (box 7 of 7D is 7, and D under 7B)."
+    - "A broker's Form 1099-B usually comes as a yearly statement that sums the sales up by part of Form 8949: 'Box A' (short-term, basis reported to the IRS), 'Box B' (short-term, not reported), 'Box D' (long-term, reported), 'Box E' (long-term, not reported). Return one 1099-B for each part that has sales, with that letter under CAT and the part's totals: proceeds (1D), cost or other basis (1E), accrued market discount (1F) and wash sale loss disallowed (1G). Federal income tax withheld (box 4) goes on the first."
+    - "A broker's statement often holds a 1099-DIV and a 1099-INT too: return them as well."
+    - "For a Form 1098-T, person is the student, and issuer the school. For a Form 1098-E, person is the borrower, and issuer the lender. For a Form 1098, person is the borrower, and issuer the lender. For a Form SSA-1099, person is the beneficiary, and issuer is Social Security Administration."
     - "A corrected form (marked CORRECTED) replaces the first one: read it like any other."

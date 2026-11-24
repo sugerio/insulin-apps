@@ -53,6 +53,16 @@
         "hasSelfEmployment": false,
         "hasStudentLoan": false,
         "paidForEducation": false,
+        "hasDividends": false,
+        "hasBrokerSales": false,
+        "hasIraDistribution": false,
+        "hasPension": false,
+        "hasSocialSecurity": false,
+        "hasLossCarryover": false,
+        "hasHsa": false,
+        "hasIraContribution": false,
+        "hasItemized": false,
+        "hasOtherIncome": false,
         "paidForCare": true,
         "householdEmployer": false,
         "priorYearCare": false,
@@ -72,6 +82,16 @@
         "hasSelfEmployment": false,
         "hasStudentLoan": false,
         "paidForEducation": false,
+        "hasDividends": false,
+        "hasBrokerSales": false,
+        "hasIraDistribution": false,
+        "hasPension": false,
+        "hasSocialSecurity": false,
+        "hasLossCarryover": false,
+        "hasHsa": false,
+        "hasIraContribution": false,
+        "hasItemized": false,
+        "hasOtherIncome": false,
         "spouseItemizes": false
       }
     },
@@ -132,6 +152,10 @@
       "F1040.33": "4408",
       "F1040.34": "4408",
       "F1040.37": "0",
+      "F6251.4": "36000",
+      "F6251.6": "0",
+      "F6251.11": "0",
+      "F1040.18": "2195",
       "F2441.2": "1",
       "F2441.3": "2500",
       "F2441.4": "36000",
@@ -171,7 +195,11 @@
       "S3.11": "0",
       "F1040.33": "1200",
       "F1040.34": "0",
-      "F1040.37": "35"
+      "F1040.37": "35",
+      "F6251.4": "28000",
+      "F6251.6": "0",
+      "F6251.11": "0",
+      "F1040.18": "1235"
     }
   }
 }

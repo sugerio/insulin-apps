@@ -133,7 +133,7 @@ function Uploader({ onUploading }: { onUploading: (uploading: boolean) => void }
           >
             <p className="text-sm font-medium wrap-anywhere">
               {year.country === "us"
-                ? `${person.name}'s Forms W-2, 1099-INT, 1099-NEC, 1098-T and 1098-E for ${year.year}`
+                ? `${person.name}'s Forms W-2, 1099, 1098 and SSA-1099 for ${year.year}`
                 : `${person.name}'s slips and receipts for ${year.year}, and last year's notice of assessment`}
             </p>
             <p className="text-xs text-muted-foreground">

@@ -1,0 +1,165 @@
+{
+  "about": "Married filing jointly, $250,000 of wages: $12,000 of state tax withheld, $9,000 of property tax, $18,000 of mortgage interest and $1,000 of points on a Form 1098, and $5,400 of gifts: itemized deductions over the standard deduction",
+  "input": {
+    "country": "us",
+    "year": 2025,
+    "people": [
+      {
+        "id": "p1",
+        "name": "Ada Wynn",
+        "role": "self",
+        "birthDate": "1978-03-03",
+        "province": null,
+        "residentAllYear": true
+      },
+      {
+        "id": "p2",
+        "name": "Ben Wynn",
+        "role": "spouse",
+        "birthDate": "1979-04-04",
+        "province": null,
+        "residentAllYear": true
+      }
+    ],
+    "family": {
+      "maritalStatus": "married",
+      "dependants": [],
+      "filingStatus": "joint"
+    },
+    "answers": {
+      "p1": {
+        "hasWages": true,
+        "hasInterest": false,
+        "hasTipsOrOvertime": false,
+        "canBeClaimed": false,
+        "isBlind": false,
+        "estimatedPayments": "0",
+        "hasCarLoan": false,
+        "hasSelfEmployment": false,
+        "hasStudentLoan": false,
+        "paidForEducation": false,
+        "hasDividends": false,
+        "hasBrokerSales": false,
+        "hasIraDistribution": false,
+        "hasPension": false,
+        "hasSocialSecurity": false,
+        "hasLossCarryover": false,
+        "hasHsa": false,
+        "hasIraContribution": false,
+        "hasItemized": true,
+        "hasOtherIncome": false,
+        "itemMedical": "10000",
+        "itemStateTax": "0",
+        "itemRealEstateTax": "9000",
+        "itemPersonalPropertyTax": "400",
+        "itemMortgageOther": "0",
+        "itemCashGifts": "5000",
+        "itemNoncashGifts": "400",
+        "mortgageQualifies": "yes",
+        "paidForCare": false
+      },
+      "p2": {
+        "hasWages": true,
+        "hasInterest": false,
+        "hasTipsOrOvertime": false,
+        "canBeClaimed": false,
+        "isBlind": false,
+        "estimatedPayments": "0",
+        "hasCarLoan": false,
+        "hasSelfEmployment": false,
+        "hasStudentLoan": false,
+        "paidForEducation": false,
+        "hasDividends": false,
+        "hasBrokerSales": false,
+        "hasIraDistribution": false,
+        "hasPension": false,
+        "hasSocialSecurity": false,
+        "hasLossCarryover": false,
+        "hasHsa": false,
+        "hasIraContribution": false,
+        "hasItemized": false,
+        "hasOtherIncome": false
+      }
+    },
+    "slips": [
+      {
+        "id": "p1-w2-0",
+        "person": "p1",
+        "type": "W2",
+        "issuer": "Acme",
+        "boxes": {
+          "1": "170000",
+          "2": "28000",
+          "4": "10540",
+          "5": "170000",
+          "6": "2465",
+          "17": "8500"
+        }
+      },
+      {
+        "id": "p1-m1098-0",
+        "person": "p1",
+        "type": "F1098",
+        "issuer": "Home Lender",
+        "boxes": {
+          "1": "18000",
+          "2": "600000",
+          "6": "1000",
+          "10": "9000"
+        }
+      },
+      {
+        "id": "p2-w2-0",
+        "person": "p2",
+        "type": "W2",
+        "issuer": "City",
+        "boxes": {
+          "1": "80000",
+          "2": "8000",
+          "4": "4960",
+          "5": "80000",
+          "6": "1160",
+          "17": "3500"
+        }
+      }
+    ]
+  },
+  "expected": {
+    "p1": {
+      "F1040.19": "0",
+      "F1040.27a": "0",
+      "F1040.28": "0",
+      "S8812.12": "0",
+      "F1040.1a": "250000",
+      "F1040.1e": "0",
+      "S3.2": "0",
+      "F1040.2a": "0",
+      "F1040.2b": "0",
+      "F1040.9": "250000",
+      "F1040.11a": "250000",
+      "F1040.12e": "45800",
+      "F1040.13b": "0",
+      "F1040.13a": "0",
+      "F1040.8": "0",
+      "F1040.10": "0",
+      "F1040.15": "204200",
+      "F1040.16": "34752",
+      "F8959.7": "0",
+      "F8960.17": "0",
+      "F1040.24": "34752",
+      "F1040.25c": "0",
+      "S3.11": "0",
+      "F1040.33": "36000",
+      "F1040.34": "1248",
+      "F1040.37": "0",
+      "SA.4": "0",
+      "SA.5e": "21400",
+      "SA.17": "45800",
+      "US.standard": "31500",
+      "F6251.4": "225600",
+      "F6251.6": "88600",
+      "F6251.11": "0",
+      "F1040.18": "34752"
+    }
+  }
+}

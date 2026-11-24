@@ -38,6 +38,16 @@
         "hasSelfEmployment": false,
         "hasStudentLoan": false,
         "paidForEducation": false,
+        "hasDividends": false,
+        "hasBrokerSales": false,
+        "hasIraDistribution": false,
+        "hasPension": false,
+        "hasSocialSecurity": false,
+        "hasLossCarryover": false,
+        "hasHsa": false,
+        "hasIraContribution": false,
+        "hasItemized": false,
+        "hasOtherIncome": false,
         "paidForCare": false
       },
       "p2": {
@@ -50,7 +60,17 @@
         "hasCarLoan": false,
         "hasSelfEmployment": false,
         "hasStudentLoan": false,
-        "paidForEducation": false
+        "paidForEducation": false,
+        "hasDividends": false,
+        "hasBrokerSales": false,
+        "hasIraDistribution": false,
+        "hasPension": false,
+        "hasSocialSecurity": false,
+        "hasLossCarryover": false,
+        "hasHsa": false,
+        "hasIraContribution": false,
+        "hasItemized": false,
+        "hasOtherIncome": false
       }
     },
     "slips": [
@@ -144,7 +164,11 @@
       "S3.11": "2343.6",
       "F1040.33": "70593.6",
       "F1040.34": "0",
-      "F1040.37": "7960.4"
+      "F1040.37": "7960.4",
+      "F6251.4": "410000",
+      "F6251.6": "273000",
+      "F6251.11": "0",
+      "F1040.18": "76534"
     }
   }
 }

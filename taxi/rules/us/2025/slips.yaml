@@ -1,7 +1,9 @@
-# Information returns: what each one is, for the screens, and its boxes as printed. `informational` boxes never change
-# a return. Any other box no formula reads is kept and, unless it holds 0, shown as not handled by this app (on the
-# W-2: allocated tips in box 8; on the 1099-INT: an early withdrawal penalty, foreign
-# tax, private activity bond interest, market discount and bond premium).
+# Information returns: what each one is, for the screens, and its boxes as printed (a box with a letter in capitals: 1a
+# is 1A). `informational` boxes never change a return; `codes` boxes hold a code from a list, not an amount. Any other
+# box no formula reads is kept and, unless it holds 0, shown as not handled by this app (on the W-2: allocated tips in
+# box 8; on the 1099-INT: an early withdrawal penalty, market discount and bond premium). The other forms are with the
+# rules that read them: 1099-NEC (self-employment.yaml), 1098-T and 1098-E (education.yaml), 1099-DIV and 1099-B
+# (investments.yaml), 1099-R and SSA-1099 (retirement.yaml), and 1098 (itemized.yaml).
 
 slips:
   W2:
@@ -19,11 +21,14 @@ slips:
       8: Allocated tips
       10: Dependent care benefits
       11: Nonqualified plans
+      12W: "Box 12, code W: employer contributions to your health savings account"
       16: State wages, tips, etc.
       17: State income tax
-    # Box 3 caps box 4, which is read; box 11 is already in box 1; boxes 16 and 17 are for the state return. Box 7, the
-    # tips reported to the employer (already in box 1), starts the qualified tips (schedule1a.yaml).
-    informational: [3, 11, 16, 17]
+    # Box 3 caps box 4, which is read; box 11 is already in box 1; box 16 is for the state return. Box 7, the tips
+    # reported to the employer (already in box 1), starts the qualified tips (schedule1a.yaml); box 17, the state income
+    # tax withheld, is a tax itemized on Schedule A (itemized.yaml); box 12 code W limits the HSA deduction
+    # (adjustments.yaml).
+    informational: [3, 11, 16]
 
   INT:
     title: Form 1099-INT Interest Income

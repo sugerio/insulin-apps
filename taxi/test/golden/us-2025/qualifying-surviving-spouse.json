@@ -43,6 +43,16 @@
         "hasSelfEmployment": false,
         "hasStudentLoan": false,
         "paidForEducation": false,
+        "hasDividends": false,
+        "hasBrokerSales": false,
+        "hasIraDistribution": false,
+        "hasPension": false,
+        "hasSocialSecurity": false,
+        "hasLossCarryover": false,
+        "hasHsa": false,
+        "hasIraContribution": false,
+        "hasItemized": false,
+        "hasOtherIncome": false,
         "paidForCare": false,
         "spouseDiedIn2025": false,
         "spouseDiedIn2023Or2024": true,
@@ -93,7 +103,11 @@
       "S3.11": "0",
       "F1040.33": "4000",
       "F1040.34": "2654",
-      "F1040.37": "0"
+      "F1040.37": "0",
+      "F6251.4": "65000",
+      "F6251.6": "0",
+      "F6251.11": "0",
+      "F1040.18": "3546"
     }
   }
 }

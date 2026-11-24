@@ -6,7 +6,9 @@ import { DocLink, anchorId, type DocSection, type DocTopic } from "./parts.tsx";
 
 const TERMS: readonly (readonly [term: string, definition: ReactNode])[] = [
   ["AGI", "Adjusted gross income, on a US return: total income less some deductions, such as half of the self-employment tax and student loan interest. Many credits get smaller as it rises."],
+  ["AMT", <>The US alternative minimum tax: a second way of working out the tax, with fewer deductions. See <DocLink to="us-tax-basics" section="capital-gains">Capital gains and the alternative minimum tax</DocLink>.</>],
   ["Balance owing", "The tax you still have to pay for the year after what was taken off your pay. In Canada it is due on April 30 of the next year; on a US return it is the amount you owe, due on April 15."],
+  ["Capital gain", "The profit when you sell something, such as shares, for more than it cost. On a US return, a long-term gain is taxed at a lower rate."],
   ["Common-law partner", <>Someone you live with in a conjugal relationship, generally for at least 12 months in a row or with a child together. See <DocLink to="tax-basics" section="spouses">Spouses and common-law partners</DocLink>.</>],
   ["CRA", "The Canada Revenue Agency, which runs federal income tax and, outside Quebec, collects provincial income tax."],
   ["Credit", "An amount that lowers the tax you pay, such as the credits for donations or medical expenses."],
@@ -19,7 +21,10 @@ const TERMS: readonly (readonly [term: string, definition: ReactNode])[] = [
   ["Form 1098-T", "The form a college sends for a student: the tuition it was paid and the scholarships it handled. It starts the education expenses for the education credits."],
   ["Form 1099", "A US form a payer sends to report money it paid you other than wages: interest (1099-INT) or pay as a contractor (1099-NEC)."],
   ["Form W-2", "The US form an employer sends to report wages and the tax taken off your pay."],
+  ["HSA", "A US health savings account, for people with a high-deductible health plan. Contributions are deducted (Form 8889)."],
+  ["IRA", "A US individual retirement arrangement. Contributions to a traditional IRA can be deducted; money taken out is taxed (Form 1099-R)."],
   ["IRS", "The Internal Revenue Service, which runs US federal income tax."],
+  ["Itemized deductions", "On a US return, the expenses listed on Schedule A (mortgage interest, state and local taxes, gifts, medical expenses), taken instead of the standard deduction when larger."],
   ["Notice of assessment", <>The CRA's answer after it processes a return. See <DocLink to="tax-basics" section="notice-of-assessment">The notice of assessment</DocLink>.</>],
   ["Profile", "In Taxi: you, your spouse or partner, and the children and other dependants who live with you. The same people every year."],
   ["Refund", "Money the CRA or the IRS pays back when more tax was taken off your pay than you owe."],

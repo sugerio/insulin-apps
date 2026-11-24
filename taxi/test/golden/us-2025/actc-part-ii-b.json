@@ -69,6 +69,16 @@
         "hasSelfEmployment": false,
         "hasStudentLoan": false,
         "paidForEducation": false,
+        "hasDividends": false,
+        "hasBrokerSales": false,
+        "hasIraDistribution": false,
+        "hasPension": false,
+        "hasSocialSecurity": false,
+        "hasLossCarryover": false,
+        "hasHsa": false,
+        "hasIraContribution": false,
+        "hasItemized": false,
+        "hasOtherIncome": false,
         "paidForCare": false,
         "paidHalfOfHome": true,
         "hasValidSSN": true
@@ -126,7 +136,11 @@
       "S3.11": "0",
       "F1040.33": "306",
       "F1040.34": "306",
-      "F1040.37": "0"
+      "F1040.37": "0",
+      "F6251.4": "16000",
+      "F6251.6": "0",
+      "F6251.11": "0",
+      "F1040.18": "0"
     }
   }
 }

@@ -76,7 +76,7 @@ describe("reading a slip with Claude", () => {
 
   it("builds a US year's prompt from the US forms and notes, with nothing of Canada's", () => {
     const prompt = promptFor({ ...context, rules: rulesFor("us", 2025)! });
-    expect(prompt).toContain("You read United States information returns (Forms W-2, 1099 and 1098) for the 2025 tax year.");
+    expect(prompt).toContain("You read United States information returns (Forms W-2, 1099, 1098 and SSA-1099) for the 2025 tax year.");
     expect(prompt).toContain("- W2, Form W-2 Wage and Tax Statement");
     expect(prompt).toContain("- F1098T, Form 1098-T Tuition Statement");
     expect(prompt).toContain("- F1098E, Form 1098-E Student Loan Interest Statement");

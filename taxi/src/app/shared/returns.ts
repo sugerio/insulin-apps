@@ -9,10 +9,15 @@ export const revisionSchema = z.number().int().min(1);
 /** An amount as printed on a slip: dollars and cents, no sign or separators. */
 export const slipAmountSchema = z.string().regex(/^\d{1,9}(\.\d{1,2})?$/, "Enter an amount like 1234.56");
 /**
- * A slip's boxes: box as printed (such as `14` or `16A`, or a Quebec RL slip's letter `A` or `A1`) → amount. The point or
- * dash of an RL sub-box is an underscore (box B.A is `B_A`), as a formula names it (slips.yaml).
+ * A slip's boxes: box as printed (such as `14` or `16A`, or a Quebec RL slip's letter `A` or `A1`) → amount, or a code
+ * for a box that holds one (the slip type's `codes`). The point or dash of an RL sub-box is an underscore (box B.A is
+ * `B_A`), and a US form's lowercase box is in capitals (box 1a of a 1099-DIV is `1A`), as a formula names it (slips.yaml).
  */
-export const slipBoxesSchema = z.record(z.string().regex(/^[0-9A-Z]{1,3}(_[0-9A-Z]{1,3})?$/, "A box such as 14, 16A, A or B_A"), slipAmountSchema);
+export const slipBoxesSchema = z.record(
+  z.string().regex(/^[0-9A-Z]{1,3}(_[0-9A-Z]{1,3})?$/, "A box such as 14, 16A, A or B_A"),
+  // An amount, or a code (one or two capitals or digits, such as a 1099-R's G): the server checks which the box holds.
+  z.string().regex(/^(\d{1,9}(\.\d{1,2})?|[0-9A-Z]{1,2})$/, "Enter an amount like 1234.56"),
+);
 
 export const SLIP_STATUSES = ["unconfirmed", "confirmed"] as const;
 

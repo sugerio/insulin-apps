@@ -8,8 +8,9 @@ import { rulesFor } from "../src/app/shared/rules/index.ts";
 // Writes sample 2025 slips as PDFs, for trying the app and for testing AI reading. Canada (the default): a T4 for each adult, two T5s (two banks) for the
 // person preparing, a T4E and a T2202 for the spouse, and receipts and notices: a donation receipt, a dental receipt for the
 // spouse, an RRSP receipt for early 2026, and each adult's 2024 notice of assessment. The United States: a W-2 for each
-// adult, two 1099-INTs and a 1098-E for the person preparing, a 1099-NEC and a 1098-T for the spouse, and a 1098-T for a
-// child (a dependant's, which isn't added to a return). Every page says it is a synthetic sample. The repository keeps no
+// adult, two 1099-INTs and a 1098-E for the person preparing, a 1099-NEC and a 1098-T for the spouse, a 1098-T for a
+// child (a dependant's, which isn't added to a return), a fund's 1099-DIV, a broker's 1099-B summaries for parts A and
+// D of Form 8949, a 1099-R from an IRA and one from a pension, an SSA-1099, and a mortgage's Form 1098. Every page says it is a synthetic sample. The repository keeps no
 // binary files, so the PDFs are made here and never committed; the default folder is ignored by git and by the app
 // checks. Box labels come from the year's rules (slips.yaml), so a sample shows the boxes the app reads.
 
@@ -196,6 +197,62 @@ const usSamples: Sample[] = [
     recipient: { name: self, lines: usHome },
     boxes: { 1: "1800.00" },
   },
+  {
+    file: `1099-DIV-${slug(self)}-Index-Fund.pdf`,
+    type: "DIV",
+    title: "Dividends and Distributions",
+    issuer: { name: "Prairie Index Fund", lines: ["77 Fund Street", "Boston MA  02110"] },
+    recipient: { name: self, lines: usHome },
+    boxes: { "1A": "2400.00", "1B": "1900.00", "2A": "350.00", 7: "42.10" },
+  },
+  {
+    file: `1099-B-${slug(self)}-Big-Broker-box-A.pdf`,
+    type: "B",
+    title: "Proceeds From Broker Transactions (summary, Form 8949 box A)",
+    issuer: { name: "Big Broker LLC", lines: ["1 Market Plaza", "New York NY  10004"] },
+    recipient: { name: self, lines: usHome },
+    boxes: { CAT: "A", "1D": "12500.00", "1E": "10100.00" },
+  },
+  {
+    file: `1099-B-${slug(self)}-Big-Broker-box-D.pdf`,
+    type: "B",
+    title: "Proceeds From Broker Transactions (summary, Form 8949 box D)",
+    issuer: { name: "Big Broker LLC", lines: ["1 Market Plaza", "New York NY  10004"] },
+    recipient: { name: self, lines: usHome },
+    boxes: { CAT: "D", "1D": "30000.00", "1E": "21000.00" },
+  },
+  {
+    file: `1099-R-${slug(spouse)}-Fund-IRA.pdf`,
+    type: "RIRA",
+    title: "Distributions From Pensions, Annuities, Retirement or Profit-Sharing Plans, IRAs (IRA/SEP/SIMPLE: X)",
+    issuer: { name: "Lakeview IRA Custodian", lines: ["8 Lakeshore Boulevard", "Springfield IL  62703"] },
+    recipient: { name: spouse, lines: usHome },
+    boxes: { 1: "6000.00", "2A": "6000.00", 4: "600.00", 7: "7" },
+  },
+  {
+    file: `1099-R-${slug(self)}-State-Pension.pdf`,
+    type: "R",
+    title: "Distributions From Pensions, Annuities, Retirement or Profit-Sharing Plans, IRAs",
+    issuer: { name: "State Employees Pension", lines: ["200 Capitol Avenue", "Springfield IL  62706"] },
+    recipient: { name: self, lines: usHome },
+    boxes: { 1: "18000.00", "2A": "18000.00", 4: "1800.00", 7: "7" },
+  },
+  {
+    file: `SSA-1099-${slug(spouse)}.pdf`,
+    type: "SSA",
+    title: "Social Security Benefit Statement",
+    issuer: { name: "Social Security Administration", lines: ["Baltimore MD  21235"] },
+    recipient: { name: spouse, lines: usHome },
+    boxes: { 3: "14400.00", 5: "14400.00", 6: "1440.00" },
+  },
+  {
+    file: `1098-${slug(self)}-Home-Lender.pdf`,
+    type: "F1098",
+    title: "Mortgage Interest Statement",
+    issuer: { name: "Home Lender Bank", lines: ["5 Loan Lane", "Chicago IL  60601"] },
+    recipient: { name: self, lines: usHome },
+    boxes: { 1: "11850.00", 2: "320000.00", 10: "6100.00" },
+  },
 ];
 
 const receipts: Receipt[] = [
@@ -312,7 +369,7 @@ async function render(sample: Sample): Promise<Uint8Array> {
     page.drawRectangle({ x, y: y + height - 14, width: 26, height: 14, color: rgb(0.15, 0.15, 0.2) });
     text(box, x + 4, y + height - 11, 8, bold, rgb(1, 1, 1));
     text(fit(labels[box] ?? "", font, 7, width - 34), x + 30, y + height - 11, 7, font, muted);
-    const count = rules.slips.get(sample.type)!.counts.includes(box);
+    const count = rules.slips.get(sample.type)!.counts.includes(box) || box in rules.slips.get(sample.type)!.codes;
     const shown = count ? amount : Number(amount).toLocaleString("en-CA", { minimumFractionDigits: 2 });
     text(shown, x + width - 8 - font.widthOfTextAtSize(shown, 14), y + 9, 14, font);
   });

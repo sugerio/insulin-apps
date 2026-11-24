@@ -185,8 +185,8 @@ lines:
     label: This person's taxable interest, Forms 1099-INT boxes 1 and 3
     formula: "sum(INT.box1) + sum(INT.box3)"
   US.ownExemptInterest:
-    label: This person's tax-exempt interest, Forms 1099-INT box 8
-    formula: "sum(INT.box8)"
+    label: This person's tax-exempt interest, Forms 1099-INT box 8 and 1099-DIV box 12
+    formula: "sum(INT.box8) + sum(DIV.box12)"
   US.ownMedicareWages:
     label: This person's Medicare wages and tips, Forms W-2 box 5
     formula: "sum(W2.box5)"
@@ -198,7 +198,7 @@ lines:
     formula: "sum(W2.box2)"
   US.ownWithheld1099:
     label: Federal income tax withheld on this person's Forms 1099
-    formula: "sum(INT.box4) + sum(NEC.box4)"
+    formula: "sum(INT.box4) + sum(NEC.box4) + sum(DIV.box4) + sum(B.box4) + sum(RIRA.box4) + sum(R.box4) + sum(SSA.box6)"
   US.ownEstimated:
     label: This person's estimated tax payments
     formula: "answer.estimatedPayments"
@@ -231,7 +231,7 @@ lines:
   F1040.2a:
     label: Tax-exempt interest
     formula: "line.US.ownExemptInterest + if(line.US.joint == 1, spouse.line.US.ownExemptInterest, 0)"
-    source: "Form 1040, line 2a: Form 1099-INT, box 8. It isn't taxed; it is reported"
+    source: "Form 1040, line 2a: Form 1099-INT, box 8, and Form 1099-DIV, box 12. It isn't taxed; it is reported"
   F1040.2b:
     label: Taxable interest
     formula: "line.US.ownTaxableInterest + if(line.US.joint == 1, spouse.line.US.ownTaxableInterest, 0)"
@@ -241,7 +241,8 @@ lines:
     formula: "line.S1.10"
   F1040.9:
     label: Total income
-    formula: "line.F1040.1z + line.F1040.2b + line.F1040.8"
+    formula: "line.F1040.1z + line.F1040.2b + line.F1040.3b + line.F1040.4b + line.F1040.5b + line.F1040.6b + line.F1040.7a + line.F1040.8"
+    source: "Form 1040, line 9: lines 1z, 2b, 3b, 4b, 5b, 6b, 7a and 8 (investments.yaml, retirement.yaml)"
   F1040.10:
     label: Adjustments to income from Schedule 1
     formula: "line.S1.26"
@@ -277,11 +278,9 @@ lines:
       + line.US.boxes * if(line.US.single == 1 or line.US.hoh == 1, param.additionalUnmarried, param.additionalMarried)
   # `if`, not `and`: until the filing status is known, a separate return's question isn't asked.
   F1040.12e:
-    label: Standard deduction
-    formula: >-
-      if(line.US.separate == 1, if(answer.spouseItemizes,
-      unsupported("Your spouse itemizes, so you must itemize too (Schedule A); this app doesn't itemize deductions yet"),
-      line.US.standard), line.US.standard)
+    label: Standard deduction or itemized deductions
+    formula: "if(line.US.itemizes == 1, line.SA.17, line.US.standard)"
+    source: "Form 1040, line 12e: the standard deduction, or itemized deductions from Schedule A (itemized.yaml)"
 
   # Schedule 1-A, Part V: the enhanced deduction for seniors, for each spouse 65 or older on a joint return. A married
   # person filing separately can't claim it.
@@ -336,16 +335,18 @@ lines:
     formula: >-
       round(if(line.US.jointRates == 1, bracket(param.bracketsJoint, line.F1040.15), if(line.US.hoh == 1, bracket(param.bracketsHead, line.F1040.15),
       if(line.US.single == 1, bracket(param.bracketsSingle, line.F1040.15), bracket(param.bracketsSeparate, line.F1040.15)))), 2)
+  US.regularTax:
+    label: Tax on taxable income at the regular rates
+    formula: "if(line.F1040.15 < param.taxTableLimit, line.US.tableTax, line.US.worksheetTax)"
   F1040.16:
     label: Tax
-    formula: "if(line.F1040.15 < param.taxTableLimit, line.US.tableTax, line.US.worksheetTax)"
+    formula: "if(line.QDW.applies == 1, line.QDW.25, line.US.regularTax)"
     source: >-
-      Instructions, line 16: the Tax Table under $100,000, the Tax Computation Worksheet from $100,000. Line 17 (the
-      alternative minimum tax, Schedule 2 line 3) is 0 here: with only wages, interest and the standard deduction, the
-      tentative minimum tax of Form 6251 stays below this tax
+      Instructions, line 16: the Tax Table under $100,000, the Tax Computation Worksheet from $100,000, or the Qualified
+      Dividends and Capital Gain Tax Worksheet (investments.yaml) with qualified dividends or capital gains
   F1040.18:
     label: Tax and the alternative minimum tax
-    formula: "line.F1040.16"
+    formula: "line.F1040.16 + line.F1040.17"
   F1040.19:
     label: Child tax credit and credit for other dependents
     formula: "line.S8812.14"
@@ -389,6 +390,14 @@ lines:
     label: Total Additional Medicare Tax
     formula: "line.F8959.7 + line.F8959.13"
     source: "Form 8959, line 18: lines 7 and 13 (no railroad retirement compensation, line 17)"
+  F8960.8:
+    label: Total investment income
+    formula: "line.F1040.2b + line.F1040.3b + line.F1040.7a"
+    source: "Form 8960, lines 1, 2, 5a and 8: taxable interest, ordinary dividends, and the net gain or loss of Form 1040 line 7a; no annuities, rents or business income here"
+  F8960.12:
+    label: Net investment income
+    formula: "max(0, line.F8960.8)"
+    source: "Form 8960, line 12: line 8 less the deductions of lines 9 to 11 (none worked out); if zero or less, 0"
   F8960.13:
     label: Modified adjusted gross income
     formula: "line.F1040.11a"
@@ -398,16 +407,16 @@ lines:
     source: "Instructions, Schedule 2, line 12: $250,000 married filing jointly or qualifying surviving spouse; $200,000 single or head of household"
   F8960.17:
     label: Net investment income tax
-    formula: "round(min(line.F1040.2b, max(0, line.F8960.13 - line.F8960.14)) * param.niitRate, 2)"
-    source: "Form 8960, lines 8 and 13 to 17: the smaller of the net investment income (here, taxable interest) and the MAGI over the threshold, times 3.8%"
+    formula: "round(min(line.F8960.12, max(0, line.F8960.13 - line.F8960.14)) * param.niitRate, 2)"
+    source: "Form 8960, lines 13 to 17: the smaller of the net investment income and the MAGI over the threshold, times 3.8%"
   S2.4:
     label: Self-employment tax
     formula: "line.SE.12 + if(line.US.joint == 1, spouse.line.SE.12, 0)"
     source: "Schedule 2, line 4: Schedule SE, line 12 (each spouse's on a joint return)"
   S2.21:
     label: Total other taxes
-    formula: "line.S2.4 + line.F8959.18 + line.F8960.17"
-    source: "Schedule 2, line 21: lines 4 (Schedule SE), 11 (Form 8959) and 12 (Form 8960)"
+    formula: "line.S2.4 + line.S2.8 + line.F8959.18 + line.F8960.17"
+    source: "Schedule 2, line 21: lines 4 (Schedule SE), 8 (the 10% tax on early distributions, retirement.yaml), 11 (Form 8959) and 12 (Form 8960)"
   F1040.23:
     label: Other taxes
     formula: "line.S2.21"
@@ -475,7 +484,7 @@ lines:
   SCOPE.return:
     label: Situations this app doesn't handle yet
     formula: >-
-      line.SCOPE.residency + line.SCOPE.widowed + line.SCOPE.kiddie + line.SCOPE.care
+      line.SCOPE.residency + line.SCOPE.widowed + line.SCOPE.kiddie + line.SCOPE.care + line.SCOPE.otherIncome + line.SCOPE.investments + line.SCOPE.retirement
   SCOPE.residency:
     label: A nonresident or dual-status alien
     formula: >-
@@ -486,6 +495,21 @@ lines:
     label: A spouse who died in 2025
     formula: 'if(family.maritalStatus == "widowed", if(answer.spouseDiedIn2025, unsupported("Your spouse died in 2025, so you can file jointly for 2025; this app doesn''t prepare that return yet"), 0), 0)'
   SCOPE.kiddie:
-    label: A child's interest taxed at the parent's rate
-    formula: 'if(line.US.joint == 1, 0, if(person.age < 24 and line.F1040.2b > param.kiddieThreshold, unsupported("Interest over $2,700 for someone under 24 may be taxed on Form 8615 (the kiddie tax), which this app doesn''t prepare"), 0))'
-    source: "Instructions, line 16, Form 8615: not for someone filing a joint return"
+    label: A child's investment income taxed at the parent's rate
+    formula: >-
+      if(line.US.joint == 1, 0, if(person.age < 24 and line.US.unearnedIncome > param.kiddieThreshold,
+      unsupported("Unearned income (interest, dividends, capital gains, pensions, taxable benefits) over $2,700 for someone under 24 may be taxed on Form 8615 (the kiddie tax), which this app doesn't prepare"), 0))
+    source: "Instructions, line 16, Form 8615: unearned income over $2,700; not for someone filing a joint return"
+  US.unearnedIncome:
+    label: Unearned income
+    formula: "line.F1040.2b + line.F1040.3b + line.F1040.4b + line.F1040.5b + line.F1040.6b + max(0, line.F1040.7a)"
+    source: "Form 8615 instructions: unearned income is income other than earned income, such as taxable interest, dividends, capital gains, pensions and taxable social security benefits"
+  SCOPE.otherIncome:
+    label: Other income this app doesn't take yet
+    formula: 'if(answer.hasOtherIncome, unsupported("Other income (unemployment, rent, alimony, gambling and the like) isn''t worked out yet: this return would leave it out"), 0) + if(line.US.joint == 1, if(spouse.answer.hasOtherIncome, unsupported("Your spouse has other income (unemployment, rent, alimony, gambling and the like), which isn''t worked out yet"), 0), 0)'
+  SCOPE.investments:
+    label: Investment income this app doesn't take yet
+    formula: "line.US.ownBrokerUnsupported + if(line.US.joint == 1, spouse.line.US.ownBrokerUnsupported, 0)"
+  SCOPE.retirement:
+    label: Retirement income this app doesn't take yet
+    formula: "line.US.ownRetirementScope + if(line.US.joint == 1, spouse.line.US.ownRetirementScope, 0)"

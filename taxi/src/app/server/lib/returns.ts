@@ -96,7 +96,16 @@ function checkSlip(view: TaxYear, year: number, type: string, boxes: Record<stri
       unknown.map((box) => ({ path: `boxes.${box}`, message: `${type} has no box ${box}` })),
     );
   }
-  return Object.fromEntries(Object.entries(boxes).map(([box, amount]) => [box, Dec.from(amount).toString()]));
+  // A code box holds one of its codes; every other box an amount.
+  const wrong = Object.entries(boxes).filter(([box, value]) => (box in slip.codes ? !slip.codes[box]!.includes(value) : !/^\d/.test(value)));
+  if (wrong.length > 0) {
+    throw new ApiError(
+      "validation_failed",
+      "Some boxes don't hold what they can",
+      wrong.map(([box]) => ({ path: `boxes.${box}`, message: box in slip.codes ? `One of ${slip.codes[box]!.join(", ")}` : "Enter an amount like 1234.56" })),
+    );
+  }
+  return Object.fromEntries(Object.entries(boxes).map(([box, value]) => [box, box in slip.codes ? value : Dec.from(value).toString()]));
 }
 
 export async function addSlip(db: Db, caller: Caller, year: number, input: CreateSlip, now: number): Promise<TaxYear> {

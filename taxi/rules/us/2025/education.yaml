@@ -345,7 +345,7 @@ lines:
     formula: "round(line.F8863.12 * line.F8863.17, 2)"
   F8863.19:
     label: Nonrefundable education credits
-    formula: "min(line.F8863.18 + line.F8863.9, max(0, line.F1040.18 - line.S3.2))"
+    formula: "min(line.F8863.18 + line.F8863.9, max(0, line.F1040.18 - line.S3.1 - line.S3.2))"
     source: >-
       8863 instructions, Credit Limit Worksheet: lines 18 and 9, up to Form 1040 line 18 less Schedule 3 lines 1, 2,
       6d and 6l (only line 2, the credit for child and dependent care expenses, is worked out by this app)
@@ -370,7 +370,7 @@ lines:
     source: "Student Loan Interest Deduction Worksheet, line 1: $2,500 for the return, filing jointly too"
   SLW.4:
     label: Modified adjusted gross income
-    formula: "line.F1040.9 - line.S1.15"
+    formula: "line.F1040.9 - line.S1.13 - line.S1.15 - line.S1.20"
     source: "Student Loan Interest Deduction Worksheet, lines 2 to 4: Form 1040 line 9, less Schedule 1 lines 11 to 20, 23 and 25 (only line 15 is worked out by this app)"
   SLW.5:
     label: Modified AGI over which the deduction is reduced

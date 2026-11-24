@@ -73,6 +73,16 @@ The US return covers:
 
 - Income: wages on Form W-2, and interest on Form 1099-INT (with savings bond and Treasury interest, and tax-exempt
   interest).
+- Investments: dividends on Form 1099-DIV, and sales of stocks, bonds and funds on Form 1099-B. A broker's 1099-B is
+  entered as one summary for each part of Form 8949 (box A, B, D or E). Sales whose basis was reported to the IRS (box A
+  or D) and that need no adjustment go on Schedule D, lines 1a and 8a. A capital loss is deducted up to $3,000 ($1,500
+  filing separately), and a loss carried over from 2024 is asked. Qualified dividends and long-term gains are taxed at
+  0%, 15% or 20% (the Qualified Dividends and Capital Gain Tax Worksheet). Foreign tax on these forms of $300 or less
+  ($600 jointly) is a credit, without Form 1116.
+- Retirement income: IRA distributions and pensions on Form 1099-R, with the taxable amount in box 2a and the
+  distribution code in box 7 (codes 1, 2, 3, 4 and 7, and direct rollovers G and H). An early distribution (code 1)
+  adds the 10% additional tax. Social security benefits on Form SSA-1099 are taxed by the Social Security Benefits
+  Worksheet: none, up to 50% or up to 85% of them.
 - Self-employment: one business for each person, as a sole proprietor (Schedule C). Its income is each Form 1099-NEC
   you add plus what you enter, and its expenses are asked line by line, with half of business meals. The app works out
   the self-employment tax (Schedule SE), deducts half of it (Schedule 1), and takes the qualified business income
@@ -104,24 +114,36 @@ The US return covers:
   ($160,000 jointly), and none is left at $90,000 ($180,000). They come after the care credit and before the child tax
   credit. Filing separately, or if someone can claim you, you can't take them.
 - Deductions: the standard deduction, with the additional amounts at 65 or older and for blindness, the smaller
-  deduction of someone who can be claimed as a dependent, and the 2025 deductions on Schedule 1-A: for seniors, for
+  deduction of someone who can be claimed as a dependent, or itemized deductions (Schedule A) when they are larger:
+  medical expenses over 7.5% of AGI, state and local taxes up to the 2025 limit of $40,000 (less at a higher income),
+  mortgage interest and points on Form 1098, and gifts to charity. Filing separately, you itemize when your spouse
+  does. Also the 2025 deductions on Schedule 1-A: for seniors, for
   qualified tips (up to $25,000), for the "half" of time-and-a-half overtime pay (up to $12,500, or $25,000 jointly),
   and for interest on a loan for a new car assembled in the U.S. (up to $10,000). Each is smaller at a higher income.
   Filing separately, the tips and overtime deductions can't be taken. The tips amount starts from box 7 of the W-2.
 - Student loan interest: up to $2,500 (Schedule 1, line 21), smaller from $85,000 of modified AGI ($170,000 jointly).
   It lowers the AGI. Filing separately, or if someone can claim you, you can't deduct it.
-- Tax: the IRS Tax Table under $100,000 and the Tax Computation Worksheet from $100,000, the Additional Medicare Tax,
-  the net investment income tax, and a credit for excess social security tax withheld by two or more employers.
+- Adjustments: contributions to a traditional IRA (up to $7,000, $8,000 at 50 or older), smaller in the phase-out
+  when you or your spouse are covered by a retirement plan at work; and contributions to a health savings account
+  (Form 8889), up to the 2025 limit less what your employer put in (box 12 of the W-2, code W).
+- Tax: the IRS Tax Table under $100,000 and the Tax Computation Worksheet from $100,000, the capital gain rates, the
+  alternative minimum tax (Form 6251, with private activity bond interest), the Additional Medicare Tax, the net
+  investment income tax on interest, dividends and gains, and a credit for excess social security tax withheld by two
+  or more employers.
 
-A parent's release of the claim to a child (Form 8332), itemized deductions, allocated tips (box 8 of the W-2) and
-unreported tips (Form 4137), a business loss, a household employee (Schedule H), and other income come in later
-versions. The app says so when one of them applies,
-instead of giving a wrong amount. A finished US return downloads as one PDF: the IRS's Form 1040 and the schedules and
-forms it uses (Schedules 1, 1-A, 2, 3, C, SE, 8812 and EIC, and Forms 2441, 8863, 8995, 8959 and 8960), filled in,
-then a worksheet.
+These come in later versions: a parent's release of the claim to a child (Form 8332), allocated tips (box 8 of the
+W-2) and unreported tips (Form 4137), a business loss, a household employee (Schedule H), other income (unemployment,
+rent, alimony and the like: asked on Income), sales that need Form 8949, the 28% and section 1250 rates (the Schedule D
+Tax Worksheet), foreign tax over $300 (Form 1116), a 1099-R code other than those above or a taxable amount the payer
+didn't figure, nondeductible IRA contributions (Form 8606), an exception to the 10% tax (Form 5329), HSA coverage for
+part of the year, mortgage interest on more than $750,000 of debt, and noncash gifts over $500 (Form 8283). The app
+says so when one of them applies, instead of giving a wrong amount. A finished US return downloads as one PDF: the
+IRS's Form 1040 and the schedules and forms it uses (Schedules 1, 1-A, 2, 3, A, C, D, SE, 8812 and EIC, and Forms 2441,
+6251, 8863, 8889, 8995, 8959 and 8960), filled in, then a worksheet. Schedule B (more than $1,500 of interest or
+dividends) is named on the worksheet for you to fill in.
 
-AI reads the US forms you upload: Form W-2, Form 1099-INT, Form 1099-NEC, Form 1098-T and Form 1098-E. Each one goes
-to the return of the person named on it. A 1098-E is added to the student loan interest. A 1098-T is not added to the
+AI reads the US forms you upload: Forms W-2, 1099-INT, 1099-DIV, 1099-B (a broker's summary, one for each part of Form
+8949), 1099-R, 1099-NEC, SSA-1099, 1098, 1098-T and 1098-E. Each one goes to the return of the person named on it. A 1098-E is added to the student loan interest. A 1098-T is not added to the
 credit as it is: its box 1, less boxes 5 and 10, is offered as the start of that person's education expenses on
 Personal info. A 1098-T for a dependant is not added, because a dependant has no return here: enter its amounts on the
 dependant's card. You can also type each form in on Income or Confirm.

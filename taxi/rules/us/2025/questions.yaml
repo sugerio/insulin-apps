@@ -48,6 +48,17 @@ questions:
       tips and the "half" of time-and-a-half overtime on Schedule 1-A; filing separately, you can't.
     default: false
 
+  hasOtherIncome:
+    type: boolean
+    module: income
+    ask: Other income
+    help: >-
+      Income not asked above, such as unemployment compensation (Form 1099-G), a state tax refund that is taxable, rent
+      or royalties (Schedule E), alimony, gambling winnings (Form W-2G), prizes, jury duty pay, a canceled debt, or income
+      from a partnership, S corporation, estate or trust (Schedule K-1). This app doesn't take it yet: the return says
+      so instead of leaving it out.
+    default: false
+
   # Payments
   estimatedPayments:
     type: money

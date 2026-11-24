@@ -1,0 +1,189 @@
+{
+  "about": "Married filing separately and living together, 68, with $20,000 of benefits and a $15,000 pension: 85% of the worksheet's income is taxable",
+  "input": {
+    "country": "us",
+    "year": 2025,
+    "people": [
+      {
+        "id": "p1",
+        "name": "Rosa Lind",
+        "role": "self",
+        "birthDate": "1957-09-09",
+        "province": null,
+        "residentAllYear": true
+      },
+      {
+        "id": "p2",
+        "name": "Karl Lind",
+        "role": "spouse",
+        "birthDate": "1958-10-10",
+        "province": null,
+        "residentAllYear": true
+      }
+    ],
+    "family": {
+      "maritalStatus": "married",
+      "dependants": [],
+      "filingStatus": "separate"
+    },
+    "answers": {
+      "p1": {
+        "hasWages": false,
+        "hasInterest": false,
+        "hasTipsOrOvertime": false,
+        "canBeClaimed": false,
+        "isBlind": false,
+        "estimatedPayments": "0",
+        "hasCarLoan": false,
+        "hasSelfEmployment": false,
+        "hasStudentLoan": false,
+        "paidForEducation": false,
+        "hasDividends": false,
+        "hasBrokerSales": false,
+        "hasIraDistribution": false,
+        "hasPension": true,
+        "hasSocialSecurity": true,
+        "hasLossCarryover": false,
+        "hasHsa": false,
+        "hasIraContribution": false,
+        "hasItemized": false,
+        "hasOtherIncome": false,
+        "indirectRollover": false,
+        "livedApartAllYear": false,
+        "paidForCare": false,
+        "spouseItemizes": false
+      },
+      "p2": {
+        "hasWages": true,
+        "hasInterest": false,
+        "hasTipsOrOvertime": false,
+        "canBeClaimed": false,
+        "isBlind": false,
+        "estimatedPayments": "0",
+        "hasCarLoan": false,
+        "hasSelfEmployment": false,
+        "hasStudentLoan": false,
+        "paidForEducation": false,
+        "hasDividends": false,
+        "hasBrokerSales": false,
+        "hasIraDistribution": false,
+        "hasPension": false,
+        "hasSocialSecurity": false,
+        "hasLossCarryover": false,
+        "hasHsa": false,
+        "hasIraContribution": false,
+        "hasItemized": false,
+        "hasOtherIncome": false,
+        "spouseItemizes": false
+      }
+    },
+    "slips": [
+      {
+        "id": "p1-ssa-0",
+        "person": "p1",
+        "type": "SSA",
+        "issuer": "Social Security Administration",
+        "boxes": {
+          "5": "20000"
+        }
+      },
+      {
+        "id": "p1-r-0",
+        "person": "p1",
+        "type": "R",
+        "issuer": "Pension Co",
+        "boxes": {
+          "1": "15000",
+          "2A": "15000",
+          "7": "7"
+        }
+      },
+      {
+        "id": "p2-w2-0",
+        "person": "p2",
+        "type": "W2",
+        "issuer": "Shop",
+        "boxes": {
+          "1": "30000",
+          "2": "2500",
+          "4": "1860",
+          "5": "30000",
+          "6": "435"
+        }
+      }
+    ]
+  },
+  "expected": {
+    "p1": {
+      "F1040.19": "0",
+      "F1040.27a": "0",
+      "F1040.28": "0",
+      "S8812.12": "0",
+      "F1040.1a": "0",
+      "F1040.1e": "0",
+      "S3.2": "0",
+      "F1040.2a": "0",
+      "F1040.2b": "0",
+      "F1040.9": "32000",
+      "F1040.11a": "32000",
+      "F1040.12e": "17350",
+      "F1040.13b": "0",
+      "F1040.13a": "0",
+      "F1040.8": "0",
+      "F1040.10": "0",
+      "F1040.15": "14650",
+      "F1040.16": "1523",
+      "F8959.7": "0",
+      "F8960.17": "0",
+      "F1040.24": "1523",
+      "F1040.25c": "0",
+      "S3.11": "0",
+      "F1040.33": "0",
+      "F1040.34": "0",
+      "F1040.37": "1523",
+      "F1040.4a": "0",
+      "F1040.4b": "0",
+      "F1040.5a": "15000",
+      "F1040.5b": "15000",
+      "S2.8": "0",
+      "F1040.6a": "20000",
+      "F1040.6b": "17000",
+      "F6251.4": "32000",
+      "F6251.6": "0",
+      "F6251.11": "0",
+      "F1040.18": "1523"
+    },
+    "p2": {
+      "F1040.19": "0",
+      "F1040.27a": "0",
+      "F1040.28": "0",
+      "S8812.12": "0",
+      "F1040.1a": "30000",
+      "F1040.1e": "0",
+      "S3.2": "0",
+      "F1040.2a": "0",
+      "F1040.2b": "0",
+      "F1040.9": "30000",
+      "F1040.11a": "30000",
+      "F1040.12e": "17350",
+      "F1040.13b": "0",
+      "F1040.13a": "0",
+      "F1040.8": "0",
+      "F1040.10": "0",
+      "F1040.15": "12650",
+      "F1040.16": "1283",
+      "F8959.7": "0",
+      "F8960.17": "0",
+      "F1040.24": "1283",
+      "F1040.25c": "0",
+      "S3.11": "0",
+      "F1040.33": "2500",
+      "F1040.34": "1217",
+      "F1040.37": "0",
+      "F6251.4": "30000",
+      "F6251.6": "0",
+      "F6251.11": "0",
+      "F1040.18": "1283"
+    }
+  }
+}

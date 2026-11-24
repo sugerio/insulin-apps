@@ -85,6 +85,20 @@ describe("2025 US forms", () => {
     ["education-llc-tax-limit", "F1040,S3,F2441,SEIC,S8812,F8863"],
     ["student-loan-phase-out", "F1040,S1"],
     ["education-young-no-refund", "F1040,S3,F8863"],
+    ["dividends-qualified-single", "F1040,S3,F8995"],
+    ["capital-gains-broker-joint", "F1040,SD"],
+    ["capital-loss-separate", "F1040,SD"],
+    ["high-income-gains-niit", "F1040,S2,SD,F8959,F8960"],
+    ["retirees-joint", "F1040,S1A"],
+    ["early-distribution", "F1040,S2"],
+    ["benefits-separate-together", "F1040"],
+    ["ira-hsa-single", "F1040,S1,F8889"],
+    ["ira-spouse-covered-joint", "F1040,S1,F8889"],
+    ["itemized-joint", "F1040,SA"],
+    ["itemized-separate-salt", "F1040,S2,SA,F8959"],
+    ["amt-private-activity-bonds", "F1040,S2,S3,F6251,F8959,F8960"],
+    ["eic-dividends-over-limit", "F1040,S8812"],
+    ["dividends-mostly-single", "F1040,S1A"],
   ] as const) {
     it(`${name}: its forms hold the case's expected lines`, () => {
       const example = golden(name);
@@ -390,5 +404,57 @@ describe("2025 US forms", () => {
     );
     const small = golden("single-wages-interest");
     expect(formsToAdd(rules, new Evaluation(rules, small.input), "p1")).toEqual([]);
+  });
+
+  it("fills Schedule D's line 1a and 8a cells and ticks, and Form 1040's line 7 when it has no Schedule D", () => {
+    const sd = formOf(print(golden("capital-gains-broker-joint").input), "SD");
+    expect(["1aD", "1aE", "1aH", "8aD", "8aE", "8aH", "13", "16", "qofNo", "line17Yes", "line20Yes", "line17No"].map((key) => at(sd, key))).toEqual([
+      "20000", "15000", "5000", "50000", "30000", "20000", "1000", "26000", "X", "X", "X", undefined,
+    ]);
+    const loss = formOf(print(golden("capital-loss-separate").input), "SD");
+    expect(["7", "14", "15", "16", "21", "line17No", "line22No"].map((key) => at(loss, key))).toEqual(["-6000", "2000", "-2000", "-8000", "1500", "X", "X"]);
+    expect(at(formOf(print(golden("capital-loss-separate").input), "F1040"), "7a")).toBe("-1500");
+    const noSchedule = formOf(print(golden("dividends-qualified-single").input), "F1040");
+    expect(["3a", "3b", "7a", "noScheduleD", "2a"].map((key) => at(noSchedule, key))).toEqual(["3000", "4000", "500", "X", "200"]);
+  });
+
+  it("ticks the rollover boxes and leaves 4a and 5a out when the whole distribution is taxable", () => {
+    const f1040 = formOf(print(golden("retirees-joint").input), "F1040");
+    expect(["4a", "4b", "iraRollover", "5a", "5b", "pensionRollover", "6a"].map((key) => at(f1040, key))).toEqual([
+      "70000", "20000", "X", "45000", "30000", "X", "36000",
+    ]);
+    const early = print(golden("early-distribution").input);
+    expect(["4a", "4b"].map((key) => at(formOf(early, "F1040"), key))).toEqual([undefined, "10000"]);
+    expect(["8", "line8NoForm"].map((key) => at(formOf(early, "S2"), key))).toEqual(["1000", "X"]);
+  });
+
+  it("fills Form 6251 with Part III, and Schedule 2's AMT lines", () => {
+    const filled = print(golden("amt-private-activity-bonds").input);
+    const f6251 = formOf(filled, "F6251");
+    expect(["2g", "13", "20", "23", "30", "33"].map((key) => at(f6251, key))).toEqual([
+      "400000", "30000", "519250", undefined, "14150", "15850",
+    ]);
+    expect(at(f6251, "11")).toBe(at(formOf(filled, "S2"), "2"));
+    expect(at(formOf(filled, "F1040"), "17")).toBe(at(f6251, "11"));
+  });
+
+  it("fills Form 8889 for the person with the HSA, with its coverage box", () => {
+    const filled = print(golden("ira-spouse-covered-joint").input);
+    expect(filled.map((each) => each.form.id)).not.toContain("F8889S");
+    const f8889 = formOf(filled, "F8889");
+    expect(["family", "selfOnly", "2", "7", "8", "9", "12", "13"].map((key) => at(f8889, key))).toEqual([
+      "X", undefined, "6000", "1000", "9550", "2000", "7550", "6000",
+    ]);
+  });
+
+  it("fills Schedule A when the return itemizes, and ticks line 12b for a spouse filing separately who itemizes", () => {
+    const sa = formOf(print(golden("itemized-joint").input), "SA");
+    expect(["5a", "5b", "5c", "5e", "8a", "11", "12", "17", "1", "4"].map((key) => at(sa, key))).toEqual([
+      "12000", "9000", "400", "21400", "19000", "5000", "400", "45800", "10000", undefined,
+    ]);
+    const kim = golden("itemized-separate-salt").input;
+    const theirs = fillForms(rules, new Evaluation(rules, kim), "p2", personalFacts(kim, "p2"));
+    expect(at(formOf(theirs, "F1040"), "spouseItemizes")).toBe("X");
+    expect(at(formOf(theirs, "SA"), "17")).toBe("3250");
   });
 });

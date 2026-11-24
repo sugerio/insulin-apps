@@ -129,6 +129,11 @@ const IRS_PLACES: Record<string, Record<string, IrsPlace>> = {
     youBlind: { field: "c2_6[0]", label: "Are blind" },
     spouseSenior: { field: "c2_7[0]", label: "Spouse: Was born before January 2, 1961" },
     spouseBlind: { field: "c2_8[0]", label: "Is blind" },
+    spouseItemizes: { field: "c2_3[0]", label: "Spouse itemizes on a separate return" },
+    iraRollover: { field: "c1_35[0]", label: "1. Rollover" },
+    pensionRollover: { field: "c1_38[0]", label: "1. Rollover" },
+    benefitsLivedApart: { field: "c1_42[0]", label: "lived apart from your spouse the entire year" },
+    noScheduleD: { field: "c1_43[0]", label: "Schedule D not required" },
   },
   // Line 22's table: each car's interest deducted here, column (iii), one row for each spouse's car.
   S1A: {
@@ -138,7 +143,26 @@ const IRS_PLACES: Record<string, Record<string, IrsPlace>> = {
   },
   // Line 7 has a second box for the amount repaid.
   S1: { ...names("f1_01[0]"), "7": { field: "f1_12[0]", label: "7. Amount" } },
-  S2: names("f1_01[0]"),
+  S2: { ...names("f1_01[0]"), line8NoForm: { field: "Line8_ReadOrder[0].c1_6[0]", label: "If not required, check here" } },
+  SA: names("f1_1[0]"),
+  // Lines 1a and 8a are table rows with no line number in their labels: their columns are named.
+  SD: {
+    ...names("f1_1[0]"),
+    qofNo: { field: "c1_1[1]", label: "No." },
+    "1aD": { field: "Table_PartI[0].Row1a[0].f1_3[0]", label: "(d) Proceeds" },
+    "1aE": { field: "Table_PartI[0].Row1a[0].f1_4[0]", label: "(e) Cost" },
+    "1aH": { field: "Table_PartI[0].Row1a[0].f1_6[0]", label: "(h) Gain or (loss)" },
+    "8aD": { field: "Table_PartII[0].Row8a[0].f1_23[0]", label: "(d) Proceeds" },
+    "8aE": { field: "Table_PartII[0].Row8a[0].f1_24[0]", label: "(e) Cost" },
+    "8aH": { field: "Table_PartII[0].Row8a[0].f1_26[0]", label: "(h) Gain or (loss)" },
+    line17Yes: { field: "c2_1[0]", label: "17. Are lines 15 and 16 both gains? Yes" },
+    line17No: { field: "c2_1[1]", label: "17. No" },
+    line20Yes: { field: "c2_2[0]", label: "Complete the Qualified Dividends and Capital Gain Tax Worksheet" },
+    line22Yes: { field: "c2_3[0]", label: "line 3a? Yes" },
+    line22No: { field: "c2_3[1]", label: "22. No" },
+  },
+  F6251: names("f1_1[0]"),
+  F8889: { ...names("f1_1[0]"), selfOnly: { field: "c1_1[0]", label: "Self-only" }, family: { field: "c1_1[1]", label: "1. Family" } },
   // Part V's rows are numbered 1 to 9 like page 1's lines: they are named, and only its first row is used.
   SC: {
     name: { field: "f1_1[0]", label: "Name of proprietor" },

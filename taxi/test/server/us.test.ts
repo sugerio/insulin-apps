@@ -89,7 +89,7 @@ describe("a United States year", () => {
 
     year = await json<TaxYear>(
       server.call("PUT", "/api/years/2025/answers", {
-        body: { revision: year.revision, personId: alex.id, answers: { hasWages: true, hasInterest: false, hasTipsOrOvertime: false, hasCarLoan: false, hasSelfEmployment: false, hasStudentLoan: false, paidForEducation: false, canBeClaimed: false, isBlind: false, estimatedPayments: "0" } },
+        body: { revision: year.revision, personId: alex.id, answers: { hasWages: true, hasInterest: false, hasTipsOrOvertime: false, hasCarLoan: false, hasSelfEmployment: false, hasStudentLoan: false, paidForEducation: false, hasDividends: false, hasBrokerSales: false, hasLossCarryover: false, hasIraDistribution: false, hasPension: false, hasSocialSecurity: false, hasOtherIncome: false, hasHsa: false, hasIraContribution: false, hasItemized: false, canBeClaimed: false, isBlind: false, estimatedPayments: "0" } },
       }),
     );
     const answered = await json<Estimate>(server.call("GET", "/api/years/2025/estimate"));
@@ -128,7 +128,7 @@ describe("printing a US return", () => {
     return pages;
   }
   const W2 = (personId: string, issuer: string, wages: string) => ({ personId, type: "W2", issuer, boxes: { 1: wages, 2: "3500", 4: "0", 5: wages, 6: (Number(wages) * 0.0145).toFixed(2) } });
-  const ANSWERS = { hasWages: true, hasInterest: false, hasTipsOrOvertime: false, hasCarLoan: false, hasSelfEmployment: false, hasStudentLoan: false, paidForEducation: false, canBeClaimed: false, isBlind: false, estimatedPayments: "0" };
+  const ANSWERS = { hasWages: true, hasInterest: false, hasTipsOrOvertime: false, hasCarLoan: false, hasSelfEmployment: false, hasStudentLoan: false, paidForEducation: false, hasDividends: false, hasBrokerSales: false, hasLossCarryover: false, hasIraDistribution: false, hasPension: false, hasSocialSecurity: false, hasOtherIncome: false, hasHsa: false, hasIraContribution: false, hasItemized: false, canBeClaimed: false, isBlind: false, estimatedPayments: "0" };
 
   /** A finished US year: Alex alone, or Alex and Sam filing jointly; each with a W-2 and every answer given. */
   async function finished(joint: boolean) {
@@ -230,7 +230,7 @@ describe("an upload in a United States year", () => {
       headers: { "Content-Type": "application/pdf", "X-File-Name": "forms.pdf", "X-Person-Id": alex.id },
     });
     const body = await json<{ status: string; message: string }>(response);
-    expect(asked).toEqual(["United States information returns (Forms W-2, 1099 and 1098)"]);
+    expect(asked).toEqual(["United States information returns (Forms W-2, 1099, 1098 and SSA-1099)"]);
     expect(body.status).toBe("read");
     expect(body.message).toBe(
       "W-2 from Maple Corp; 1098-E from Great Lakes Student Loans; 1098-T from Prairie Community College is Riley Rivera's, who has no return here: not added",
@@ -307,7 +307,7 @@ describe("a joint return", () => {
     current = await w2(sam.id, "Initech", "50000", "4200");
     const answers = (personId: string) =>
       server.call("PUT", "/api/years/2025/answers", {
-        body: { revision: current.revision, personId, answers: { hasWages: true, hasInterest: false, hasTipsOrOvertime: false, hasCarLoan: false, hasSelfEmployment: false, hasStudentLoan: false, paidForEducation: false, canBeClaimed: false, isBlind: false, estimatedPayments: "0" } },
+        body: { revision: current.revision, personId, answers: { hasWages: true, hasInterest: false, hasTipsOrOvertime: false, hasCarLoan: false, hasSelfEmployment: false, hasStudentLoan: false, paidForEducation: false, hasDividends: false, hasBrokerSales: false, hasLossCarryover: false, hasIraDistribution: false, hasPension: false, hasSocialSecurity: false, hasOtherIncome: false, hasHsa: false, hasIraContribution: false, hasItemized: false, canBeClaimed: false, isBlind: false, estimatedPayments: "0" } },
       });
     current = await json<TaxYear>(answers(alex.id));
     // Sam's answers are still missing: the joint return isn't done.
@@ -369,7 +369,7 @@ describe("dependants on a US return", () => {
       }),
       201,
     );
-    current = await json<TaxYear>(save(current.revision, alex.id, { hasWages: true, hasInterest: false, hasTipsOrOvertime: false, hasCarLoan: false, hasSelfEmployment: false, hasStudentLoan: false, paidForEducation: false, canBeClaimed: false, isBlind: false, estimatedPayments: "0", paidHalfOfHome: true, hasValidSSN: true, paidForCare: false }));
+    current = await json<TaxYear>(save(current.revision, alex.id, { hasWages: true, hasInterest: false, hasTipsOrOvertime: false, hasCarLoan: false, hasSelfEmployment: false, hasStudentLoan: false, paidForEducation: false, hasDividends: false, hasBrokerSales: false, hasLossCarryover: false, hasIraDistribution: false, hasPension: false, hasSocialSecurity: false, hasOtherIncome: false, hasHsa: false, hasIraContribution: false, hasItemized: false, canBeClaimed: false, isBlind: false, estimatedPayments: "0", paidHalfOfHome: true, hasValidSSN: true, paidForCare: false }));
     // The child's questions are still to answer: Personal info isn't done.
     expect(current.returns[0]!.steps.personal).toBe("todo");
     current = await json<TaxYear>(save(current.revision, ava.id, childAnswers));
@@ -404,7 +404,7 @@ describe("the earned income credit", () => {
       }),
       201,
     );
-    const answers = { hasWages: true, hasInterest: false, hasTipsOrOvertime: false, hasCarLoan: false, hasSelfEmployment: false, hasStudentLoan: false, paidForEducation: false, canBeClaimed: false, isBlind: false, estimatedPayments: "0" };
+    const answers = { hasWages: true, hasInterest: false, hasTipsOrOvertime: false, hasCarLoan: false, hasSelfEmployment: false, hasStudentLoan: false, paidForEducation: false, hasDividends: false, hasBrokerSales: false, hasLossCarryover: false, hasIraDistribution: false, hasPension: false, hasSocialSecurity: false, hasOtherIncome: false, hasHsa: false, hasIraContribution: false, hasItemized: false, canBeClaimed: false, isBlind: false, estimatedPayments: "0" };
     year = await json<TaxYear>(server.call("PUT", "/api/years/2025/answers", { body: { revision: year.revision, personId: rae.id, answers } }));
     let estimate = await json<Estimate>(server.call("GET", "/api/years/2025/estimate"));
     // The credit needs a valid SSN: asked before the credit is worked out.
@@ -443,6 +443,21 @@ describe("the earned income credit", () => {
   });
 });
 
+describe("a US form with a code box", () => {
+  it("keeps a code the box can hold, and refuses another, or an amount, there", async () => {
+    const alex = await addPerson("Alex Rivera", "self");
+    let year = await json<TaxYear>(server.call("POST", "/api/years", { body: { year: 2025, country: "us", people: [alex.id] } }), 201);
+    const add = (boxes: Record<string, string>) => server.call("POST", "/api/years/2025/slips", { body: { revision: year.revision, personId: alex.id, type: "B", issuer: "Broker", boxes } });
+    const refused = await json<{ error: { issues: { path: string; message: string }[] } }>(add({ CAT: "Z", "1D": "100", "1E": "50" }), 400);
+    expect(refused.error.issues).toEqual([{ path: "boxes.CAT", message: "One of A, B, D, E" }]);
+    const amount = await json<{ error: { issues: { path: string; message: string }[] } }>(add({ CAT: "A", "1D": "D" }), 400);
+    expect(amount.error.issues).toEqual([{ path: "boxes.1D", message: "Enter an amount like 1234.56" }]);
+    year = await json<TaxYear>(add({ CAT: "A", "1D": "100.50", "1E": "50" }), 201);
+    const { slips } = await json<SlipList>(server.call("GET", "/api/years/2025/slips"));
+    expect(slips[0]!.boxes).toEqual({ CAT: "A", "1D": "100.5", "1E": "50" });
+  });
+});
+
 describe("hints on a US year", () => {
   it("tells a couple filing separately what filing jointly saves, as the year filed jointly works out", async () => {
     const alex = await addPerson("Alex Rivera", "self", "1985-02-02");
@@ -455,7 +470,7 @@ describe("hints on a US year", () => {
       adults: [alex, sam].map((each) => ({ personId: each.id, province: null, residentAllYear: true })),
     });
     year = await json<TaxYear>(server.call("PUT", "/api/years/2025/personal-info", { body: facts("separate") }));
-    const none = { hasWages: true, hasInterest: false, hasTipsOrOvertime: false, hasCarLoan: false, hasSelfEmployment: false, hasStudentLoan: false, paidForEducation: false, canBeClaimed: false, isBlind: false, estimatedPayments: "0", spouseItemizes: false };
+    const none = { hasWages: true, hasInterest: false, hasTipsOrOvertime: false, hasCarLoan: false, hasSelfEmployment: false, hasStudentLoan: false, paidForEducation: false, hasDividends: false, hasBrokerSales: false, hasLossCarryover: false, hasIraDistribution: false, hasPension: false, hasSocialSecurity: false, hasOtherIncome: false, hasHsa: false, hasIraContribution: false, hasItemized: false, canBeClaimed: false, isBlind: false, estimatedPayments: "0", spouseItemizes: false };
     for (const [person, wages, withheld] of [[alex, "140000", "24000"], [sam, "20000", "1500"]] as const) {
       year = await json<TaxYear>(server.call("POST", "/api/years/2025/slips", { body: { revision: year.revision, personId: person.id, type: "W2", issuer: "Acme", boxes: { 1: wages, 2: withheld } } }), 201);
       year = await json<TaxYear>(server.call("PUT", "/api/years/2025/answers", { body: { revision: year.revision, personId: person.id, answers: none } }));

@@ -1,5 +1,5 @@
 import { DOCUMENT_TYPES, MAX_DOCUMENT_BYTES, maybeSameSlip, type DocumentList, type DocumentRecord, type Person, type ReadResult, type Slip, type TaxYear } from "#shared";
-import { normalizeAmount } from "../../shared/amount.ts";
+import { normalizeAmount, sameBoxValue } from "../../shared/amount.ts";
 import { Dec } from "../../shared/engine/decimal.ts";
 import { documentName } from "../../shared/engine/rules.ts";
 import { rulesFor } from "../../shared/rules/index.ts";
@@ -490,6 +490,13 @@ function plan(slips: ReadSlip[], view: TaxYear, year: number, uploader: Person):
     for (const [rawBox, rawAmount] of Object.entries(slip.boxes)) {
       const box = rawBox.trim().toUpperCase();
       if (!(box in type.boxes)) continue;
+      // A code box keeps one of its codes; anything else read there is for a person to enter.
+      if (box in type.codes) {
+        const code = rawAmount.trim().toUpperCase();
+        if (type.codes[box]!.includes(code)) boxes[box] = code;
+        else unsure.add(box);
+        continue;
+      }
       const amount = normalizeAmount(rawAmount);
       if (/^\d{1,9}(\.\d{1,2})?$/.test(amount)) boxes[box] = Dec.from(amount).toString();
       else unsure.add(box);
@@ -531,7 +538,7 @@ function addsNothing(reading: Planned, slip: { type: string; issuer: string; per
   const amounts = Object.entries(reading.boxes);
   return (
     amounts.length > 0 &&
-    amounts.every(([box, amount]) => slip.boxes[box] !== undefined && Dec.from(slip.boxes[box]).eq(amount)) &&
+    amounts.every(([box, amount]) => slip.boxes[box] !== undefined && sameBoxValue(slip.boxes[box], amount)) &&
     reading.unsure.every((box) => slip.boxes[box] !== undefined)
   );
 }

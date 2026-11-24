@@ -12,9 +12,9 @@
 # column; its fields are worked out from the dependant's side (`dependant.`), and its `when`s are about the return.
 #
 # A form applies to the returns whose `applies` is yes; the forms print in the order of the attachment sequence number
-# printed at the top right of each, as the IRS asks them attached: Form 1040, then Schedules 1, 1-A, 2, 3, C and SE
-# (on a joint return, the spouse's copy after the preparer's), Form 2441, Schedule EIC, Schedule 8812, and Forms 8863,
-# 8995, 8959 and 8960. A form with `side: spouse` is the spouse's copy, worked out from their side; `layout` reuses another
+# printed at the top right of each, as the IRS asks them attached: Form 1040, then Schedules 1, 1-A, 2, 3, A, C, D and
+# SE (on a joint return, the spouse's copy after the preparer's), Forms 2441 and 6251, Schedule EIC, Schedule 8812, and
+# Forms 8863, 8889, 8995, 8959 and 8960. A form with `side: spouse` is the spouse's copy, worked out from their side; `layout` reuses another
 # form's places on the same PDF.
 #
 # The PDFs come from irs.gov on first use (url: the 2025 revision's own address, which doesn't change when the IRS
@@ -46,6 +46,20 @@ forms:
       1z: line.F1040.1z
       2a: line.F1040.2a
       2b: line.F1040.2b
+      3a: line.F1040.3a
+      3b: line.F1040.3b
+      # Lines 4a and 5a only when part isn't taxable (a rollover); fully taxable, the total goes on 4b or 5b alone.
+      4a: { value: line.F1040.4a, when: "line.F1040.4a > line.F1040.4b" }
+      4b: line.F1040.4b
+      iraRollover: { tick: "line.US.iraRollover == 1" }
+      5a: { value: line.F1040.5a, when: "line.F1040.5a > line.F1040.5b" }
+      5b: line.F1040.5b
+      pensionRollover: { tick: "line.US.pensionRollover == 1" }
+      6a: line.F1040.6a
+      6b: { value: line.F1040.6b, when: "line.F1040.6a > 0", zero: true }
+      benefitsLivedApart: { tick: "line.US.separate == 1 and line.F1040.6a > 0 and answer.livedApartAllYear" }
+      7a: line.F1040.7a
+      noScheduleD: { tick: "line.US.scheduleD == 0 and line.F1040.7a > 0" }
       "8": line.F1040.8
       "9": line.F1040.9
       "10": line.F1040.10
@@ -58,6 +72,7 @@ forms:
       youBlind: { tick: answer.isBlind }
       spouseSenior: { tick: "line.US.joint == 1 and spouse.person.age >= 65" }
       spouseBlind: { tick: "line.US.joint == 1 and spouse.answer.isBlind" }
+      spouseItemizes: { tick: "line.US.separate == 1 and answer.spouseItemizes" }
       12e: line.F1040.12e
       13a: line.F1040.13a
       13b: line.F1040.13b
@@ -65,6 +80,7 @@ forms:
       # "If zero or less, enter -0-" (lines 15 and 22), and the total tax.
       "15": { value: line.F1040.15, zero: true }
       "16": line.F1040.16
+      "17": line.F1040.17
       "18": line.F1040.18
       "19": line.F1040.19
       "20": line.F1040.20
@@ -115,11 +131,13 @@ forms:
     applies: "line.S1.10 > 0 or line.S1.26 > 0"
     fields:
       names: { text: returnNames }
-      # Part I: business income only; Part II: the deductible part of self-employment tax and the student loan interest
-      # deduction.
+      # Part I: business income only; Part II: the HSA deduction, the deductible part of self-employment tax, the IRA
+      # deduction and the student loan interest deduction.
       "3": line.S1.3
       "10": line.S1.10
+      "13": line.S1.13
       "15": line.S1.15
+      "20": line.S1.20
       "21": line.S1.21
       "26": line.S1.26
 
@@ -178,10 +196,14 @@ forms:
   S2:
     title: Schedule 2 (Form 1040), Additional Taxes
     url: https://www.irs.gov/pub/irs-prior/f1040s2--2025.pdf
-    applies: "line.S2.21 > 0"
+    applies: "line.S2.21 > 0 or line.F1040.17 > 0"
     fields:
       names: { text: returnNames }
+      "2": line.F1040.17
+      "3": line.F1040.17
       "4": line.S2.4
+      "8": line.S2.8
+      line8NoForm: { tick: "line.S2.8 > 0" }
       "11": line.F8959.18
       "12": line.F8960.17
       "21": line.S2.21
@@ -192,11 +214,37 @@ forms:
     applies: "line.S3.8 > 0 or line.S3.11 > 0"
     fields:
       names: { text: returnNames }
+      "1": line.S3.1
       "2": line.S3.2
       "3": line.S3.3
       "8": line.S3.8
       "11": line.S3.11
       "15": line.S3.11
+
+  # Schedule A: when the return itemizes.
+  SA:
+    title: Schedule A (Form 1040), Itemized Deductions
+    url: https://www.irs.gov/pub/irs-prior/f1040sa--2025.pdf
+    applies: "line.US.itemizes == 1"
+    fields:
+      names: { text: returnNames }
+      "1": line.SA.1
+      "2": { value: line.F1040.11a, when: "line.SA.1 > 0" }
+      "3": { value: line.SA.3, when: "line.SA.1 > 0" }
+      "4": line.SA.4
+      5a: line.SA.5a
+      5b: line.SA.5b
+      5c: line.SA.5c
+      5d: line.SA.5d
+      5e: line.SA.5e
+      "7": line.SA.7
+      8a: line.SA.8a
+      8e: line.SA.8a
+      "10": line.SA.10
+      "11": line.SA.11
+      "12": line.SA.12
+      "14": line.SA.14
+      "17": line.SA.17
 
   # Schedule C: each person's business, the person preparing's here and the spouse's below on a joint return. The
   # business's name, address, code and accounting method, the vehicle information of Part IV (with car expenses) and
@@ -235,6 +283,35 @@ forms:
     side: spouse
     layout: SC
     fields: *scheduleC
+
+  # Schedule D: sales on 1099-B summaries for box A and D (lines 1a and 8a), a carryover, and capital gain
+  # distributions with them. Lines 6, 14 and 21 are printed in brackets on the form, so their amounts are written as
+  # they are; lines 7, 15 and 16 can be losses, written in brackets.
+  SD:
+    title: Schedule D (Form 1040), Capital Gains and Losses
+    url: https://www.irs.gov/pub/irs-prior/f1040sd--2025.pdf
+    applies: "line.US.scheduleD == 1"
+    fields:
+      names: { text: returnNames }
+      qofNo: { tick: "line.US.scheduleD == 1" }
+      1aD: line.SD.1ad
+      1aE: line.SD.1ae
+      1aH: { value: line.SD.1ah, when: "line.SD.1ad > 0" }
+      "6": line.SD.6
+      "7": line.SD.7
+      8aD: line.SD.8ad
+      8aE: line.SD.8ae
+      8aH: { value: line.SD.8ah, when: "line.SD.8ad > 0" }
+      "13": line.SD.13
+      "14": line.SD.14
+      "15": line.SD.15
+      "16": { value: line.SD.16, zero: true }
+      line17Yes: { tick: "line.SD.15 > 0 and line.SD.16 > 0" }
+      line17No: { tick: "line.SD.15 <= 0 or line.SD.16 <= 0" }
+      line20Yes: { tick: "line.SD.15 > 0 and line.SD.16 > 0" }
+      "21": "0 - line.SD.21"
+      line22Yes: { tick: "line.SD.16 <= 0 and line.F1040.3a > 0" }
+      line22No: { tick: "line.SD.16 <= 0 and line.F1040.3a == 0" }
 
   # Schedule SE: each person with $400 or more of net earnings from self-employment.
   SE:
@@ -321,6 +398,52 @@ forms:
         lastName: { text: lastName }
         disabled: { tick: "line.DEP.careDisabled == 1" }
         expenses: "line.DEP.careChildExpenses + line.DEP.careDisabledExpenses"
+
+  # Form 6251: when there is an AMT to pay (line 7 more than line 10, 6251 instructions, Who Must File).
+  F6251:
+    title: Form 6251, Alternative Minimum Tax—Individuals
+    url: https://www.irs.gov/pub/irs-prior/f6251--2025.pdf
+    applies: "line.F6251.11 > 0"
+    fields:
+      names: { text: returnNames }
+      1a: line.F6251.1a
+      1b: line.F6251.1b
+      2a: line.F6251.2a
+      2g: line.F6251.2g
+      "4": line.F6251.4
+      "5": line.F6251.5
+      "6": line.F6251.6
+      "7": line.F6251.7
+      "8": line.F6251.8
+      "9": line.F6251.9
+      "10": line.F6251.10
+      "11": line.F6251.11
+      # Part III, when the regular tax used the Qualified Dividends and Capital Gain Tax Worksheet.
+      "12": { value: line.F6251.6, when: "line.QDW.applies == 1" }
+      "13": { value: line.F6251.13, when: "line.QDW.applies == 1" }
+      "15": { value: line.F6251.13, when: "line.QDW.applies == 1" }
+      "16": { value: line.F6251.16, when: "line.QDW.applies == 1" }
+      "17": { value: line.F6251.17, when: "line.QDW.applies == 1" }
+      "18": { value: line.F6251.18, when: "line.QDW.applies == 1" }
+      "19": { value: line.QDW.6, when: "line.QDW.applies == 1" }
+      "20": { value: line.QDW.5, when: "line.QDW.applies == 1" }
+      "21": { value: line.F6251.21, when: "line.QDW.applies == 1" }
+      "22": { value: line.F6251.22, when: "line.QDW.applies == 1" }
+      "23": { value: line.F6251.23, when: "line.QDW.applies == 1" }
+      "24": { value: "line.F6251.22 - line.F6251.23", when: "line.QDW.applies == 1" }
+      "25": { value: line.QDW.13, when: "line.QDW.applies == 1" }
+      "26": { value: line.F6251.21, when: "line.QDW.applies == 1" }
+      "27": { value: line.QDW.5, when: "line.QDW.applies == 1" }
+      "28": { value: "line.F6251.21 + line.QDW.5", when: "line.QDW.applies == 1" }
+      "29": { value: "max(0, line.QDW.13 - (line.F6251.21 + line.QDW.5))", when: "line.QDW.applies == 1" }
+      "30": { value: line.F6251.30, when: "line.QDW.applies == 1" }
+      "31": { value: line.F6251.31, when: "line.QDW.applies == 1" }
+      "32": { value: "line.F6251.23 + line.F6251.30", when: "line.QDW.applies == 1" }
+      "33": { value: "line.F6251.22 - (line.F6251.23 + line.F6251.30)", when: "line.QDW.applies == 1" }
+      "34": { value: line.F6251.34, when: "line.QDW.applies == 1" }
+      "38": { value: "line.F6251.18 + line.F6251.31 + line.F6251.34", when: "line.QDW.applies == 1" }
+      "39": { value: line.F6251.39, when: "line.QDW.applies == 1" }
+      "40": { value: line.F6251.40, when: "line.QDW.applies == 1" }
 
   SEIC:
     title: Schedule EIC (Form 1040), Earned Income Credit
@@ -451,6 +574,33 @@ forms:
         "30": line.DEP.aotc30
         "31": line.DEP.llc31
 
+  # Form 8889, Part I: each person's own HSA (the spouse's copy below on a joint return).
+  F8889:
+    title: Form 8889, Health Savings Accounts (HSAs)
+    url: https://www.irs.gov/pub/irs-prior/f8889--2025.pdf
+    applies: "line.F8889.13 > 0 or line.F8889.9 > 0"
+    fields: &form8889
+      names: { text: name }
+      selfOnly: { tick: 'answer.hsaCoverage == "self"' }
+      family: { tick: 'answer.hsaCoverage == "family"' }
+      "2": line.F8889.2
+      "3": { value: 'if(answer.hsaCoverage == "family", param.hsaFamily, param.hsaSelfOnly)', when: "answer.hasHsa" }
+      "5": { value: 'if(answer.hsaCoverage == "family", param.hsaFamily, param.hsaSelfOnly)', when: "answer.hasHsa" }
+      "6": { value: 'if(answer.hsaCoverage == "family", param.hsaFamily, param.hsaSelfOnly)', when: "answer.hasHsa" }
+      "7": { value: param.hsaCatchUp, when: "answer.hasHsa and person.age >= 55" }
+      "8": line.F8889.8
+      "9": line.F8889.9
+      "11": line.F8889.9
+      "12": "max(0, line.F8889.8 - line.F8889.9)"
+      "13": line.F8889.13
+  F8889S:
+    title: Form 8889, Health Savings Accounts (HSAs) (spouse)
+    url: https://www.irs.gov/pub/irs-prior/f8889--2025.pdf
+    applies: "line.US.joint == 1 and (spouse.line.F8889.13 > 0 or spouse.line.F8889.9 > 0)"
+    side: spouse
+    layout: F8889
+    fields: *form8889
+
   F8995:
     title: Form 8995, Qualified Business Income Deduction Simplified Computation
     url: https://www.irs.gov/pub/irs-prior/f8995--2025.pdf
@@ -463,9 +613,13 @@ forms:
       "2": line.F8995.2
       "4": line.F8995.2
       "5": line.F8995.5
-      "10": line.F8995.5
+      "6": line.F8995.6
+      "8": line.F8995.6
+      "9": line.F8995.9
+      "10": line.F8995.10
       "11": line.F8995.11
-      "13": line.F8995.11
+      "12": line.F8995.12
+      "13": line.F8995.13
       "14": line.F8995.14
       "15": line.F8995.15
 
@@ -502,14 +656,17 @@ forms:
     applies: "line.F8960.17 > 0"
     fields:
       names: { text: returnNames }
-      # The only investment income the app takes is taxable interest, with no expenses against it.
+      # Taxable interest, ordinary dividends and the net gain or loss of Form 1040 line 7a, with no expenses against them.
       "1": line.F1040.2b
-      "8": line.F1040.2b
-      "12": line.F1040.2b
+      "2": line.F1040.3b
+      5a: line.F1040.7a
+      5d: line.F1040.7a
+      "8": line.F8960.8
+      "12": line.F8960.12
       "13": line.F8960.13
       "14": line.F8960.14
       "15": "max(0, line.F8960.13 - line.F8960.14)"
-      "16": "min(line.F1040.2b, max(0, line.F8960.13 - line.F8960.14))"
+      "16": "min(line.F8960.12, max(0, line.F8960.13 - line.F8960.14))"
       "17": line.F8960.17
 
 # Forms a return needs that aren't printed, in the order they're attached: the worksheet and Finish name them, for the
@@ -518,9 +675,10 @@ formsToAdd:
   SB:
     form: Schedule B (Form 1040), Interest and Ordinary Dividends
     why: >-
-      because your taxable interest is more than $1,500: list each payer and amount (your 1099-INT forms, below) in
-      Part I, and answer the questions about foreign accounts and trusts in Part III
-    applies: "line.F1040.2b > 1500"
+      because your taxable interest or your ordinary dividends are more than $1,500: list each payer and amount (your
+      1099-INT and 1099-DIV forms, below) in Parts I and II, and answer the questions about foreign accounts and trusts
+      in Part III
+    applies: "line.F1040.2b > 1500 or line.F1040.3b > 1500"
   F8863P2:
     form: Form 8863, page 2, for each other student
     why: >-

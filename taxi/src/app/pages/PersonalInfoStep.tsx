@@ -136,6 +136,11 @@ function UsTaxNotes() {
           or more), and comes before the child tax credit.
         </p>
         <p>
+          <b className="text-foreground">College.</b> If you paid tuition for college or another school after high school, for yourself or for a
+          dependant 14 or older, enter the expenses less tax-free scholarships. For a dependant, they are asked on their card. You choose the
+          American opportunity credit (up to $2,500 for each student, part of it refundable) or the lifetime learning credit (up to $2,000).
+        </p>
+        <p>
           <b className="text-foreground">Residency.</b> This is the federal return of a U.S. citizen or resident alien for the whole year. A
           nonresident or dual-status alien files Form 1040-NR, which the app doesn't prepare. State returns aren't prepared.
         </p>

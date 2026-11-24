@@ -325,8 +325,8 @@ lines:
     source: "Schedule 3, line 2: Form 2441, line 11"
   S3.8:
     label: Total nonrefundable credits from Schedule 3
-    formula: "line.S3.2"
-    source: "Schedule 3, line 8: no other nonrefundable credit is worked out by this app"
+    formula: "line.S3.2 + line.S3.3"
+    source: "Schedule 3, line 8: lines 2 and 3 (education.yaml); no other nonrefundable credit is worked out by this app"
 
   # Asked as soon as you say you paid for care, with the care for each person.
   SCOPE.care:

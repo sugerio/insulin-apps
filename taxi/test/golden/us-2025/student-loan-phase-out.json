@@ -1,0 +1,84 @@
+{
+  "about": "Single, $92,000 of wages and $2,800 of student loan interest: $2,500 counts, cut by 0.467 for the $7,000 over $85,000",
+  "input": {
+    "country": "us",
+    "year": 2025,
+    "people": [
+      {
+        "id": "p1",
+        "name": "Noel Grant",
+        "role": "self",
+        "birthDate": "1994-12-12",
+        "province": null,
+        "residentAllYear": true
+      }
+    ],
+    "family": {
+      "maritalStatus": "single",
+      "dependants": []
+    },
+    "answers": {
+      "p1": {
+        "hasWages": true,
+        "hasInterest": false,
+        "hasTipsOrOvertime": false,
+        "canBeClaimed": false,
+        "isBlind": false,
+        "estimatedPayments": "0",
+        "hasCarLoan": false,
+        "hasSelfEmployment": false,
+        "hasStudentLoan": true,
+        "paidForEducation": false,
+        "studentLoanInterest": "2800",
+        "paidForCare": false
+      }
+    },
+    "slips": [
+      {
+        "id": "p1-w2-0",
+        "person": "p1",
+        "type": "W2",
+        "issuer": "Data Corp",
+        "boxes": {
+          "1": "92000",
+          "2": "11000",
+          "4": "5704",
+          "5": "92000",
+          "6": "1334"
+        }
+      }
+    ]
+  },
+  "expected": {
+    "p1": {
+      "F1040.19": "0",
+      "F1040.27a": "0",
+      "F1040.28": "0",
+      "S8812.12": "0",
+      "F1040.1a": "92000",
+      "F1040.1e": "0",
+      "S3.2": "0",
+      "F1040.2a": "0",
+      "F1040.2b": "0",
+      "F1040.9": "92000",
+      "F1040.11a": "90667.5",
+      "F1040.12e": "15750",
+      "F1040.13b": "0",
+      "F1040.13a": "0",
+      "F1040.8": "0",
+      "F1040.10": "1332.5",
+      "F1040.15": "74917.5",
+      "F1040.16": "11398",
+      "F8959.7": "0",
+      "F8960.17": "0",
+      "F1040.24": "11398",
+      "F1040.25c": "0",
+      "S3.11": "0",
+      "F1040.33": "11000",
+      "F1040.34": "0",
+      "F1040.37": "398",
+      "S1.21": "1332.5",
+      "S1.26": "1332.5"
+    }
+  }
+}

@@ -1,0 +1,166 @@
+{
+  "about": "Married filing jointly, $172,345 of wages: student loan interest cut, then a child's American opportunity credit, and the lifetime learning credit on $10,000 of a spouse's and another child's $11,000, cut to 0.429 of each",
+  "input": {
+    "country": "us",
+    "year": 2025,
+    "people": [
+      {
+        "id": "p1",
+        "name": "Lee Park",
+        "role": "self",
+        "birthDate": "1975-01-01",
+        "province": null,
+        "residentAllYear": true
+      },
+      {
+        "id": "p2",
+        "name": "Mia Park",
+        "role": "spouse",
+        "birthDate": "1983-02-02",
+        "province": null,
+        "residentAllYear": true
+      }
+    ],
+    "family": {
+      "maritalStatus": "married",
+      "dependants": [
+        {
+          "id": "d1",
+          "name": "Jun Park",
+          "birthDate": "2005-05-05",
+          "answers": {
+            "relationship": "child",
+            "monthsWithYou": "12",
+            "hasSSN": true,
+            "paidOwnSupport": false,
+            "filedJointReturn": false,
+            "citizenOrResident": true,
+            "fullTimeStudent": true,
+            "studentExpenses": "4500",
+            "studentCredit": "aotc"
+          }
+        },
+        {
+          "id": "d2",
+          "name": "Ari Park",
+          "birthDate": "2002-03-03",
+          "answers": {
+            "relationship": "child",
+            "monthsWithYou": "12",
+            "hasSSN": true,
+            "paidOwnSupport": false,
+            "filedJointReturn": false,
+            "citizenOrResident": true,
+            "fullTimeStudent": true,
+            "studentExpenses": "3000",
+            "studentCredit": "llc"
+          }
+        }
+      ],
+      "filingStatus": "joint"
+    },
+    "answers": {
+      "p1": {
+        "hasWages": true,
+        "hasInterest": false,
+        "hasTipsOrOvertime": false,
+        "canBeClaimed": false,
+        "isBlind": false,
+        "estimatedPayments": "0",
+        "hasCarLoan": false,
+        "hasSelfEmployment": false,
+        "hasStudentLoan": false,
+        "paidForEducation": true,
+        "educationExpenses": "0",
+        "paidForCare": false,
+        "hasValidSSN": true
+      },
+      "p2": {
+        "hasWages": true,
+        "hasInterest": false,
+        "hasTipsOrOvertime": false,
+        "canBeClaimed": false,
+        "isBlind": false,
+        "estimatedPayments": "0",
+        "hasCarLoan": false,
+        "hasSelfEmployment": false,
+        "hasStudentLoan": true,
+        "paidForEducation": true,
+        "studentLoanInterest": "1000",
+        "educationExpenses": "8000",
+        "educationCredit": "llc",
+        "hasValidSSN": true
+      }
+    },
+    "slips": [
+      {
+        "id": "p1-w2-0",
+        "person": "p1",
+        "type": "W2",
+        "issuer": "Harbor Bank",
+        "boxes": {
+          "1": "112345",
+          "2": "14000",
+          "4": "6965.39",
+          "5": "112345",
+          "6": "1629"
+        }
+      },
+      {
+        "id": "p2-w2-0",
+        "person": "p2",
+        "type": "W2",
+        "issuer": "City Schools",
+        "boxes": {
+          "1": "60000",
+          "2": "5200",
+          "4": "3720",
+          "5": "60000",
+          "6": "870"
+        }
+      }
+    ]
+  },
+  "expected": {
+    "p1": {
+      "F1040.19": "1000",
+      "F1040.27a": "0",
+      "F1040.28": "0",
+      "S8812.12": "1000",
+      "F1040.1a": "172345",
+      "F1040.1e": "0",
+      "S3.2": "0",
+      "F1040.2a": "0",
+      "F1040.2b": "0",
+      "F1040.9": "172345",
+      "F1040.11a": "171423",
+      "F1040.12e": "31500",
+      "F1040.13b": "0",
+      "F1040.13a": "0",
+      "F1040.8": "0",
+      "F1040.10": "922",
+      "F1040.15": "139923",
+      "F1040.16": "20611.06",
+      "F8959.7": "0",
+      "F8960.17": "0",
+      "F1040.24": "18109.56",
+      "F1040.25c": "0",
+      "S3.11": "0",
+      "F1040.33": "19629",
+      "F1040.34": "1519.44",
+      "F1040.37": "0",
+      "S1.21": "922",
+      "S1.26": "922",
+      "F8863.1": "2500",
+      "F8863.6": "0.429",
+      "F8863.7": "1072.5",
+      "F8863.8": "429",
+      "F8863.9": "643.5",
+      "F8863.10": "11000",
+      "F8863.18": "858",
+      "F8863.19": "1501.5",
+      "S3.3": "1501.5",
+      "F1040.29": "429"
+    }
+  }
+}

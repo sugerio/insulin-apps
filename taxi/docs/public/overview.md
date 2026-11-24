@@ -97,11 +97,19 @@ The US return covers:
   taken before the child tax credit, so more of that one can be refunded. Dependent care benefits from an employer
   (box 10 of the W-2) are excluded up to $5,000, and the rest is taxed as wages. Filing jointly, a spouse who was a
   full-time student or couldn't care for themselves, and had no wages, counts as earning $250 ($500) a month.
+- The education credits (Form 8863), for you, your spouse filing jointly, or a dependant 14 or older. You enter each
+  student's tuition and required fees, less tax-free scholarships, and choose the credit. The American opportunity
+  credit is all of the first $2,000 and 25% of the next $2,000 for each student, and 40% of it is refundable. The
+  lifetime learning credit is 20% of up to $10,000 for the return. Both are smaller from $80,000 of modified AGI
+  ($160,000 jointly), and none is left at $90,000 ($180,000). They come after the care credit and before the child tax
+  credit. Filing separately, or if someone can claim you, you can't take them.
 - Deductions: the standard deduction, with the additional amounts at 65 or older and for blindness, the smaller
   deduction of someone who can be claimed as a dependent, and the 2025 deductions on Schedule 1-A: for seniors, for
   qualified tips (up to $25,000), for the "half" of time-and-a-half overtime pay (up to $12,500, or $25,000 jointly),
   and for interest on a loan for a new car assembled in the U.S. (up to $10,000). Each is smaller at a higher income.
   Filing separately, the tips and overtime deductions can't be taken. The tips amount starts from box 7 of the W-2.
+- Student loan interest: up to $2,500 (Schedule 1, line 21), smaller from $85,000 of modified AGI ($170,000 jointly).
+  It lowers the AGI. Filing separately, or if someone can claim you, you can't deduct it.
 - Tax: the IRS Tax Table under $100,000 and the Tax Computation Worksheet from $100,000, the Additional Medicare Tax,
   the net investment income tax, and a credit for excess social security tax withheld by two or more employers.
 
@@ -109,8 +117,8 @@ A parent's release of the claim to a child (Form 8332), itemized deductions, all
 unreported tips (Form 4137), a business loss, a household employee (Schedule H), and other income come in later
 versions. The app says so when one of them applies,
 instead of giving a wrong amount. A finished US return downloads as one PDF: the IRS's Form 1040 and the schedules and
-forms it uses (Schedules 1, 1-A, 2, 3, C, SE, 8812 and EIC, and Forms 2441, 8995, 8959 and 8960), filled in, then a
-worksheet. Taxi doesn't read US forms by AI yet: enter each W-2, 1099-INT and 1099-NEC on Income.
+forms it uses (Schedules 1, 1-A, 2, 3, C, SE, 8812 and EIC, and Forms 2441, 8863, 8995, 8959 and 8960), filled in,
+then a worksheet. Taxi doesn't read US forms by AI yet: enter each W-2, 1099-INT and 1099-NEC on Income.
 
 ## What it stores
 

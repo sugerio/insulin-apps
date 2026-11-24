@@ -285,8 +285,8 @@ lines:
     formula: "line.SE.13 + if(line.US.joint == 1, spouse.line.SE.13, 0)"
   S1.26:
     label: Adjustments to income
-    formula: "line.S1.15"
-    source: "Schedule 1, line 26: only the deductible part of self-employment tax is worked out"
+    formula: "line.S1.15 + line.S1.21"
+    source: "Schedule 1, line 26: the deductible part of self-employment tax and the student loan interest deduction (education.yaml); no other adjustment is worked out"
 
   # Form 8995: qualified business income deduction, at or below the threshold.
   F8995.2:

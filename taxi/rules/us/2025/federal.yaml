@@ -1,4 +1,6 @@
 # Form 1040 for 2025, with Schedules 1-A, 2 and 3 and Forms 8959 and 8960 as far as wages and interest reach them.
+# The credits and adjustments of other parts are in their own files (care, dependants, eic, education,
+# schedule1a, self-employment).
 # "Instructions" is the 2025 Instructions for Form 1040 (i1040gi, February 25, 2026).
 
 params:
@@ -452,8 +454,8 @@ lines:
     formula: "line.S3.11"
   F1040.32:
     label: Other payments and refundable credits
-    formula: "line.F1040.27a + line.F1040.28 + line.F1040.31"
-    source: "Form 1040, line 32: lines 27a, 28 and 31"
+    formula: "line.F1040.27a + line.F1040.28 + line.F1040.29 + line.F1040.31"
+    source: "Form 1040, line 32: lines 27a, 28, 29 and 31"
   F1040.33:
     label: Total payments
     formula: "line.F1040.25d + line.F1040.26 + line.F1040.32"

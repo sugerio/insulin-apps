@@ -41,6 +41,8 @@
         "estimatedPayments": "0",
         "hasCarLoan": false,
         "hasSelfEmployment": false,
+        "hasStudentLoan": false,
+        "paidForEducation": false,
         "paidForCare": false,
         "spouseDiedIn2025": false,
         "spouseDiedIn2023Or2024": true,

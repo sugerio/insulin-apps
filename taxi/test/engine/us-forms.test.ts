@@ -80,6 +80,11 @@ describe("2025 US forms", () => {
     ["self-employed-parent-eic", "F1040,S1,S2,SC,SE,SEIC,S8812"],
     ["joint-both-self-employed", "F1040,S1,S2,SC,SCS,SE,SES,F8995"],
     ["small-profit-no-se-tax", "F1040,S1,SC,F8995"],
+    ["education-aotc-child", "F1040,S3,S8812,F8863"],
+    ["education-joint-phase-out", "F1040,S1,S3,S8812,F8863"],
+    ["education-llc-tax-limit", "F1040,S3,F2441,SEIC,S8812,F8863"],
+    ["student-loan-phase-out", "F1040,S1"],
+    ["education-young-no-refund", "F1040,S3,F8863"],
   ] as const) {
     it(`${name}: its forms hold the case's expected lines`, () => {
       const example = golden(name);
@@ -332,6 +337,48 @@ describe("2025 US forms", () => {
     expect(at(f8960, "15")).toBe(over.toString());
     expect(at(f8960, "16")).toBe(Dec.min(over, Dec.from(at(f8960, "12")!)).toString());
     expect(at(formOf(filled, "S2"), "21")).toBe(Dec.from(at(f8959, "7")!).add(Dec.from(at(f8960, "17")!)).toString());
+  });
+
+  it("writes Form 8863's decimals as a digit and three more, and fills page 2 for a dependant when no adult is a student", () => {
+    const f8863 = formOf(print(golden("education-aotc-child").input), "F8863");
+    expect(["6", "6digits", "line7NoRefund", "17", "names2"].map((key) => at(f8863, key))).toEqual(["1", "000", undefined, undefined, "Dana Wells"]);
+    expect(["student@1", "line23No@1", "line24Yes@1", "line25No@1", "line26No@1", "27@1", "28@1", "29@1", "30@1", "31@1"].map((key) => at(f8863, key))).toEqual([
+      "Sam Wells",
+      "X",
+      "X",
+      "X",
+      "X",
+      "4000",
+      "2000",
+      "500",
+      "2500",
+      undefined,
+    ]);
+    expect(at(f8863, "student")).toBeUndefined();
+  });
+
+  it("fills page 2 of Form 8863 for the spouse, leaves lines 23 to 26 for a lifetime learning credit, and asks a page 2 for each other student", () => {
+    const example = golden("education-joint-phase-out");
+    const f8863 = formOf(print(example.input), "F8863");
+    expect(["6", "6digits", "17", "17digits", "11"].map((key) => at(f8863, key))).toEqual(["0", "429", "0", "429", "10000"]);
+    expect(["student", "spouseStudent", "line23No", "27", "31", "student@1"].map((key) => at(f8863, key))).toEqual([undefined, "Mia Park", undefined, undefined, "8000", undefined]);
+    expect(formsToAdd(rules, new Evaluation(rules, example.input), "p1").map(({ form }) => form)).toEqual(["Form 8863, page 2, for each other student"]);
+    expect(formsToAdd(rules, new Evaluation(rules, golden("education-aotc-child").input), "p1")).toEqual([]);
+  });
+
+  it("ticks Form 8863's line 7 box for a young student with no refundable credit, and fills their own page 2", () => {
+    const f8863 = formOf(print(golden("education-young-no-refund").input), "F8863");
+    expect(["line7NoRefund", "7", "8", "9", "student", "27", "28", "29", "30"].map((key) => at(f8863, key))).toEqual([
+      "X",
+      "2250",
+      undefined,
+      "2250",
+      "Kit Young",
+      "3000",
+      "1000",
+      "250",
+      "2250",
+    ]);
   });
 
   it("names Schedule B to fill in yourself when the taxable interest is more than $1,500", () => {

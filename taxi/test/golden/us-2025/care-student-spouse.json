@@ -51,6 +51,8 @@
         "estimatedPayments": "0",
         "hasCarLoan": false,
         "hasSelfEmployment": false,
+        "hasStudentLoan": false,
+        "paidForEducation": false,
         "paidForCare": true,
         "householdEmployer": false,
         "priorYearCare": false,
@@ -67,6 +69,8 @@
         "estimatedPayments": "0",
         "hasCarLoan": false,
         "hasSelfEmployment": false,
+        "hasStudentLoan": false,
+        "paidForEducation": false,
         "hasValidSSN": true,
         "studentOrDisabledMonths": "9"
       }

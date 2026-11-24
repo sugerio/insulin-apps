@@ -54,8 +54,8 @@ function oneW2(options: {
       })),
     },
     answers: {
-      p1: { hasTipsOrOvertime: false, hasCarLoan: false, hasSelfEmployment: false, spouseItemizes: false, hasValidSSN: true, paidHalfOfHome: true, paidForCare: false, ...options.answers },
-      ...(options.joint ? { p2: { hasTipsOrOvertime: false, hasCarLoan: false, hasSelfEmployment: false, hasValidSSN: true, ...options.spouseAnswers } } : {}),
+      p1: { hasTipsOrOvertime: false, hasCarLoan: false, hasSelfEmployment: false, hasStudentLoan: false, paidForEducation: false, spouseItemizes: false, hasValidSSN: true, paidHalfOfHome: true, paidForCare: false, ...options.answers },
+      ...(options.joint ? { p2: { hasTipsOrOvertime: false, hasCarLoan: false, hasSelfEmployment: false, hasStudentLoan: false, paidForEducation: false, hasValidSSN: true, ...options.spouseAnswers } } : {}),
     },
     slips: [
       {
@@ -357,7 +357,7 @@ describe("the 2025 US rules", () => {
 
   it("show one federal refund or amount owed, and print on the IRS forms in their attachment order", () => {
     expect(rules.balances).toEqual([{ name: "Federal", refund: "F1040.34", owing: "F1040.37" }]);
-    expect([...rules.forms.keys()]).toEqual(["F1040", "S1", "S1A", "S2", "S3", "SC", "SCS", "SE", "SES", "F2441", "SEIC", "S8812", "F8995", "F8959", "F8960"]);
+    expect([...rules.forms.keys()]).toEqual(["F1040", "S1", "S1A", "S2", "S3", "SC", "SCS", "SE", "SES", "F2441", "SEIC", "S8812", "F8863", "F8995", "F8959", "F8960"]);
   });
 });
 
@@ -496,5 +496,101 @@ describe("self-employment: Schedules C, SE and 1, and Form 8995", () => {
     expect(questions({})).toContain("hasSelfEmployment");
     expect(questions({})).not.toContain("businessIncome");
     expect(questions({ hasSelfEmployment: true })).toEqual(expect.arrayContaining(["businessIncome", "businessSupplies", "businessMeals", "businessExtras"]));
+  });
+});
+
+describe("education: Form 8863 and the student loan interest deduction", () => {
+  const evaluation = (input: EngineInput) => new Evaluation(rules, input);
+  const line = (input: EngineInput, id: string) => evaluation(input).line("p1", id).value?.toString() ?? null;
+  const lines = (input: EngineInput, ids: string[]) => ids.map((id) => line(input, id));
+  const course = (expenses: string, credit: "aotc" | "llc", extra: Record<string, string | boolean> = {}) => ({
+    paidForEducation: true,
+    educationExpenses: expenses,
+    educationCredit: credit,
+    ...extra,
+  });
+  const loan = (interest: string) => ({ hasStudentLoan: true, studentLoanInterest: interest });
+
+  it("takes the American opportunity credit on all of the first $2,000 and 25% of the next $2,000, 40% of it refundable", () => {
+    expect(lines(oneW2({ wages: "50000", answers: course("3000", "aotc") }), ["F8863.1", "F8863.7", "F8863.8", "F8863.9", "S3.3", "F1040.29"])).toEqual([
+      "2250",
+      "2250",
+      "900",
+      "1350",
+      "1350",
+      "900",
+    ]);
+    expect(line(oneW2({ wages: "50000", answers: course("9000", "aotc") }), "F8863.1")).toBe("2500");
+  });
+
+  it("takes the lifetime learning credit on 20% of up to $10,000 for the return", () => {
+    expect(lines(oneW2({ wages: "50000", answers: course("12000", "llc") }), ["F8863.10", "F8863.11", "F8863.18", "F8863.19", "F8863.8"])).toEqual(["12000", "10000", "2000", "2000", "0"]);
+  });
+
+  it("cuts both credits from $80,000 of modified AGI ($160,000 jointly) to $90,000, by a decimal rounded to three places", () => {
+    const share = (wages: string, joint = false) => line(oneW2({ wages, joint, answers: course("4000", "aotc") }), "F8863.6");
+    expect([share("80000"), share("81234"), share("85000"), share("89999.99"), share("90000"), share("170000", true)]).toEqual(["1", "0.877", "0.5", "0", "0", "0.5"]);
+    expect(line(oneW2({ wages: "85000", answers: course("10000", "llc") }), "F8863.18")).toBe("1000");
+  });
+
+  it("gives no credit and no student loan deduction filing separately, or to someone who can be claimed as a dependent", () => {
+    const answers = { ...course("4000", "aotc"), ...loan("1000") };
+    const separate = oneW2({ wages: "50000", married: true, answers });
+    const claimed = oneW2({ wages: "50000", answers: { ...answers, canBeClaimed: true } });
+    for (const input of [separate, claimed]) expect(lines(input, ["F8863.1", "F8863.19", "F1040.29", "S1.21"])).toEqual(["0", "0", "0", "0"]);
+    // Nothing about education is asked of them.
+    expect(evaluation(oneW2({ wages: "50000", answers: { canBeClaimed: true } })).result().people[0]!.questions).not.toContain("paidForEducation");
+  });
+
+  it("makes none of the credit refundable for someone under 24, not filing jointly, with a parent alive, as Form 8863 line 7 says", () => {
+    const young = (birthDate: string, extra: Record<string, boolean>) => oneW2({ wages: "25000", birthDate, answers: course("3000", "aotc", extra) });
+    expect(line(young("2005-01-01", { parentAlive: true, fullTimeStudentSelf: true, earnedUnderHalfSupport: true }), "F8863.8")).toBe("0");
+    // Earning half of their support or more, not a full-time student, or no parent alive: 40% is refundable.
+    expect(line(young("2005-01-01", { parentAlive: true, fullTimeStudentSelf: true, earnedUnderHalfSupport: false }), "F8863.8")).toBe("900");
+    expect(line(young("2005-01-01", { parentAlive: true, fullTimeStudentSelf: false }), "F8863.8")).toBe("900");
+    expect(line(young("2005-01-01", { parentAlive: false }), "F8863.8")).toBe("900");
+    // Under 18, a parent alive is enough; at 18, the support test too; from 24, none of it is asked.
+    expect(line(young("2008-01-01", { parentAlive: true }), "F8863.8")).toBe("0");
+    expect(line(young("2007-01-01", { parentAlive: true, earnedUnderHalfSupport: true }), "F8863.8")).toBe("0");
+    const questions = (birthDate: string, extra: Record<string, boolean> = {}) => evaluation(young(birthDate, extra)).result().people[0]!.questions;
+    expect(questions("2005-01-01")).toContain("parentAlive");
+    expect(questions("2005-01-01", { parentAlive: true })).toContain("fullTimeStudentSelf");
+    expect(questions("2001-01-01")).not.toContain("parentAlive");
+  });
+
+  it("takes the education credits after the care credit and before the child tax credit", () => {
+    // Head of household with a child of 10 and $25,000 of taxable income: more tax than the credit.
+    const input = oneW2({ taxable: "25000", hoh: true, answers: course("4000", "aotc") });
+    const [tax, education, limit] = lines(input, ["F1040.18", "S3.3", "S8812.13"]);
+    expect(education).toBe("1500");
+    expect(limit).toBe(Dec.from(tax!).sub(Dec.from("1500")).toString());
+  });
+
+  it("deducts up to $2,500 of student loan interest, cut from $85,000 of modified AGI ($170,000 jointly) to $100,000", () => {
+    const deduction = (wages: string, interest = "3000") => line(oneW2({ wages, answers: loan(interest) }), "S1.21");
+    expect([deduction("50000", "1200"), deduction("50000"), deduction("85000"), deduction("92000"), deduction("100000")]).toEqual(["1200", "2500", "2500", "1332.5", "0"]);
+    // An adjustment: it lowers the AGI.
+    expect(lines(oneW2({ wages: "50000", answers: loan("1200") }), ["F1040.10", "S1.26", "F1040.11a"])).toEqual(["1200", "1200", "48800"]);
+    // Jointly, $2,500 for the couple, cut by $10,000 over $170,000 in $30,000: 0.333.
+    const couple = oneW2({ wages: "180000", joint: true, answers: loan("1500"), spouseAnswers: loan("1500") });
+    expect(lines(couple, ["SLW.1", "SLW.7", "S1.21"])).toEqual(["2500", "0.333", "1667.5"]);
+  });
+
+  it("asks the expenses only after the yes, the credit once there are some, and a dependant's from 14 on their card", () => {
+    const questions = (answers: Record<string, string | boolean>) => evaluation(oneW2({ wages: "40000", answers })).result().people[0]!.questions;
+    expect(questions({})).toEqual(expect.arrayContaining(["paidForEducation", "hasStudentLoan"]));
+    expect(questions({})).not.toContain("educationExpenses");
+    expect(questions({ paidForEducation: true })).toContain("educationExpenses");
+    expect(questions({ paidForEducation: true })).not.toContain("educationCredit");
+    expect(questions({ paidForEducation: true, educationExpenses: "500" })).toContain("educationCredit");
+    expect(questions({ hasStudentLoan: true })).toContain("studentLoanInterest");
+    expect([rules.questions.get("paidForEducation")!.module, rules.questions.get("hasStudentLoan")!.module]).toEqual(["about", "deductions"]);
+    // A child of 10 isn't asked; a child of 19 is.
+    const family = oneW2({ wages: "40000", hoh: true, answers: { paidForEducation: true, educationExpenses: "0" } });
+    const dependantQuestions = (input: EngineInput) => evaluation(input).result().dependants[0]!.questions;
+    expect(dependantQuestions(family)).not.toContain("studentExpenses");
+    family.family.dependants[0]!.birthDate = "2006-01-01";
+    family.family.dependants[0]!.answers = { ...family.family.dependants[0]!.answers, fullTimeStudent: true };
+    expect(dependantQuestions(family)).toContain("studentExpenses");
   });
 });

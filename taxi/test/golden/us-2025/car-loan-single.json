@@ -27,6 +27,8 @@
         "estimatedPayments": "0",
         "hasCarLoan": true,
         "hasSelfEmployment": false,
+        "hasStudentLoan": false,
+        "paidForEducation": false,
         "carLoanInterest": "12000",
         "carLoanQualifies": "yes",
         "paidForCare": false

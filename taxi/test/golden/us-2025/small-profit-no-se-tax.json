@@ -27,6 +27,8 @@
         "estimatedPayments": "0",
         "hasCarLoan": false,
         "hasSelfEmployment": true,
+        "hasStudentLoan": false,
+        "paidForEducation": false,
         "businessIncome": "1000",
         "businessExtras": "none",
         "businessAdvertising": "0",

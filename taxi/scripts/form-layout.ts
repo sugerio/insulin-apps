@@ -83,6 +83,15 @@ const PLACES: Record<string, Record<string, PlaceSpec>> = {
 /** `<name>@1` to `<name>@<n>`, each the field given for it, with the same piece of label. */
 const columns = (name: string, label: string, fields: string[]): Record<string, IrsPlace> =>
   Object.fromEntries(fields.map((field, index) => [`${name}@${index + 1}`, { field, label }]));
+/** Form 8863's Part III for one student: the name, the answers of lines 23 to 26 for the American opportunity credit, and lines 27 to 31. */
+const partIII = (suffix: string): Record<string, IrsPlace> => ({
+  [`student${suffix}`]: { field: "f2-5[0]", label: "20. Student name" },
+  [`line23No${suffix}`]: { field: "c2_5[1]", label: "23. No" },
+  [`line24Yes${suffix}`]: { field: "c2_6[0]", label: "Yes — Go to line 25" },
+  [`line25No${suffix}`]: { field: "c2_7[1]", label: "25. No" },
+  [`line26No${suffix}`]: { field: "c2_8[1]", label: "26. No" },
+  ...Object.fromEntries([27, 28, 29, 30, 31].map((line, index) => [`${line}${suffix}`, { field: `f2_${31 + index}[0]`, label: `${line}.` }])),
+});
 /** Each schedule's "Name(s) shown on return". */
 const names = (field: string): Record<string, IrsPlace> => ({ names: { field, label: "Name(s) shown on" } });
 
@@ -197,6 +206,20 @@ const IRS_PLACES: Record<string, Record<string, IrsPlace>> = {
     ...columns("lastName", "Qualifying person's name. Last", [1, 2, 3].map((row, index) => `Table_Line2[0].Row${row}[0].f1_${16 + index * 4}[0]`)),
     ...columns("disabled", "over age 12 and was disabled", [1, 2, 3].map((row, index) => `Table_Line2[0].Row${row}[0].c1_${8 + index}[0]`)),
     ...columns("expenses", "Qualified expenses you incurred", [1, 2, 3].map((row, index) => `Table_Line2[0].Row${row}[0].f1_${18 + index * 4}[0]`)),
+  },
+  // Form 8863: the decimals of lines 6 and 17 in two boxes each, the box of line 7, and page 2 (Part III) for one student,
+  // in two sets of places: as a row of the form (you or your spouse) and as the one column of its table of dependants.
+  F8863: {
+    ...names("f1_1[0]"),
+    names2: { field: "f2_1[0]", label: "Name(s) shown on" },
+    "6": { field: "f1_10[0]", label: "6. If line 4 is", count: true },
+    "6digits": { field: "f1_11[0]", label: "6. Digits after the decimal", count: true },
+    "17": { field: "f1_22[0]", label: "17. If line 15 is", count: true },
+    "17digits": { field: "f1_23[0]", label: "17. Digits after the decimal", count: true },
+    line7NoRefund: { field: "c1_1[0]", label: "check this box" },
+    spouseStudent: { field: "f2-5[0]", label: "20. Student name" },
+    ...partIII(""),
+    ...partIII("@1"),
   },
   F8959: names("f1_1[0]"),
   F8960: names("f1_1[0]"),

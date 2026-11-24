@@ -3,7 +3,8 @@
 # status box, a column of a table) is named in scripts/form-layout.ts by its field. Each amount is a formula from the
 # return's side, like a line's. A zero or a missing amount is left blank, unless the field says `zero: true`. Rows the
 # app has nothing for (IRA distributions, Schedule 1) are left out. A field is an amount unless it says otherwise:
-#   { count: <formula> }   a whole number (a number of children or months), with no cents
+#   { count: <formula> }   a whole number (a number of children or months), with no cents; with `digits: <n>`, written
+#                          with n digits, zeros included, even when it is zero (the decimals of Form 8863, line 6)
 #   { tick: <formula> }    a tick in a box, when the formula is yes from the person's answers (not from a usual answer)
 #   { text: <fact> }       the person's firstName or lastName, their spouse's spouseFirstName, spouseLastName or whole
 #                          spouseName, or the returnNames a schedule is headed with (both spouses' on a joint return)
@@ -12,8 +13,8 @@
 #
 # A form applies to the returns whose `applies` is yes; the forms print in the order of the attachment sequence number
 # printed at the top right of each, as the IRS asks them attached: Form 1040, then Schedules 1, 1-A, 2, 3, C and SE
-# (on a joint return, the spouse's copy after the preparer's), Form 2441, Schedule EIC, Schedule 8812, and Forms 8995,
-# 8959 and 8960. A form with `side: spouse` is the spouse's copy, worked out from their side; `layout` reuses another
+# (on a joint return, the spouse's copy after the preparer's), Form 2441, Schedule EIC, Schedule 8812, and Forms 8863,
+# 8995, 8959 and 8960. A form with `side: spouse` is the spouse's copy, worked out from their side; `layout` reuses another
 # form's places on the same PDF.
 #
 # The PDFs come from irs.gov on first use (url: the 2025 revision's own address, which doesn't change when the IRS
@@ -79,6 +80,7 @@ forms:
       "26": line.F1040.26
       27a: line.F1040.27a
       "28": line.F1040.28
+      "29": line.F1040.29
       "31": line.F1040.31
       "32": line.F1040.32
       "33": line.F1040.33
@@ -113,10 +115,12 @@ forms:
     applies: "line.S1.10 > 0 or line.S1.26 > 0"
     fields:
       names: { text: returnNames }
-      # Part I: business income only; Part II: the deductible part of self-employment tax only.
+      # Part I: business income only; Part II: the deductible part of self-employment tax and the student loan interest
+      # deduction.
       "3": line.S1.3
       "10": line.S1.10
       "15": line.S1.15
+      "21": line.S1.21
       "26": line.S1.26
 
   S1A:
@@ -189,6 +193,7 @@ forms:
     fields:
       names: { text: returnNames }
       "2": line.S3.2
+      "3": line.S3.3
       "8": line.S3.8
       "11": line.S3.11
       "15": line.S3.11
@@ -381,6 +386,71 @@ forms:
       # Part II-C
       "27": line.S8812.27
 
+  # Form 8863: page 1 for the return, and page 2 (Part III) for one student: you, else your spouse filing jointly, else
+  # the first dependant with a credit. Each other student needs a copy of page 2, which the worksheet asks for. The
+  # student's social security number and each school's name, address, EIN and Form 1098-T answers (line 22) stay for
+  # the person to fill in. Lines 23 to 26 are ticked for a student who takes the American opportunity credit, as they
+  # said all of its conditions are true; for one who takes the lifetime learning credit, they stay for the person.
+  F8863:
+    title: Form 8863, Education Credits (American Opportunity and Lifetime Learning Credits)
+    url: https://www.irs.gov/pub/irs-prior/f8863--2025.pdf
+    applies: "line.F8863.7 + line.F8863.18 > 0"
+    fields:
+      names: { text: returnNames }
+      names2: { text: returnNames }
+      # Part I. Lines 6 and 17 are decimals: the digit before the point, and the three after it.
+      "1": line.F8863.1
+      "2": { value: line.F8863.2, when: &aotc "line.F8863.1 > 0" }
+      "3": { value: line.F8863.3, when: *aotc }
+      "4": { value: line.F8863.4, when: *aotc }
+      "5": { value: line.F8863.5, when: *aotc }
+      "6": { count: "floor(line.F8863.6, 1)", digits: 1, when: *aotc }
+      6digits: { count: "(line.F8863.6 - floor(line.F8863.6, 1)) * 1000", digits: 3, when: *aotc }
+      line7NoRefund: { tick: "line.US.aotcNoRefund == 1" }
+      "7": line.F8863.7
+      "8": line.F8863.8
+      "9": line.F8863.9
+      # Part II
+      "10": line.F8863.10
+      "11": line.F8863.11
+      "12": line.F8863.12
+      "13": { value: line.F8863.2, when: &llc "line.F8863.10 > 0" }
+      "14": { value: line.F8863.3, when: *llc }
+      "15": { value: line.F8863.15, when: *llc }
+      "16": { value: line.F8863.5, when: *llc }
+      "17": { count: "floor(line.F8863.17, 1)", digits: 1, when: *llc }
+      17digits: { count: "(line.F8863.17 - floor(line.F8863.17, 1)) * 1000", digits: 3, when: *llc }
+      "18": line.F8863.18
+      "19": line.F8863.19
+      # Part III for you or your spouse
+      student: { text: name, when: "line.US.page2 == 1" }
+      spouseStudent: { text: spouseName, when: "line.US.page2 == 2" }
+      line23No: { tick: &page2Aotc "if(line.US.page2 == 1, line.US.ownAotcStudent, if(line.US.page2 == 2, spouse.line.US.ownAotcStudent, 0)) == 1" }
+      line24Yes: { tick: *page2Aotc }
+      line25No: { tick: *page2Aotc }
+      line26No: { tick: *page2Aotc }
+      "27": "if(line.US.page2 == 1, line.US.ownAotc27, if(line.US.page2 == 2, spouse.line.US.ownAotc27, 0))"
+      "28": "max(0, if(line.US.page2 == 1, line.US.ownAotc27, if(line.US.page2 == 2, spouse.line.US.ownAotc27, 0)) - param.aotcFullRate)"
+      "29": "round(max(0, if(line.US.page2 == 1, line.US.ownAotc27, if(line.US.page2 == 2, spouse.line.US.ownAotc27, 0)) - param.aotcFullRate) * param.aotcPartRate, 2)"
+      "30": "if(line.US.page2 == 1, line.US.ownAotc30, if(line.US.page2 == 2, spouse.line.US.ownAotc30, 0))"
+      "31": "if(line.US.page2 == 1, line.US.ownLlc31, if(line.US.page2 == 2, spouse.line.US.ownLlc31, 0))"
+    # Part III for a dependant, when neither you nor your spouse is a student.
+    dependants:
+      when: "line.US.page2 == 0 and line.US.educationAsked == 1"
+      which: "line.DEP.student == 1"
+      columns: 1
+      fields:
+        student: { text: name }
+        line23No: { tick: "line.DEP.aotcStudent == 1" }
+        line24Yes: { tick: "line.DEP.aotcStudent == 1" }
+        line25No: { tick: "line.DEP.aotcStudent == 1" }
+        line26No: { tick: "line.DEP.aotcStudent == 1" }
+        "27": line.DEP.aotc27
+        "28": "max(0, line.DEP.aotc27 - param.aotcFullRate)"
+        "29": "round(max(0, line.DEP.aotc27 - param.aotcFullRate) * param.aotcPartRate, 2)"
+        "30": line.DEP.aotc30
+        "31": line.DEP.llc31
+
   F8995:
     title: Form 8995, Qualified Business Income Deduction Simplified Computation
     url: https://www.irs.gov/pub/irs-prior/f8995--2025.pdf
@@ -451,3 +521,11 @@ formsToAdd:
       because your taxable interest is more than $1,500: list each payer and amount (your 1099-INT forms, below) in
       Part I, and answer the questions about foreign accounts and trusts in Part III
     applies: "line.F1040.2b > 1500"
+  F8863P2:
+    form: Form 8863, page 2, for each other student
+    why: >-
+      because more than one student has an education credit: Taxi fills in page 2 (Part III) for the first, and each
+      other student needs a copy of it. For a student with the American opportunity credit, line 27 is their expenses up
+      to $4,000 and line 30 the credit (all of the first $2,000 and 25% of the rest); for one with the lifetime learning
+      credit, line 31 is their expenses. "How each line is worked out", below, has each student's amounts.
+    applies: "line.US.students > 1"

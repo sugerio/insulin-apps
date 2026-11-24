@@ -121,7 +121,9 @@ export function fillForms(rules: RuleSet, evaluation: Evaluation, personId: stri
         // usual answer standing in for theirs.
         if (value === true && status === "complete") marks.push({ kind: "tick", key, page, x, y });
       } else if (field.kind === "count") {
-        if (value instanceof Dec && !value.isZero()) marks.push({ kind: "count", key, page, x, y, text: value.roundTo(0, "HALF_UP").toString() });
+        // A decimal's digits (Form 8863's 0.429) keep their zeros: 1.000 is 1 and 000.
+        if (field.digits !== undefined && value instanceof Dec) marks.push({ kind: "count", key, page, x, y, text: value.roundTo(0, "HALF_UP").toString().padStart(field.digits, "0") });
+        else if (value instanceof Dec && !value.isZero()) marks.push({ kind: "count", key, page, x, y, text: value.roundTo(0, "HALF_UP").toString() });
       } else if (field.kind === "amount") {
         place(key, page, x, y, value instanceof Dec ? value : null, field.zero, field.plain);
       }

@@ -27,6 +27,8 @@
         "estimatedPayments": "0",
         "hasCarLoan": false,
         "hasSelfEmployment": false,
+        "hasStudentLoan": false,
+        "paidForEducation": false,
         "qualifiedTips": "9000",
         "qualifiedOvertime": "0",
         "hasValidSSN": false,

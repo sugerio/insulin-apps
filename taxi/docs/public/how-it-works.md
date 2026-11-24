@@ -140,8 +140,11 @@ left under Before you file, and the download is refused.
 - A row Taxi doesn't know (a dependant's details, each expense category, a property's address) is left blank. The
   worksheet lists the slips, the answers, the hints applied and every line with its formula.
 - A US return prints on the IRS's own forms: Form 1040, then each schedule and form the return uses, in the order the
-  IRS asks them attached (Schedules 1, 1-A, 2, 3, C and SE, Form 2441, Schedule EIC, Schedule 8812, and Forms 8995,
-  8959 and 8960). On a joint return each spouse with a business gets their own Schedule C and SE.
+  IRS asks them attached (Schedules 1, 1-A, 2, 3, C and SE, Form 2441, Schedule EIC, Schedule 8812, and Forms 8863,
+  8995, 8959 and 8960). On a joint return each spouse with a business gets their own Schedule C and SE. Form 8863 has
+  one page 2 for each student: Taxi fills it in for one student (you, else your spouse, else the first dependant), and
+  the worksheet asks for a copy for each other student. Lines 6 and 17 of Form 8863 are decimals: the digit before the
+  point and the three after it are written in their own boxes.
   Taxi downloads them from irs.gov the first time, and checks each file the same way. Form 1040 gets the names, the
   filing status, the standard deduction boxes, and each dependent's name, relationship and boxes (four at most; the
   worksheet lists the others for the statement the IRS asks for). Each schedule gets the names on the return. On a

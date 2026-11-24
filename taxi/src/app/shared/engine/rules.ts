@@ -203,12 +203,13 @@ interface FieldPlace {
 /**
  * What a form gets, by kind: an amount in dollars and cents (x is the line between them, or the right end of a `plain`
  * box with no such line; `zero` writes 0.00 where the CRA asks for an amount even when it is zero), a whole number (x is
- * where its box ends), a tick (x and y are the box's centre) and a personal fact as text (x is where it starts; a date's
- * boxes have a cell width).
+ * where its box ends; with `digits`, written with that many digits, zeros included, even when it is zero), a tick (x
+ * and y are the box's centre) and a personal fact as text (x is where it starts; a date's boxes have a cell width).
  */
 export type FormField =
   | (FieldPlace & { kind: "amount"; formula: Formula; text: string; zero: boolean; plain: boolean })
-  | (FieldPlace & { kind: "count" | "tick"; formula: Formula; text: string })
+  | (FieldPlace & { kind: "count"; formula: Formula; text: string; digits?: number })
+  | (FieldPlace & { kind: "tick"; formula: Formula; text: string })
   | (FieldPlace & { kind: "text"; fact: PersonalFact; width?: number; cell?: number });
 
 /**
@@ -372,6 +373,8 @@ const compiledFieldSchema = z.strictObject({
   plain: z.boolean().optional(),
   width: z.number().optional(),
   cell: z.number().optional(),
+  /** A count written with this many digits, zeros included. */
+  digits: z.number().int().min(1).optional(),
   /** In a table of dependants: the column. */
   column: z.number().int().min(1).optional(),
   /** A choice's answers in the form's words. */
@@ -622,7 +625,9 @@ export function loadRuleSet(json: unknown, where: (entry: string) => string = ()
               return { ...place, kind: "text", fact, ...sizeOf(field) };
             }
             const formula = { formula: parse(where, field.value), text: field.value };
-            return field.kind === "amount" ? { ...place, kind: "amount", ...formula, zero: field.zero ?? false, plain: field.plain ?? false } : { ...place, kind: field.kind, ...formula };
+            if (field.kind === "amount") return { ...place, kind: "amount", ...formula, zero: field.zero ?? false, plain: field.plain ?? false };
+            if (field.kind === "count") return { ...place, kind: "count", ...formula, ...(field.digits === undefined ? {} : { digits: field.digits }) };
+            return { ...place, kind: field.kind, ...formula };
           }),
           ...(form.dependants === undefined
             ? {}

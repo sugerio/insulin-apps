@@ -36,6 +36,8 @@
         "estimatedPayments": "2000",
         "hasCarLoan": false,
         "hasSelfEmployment": false,
+        "hasStudentLoan": false,
+        "paidForEducation": false,
         "paidForCare": false,
         "spouseItemizes": false
       },
@@ -48,6 +50,8 @@
         "estimatedPayments": "0",
         "hasCarLoan": false,
         "hasSelfEmployment": false,
+        "hasStudentLoan": false,
+        "paidForEducation": false,
         "spouseItemizes": false
       }
     },

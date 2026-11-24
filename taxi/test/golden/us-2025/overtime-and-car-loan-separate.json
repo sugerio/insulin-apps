@@ -36,6 +36,8 @@
         "estimatedPayments": "0",
         "hasCarLoan": true,
         "hasSelfEmployment": false,
+        "hasStudentLoan": false,
+        "paidForEducation": false,
         "qualifiedTips": "0",
         "qualifiedOvertime": "6000",
         "hasValidSSN": true,
@@ -53,6 +55,8 @@
         "estimatedPayments": "0",
         "hasCarLoan": false,
         "hasSelfEmployment": false,
+        "hasStudentLoan": false,
+        "paidForEducation": false,
         "spouseItemizes": false
       }
     },

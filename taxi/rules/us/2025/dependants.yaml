@@ -244,8 +244,8 @@ lines:
     formula: "max(0, line.S8812.8 - line.S8812.11)"
   S8812.13:
     label: Credit limit
-    formula: "max(0, line.F1040.18 - line.S3.2)"
-    source: "8812 instructions, Credit Limit Worksheet A: Form 1040 line 18, less Schedule 3 line 2 (the credit for child and dependent care expenses); the other credits it lists aren't worked out by this app"
+    formula: "max(0, line.F1040.18 - line.S3.2 - line.S3.3)"
+    source: "8812 instructions, Credit Limit Worksheet A: Form 1040 line 18, less Schedule 3 lines 2 and 3 (the credits for child and dependent care expenses and for education); the other credits it lists aren't worked out by this app"
   S8812.14:
     label: Child tax credit and credit for other dependents
     formula: "min(line.S8812.12, line.S8812.13)"

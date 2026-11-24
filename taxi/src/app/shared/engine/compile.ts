@@ -88,12 +88,13 @@ const sourceHint = z.strictObject({
 const sourceFormula = z.string().min(1);
 /**
  * A form's field, by its row (or line code, or named place): an amount (a formula, or `value` with `when` and `zero`),
- * a whole number (`count`), a tick (`tick`, a yes/no formula) or a personal fact as text (`text`).
+ * a whole number (`count`, with `digits` for the digits of a decimal written with their zeros, such as 075 of 0.075),
+ * a tick (`tick`, a yes/no formula) or a personal fact as text (`text`).
  */
 const sourceField = z.union([
   sourceFormula,
   z.strictObject({ value: sourceFormula, when: sourceFormula.optional(), zero: z.boolean().optional() }),
-  z.strictObject({ count: sourceFormula, when: sourceFormula.optional() }),
+  z.strictObject({ count: sourceFormula, when: sourceFormula.optional(), digits: z.number().int().min(1).optional() }),
   z.strictObject({ tick: sourceFormula }),
   z.strictObject({ text: z.enum(PERSONAL_FACTS), when: sourceFormula.optional() }),
 ]);
@@ -335,7 +336,9 @@ function placeForm(form: z.infer<typeof sourceForm>, layout: z.infer<typeof sour
       const name = key.split("@")[0]!;
       if (layout!.printed?.includes(name)) fail(`Row ${key} already has an amount printed on the form`);
       const [page, x, y] = box(key);
-      if ("count" in spec) return { key, kind: "count", page, x, y, value: spec.count, ...(spec.when === undefined ? {} : { when: spec.when }) };
+      if ("count" in spec) {
+        return { key, kind: "count", page, x, y, value: spec.count, ...(spec.when === undefined ? {} : { when: spec.when }), ...("digits" in spec && spec.digits ? { digits: spec.digits } : {}) };
+      }
       // A box with no cents line (x is its right end) gets the amount with its decimal point.
       const plain = (layout!.plain ?? []).some((each) => each === key || each === name);
       return { key, kind: "amount", page, x, y, value: spec.value, ...(spec.when === undefined ? {} : { when: spec.when }), ...(spec.zero ? { zero: true } : {}), ...(plain ? { plain } : {}) };

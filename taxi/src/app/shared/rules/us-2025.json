@@ -4,6 +4,7 @@
   "filingUnit": "person",
   "result": [
     "F1040.9",
+    "F1040.10",
     "F1040.11a",
     "F1040.12e",
     "F1040.13a",
@@ -12,16 +13,19 @@
     "F1040.16",
     "F1040.19",
     "S3.2",
+    "S3.3",
     "F1040.23",
     "F1040.24",
     "F1040.27a",
     "F1040.28",
+    "F1040.29",
     "F1040.33",
     "F1040.34",
     "F1040.37"
   ],
   "resultWhen": {
     "F1040.9": "person.role == \"self\" or line.US.joint == 0",
+    "F1040.10": "person.role == \"self\" or line.US.joint == 0",
     "F1040.11a": "person.role == \"self\" or line.US.joint == 0",
     "F1040.12e": "person.role == \"self\" or line.US.joint == 0",
     "F1040.13a": "person.role == \"self\" or line.US.joint == 0",
@@ -30,10 +34,12 @@
     "F1040.16": "person.role == \"self\" or line.US.joint == 0",
     "F1040.19": "person.role == \"self\" or line.US.joint == 0",
     "S3.2": "person.role == \"self\" or line.US.joint == 0",
+    "S3.3": "person.role == \"self\" or line.US.joint == 0",
     "F1040.23": "person.role == \"self\" or line.US.joint == 0",
     "F1040.24": "person.role == \"self\" or line.US.joint == 0",
     "F1040.27a": "person.role == \"self\" or line.US.joint == 0",
     "F1040.28": "person.role == \"self\" or line.US.joint == 0",
+    "F1040.29": "person.role == \"self\" or line.US.joint == 0",
     "F1040.33": "person.role == \"self\" or line.US.joint == 0",
     "F1040.34": "person.role == \"self\" or line.US.joint == 0",
     "F1040.37": "person.role == \"self\" or line.US.joint == 0"
@@ -130,6 +136,77 @@
       "label": "Line 16b from which Part II-B applies (three or more qualifying children)",
       "value": "5100",
       "source": "8812 instructions, Part II-A: if line 16b is $5,100 or more, go to Part II-B"
+    },
+    "aotcFullRate": {
+      "label": "Expenses the American opportunity credit counts in full",
+      "value": "2000",
+      "source": "Form 8863, lines 27 to 30: the first $2,000 of each student's adjusted qualified education expenses"
+    },
+    "aotcMaxExpenses": {
+      "label": "Most expenses the American opportunity credit counts for each student",
+      "value": "4000",
+      "source": "Form 8863, line 27: don't enter more than $4,000"
+    },
+    "aotcPartRate": {
+      "label": "Share of the expenses over $2,000 the American opportunity credit counts",
+      "value": "0.25",
+      "source": "Form 8863, line 29: 25% (0.25)"
+    },
+    "aotcRefundableRate": {
+      "label": "Refundable part of the American opportunity credit",
+      "value": "0.4",
+      "source": "Form 8863, line 8: 40% (0.40)"
+    },
+    "llcMaxExpenses": {
+      "label": "Most expenses the lifetime learning credit counts for the return",
+      "value": "10000",
+      "source": "Form 8863, line 11: the smaller of line 10 or $10,000"
+    },
+    "llcRate": {"label":"Lifetime learning credit rate","value":"0.2","source":"Form 8863, line 12: 20% (0.20)"},
+    "educationLimit": {
+      "label": "Modified AGI from which there is no education credit",
+      "value": "90000",
+      "source": "Form 8863, lines 2 and 13: $90,000 if single, head of household, or qualifying surviving spouse"
+    },
+    "educationLimitJoint": {
+      "label": "Modified AGI from which there is no education credit, Married filing jointly",
+      "value": "180000",
+      "source": "Form 8863, lines 2 and 13: $180,000 if married filing jointly"
+    },
+    "educationRange": {
+      "label": "Modified AGI range over which the education credits are reduced",
+      "value": "10000",
+      "source": "Form 8863, lines 5 and 16: $10,000 if single, head of household, or qualifying surviving spouse"
+    },
+    "educationRangeJoint": {
+      "label": "Modified AGI range over which the education credits are reduced, Married filing jointly",
+      "value": "20000",
+      "source": "Form 8863, lines 5 and 16: $20,000 if married filing jointly"
+    },
+    "studentLoanMax": {
+      "label": "Most student loan interest deducted",
+      "value": "2500",
+      "source": "Instructions, Schedule 1, line 21, Student Loan Interest Deduction Worksheet, line 1: don't enter more than $2,500"
+    },
+    "studentLoanStart": {
+      "label": "Modified AGI over which the student loan interest deduction is reduced",
+      "value": "85000",
+      "source": "Instructions, Student Loan Interest Deduction Worksheet, line 5: $85,000 if single, head of household, or qualifying surviving spouse"
+    },
+    "studentLoanStartJoint": {
+      "label": "Modified AGI over which the student loan interest deduction is reduced, Married filing jointly",
+      "value": "170000",
+      "source": "Instructions, Student Loan Interest Deduction Worksheet, line 5: $170,000 if married filing jointly"
+    },
+    "studentLoanRange": {
+      "label": "Modified AGI range over which the student loan interest deduction is reduced",
+      "value": "15000",
+      "source": "Instructions, Student Loan Interest Deduction Worksheet, line 7: divide line 6 by $15,000"
+    },
+    "studentLoanRangeJoint": {
+      "label": "Modified AGI range over which the student loan interest deduction is reduced, Married filing jointly",
+      "value": "30000",
+      "source": "Instructions, Student Loan Interest Deduction Worksheet, line 7: $30,000 if married filing jointly"
     },
     "eicRateInNoChild": {
       "label": "Earned income credit rate as it rises, no qualifying child",
@@ -718,8 +795,8 @@
     },
     "S3.8": {
       "label": "Total nonrefundable credits from Schedule 3",
-      "formula": "line.S3.2",
-      "source": "Schedule 3, line 8: no other nonrefundable credit is worked out by this app"
+      "formula": "line.S3.2 + line.S3.3",
+      "source": "Schedule 3, line 8: lines 2 and 3 (education.yaml); no other nonrefundable credit is worked out by this app"
     },
     "SCOPE.care": {
       "label": "Care this app doesn't handle yet",
@@ -813,8 +890,8 @@
     "S8812.12": {"label":"Credits after the reduction","formula":"max(0, line.S8812.8 - line.S8812.11)"},
     "S8812.13": {
       "label": "Credit limit",
-      "formula": "max(0, line.F1040.18 - line.S3.2)",
-      "source": "8812 instructions, Credit Limit Worksheet A: Form 1040 line 18, less Schedule 3 line 2 (the credit for child and dependent care expenses); the other credits it lists aren't worked out by this app"
+      "formula": "max(0, line.F1040.18 - line.S3.2 - line.S3.3)",
+      "source": "8812 instructions, Credit Limit Worksheet A: Form 1040 line 18, less Schedule 3 lines 2 and 3 (the credits for child and dependent care expenses and for education); the other credits it lists aren't worked out by this app"
     },
     "S8812.14": {"label":"Child tax credit and credit for other dependents","formula":"min(line.S8812.12, line.S8812.13)"},
     "S8812.16a": {"label":"Credits more than the tax","formula":"max(0, line.S8812.12 - line.S8812.14)"},
@@ -853,6 +930,190 @@
       "label": "Additional child tax credit",
       "formula": "if(line.S8812.16a == 0, 0, if(line.S8812.16b >= param.actcThreeChildren, min(line.S8812.17, line.S8812.26), min(line.S8812.17, line.S8812.20)))",
       "source": "Schedule 8812, lines 16a to 27: Part II-B when line 16b is $5,100 or more (three or more children)"
+    },
+    "US.educationAllowed": {
+      "label": "This return can take the education credits and the student loan interest deduction (1 for yes)",
+      "formula": "if(line.US.separate == 1, 0, if(line.US.claimable == 1, 0, 1))",
+      "source": "8863 instructions, Who Can Claim an Education Credit: not married filing separately, and not someone listed as a dependent on another's return; Instructions, Schedule 1, line 21: the same for the student loan interest deduction"
+    },
+    "US.educationAsked": {
+      "label": "You, or your spouse on a joint return, paid for higher education (1 for yes)",
+      "formula": "if(line.US.educationAllowed == 0, 0, if(answer.paidForEducation, 1, if(line.US.joint == 1, if(spouse.answer.paidForEducation, 1, 0), 0)))"
+    },
+    "US.ownStudentExpenses": {
+      "label": "This person's own adjusted qualified education expenses",
+      "formula": "if(line.US.educationAllowed == 0, 0, if(answer.paidForEducation, answer.educationExpenses, 0))",
+      "source": "8863 instructions, Adjusted Qualified Education Expenses Worksheet: expenses paid in 2025, less tax-free educational assistance"
+    },
+    "US.ownAotcStudent": {
+      "label": "This person takes the American opportunity credit (1 for yes)",
+      "formula": "if(line.US.ownStudentExpenses == 0, 0, if(answer.educationCredit == \"aotc\", 1, 0))",
+      "source": "Form 8863, lines 23 to 26: the student meets each condition"
+    },
+    "US.ownAotc27": {
+      "label": "This person's expenses for the American opportunity credit, up to $4,000",
+      "formula": "if(line.US.ownAotcStudent == 1, min(line.US.ownStudentExpenses, param.aotcMaxExpenses), 0)"
+    },
+    "US.ownAotc30": {
+      "label": "This person's American opportunity credit before the limits",
+      "formula": "min(line.US.ownAotc27, param.aotcFullRate) + round(max(0, line.US.ownAotc27 - param.aotcFullRate) * param.aotcPartRate, 2)",
+      "source": "Form 8863, lines 28 to 30: line 27, up to $2,000, plus 25% of the rest"
+    },
+    "US.ownLlc31": {
+      "label": "This person's expenses for the lifetime learning credit",
+      "formula": "if(line.US.ownStudentExpenses == 0, 0, if(answer.educationCredit == \"llc\", line.US.ownStudentExpenses, 0))",
+      "source": "Form 8863, line 31: not for a student who takes the American opportunity credit"
+    },
+    "DEP.studentExpenses": {
+      "label": "Adjusted qualified education expenses for this dependant",
+      "formula": "if(dependant.age < 14, 0, if(line.DEP.dependent == 1, dependant.answer.studentExpenses, 0))",
+      "source": "8863 instructions, Who Can Claim an Education Credit: expenses for a dependent you claim, paid by you or by the dependent. They aren't asked for a child under 14 at the end of 2025, who isn't likely to be in college",
+      "each": "dependant"
+    },
+    "DEP.aotcStudent": {
+      "label": "This dependant takes the American opportunity credit (1 for yes)",
+      "formula": "if(line.DEP.studentExpenses == 0, 0, if(dependant.answer.studentCredit == \"aotc\", 1, 0))",
+      "each": "dependant"
+    },
+    "DEP.aotc27": {
+      "label": "Expenses for the American opportunity credit, up to $4,000",
+      "formula": "if(line.DEP.aotcStudent == 1, min(line.DEP.studentExpenses, param.aotcMaxExpenses), 0)",
+      "each": "dependant"
+    },
+    "DEP.aotc30": {
+      "label": "American opportunity credit for this dependant before the limits",
+      "formula": "min(line.DEP.aotc27, param.aotcFullRate) + round(max(0, line.DEP.aotc27 - param.aotcFullRate) * param.aotcPartRate, 2)",
+      "source": "Form 8863, lines 28 to 30",
+      "each": "dependant"
+    },
+    "DEP.llc31": {
+      "label": "Expenses for the lifetime learning credit for this dependant",
+      "formula": "if(line.DEP.studentExpenses == 0, 0, if(dependant.answer.studentCredit == \"llc\", line.DEP.studentExpenses, 0))",
+      "each": "dependant"
+    },
+    "DEP.student": {
+      "label": "A student with an education credit (1 for yes)",
+      "formula": "if(line.DEP.aotc30 + line.DEP.llc31 > 0, 1, 0)",
+      "each": "dependant"
+    },
+    "US.dependantAotc": {
+      "label": "The American opportunity credit for the dependants, before the limits",
+      "formula": "if(line.US.educationAsked == 0, 0, sum(dependants.DEP.aotc30))"
+    },
+    "US.dependantLlc": {
+      "label": "The dependants' expenses for the lifetime learning credit",
+      "formula": "if(line.US.educationAsked == 0, 0, sum(dependants.DEP.llc31))"
+    },
+    "US.adultStudents": {
+      "label": "Adults on this return with an education credit",
+      "formula": "if(line.US.ownAotc30 + line.US.ownLlc31 > 0, 1, 0) + if(line.US.joint == 1, if(spouse.line.US.ownAotc30 + spouse.line.US.ownLlc31 > 0, 1, 0), 0)"
+    },
+    "US.students": {
+      "label": "Students on this return with an education credit",
+      "formula": "line.US.adultStudents + if(line.US.educationAsked == 0, 0, sum(dependants.DEP.student))"
+    },
+    "US.page2": {
+      "label": "The student printed on page 2 of Form 8863 (1 for you, 2 for your spouse, 0 for a dependant)",
+      "formula": "if(line.US.ownAotc30 + line.US.ownLlc31 > 0, 1, if(line.US.joint == 1, if(spouse.line.US.ownAotc30 + spouse.line.US.ownLlc31 > 0, 2, 0), 0))",
+      "source": "8863 instructions, Part III: one page 2 for each student; Taxi fills in the first, and the worksheet names the others"
+    },
+    "F8863.1": {
+      "label": "American opportunity credit before the income limit",
+      "formula": "line.US.ownAotc30 + if(line.US.joint == 1, spouse.line.US.ownAotc30, 0) + line.US.dependantAotc",
+      "source": "Form 8863, line 1: each student's Part III, line 30"
+    },
+    "F8863.2": {
+      "label": "Modified AGI from which there is no credit",
+      "formula": "if(line.US.joint == 1, param.educationLimitJoint, param.educationLimit)"
+    },
+    "F8863.3": {
+      "label": "Modified adjusted gross income",
+      "formula": "line.F1040.11a",
+      "source": "8863 instructions, line 3: Form 1040, line 11b (no income excluded from Puerto Rico or abroad)"
+    },
+    "F8863.4": {
+      "label": "Modified AGI under the limit",
+      "formula": "max(0, line.F8863.2 - line.F8863.3)",
+      "source": "Form 8863, line 4: if zero or less, you can't take any education credit"
+    },
+    "F8863.5": {
+      "label": "Range over which the credit is reduced",
+      "formula": "if(line.US.joint == 1, param.educationRangeJoint, param.educationRange)"
+    },
+    "F8863.6": {
+      "label": "Share of the credit allowed",
+      "formula": "if(line.F8863.4 >= line.F8863.5, 1, round(line.F8863.4 / line.F8863.5, 3))",
+      "source": "Form 8863, line 6: 1.000, or line 4 divided by line 5 as a decimal rounded to three places"
+    },
+    "F8863.7": {"label":"American opportunity credit after the income limit","formula":"round(line.F8863.1 * line.F8863.6, 2)"},
+    "US.aotcNoRefund": {
+      "label": "None of the American opportunity credit is refundable (1 for yes)",
+      "formula": "if(line.US.joint == 1, 0, if(person.age >= 24, 0, if(line.F8863.7 == 0, 0, if(answer.parentAlive, if(person.age < 18, 1, if(person.age == 18, if(answer.earnedUnderHalfSupport, 1, 0), if(answer.fullTimeStudentSelf, if(answer.earnedUnderHalfSupport, 1, 0), 0))), 0))))",
+      "source": "8863 instructions, line 7: you were under 18; or 18, or a full-time student under 24, with earned income less than half of your support; at least one of your parents was alive at the end of 2025; and you aren't filing jointly. The age is the year less the birth year"
+    },
+    "F8863.8": {
+      "label": "Refundable American opportunity credit",
+      "formula": "if(line.US.aotcNoRefund == 1, 0, round(line.F8863.7 * param.aotcRefundableRate, 2))",
+      "source": "Form 8863, line 8: 40% of line 7, on Form 1040, line 29"
+    },
+    "F8863.9": {"label":"Nonrefundable American opportunity credit","formula":"line.F8863.7 - line.F8863.8"},
+    "F8863.10": {
+      "label": "Expenses for the lifetime learning credit",
+      "formula": "line.US.ownLlc31 + if(line.US.joint == 1, spouse.line.US.ownLlc31, 0) + line.US.dependantLlc",
+      "source": "Form 8863, line 10: each student's Part III, line 31"
+    },
+    "F8863.11": {
+      "label": "Expenses for the lifetime learning credit, up to $10,000",
+      "formula": "min(line.F8863.10, param.llcMaxExpenses)"
+    },
+    "F8863.12": {"label":"Lifetime learning credit before the income limit","formula":"round(line.F8863.11 * param.llcRate, 2)"},
+    "F8863.15": {
+      "label": "Modified AGI under the limit, for the lifetime learning credit",
+      "formula": "max(0, line.F8863.2 - line.F8863.3)",
+      "source": "Form 8863, lines 13 to 15: the same as lines 2 to 4"
+    },
+    "F8863.17": {
+      "label": "Share of the lifetime learning credit allowed",
+      "formula": "if(line.F8863.15 >= line.F8863.5, 1, round(line.F8863.15 / line.F8863.5, 3))",
+      "source": "Form 8863, lines 16 and 17: as lines 5 and 6"
+    },
+    "F8863.18": {"label":"Lifetime learning credit","formula":"round(line.F8863.12 * line.F8863.17, 2)"},
+    "F8863.19": {
+      "label": "Nonrefundable education credits",
+      "formula": "min(line.F8863.18 + line.F8863.9, max(0, line.F1040.18 - line.S3.2))",
+      "source": "8863 instructions, Credit Limit Worksheet: lines 18 and 9, up to Form 1040 line 18 less Schedule 3 lines 1, 2, 6d and 6l (only line 2, the credit for child and dependent care expenses, is worked out by this app)"
+    },
+    "S3.3": {"label":"Education credits","formula":"line.F8863.19","source":"Schedule 3, line 3: Form 8863, line 19"},
+    "F1040.29": {"label":"American opportunity credit","formula":"line.F8863.8","source":"Form 1040, line 29: Form 8863, line 8"},
+    "US.ownStudentLoan": {
+      "label": "Student loan interest this person paid",
+      "formula": "if(answer.hasStudentLoan, answer.studentLoanInterest, 0)"
+    },
+    "SLW.1": {
+      "label": "Student loan interest, up to $2,500",
+      "formula": "min(line.US.ownStudentLoan + if(line.US.joint == 1, spouse.line.US.ownStudentLoan, 0), param.studentLoanMax)",
+      "source": "Student Loan Interest Deduction Worksheet, line 1: $2,500 for the return, filing jointly too"
+    },
+    "SLW.4": {
+      "label": "Modified adjusted gross income",
+      "formula": "line.F1040.9 - line.S1.15",
+      "source": "Student Loan Interest Deduction Worksheet, lines 2 to 4: Form 1040 line 9, less Schedule 1 lines 11 to 20, 23 and 25 (only line 15 is worked out by this app)"
+    },
+    "SLW.5": {
+      "label": "Modified AGI over which the deduction is reduced",
+      "formula": "if(line.US.joint == 1, param.studentLoanStartJoint, param.studentLoanStart)"
+    },
+    "SLW.6": {"label":"Modified AGI over the threshold","formula":"max(0, line.SLW.4 - line.SLW.5)"},
+    "SLW.7": {
+      "label": "Share of the interest not deducted",
+      "formula": "min(1, round(line.SLW.6 / if(line.US.joint == 1, param.studentLoanRangeJoint, param.studentLoanRange), 3))",
+      "source": "Student Loan Interest Deduction Worksheet, line 7: line 6 divided by $15,000 ($30,000 jointly), rounded to three places, 1.000 at most"
+    },
+    "SLW.8": {"label":"Interest not deducted","formula":"round(line.SLW.1 * line.SLW.7, 2)"},
+    "S1.21": {
+      "label": "Student loan interest deduction",
+      "formula": "if(line.SLW.1 == 0, 0, if(line.US.educationAllowed == 0, 0, line.SLW.1 - line.SLW.8))",
+      "source": "Student Loan Interest Deduction Worksheet, line 9: line 1 less line 8; not filing separately, or when someone can claim you"
     },
     "DEP.eicChild": {
       "label": "A qualifying child for the earned income credit (1 for yes)",
@@ -1199,8 +1460,8 @@
     "F1040.31": {"label":"Credits and payments from Schedule 3","formula":"line.S3.11"},
     "F1040.32": {
       "label": "Other payments and refundable credits",
-      "formula": "line.F1040.27a + line.F1040.28 + line.F1040.31",
-      "source": "Form 1040, line 32: lines 27a, 28 and 31"
+      "formula": "line.F1040.27a + line.F1040.28 + line.F1040.29 + line.F1040.31",
+      "source": "Form 1040, line 32: lines 27a, 28, 29 and 31"
     },
     "F1040.33": {"label":"Total payments","formula":"line.F1040.25d + line.F1040.26 + line.F1040.32"},
     "F1040.34": {
@@ -1402,8 +1663,8 @@
     },
     "S1.26": {
       "label": "Adjustments to income",
-      "formula": "line.S1.15",
-      "source": "Schedule 1, line 26: only the deductible part of self-employment tax is worked out"
+      "formula": "line.S1.15 + line.S1.21",
+      "source": "Schedule 1, line 26: the deductible part of self-employment tax and the student loan interest deduction (education.yaml); no other adjustment is worked out"
     },
     "F8995.2": {
       "label": "Qualified business income",
@@ -1580,6 +1841,70 @@
       "ask": "Your spouse died in 2023 or 2024",
       "module": "about",
       "help": "With a dependent child who lived with you all year, you may file as a qualifying surviving spouse."
+    },
+    "paidForEducation": {
+      "type": "boolean",
+      "ask": "You paid for college or other higher education in 2025, for yourself or for a dependant",
+      "module": "about",
+      "help": "Tuition and required fees for a university, college, vocational school or other school after high school that can take part in federal student aid. A Form 1098-T from the school shows what it received. It can give you the American opportunity credit or the lifetime learning credit (Form 8863). Each dependant's expenses are asked under their name.",
+      "default": false
+    },
+    "educationExpenses": {
+      "type": "money",
+      "ask": "Your own qualified education expenses in 2025",
+      "module": "about",
+      "help": "Tuition and the fees and course materials the school requires, that you paid in 2025 for your own courses, less tax-free scholarships, grants and employer education aid. Start from box 1 of your Form 1098-T, less box 5. Not room and board, insurance, medical expenses or transportation. Enter 0 if you weren't a student."
+    },
+    "educationCredit": {
+      "type": "choice",
+      "ask": "The credit for your expenses",
+      "module": "about",
+      "help": "The American opportunity credit is larger and partly refundable, but all of these must be true: the courses lead to a degree or other recognized credential; the student was enrolled at least half-time for at least one academic period that began in 2025; the student hadn't completed the first 4 years of college before 2025; the credit wasn't claimed for the student for 4 earlier years; and the student has no felony drug conviction. Otherwise, the lifetime learning credit counts any course at an eligible school, even one to improve job skills.",
+      "optionLabels": {"aotc":"American opportunity credit (all of its conditions are true)","llc":"Lifetime learning credit"},
+      "options": ["aotc","llc"]
+    },
+    "parentAlive": {
+      "type": "boolean",
+      "ask": "At least one of your parents was alive at the end of 2025",
+      "module": "about",
+      "help": "With the American opportunity credit, someone under 24 who isn't filing jointly may get no refundable part of it (Form 8863, line 7)."
+    },
+    "fullTimeStudentSelf": {"type":"boolean","ask":"You were a full-time student in at least 5 months of 2025","module":"about"},
+    "earnedUnderHalfSupport": {
+      "type": "boolean",
+      "ask": "Your earned income was less than half of your support in 2025",
+      "module": "about",
+      "help": "Earned income is wages and self-employment income. Support is food, housing, clothing, medical care, education and the like, paid by you, your parents and others. A scholarship isn't support if you were a full-time student."
+    },
+    "studentExpenses": {
+      "type": "money",
+      "ask": "Qualified education expenses you paid for them in 2025",
+      "module": "about",
+      "help": "Tuition and the fees and course materials the school requires, paid in 2025 by you or by them, less tax-free scholarships, grants and employer education aid. Start from box 1 of their Form 1098-T, less box 5. Not room and board. Enter 0 if they weren't a student after high school.",
+      "dependant": true
+    },
+    "studentCredit": {
+      "type": "choice",
+      "ask": "The credit for their expenses",
+      "module": "about",
+      "help": "The American opportunity credit is larger and partly refundable, but all of these must be true: the courses lead to a degree or other recognized credential; the student was enrolled at least half-time for at least one academic period that began in 2025; the student hadn't completed the first 4 years of college before 2025; the credit wasn't claimed for the student for 4 earlier years; and the student has no felony drug conviction. Otherwise, the lifetime learning credit counts any course at an eligible school, even one to improve job skills.",
+      "dependant": true,
+      "optionLabels": {"aotc":"American opportunity credit (all of its conditions are true)","llc":"Lifetime learning credit"},
+      "options": ["aotc","llc"]
+    },
+    "hasStudentLoan": {
+      "type": "boolean",
+      "ask": "Interest on a student loan",
+      "module": "deductions",
+      "help": "Interest you paid in 2025 on a loan taken out only to pay higher education expenses for you, your spouse or your dependant (Schedule 1, line 21). Your lender's Form 1098-E shows it. Filing separately, or if someone can claim you as a dependent, you can't deduct it.",
+      "default": false
+    },
+    "studentLoanInterest": {
+      "type": "money",
+      "ask": "Student loan interest you paid in 2025",
+      "module": "deductions",
+      "help": "Box 1 of each Form 1098-E. The interest only, not the payments of the loan itself.",
+      "parent": "hasStudentLoan"
     },
     "livedApartLastSixMonths": {
       "type": "boolean",
@@ -1855,6 +2180,7 @@
         {"key":"24","kind":"amount","page":2,"x":575.5,"y":530.8,"value":"line.F1040.24","zero":true,"plain":true},
         {"key":"26","kind":"amount","page":2,"x":575.5,"y":458.8,"value":"line.F1040.26","plain":true},
         {"key":"28","kind":"amount","page":2,"x":481.2,"y":374.8,"value":"line.F1040.28","plain":true},
+        {"key":"29","kind":"amount","page":2,"x":481.2,"y":362.7,"value":"line.F1040.29","plain":true},
         {"key":"31","kind":"amount","page":2,"x":481.2,"y":338.8,"value":"line.F1040.31","plain":true},
         {"key":"32","kind":"amount","page":2,"x":575.5,"y":326.7,"value":"line.F1040.32","plain":true},
         {"key":"33","kind":"amount","page":2,"x":575.5,"y":314.8,"value":"line.F1040.33","plain":true},
@@ -2213,6 +2539,7 @@
         {"key":"3","kind":"amount","page":1,"x":575.5,"y":572.8,"value":"line.S1.3","plain":true},
         {"key":"10","kind":"amount","page":1,"x":575.5,"y":116.8,"value":"line.S1.10","plain":true},
         {"key":"15","kind":"amount","page":2,"x":575.5,"y":650.7,"value":"line.S1.15","plain":true},
+        {"key":"21","kind":"amount","page":2,"x":575.5,"y":542.7,"value":"line.S1.21","plain":true},
         {"key":"26","kind":"amount","page":2,"x":575.5,"y":242.8,"value":"line.S1.26","plain":true},
         {"key":"names","kind":"text","page":1,"x":38,"y":687.8,"value":"returnNames","width":405.7}
       ],
@@ -2492,6 +2819,7 @@
       "applies": "line.S3.8 > 0 or line.S3.11 > 0",
       "fields": [
         {"key":"2","kind":"amount","page":1,"x":575.5,"y":650.7,"value":"line.S3.2","plain":true},
+        {"key":"3","kind":"amount","page":1,"x":575.5,"y":638.8,"value":"line.S3.3","plain":true},
         {"key":"8","kind":"amount","page":1,"x":575.5,"y":374.8,"value":"line.S3.8","plain":true},
         {"key":"11","kind":"amount","page":1,"x":575.5,"y":326.7,"value":"line.S3.11","plain":true},
         {"key":"15","kind":"amount","page":1,"x":575.5,"y":182.7,"value":"line.S3.11","plain":true},
@@ -3211,6 +3539,280 @@
       ],
       "tables": []
     },
+    "F8863": {
+      "title": "Form 8863, Education Credits (American Opportunity and Lifetime Learning Credits)",
+      "url": "https://www.irs.gov/pub/irs-prior/f8863--2025.pdf",
+      "sha256": "a251a1cfbd613d5dd81646b276b1cc3562d7efb8bed969491eada7c8eb0d8e00",
+      "pages": 2,
+      "applies": "line.F8863.7 + line.F8863.18 > 0",
+      "fields": [
+        {"key":"1","kind":"amount","page":1,"x":575.5,"y":626.7,"value":"line.F8863.1","plain":true},
+        {
+          "key": "2",
+          "kind": "amount",
+          "page": 1,
+          "x": 481.2,
+          "y": 602.7,
+          "value": "line.F8863.2",
+          "when": "line.F8863.1 > 0",
+          "plain": true
+        },
+        {
+          "key": "3",
+          "kind": "amount",
+          "page": 1,
+          "x": 481.2,
+          "y": 566.7,
+          "value": "line.F8863.3",
+          "when": "line.F8863.1 > 0",
+          "plain": true
+        },
+        {
+          "key": "4",
+          "kind": "amount",
+          "page": 1,
+          "x": 481.2,
+          "y": 542.7,
+          "value": "line.F8863.4",
+          "when": "line.F8863.1 > 0",
+          "plain": true
+        },
+        {
+          "key": "5",
+          "kind": "amount",
+          "page": 1,
+          "x": 481.2,
+          "y": 518.7,
+          "value": "line.F8863.5",
+          "when": "line.F8863.1 > 0",
+          "plain": true
+        },
+        {
+          "key": "6",
+          "kind": "count",
+          "page": 1,
+          "x": 532.3,
+          "y": 482.7,
+          "value": "floor(line.F8863.6, 1)",
+          "when": "line.F8863.1 > 0",
+          "digits": 1
+        },
+        {"key":"7","kind":"amount","page":1,"x":575.5,"y":434.7,"value":"line.F8863.7","plain":true},
+        {"key":"8","kind":"amount","page":1,"x":575.5,"y":410.7,"value":"line.F8863.8","plain":true},
+        {"key":"9","kind":"amount","page":1,"x":575.5,"y":386.7,"value":"line.F8863.9","plain":true},
+        {"key":"10","kind":"amount","page":1,"x":575.5,"y":362.7,"value":"line.F8863.10","plain":true},
+        {"key":"11","kind":"amount","page":1,"x":575.5,"y":350.7,"value":"line.F8863.11","plain":true},
+        {"key":"12","kind":"amount","page":1,"x":575.5,"y":338.7,"value":"line.F8863.12","plain":true},
+        {
+          "key": "13",
+          "kind": "amount",
+          "page": 1,
+          "x": 481.2,
+          "y": 314.7,
+          "value": "line.F8863.2",
+          "when": "line.F8863.10 > 0",
+          "plain": true
+        },
+        {
+          "key": "14",
+          "kind": "amount",
+          "page": 1,
+          "x": 481.2,
+          "y": 278.7,
+          "value": "line.F8863.3",
+          "when": "line.F8863.10 > 0",
+          "plain": true
+        },
+        {
+          "key": "15",
+          "kind": "amount",
+          "page": 1,
+          "x": 481.2,
+          "y": 254.7,
+          "value": "line.F8863.15",
+          "when": "line.F8863.10 > 0",
+          "plain": true
+        },
+        {
+          "key": "16",
+          "kind": "amount",
+          "page": 1,
+          "x": 481.2,
+          "y": 230.7,
+          "value": "line.F8863.5",
+          "when": "line.F8863.10 > 0",
+          "plain": true
+        },
+        {
+          "key": "17",
+          "kind": "count",
+          "page": 1,
+          "x": 532.3,
+          "y": 194.7,
+          "value": "floor(line.F8863.17, 1)",
+          "when": "line.F8863.10 > 0",
+          "digits": 1
+        },
+        {"key":"18","kind":"amount","page":1,"x":575.5,"y":170.7,"value":"line.F8863.18","plain":true},
+        {"key":"19","kind":"amount","page":1,"x":575.5,"y":146.7,"value":"line.F8863.19","plain":true},
+        {
+          "key": "27",
+          "kind": "amount",
+          "page": 2,
+          "x": 575.5,
+          "y": 170.7,
+          "value": "if(line.US.page2 == 1, line.US.ownAotc27, if(line.US.page2 == 2, spouse.line.US.ownAotc27, 0))",
+          "plain": true
+        },
+        {
+          "key": "28",
+          "kind": "amount",
+          "page": 2,
+          "x": 575.5,
+          "y": 158.7,
+          "value": "max(0, if(line.US.page2 == 1, line.US.ownAotc27, if(line.US.page2 == 2, spouse.line.US.ownAotc27, 0)) - param.aotcFullRate)",
+          "plain": true
+        },
+        {
+          "key": "29",
+          "kind": "amount",
+          "page": 2,
+          "x": 575.5,
+          "y": 146.7,
+          "value": "round(max(0, if(line.US.page2 == 1, line.US.ownAotc27, if(line.US.page2 == 2, spouse.line.US.ownAotc27, 0)) - param.aotcFullRate) * param.aotcPartRate, 2)",
+          "plain": true
+        },
+        {
+          "key": "30",
+          "kind": "amount",
+          "page": 2,
+          "x": 575.5,
+          "y": 122.7,
+          "value": "if(line.US.page2 == 1, line.US.ownAotc30, if(line.US.page2 == 2, spouse.line.US.ownAotc30, 0))",
+          "plain": true
+        },
+        {
+          "key": "31",
+          "kind": "amount",
+          "page": 2,
+          "x": 575.5,
+          "y": 86.7,
+          "value": "if(line.US.page2 == 1, line.US.ownLlc31, if(line.US.page2 == 2, spouse.line.US.ownLlc31, 0))",
+          "plain": true
+        },
+        {"key":"names","kind":"text","page":1,"x":38,"y":686.7,"value":"returnNames","width":420.1},
+        {"key":"names2","kind":"text","page":2,"x":38,"y":722.7,"value":"returnNames","width":420.1},
+        {
+          "key": "6digits",
+          "kind": "count",
+          "page": 1,
+          "x": 575.5,
+          "y": 482.7,
+          "value": "(line.F8863.6 - floor(line.F8863.6, 1)) * 1000",
+          "when": "line.F8863.1 > 0",
+          "digits": 3
+        },
+        {"key":"line7NoRefund","kind":"tick","page":1,"x":468,"y":438,"value":"line.US.aotcNoRefund == 1"},
+        {
+          "key": "17digits",
+          "kind": "count",
+          "page": 1,
+          "x": 575.5,
+          "y": 194.7,
+          "value": "(line.F8863.17 - floor(line.F8863.17, 1)) * 1000",
+          "when": "line.F8863.10 > 0",
+          "digits": 3
+        },
+        {
+          "key": "student",
+          "kind": "text",
+          "page": 2,
+          "x": 52.4,
+          "y": 644.7,
+          "value": "name",
+          "width": 254.5,
+          "when": "line.US.page2 == 1"
+        },
+        {
+          "key": "spouseStudent",
+          "kind": "text",
+          "page": 2,
+          "x": 52.4,
+          "y": 644.7,
+          "value": "spouseName",
+          "width": 254.5,
+          "when": "line.US.page2 == 2"
+        },
+        {
+          "key": "line23No",
+          "kind": "tick",
+          "page": 2,
+          "x": 457.2,
+          "y": 390,
+          "value": "if(line.US.page2 == 1, line.US.ownAotcStudent, if(line.US.page2 == 2, spouse.line.US.ownAotcStudent, 0)) == 1"
+        },
+        {
+          "key": "line24Yes",
+          "kind": "tick",
+          "page": 2,
+          "x": 320.4,
+          "y": 336,
+          "value": "if(line.US.page2 == 1, line.US.ownAotcStudent, if(line.US.page2 == 2, spouse.line.US.ownAotcStudent, 0)) == 1"
+        },
+        {
+          "key": "line25No",
+          "kind": "tick",
+          "page": 2,
+          "x": 457.2,
+          "y": 282,
+          "value": "if(line.US.page2 == 1, line.US.ownAotcStudent, if(line.US.page2 == 2, spouse.line.US.ownAotcStudent, 0)) == 1"
+        },
+        {
+          "key": "line26No",
+          "kind": "tick",
+          "page": 2,
+          "x": 457.2,
+          "y": 246,
+          "value": "if(line.US.page2 == 1, line.US.ownAotcStudent, if(line.US.page2 == 2, spouse.line.US.ownAotcStudent, 0)) == 1"
+        }
+      ],
+      "dependants": {
+        "when": "line.US.page2 == 0 and line.US.educationAsked == 1",
+        "which": "line.DEP.student == 1",
+        "columns": 1,
+        "fields": [
+          {"key":"27@1","column":1,"kind":"amount","page":2,"x":575.5,"y":170.7,"value":"line.DEP.aotc27","plain":true},
+          {
+            "key": "28@1",
+            "column": 1,
+            "kind": "amount",
+            "page": 2,
+            "x": 575.5,
+            "y": 158.7,
+            "value": "max(0, line.DEP.aotc27 - param.aotcFullRate)",
+            "plain": true
+          },
+          {
+            "key": "29@1",
+            "column": 1,
+            "kind": "amount",
+            "page": 2,
+            "x": 575.5,
+            "y": 146.7,
+            "value": "round(max(0, line.DEP.aotc27 - param.aotcFullRate) * param.aotcPartRate, 2)",
+            "plain": true
+          },
+          {"key":"30@1","column":1,"kind":"amount","page":2,"x":575.5,"y":122.7,"value":"line.DEP.aotc30","plain":true},
+          {"key":"31@1","column":1,"kind":"amount","page":2,"x":575.5,"y":86.7,"value":"line.DEP.llc31","plain":true},
+          {"key":"student@1","column":1,"kind":"text","page":2,"x":52.4,"y":644.7,"value":"name","width":254.5},
+          {"key":"line23No@1","column":1,"kind":"tick","page":2,"x":457.2,"y":390,"value":"line.DEP.aotcStudent == 1"},
+          {"key":"line24Yes@1","column":1,"kind":"tick","page":2,"x":320.4,"y":336,"value":"line.DEP.aotcStudent == 1"},
+          {"key":"line25No@1","column":1,"kind":"tick","page":2,"x":457.2,"y":282,"value":"line.DEP.aotcStudent == 1"},
+          {"key":"line26No@1","column":1,"kind":"tick","page":2,"x":457.2,"y":246,"value":"line.DEP.aotcStudent == 1"}
+        ]
+      },
+      "tables": []
+    },
     "F8995": {
       "title": "Form 8995, Qualified Business Income Deduction Simplified Computation",
       "url": "https://www.irs.gov/pub/irs-prior/f8995--2025.pdf",
@@ -3363,10 +3965,16 @@
       "form": "Schedule B (Form 1040), Interest and Ordinary Dividends",
       "why": "because your taxable interest is more than $1,500: list each payer and amount (your 1099-INT forms, below) in Part I, and answer the questions about foreign accounts and trusts in Part III",
       "applies": "line.F1040.2b > 1500"
+    },
+    {
+      "id": "F8863P2",
+      "form": "Form 8863, page 2, for each other student",
+      "why": "because more than one student has an education credit: Taxi fills in page 2 (Part III) for the first, and each other student needs a copy of it. For a student with the American opportunity credit, line 27 is their expenses up to $4,000 and line 30 the credit (all of the first $2,000 and 25% of the rest); for one with the lifetime learning credit, line 31 is their expenses. \"How each line is worked out\", below, has each student's amounts.",
+      "applies": "line.US.students > 1"
     }
   ],
   "outcome": "RESULT.net",
   "balances": [{"name":"Federal","refund":"F1040.34","owing":"F1040.37"}],
   "residency": "A U.S. citizen or resident alien all year",
-  "version": "e66dcfe314ec272d"
+  "version": "8cc1d6254806f8f4"
 }

@@ -136,6 +136,23 @@ describe("slips", () => {
     expect((await json<SlipList>(server.call("GET", "/api/years/2025/slips"))).slips).toEqual([]);
   });
 
+  it("are confirmed only as chosen, with slipIds: the slips a step showed", async () => {
+    const { alex, sam, revision } = await year();
+    let current = await json<TaxYear>(server.call("POST", "/api/years/2025/slips", { body: { revision, personId: alex.id, type: "T4", issuer: "Maple Corp", boxes: T4 } }), 201);
+    current = await json<TaxYear>(server.call("POST", "/api/years/2025/slips", { body: { revision: current.revision, personId: alex.id, type: "T4", issuer: "Birch Inc", boxes: T4 } }), 201);
+    const [maple, birch] = (await json<SlipList>(server.call("GET", "/api/years/2025/slips"))).slips;
+    // A slip not in the year, or not the adult's, is refused, and nothing is confirmed.
+    const stranger = await server.call("POST", "/api/years/2025/slips/confirm", { body: { revision: current.revision, personId: sam.id, slipIds: [maple!.id] } });
+    expect(stranger.status).toBe(400);
+    current = await json<TaxYear>(server.call("POST", "/api/years/2025/slips/confirm", { body: { revision: current.revision, personId: alex.id, slipIds: [maple!.id] } }));
+    const statuses = (await json<SlipList>(server.call("GET", "/api/years/2025/slips"))).slips.map((slip) => [slip.issuer, slip.status]);
+    expect(statuses).toEqual([
+      [maple!.issuer, "confirmed"],
+      [birch!.issuer, "unconfirmed"],
+    ]);
+    expect(current.returns[0]!.steps.confirm).toBe("todo");
+  });
+
   it("can't be confirmed while a box AI couldn't read has no amount, until that box is entered", async () => {
     server.close();
     const reader: SlipReader = {
@@ -193,7 +210,7 @@ describe("slips", () => {
 /** A module's questions answered as for a return with none of it: each yes/no question no, each amount its default. */
 function noneOf(module: string, except: string[] = []): Record<string, string | boolean> {
   return Object.fromEntries(
-    [...rulesFor(2025)!.questions.values()]
+    [...rulesFor("ca", 2025)!.questions.values()]
       .filter((question) => question.module === module && !question.parent && !except.includes(question.id))
       .flatMap((question) => (question.type === "boolean" ? [[question.id, false]] : question.default !== undefined ? [[question.id, question.default]] : [])),
   );

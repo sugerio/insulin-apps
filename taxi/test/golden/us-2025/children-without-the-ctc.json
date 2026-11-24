@@ -1,0 +1,124 @@
+{
+  "about": "Head of household with a child of 6 without a social security number and a full-time student of 20: two credits for other dependents",
+  "input": {
+    "country": "us",
+    "year": 2025,
+    "people": [
+      {
+        "id": "p1",
+        "name": "Alex Moreno",
+        "role": "self",
+        "birthDate": "1983-12-12",
+        "province": "FL",
+        "residentAllYear": true
+      }
+    ],
+    "family": {
+      "maritalStatus": "single",
+      "dependants": [
+        {
+          "id": "d1",
+          "name": "Luz Moreno",
+          "birthDate": "2019-04-04",
+          "answers": {
+            "relationship": "child",
+            "monthsWithYou": "12",
+            "hasSSN": false,
+            "paidOwnSupport": false,
+            "filedJointReturn": false,
+            "citizenOrResident": true
+          }
+        },
+        {
+          "id": "d2",
+          "name": "Tomas Moreno",
+          "birthDate": "2005-05-05",
+          "answers": {
+            "relationship": "child",
+            "monthsWithYou": "12",
+            "hasSSN": true,
+            "paidOwnSupport": false,
+            "filedJointReturn": false,
+            "citizenOrResident": true,
+            "fullTimeStudent": true
+          }
+        }
+      ]
+    },
+    "answers": {
+      "p1": {
+        "hasWages": true,
+        "hasInterest": false,
+        "hasTipsOrOvertime": false,
+        "canBeClaimed": false,
+        "isBlind": false,
+        "estimatedPayments": "0",
+        "hasCarLoan": false,
+        "hasSelfEmployment": false,
+        "hasStudentLoan": false,
+        "paidForEducation": false,
+        "hasDividends": false,
+        "hasBrokerSales": false,
+        "hasIraDistribution": false,
+        "hasPension": false,
+        "hasSocialSecurity": false,
+        "hasLossCarryover": false,
+        "hasHsa": false,
+        "hasIraContribution": false,
+        "hasItemized": false,
+        "hasOtherIncome": false,
+        "paidForCare": false,
+        "paidHalfOfHome": true
+      }
+    },
+    "slips": [
+      {
+        "id": "p1-w2-0",
+        "person": "p1",
+        "type": "W2",
+        "issuer": "Acme Tools",
+        "boxes": {
+          "1": "52000",
+          "2": "3000",
+          "4": "3224",
+          "5": "52000",
+          "6": "754"
+        }
+      }
+    ]
+  },
+  "expected": {
+    "p1": {
+      "F1040.19": "1000",
+      "F1040.27a": "0",
+      "F1040.28": "0",
+      "S8812.12": "1000",
+      "F1040.1a": "52000",
+      "F1040.1e": "0",
+      "S3.2": "0",
+      "F1040.2a": "0",
+      "F1040.2b": "0",
+      "F1040.9": "52000",
+      "F1040.11a": "52000",
+      "F1040.12e": "23625",
+      "F1040.13b": "0",
+      "F1040.13a": "0",
+      "F1040.8": "0",
+      "F1040.10": "0",
+      "F1040.15": "28375",
+      "F1040.16": "3065",
+      "F8959.7": "0",
+      "F8960.17": "0",
+      "F1040.24": "2065",
+      "F1040.25c": "0",
+      "S3.11": "0",
+      "F1040.33": "3000",
+      "F1040.34": "935",
+      "F1040.37": "0",
+      "F6251.4": "52000",
+      "F6251.6": "0",
+      "F6251.11": "0",
+      "F1040.18": "3065"
+    }
+  }
+}

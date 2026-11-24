@@ -1,0 +1,171 @@
+{
+  "about": "A couple filing jointly: $60,000 of wages and a $25,000 business for one, a $34,000 business for the other; each spouse's Schedule SE",
+  "input": {
+    "country": "us",
+    "year": 2025,
+    "people": [
+      {
+        "id": "p1",
+        "name": "Ana Cruz",
+        "role": "self",
+        "birthDate": "1985-06-06",
+        "province": "FL",
+        "residentAllYear": true
+      },
+      {
+        "id": "p2",
+        "name": "Leo Cruz",
+        "role": "spouse",
+        "birthDate": "1984-07-07",
+        "province": "FL",
+        "residentAllYear": true
+      }
+    ],
+    "family": {
+      "maritalStatus": "married",
+      "dependants": [],
+      "filingStatus": "joint"
+    },
+    "answers": {
+      "p1": {
+        "hasWages": true,
+        "hasInterest": false,
+        "hasTipsOrOvertime": false,
+        "canBeClaimed": false,
+        "isBlind": false,
+        "estimatedPayments": "0",
+        "hasCarLoan": false,
+        "hasSelfEmployment": true,
+        "hasStudentLoan": false,
+        "paidForEducation": false,
+        "hasDividends": false,
+        "hasBrokerSales": false,
+        "hasIraDistribution": false,
+        "hasPension": false,
+        "hasSocialSecurity": false,
+        "hasLossCarryover": false,
+        "hasHsa": false,
+        "hasIraContribution": false,
+        "hasItemized": false,
+        "hasOtherIncome": false,
+        "businessIncome": "27000",
+        "businessExtras": "none",
+        "businessAdvertising": "500",
+        "businessCar": "0",
+        "businessContractLabor": "0",
+        "businessInsurance": "1500",
+        "businessProfessional": "0",
+        "businessOffice": "0",
+        "businessRent": "0",
+        "businessSupplies": "0",
+        "businessTravel": "0",
+        "businessMeals": "0",
+        "businessUtilities": "0",
+        "businessOtherExpenses": "0",
+        "paidForCare": false
+      },
+      "p2": {
+        "hasWages": false,
+        "hasInterest": false,
+        "hasTipsOrOvertime": false,
+        "canBeClaimed": false,
+        "isBlind": false,
+        "estimatedPayments": "0",
+        "hasCarLoan": false,
+        "hasSelfEmployment": true,
+        "hasStudentLoan": false,
+        "paidForEducation": false,
+        "hasDividends": false,
+        "hasBrokerSales": false,
+        "hasIraDistribution": false,
+        "hasPension": false,
+        "hasSocialSecurity": false,
+        "hasLossCarryover": false,
+        "hasHsa": false,
+        "hasIraContribution": false,
+        "hasItemized": false,
+        "hasOtherIncome": false,
+        "businessIncome": "0",
+        "businessExtras": "none",
+        "businessAdvertising": "0",
+        "businessCar": "0",
+        "businessContractLabor": "0",
+        "businessInsurance": "0",
+        "businessProfessional": "0",
+        "businessOffice": "0",
+        "businessRent": "2000",
+        "businessSupplies": "4000",
+        "businessTravel": "0",
+        "businessMeals": "0",
+        "businessUtilities": "0",
+        "businessOtherExpenses": "0"
+      }
+    },
+    "slips": [
+      {
+        "id": "p1-w2-0",
+        "person": "p1",
+        "type": "W2",
+        "issuer": "City Clinic",
+        "boxes": {
+          "1": "60000",
+          "2": "6000",
+          "3": "60000",
+          "4": "3720",
+          "5": "60000",
+          "6": "870"
+        }
+      },
+      {
+        "id": "p2-nec-0",
+        "person": "p2",
+        "type": "NEC",
+        "issuer": "Build Co",
+        "boxes": {
+          "1": "40000"
+        }
+      }
+    ]
+  },
+  "expected": {
+    "p1": {
+      "F1040.19": "0",
+      "F1040.27a": "0",
+      "F1040.28": "0",
+      "S8812.12": "0",
+      "F1040.1a": "60000",
+      "F1040.1e": "0",
+      "S3.2": "0",
+      "F1040.2a": "0",
+      "F1040.2b": "0",
+      "F1040.9": "119000",
+      "F1040.11a": "114831.77",
+      "F1040.12e": "31500",
+      "F1040.13b": "0",
+      "F1040.13a": "10966.35",
+      "F1040.8": "59000",
+      "F1040.10": "4168.23",
+      "F1040.15": "72365.42",
+      "F1040.16": "8208",
+      "F8959.7": "0",
+      "F8960.17": "0",
+      "F1040.24": "16544.44",
+      "F1040.25c": "0",
+      "S3.11": "0",
+      "F1040.33": "6000",
+      "F1040.34": "0",
+      "F1040.37": "10544.44",
+      "SC.31": "25000",
+      "SE.12": "3532.39",
+      "S1.3": "59000",
+      "S1.15": "4168.23",
+      "S2.4": "8336.44",
+      "F8995.15": "10966.35",
+      "F8959.18": "0",
+      "F6251.4": "103865.42",
+      "F6251.6": "0",
+      "F6251.11": "0",
+      "F1040.18": "8208"
+    }
+  }
+}

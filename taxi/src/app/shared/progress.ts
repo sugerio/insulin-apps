@@ -1,4 +1,4 @@
-import { Dec } from "./engine/decimal.ts";
+import { sameBoxValue } from "./amount.ts";
 import type { Module, Question, RuleSet } from "./engine/rules.ts";
 import type { Slip } from "./returns.ts";
 
@@ -63,7 +63,7 @@ export function maybeSameSlip(a: Omit<SlipLike, "id">, b: Omit<SlipLike, "id">):
   if (a.personId !== b.personId || a.type !== b.type || a.issuer.trim().toLowerCase() !== b.issuer.trim().toLowerCase()) return false;
   return Object.keys(a.boxes)
     .filter((box) => b.boxes[box] !== undefined)
-    .every((box) => Dec.from(a.boxes[box]!).eq(b.boxes[box]!));
+    .every((box) => sameBoxValue(a.boxes[box]!, b.boxes[box]!));
 }
 
 /**

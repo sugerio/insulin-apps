@@ -1,0 +1,257 @@
+# Itemized deductions (Schedule A): medical and dental expenses, state and local taxes up to the 2025 limit, home
+# mortgage interest on Form 1098, and gifts to charity. The return takes the larger of them and the standard deduction
+# (a spouse filing separately who itemizes makes the other itemize too). "Schedule A instructions" is the 2025
+# Instructions for Schedule A.
+#
+# Not worked out, each said on the return: general sales taxes instead of income taxes, other taxes (line 6), mortgage
+# interest not on a Form 1098 or on more than $750,000 of debt, investment interest (Form 4952), noncash gifts over $500
+# (Form 8283), gifts over the percentage-of-AGI limits or carried over, casualty losses and other itemized deductions.
+
+slips:
+  F1098:
+    title: Form 1098 Mortgage Interest Statement
+    name: "1098"
+    about: From a lender, the interest and points you paid in 2025 on a mortgage on your home
+    boxes:
+      1: Mortgage interest received from payer(s)/borrower(s)
+      2: Outstanding mortgage principal
+      4: Refund of overpaid interest
+      5: Mortgage insurance premiums
+      6: Points paid on purchase of principal residence
+      10: Other
+    # Box 2 checks the $750,000 limit. Box 5 isn't deductible for 2025, and box 10 is often the real estate taxes the
+    # lender paid, entered as such. A refund in box 4 isn't read: an amount in it says so.
+    informational: [5, 10]
+
+params:
+  medicalFloor:
+    label: Share of AGI medical expenses must be over
+    source: "Schedule A, line 3: line 2 multiplied by 7.5% (0.075)"
+    value: 7.5%
+  saltCap:
+    label: Most state and local taxes deducted
+    source: "Schedule A instructions, State and Local Tax Deduction Worksheet, line 1: $40,000 (halved on line 10 if married filing separately)"
+    value: 40000
+  saltPhaseOutStart:
+    label: Modified AGI over which the state and local tax limit is reduced
+    source: "Schedule A instructions, State and Local Tax Deduction Worksheet, line 5: $500,000 ($250,000 if married filing separately)"
+    value: 500000
+  saltPhaseOutStartSeparate:
+    label: Modified AGI over which the state and local tax limit is reduced, Married filing separately
+    source: "Schedule A instructions, line 5e: $250,000 if married filing separately"
+    value: 250000
+  saltPhaseOutRate:
+    label: Reduction of the state and local tax limit for each dollar of modified AGI over the threshold
+    source: "Schedule A instructions, State and Local Tax Deduction Worksheet, line 7: 30% of line 6"
+    value: 30%
+  saltFloor:
+    label: Smallest state and local tax limit
+    source: "Schedule A instructions, State and Local Tax Deduction Worksheet, line 9: the larger of line 8 or $10,000"
+    value: 10000
+  saltHalfSeparate:
+    label: Share of the limit when married filing separately
+    source: "Schedule A instructions, State and Local Tax Deduction Worksheet, line 10: half the amount on line 9 if married filing separately"
+    value: 50%
+  mortgageDebtLimit:
+    label: Most home acquisition debt whose interest is deducted
+    source: "Schedule A instructions, line 8: $750,000 ($375,000 if married filing separately) of debt taken out after December 15, 2017"
+    value: 750000
+  mortgageDebtLimitSeparate:
+    label: Most home acquisition debt whose interest is deducted, Married filing separately
+    source: "Schedule A instructions, line 8: $375,000 if married filing separately"
+    value: 375000
+  cashGiftLimit:
+    label: Most cash gifts deducted, as a share of AGI
+    source: "Schedule A instructions, line 11: cash gifts to most charities are limited to 60% of AGI"
+    value: 60%
+  noncashGiftForm:
+    label: Noncash gifts over which Form 8283 is needed
+    source: "Schedule A instructions, line 12: if the total is over $500, you must file Form 8283"
+    value: 500
+  noncashGiftLimit:
+    label: Noncash gifts this app deducts, as a share of AGI
+    source: "Schedule A instructions, line 12: gifts of property are limited to 20% to 50% of AGI; over 20% this app doesn't decide which"
+    value: 20%
+
+questions:
+  hasItemized:
+    type: boolean
+    module: deductions
+    ask: Expenses you can itemize
+    help: >-
+      Mortgage interest on your home, state and local taxes (income or property), gifts to charity and medical expenses
+      (Schedule A). The app takes them instead of the standard deduction when they are larger. Your W-2s' state income
+      tax (box 17) is counted for you.
+    default: false
+  itemMedical:
+    type: money
+    module: deductions
+    parent: hasItemized
+    ask: Medical and dental expenses
+    help: >-
+      What you paid in 2025 for medical and dental care, prescriptions and health insurance premiums for you and your
+      family, less what insurance or anyone else paid back. Only the part over 7.5% of your AGI counts.
+  itemStateTax:
+    type: money
+    module: deductions
+    parent: hasItemized
+    ask: State and local income tax paid in 2025, not on a W-2
+    help: Estimated state tax payments for 2025, and a balance you paid in 2025 for 2024. Box 17 of your W-2s is already counted.
+  itemRealEstateTax:
+    type: money
+    module: deductions
+    parent: hasItemized
+    ask: Real estate taxes
+    help: Property tax you paid in 2025 on your home or land, yourself or through your lender (box 10 of a Form 1098 often shows it).
+  itemPersonalPropertyTax:
+    type: money
+    module: deductions
+    parent: hasItemized
+    ask: Personal property taxes
+    help: A yearly tax based on the value of a car or boat, for example.
+  itemMortgageOther:
+    type: money
+    module: deductions
+    parent: hasItemized
+    receipts: F1098
+    ask: Mortgage interest not on a Form 1098
+    help: Uploaded Forms 1098 are counted. Enter 0 unless you paid interest to a person rather than a lender.
+  mortgageQualifies:
+    type: choice
+    module: deductions
+    parent: hasItemized
+    ask: Do your mortgages qualify?
+    options: [yes, no]
+    optionLabels:
+      yes: Yes, both of these are true
+      no: No
+    help: >-
+      Each loan was taken out to buy, build or improve the home it is secured by (your main home or a second home), and
+      all of them together are $750,000 or less ($375,000 filing separately; $1,000,000 for loans before December 16,
+      2017).
+  itemCashGifts:
+    type: money
+    module: deductions
+    parent: hasItemized
+    ask: Gifts to charity by cash, check or card
+    help: To churches, schools, charities and other qualified organizations, with a receipt or bank record for each.
+  itemNoncashGifts:
+    type: money
+    module: deductions
+    parent: hasItemized
+    ask: Gifts to charity of things, not money
+    help: The fair market value of clothes, furniture or other things you gave. Over $500 in all needs Form 8283.
+
+lines:
+  # Each person's own amounts; a joint return adds the spouse's.
+  US.ownMedical:
+    label: This person's medical and dental expenses
+    formula: "if(answer.hasItemized, answer.itemMedical, 0)"
+  US.ownIncomeTaxes:
+    label: State and local income taxes this person paid
+    formula: "sum(W2.box17) + if(answer.hasItemized, answer.itemStateTax, 0)"
+    source: "Schedule A instructions, line 5a: state and local income taxes withheld (Form W-2, box 17) and paid in 2025"
+  US.ownRealEstateTax:
+    label: Real estate taxes this person paid
+    formula: "if(answer.hasItemized, answer.itemRealEstateTax, 0)"
+  US.ownPersonalPropertyTax:
+    label: Personal property taxes this person paid
+    formula: "if(answer.hasItemized, answer.itemPersonalPropertyTax, 0)"
+  US.ownMortgage:
+    label: Mortgage interest and points on this person's Forms 1098
+    formula: "sum(F1098.box1) + sum(F1098.box6)"
+  US.ownMortgageDebt:
+    label: Outstanding principal on this person's Forms 1098
+    formula: "sum(F1098.box2)"
+  US.ownGifts:
+    label: This person's gifts to charity
+    formula: "if(answer.hasItemized, answer.itemCashGifts + answer.itemNoncashGifts, 0)"
+  US.ownCashGifts:
+    label: This person's cash gifts to charity
+    formula: "if(answer.hasItemized, answer.itemCashGifts, 0)"
+  US.ownNoncashGifts:
+    label: This person's noncash gifts to charity
+    formula: "if(answer.hasItemized, answer.itemNoncashGifts, 0)"
+
+  SA.1:
+    label: Medical and dental expenses
+    formula: "line.US.ownMedical + if(line.US.joint == 1, spouse.line.US.ownMedical, 0)"
+  SA.3:
+    label: 7.5% of AGI
+    formula: "round(line.F1040.11a * param.medicalFloor, 2)"
+    source: "Schedule A, lines 2 and 3"
+  SA.4:
+    label: Medical and dental expenses deducted
+    formula: "max(0, line.SA.1 - line.SA.3)"
+  SA.5a:
+    label: State and local income taxes
+    formula: "line.US.ownIncomeTaxes + if(line.US.joint == 1, spouse.line.US.ownIncomeTaxes, 0)"
+  SA.5b:
+    label: State and local real estate taxes
+    formula: "line.US.ownRealEstateTax + if(line.US.joint == 1, spouse.line.US.ownRealEstateTax, 0)"
+  SA.5c:
+    label: State and local personal property taxes
+    formula: "line.US.ownPersonalPropertyTax + if(line.US.joint == 1, spouse.line.US.ownPersonalPropertyTax, 0)"
+  SA.5d:
+    label: State and local taxes
+    formula: "line.SA.5a + line.SA.5b + line.SA.5c"
+  SA.saltLimit:
+    label: Limit on state and local taxes
+    formula: >-
+      round(max(param.saltFloor, param.saltCap - round(max(0, line.F1040.11a - if(line.US.separate == 1, param.saltPhaseOutStartSeparate, param.saltPhaseOutStart))
+      * param.saltPhaseOutRate, 2)) * if(line.US.separate == 1, param.saltHalfSeparate, 1), 2)
+    source: >-
+      Schedule A instructions, State and Local Tax Deduction Worksheet, lines 1 to 10: $40,000 less 30% of modified AGI
+      (here, line 11b) over $500,000 ($250,000 if married filing separately), at least $10,000, and half of that if
+      married filing separately
+  SA.5e:
+    label: State and local taxes deducted
+    formula: "min(line.SA.5d, line.SA.saltLimit)"
+  SA.7:
+    label: Taxes you paid
+    formula: "line.SA.5e"
+    source: "Schedule A, line 7: line 5e (no other taxes on line 6)"
+  SA.8a:
+    label: Home mortgage interest and points on Form 1098
+    formula: >-
+      if(line.US.ownMortgage + if(line.US.joint == 1, spouse.line.US.ownMortgage, 0) == 0, 0,
+      if(line.US.ownMortgageDebt + if(line.US.joint == 1, spouse.line.US.ownMortgageDebt, 0) > if(line.US.separate == 1, param.mortgageDebtLimitSeparate, param.mortgageDebtLimit)
+      or answer.mortgageQualifies == "no",
+      unsupported("Mortgage interest on more than $750,000 of debt, or on a loan not used to buy, build or improve the home, is limited with Pub. 936, which this app doesn't work out"),
+      line.US.ownMortgage + if(line.US.joint == 1, spouse.line.US.ownMortgage, 0)))
+    source: "Schedule A, line 8a: Form 1098, boxes 1 and 6"
+  SA.8b:
+    label: Mortgage interest not on Form 1098
+    formula: >-
+      if(answer.hasItemized, if(answer.itemMortgageOther > 0, unsupported("Mortgage interest paid to a person goes on Schedule A line 8b with their name and address, which this app doesn't fill in yet"), 0), 0)
+  SA.10:
+    label: Interest you paid
+    formula: "line.SA.8a + line.SA.8b"
+    source: "Schedule A, lines 8e and 10 (no investment interest, line 9)"
+  SA.11:
+    label: Gifts by cash or check
+    formula: >-
+      if(line.US.ownCashGifts + if(line.US.joint == 1, spouse.line.US.ownCashGifts, 0) > round(line.F1040.11a * param.cashGiftLimit, 2),
+      unsupported("Cash gifts over 60% of AGI are limited and carried over, which this app doesn't work out"),
+      line.US.ownCashGifts + if(line.US.joint == 1, spouse.line.US.ownCashGifts, 0))
+  SA.12:
+    label: Gifts other than by cash or check
+    formula: >-
+      if(line.US.ownNoncashGifts + if(line.US.joint == 1, spouse.line.US.ownNoncashGifts, 0) > param.noncashGiftForm,
+      unsupported("Noncash gifts over $500 need Form 8283, which this app doesn't prepare"),
+      if(line.US.ownNoncashGifts + if(line.US.joint == 1, spouse.line.US.ownNoncashGifts, 0) > round(line.F1040.11a * param.noncashGiftLimit, 2),
+      unsupported("Noncash gifts over 20% of AGI may be limited, which this app doesn't work out"),
+      line.US.ownNoncashGifts + if(line.US.joint == 1, spouse.line.US.ownNoncashGifts, 0)))
+  SA.14:
+    label: Gifts to charity
+    formula: "line.SA.11 + line.SA.12"
+    source: "Schedule A, line 14: lines 11 and 12 (no carryover, line 13)"
+  SA.17:
+    label: Total itemized deductions
+    formula: "line.SA.4 + line.SA.7 + line.SA.10 + line.SA.14"
+    source: "Schedule A, line 17: lines 4, 7, 10 and 14 (no casualty or other deductions, lines 15 and 16)"
+  US.itemizes:
+    label: The return itemizes (1 for yes)
+    formula: >-
+      if(line.US.separate == 1, if(answer.spouseItemizes, 1, if(line.SA.17 > line.US.standard, 1, 0)), if(line.SA.17 > line.US.standard, 1, 0))
+    source: "Instructions, line 12e: the larger of the standard deduction and the itemized deductions; filing separately, itemize if your spouse does (line 12b)"

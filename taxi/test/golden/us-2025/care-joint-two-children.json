@@ -1,0 +1,187 @@
+{
+  "about": "Married filing jointly, children of 3 and 8 and $9,000 of care: 20% of $6,000, and the child tax credit after it",
+  "input": {
+    "country": "us",
+    "year": 2025,
+    "people": [
+      {
+        "id": "p1",
+        "name": "Ben Ross",
+        "role": "self",
+        "birthDate": "1986-03-03",
+        "province": "FL",
+        "residentAllYear": true
+      },
+      {
+        "id": "p2",
+        "name": "Ada Ross",
+        "role": "spouse",
+        "birthDate": "1987-04-04",
+        "province": "FL",
+        "residentAllYear": true
+      }
+    ],
+    "family": {
+      "maritalStatus": "married",
+      "dependants": [
+        {
+          "id": "d1",
+          "name": "Mo Ross",
+          "birthDate": "2022-01-01",
+          "answers": {
+            "relationship": "child",
+            "monthsWithYou": "12",
+            "hasSSN": true,
+            "paidOwnSupport": false,
+            "filedJointReturn": false,
+            "citizenOrResident": true,
+            "careExpenses": "7000"
+          }
+        },
+        {
+          "id": "d2",
+          "name": "Al Ross",
+          "birthDate": "2017-06-06",
+          "answers": {
+            "relationship": "child",
+            "monthsWithYou": "12",
+            "hasSSN": true,
+            "paidOwnSupport": false,
+            "filedJointReturn": false,
+            "citizenOrResident": true,
+            "careExpenses": "2000"
+          }
+        }
+      ],
+      "filingStatus": "joint"
+    },
+    "answers": {
+      "p1": {
+        "hasWages": true,
+        "hasInterest": false,
+        "hasTipsOrOvertime": false,
+        "canBeClaimed": false,
+        "isBlind": false,
+        "estimatedPayments": "0",
+        "hasCarLoan": false,
+        "hasSelfEmployment": false,
+        "hasStudentLoan": false,
+        "paidForEducation": false,
+        "hasDividends": false,
+        "hasBrokerSales": false,
+        "hasIraDistribution": false,
+        "hasPension": false,
+        "hasSocialSecurity": false,
+        "hasLossCarryover": false,
+        "hasHsa": false,
+        "hasIraContribution": false,
+        "hasItemized": false,
+        "hasOtherIncome": false,
+        "paidForCare": true,
+        "householdEmployer": false,
+        "priorYearCare": false,
+        "spouseNeedsCare": false,
+        "hasValidSSN": true,
+        "studentOrDisabledMonths": "0"
+      },
+      "p2": {
+        "hasWages": true,
+        "hasInterest": false,
+        "hasTipsOrOvertime": false,
+        "canBeClaimed": false,
+        "isBlind": false,
+        "estimatedPayments": "0",
+        "hasCarLoan": false,
+        "hasSelfEmployment": false,
+        "hasStudentLoan": false,
+        "paidForEducation": false,
+        "hasDividends": false,
+        "hasBrokerSales": false,
+        "hasIraDistribution": false,
+        "hasPension": false,
+        "hasSocialSecurity": false,
+        "hasLossCarryover": false,
+        "hasHsa": false,
+        "hasIraContribution": false,
+        "hasItemized": false,
+        "hasOtherIncome": false,
+        "hasValidSSN": true,
+        "studentOrDisabledMonths": "0"
+      }
+    },
+    "slips": [
+      {
+        "id": "p1-w2-0",
+        "person": "p1",
+        "type": "W2",
+        "issuer": "Northwind",
+        "boxes": {
+          "1": "60000",
+          "2": "4000",
+          "4": "3720",
+          "5": "60000",
+          "6": "870"
+        }
+      },
+      {
+        "id": "p2-w2-0",
+        "person": "p2",
+        "type": "W2",
+        "issuer": "Contoso",
+        "boxes": {
+          "1": "25000",
+          "2": "900",
+          "4": "1550",
+          "5": "25000",
+          "6": "362.50"
+        }
+      }
+    ]
+  },
+  "expected": {
+    "p1": {
+      "F1040.19": "4400",
+      "F1040.27a": "0",
+      "F1040.28": "0",
+      "S8812.12": "4400",
+      "F1040.1a": "85000",
+      "F1040.1e": "0",
+      "S3.2": "1200",
+      "F1040.2a": "0",
+      "F1040.2b": "0",
+      "F1040.9": "85000",
+      "F1040.11a": "85000",
+      "F1040.12e": "31500",
+      "F1040.13b": "0",
+      "F1040.13a": "0",
+      "F1040.8": "0",
+      "F1040.10": "0",
+      "F1040.15": "53500",
+      "F1040.16": "5946",
+      "F8959.7": "0",
+      "F8960.17": "0",
+      "F1040.24": "346",
+      "F1040.25c": "0",
+      "S3.11": "0",
+      "F1040.33": "4900",
+      "F1040.34": "4554",
+      "F1040.37": "0",
+      "F6251.4": "85000",
+      "F6251.6": "0",
+      "F6251.11": "0",
+      "F1040.18": "5946",
+      "F2441.2": "2",
+      "F2441.3": "6000",
+      "F2441.4": "60000",
+      "F2441.5": "25000",
+      "F2441.6": "6000",
+      "F2441.8": "0.2",
+      "F2441.9a": "1200",
+      "F2441.12": "0",
+      "F2441.15": "0",
+      "F2441.16": "9000",
+      "F2441.25": "0",
+      "F2441.26": "0"
+    }
+  }
+}

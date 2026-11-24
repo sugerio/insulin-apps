@@ -79,6 +79,28 @@ describe("compiling rule files", () => {
     expect(compileError([year(2025, null, { "a.yaml": { ...base, lines } })])).toMatch(/lines\.A\.1: The line depends on itself: A\.1 → A\.2 → A\.1$/);
   });
 
+  it("keeps a line for each dependant and an adult's return apart", () => {
+    const withLines = (lines: Record<string, unknown>, questions: Record<string, unknown> = {}) => [
+      year(2025, null, {
+        "a.yaml": {
+          ...base,
+          lines: { ...base.lines, ...lines },
+          questions: { ...base.questions, kidAge: { type: "count", ask: "Age", module: "about", dependant: true }, ...questions },
+        },
+      }),
+    ];
+    const each = (formula: string) => ({ label: "Each", formula, each: "dependant" });
+    // A dependant's line reads the dependant; a return reads the dependants' line as a list.
+    expect(() => compileRules(withLines({ "D.kid": each("if(dependant.age < 17, 1, 0)"), "A.3": { label: "Kids", formula: "sum(dependants.D.kid)" } }), hash)).not.toThrow();
+    expect(compileError(withLines({ "A.3": { label: "X", formula: "dependant.age" } }))).toContain("only a line with each: dependant reads dependant.<…>");
+    expect(compileError(withLines({ "D.kid": each("answer.status") }))).toContain("a line for each dependant reads dependant.<…>");
+    expect(compileError(withLines({ "D.kid": each("1"), "A.3": { label: "X", formula: "line.D.kid" } }))).toContain("read a dependant's line through dependants.D.kid");
+    expect(compileError(withLines({ "D.kid": each("line.A.1") }))).toContain("a dependant's line reads only lines worked out for each dependant");
+    expect(compileError(withLines({ "A.3": { label: "X", formula: "sum(dependants.A.1)" } }))).toContain("A.1 isn't worked out for each dependant");
+    expect(compileError(withLines({ "A.3": { label: "X", formula: "answer.kidAge" } }))).toContain("kidAge is asked about each dependant");
+    expect(compileError(withLines({ "D.kid": each('if(dependant.answer.status == "single", 1, 0)') }))).toContain("status is asked about an adult");
+  });
+
   it("refuses values of the wrong kind", () => {
     const withLine = (formula: string) => [year(2025, null, { "a.yaml": { ...base, lines: { ...base.lines, "A.3": { label: "X", formula } } } })];
     expect(compileError(withLine("S.box1 + 1"))).toContain('"+" works on numbers; use sum() for slip boxes');

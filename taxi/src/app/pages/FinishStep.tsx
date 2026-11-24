@@ -1,7 +1,7 @@
 import { useId, useMemo, useState } from "react";
 import { Link } from "react-router";
 import { FileDown } from "lucide-react";
-import { formsToAdd, printBlockers, spouseOf, type Estimate, type FormLanguage, type SlipList, type Step } from "#shared";
+import { balancesOf, filesJointly, formsToAdd, printBlockers, spouseOf, type Estimate, type FormLanguage, type SlipList, type Step } from "#shared";
 import { Button } from "@/components/ui/button.tsx";
 import { Card, CardContent } from "@/components/ui/card.tsx";
 import { Label } from "@/components/ui/label.tsx";
@@ -17,12 +17,21 @@ import { useEstimate, useSlips } from "../lib/useYearData.ts";
 import { Evaluation } from "../shared/engine/evaluate.ts";
 import { rulesFor } from "../shared/rules/index.ts";
 
+/** What Finish says of each state return printed after the federal forms, by the name of its balance. */
+const STATE_RETURNS: Record<string, string> = {
+  California:
+    "After them comes California's Form 540 with its schedules and credit forms: sign it and mail it to the Franchise Tax Board apart from the federal return (the worksheet gives the address), or file it with CalFile or e-file software.",
+  "New York":
+    "After them comes New York's Form IT-201 with Form IT-2 and its credit forms: sign it and mail it to the New York State Department of Taxation and Finance apart from the federal return (the worksheet gives the address), or file it with e-file software.",
+};
+
 // Step 6, `/returns/:year/:personId/finish`: the open return's refund or balance owing, its key lines with why each is
 // what it is (worked out in the browser with the same engine), what still needs a look before filing, and the return's
 // hints: savings to apply and things to know.
 
 export function FinishStep() {
-  const { person } = useReturn();
+  // Finish is the return's: on a joint return, both spouses see the joint result.
+  const { owner: person } = useReturn();
   const estimate = useEstimate();
   const slips = useSlips();
   return (
@@ -37,44 +46,51 @@ export function FinishStep() {
 
 function Results({ estimate, slips }: { estimate: Estimate; slips: SlipList }) {
   const { year } = useYear();
-  const { person: owner } = useReturn();
-  const rules = rulesFor(year.year)!;
+  const { owner, onReturn: members } = useReturn();
+  const rules = rulesFor(year.country, year.year)!;
   const evaluation = useMemo(() => new Evaluation(rules, estimate.input), [rules, estimate.input]);
   const person = estimate.result.people.find((each) => each.personId === owner.id);
   if (!person) return <p className="text-sm text-muted-foreground">Nothing to work out yet.</p>;
-  const line = (id: string) => person.lines.find((each) => each.id === id);
-  const refund = line("T1.48400");
-  const owing = line("T1.48500");
-  // A resident of Quebec files two returns: the result has the Quebec refund and balance (TP-1 lines 478 and 479) too.
-  const quebecRefund = line("TP1.478");
-  const quebecOwing = line("TP1.479");
-  const results = new Set(["T1.48400", "T1.48500", "TP1.478", "TP1.479"]);
+  // The refund or balance owing, and a resident of Quebec's second one (TP-1 lines 478 and 479).
+  const balances = balancesOf(rules, person.lines);
+  const results = new Set(balances.flatMap((balance) => [balance.refund.id, balance.owing.id]));
   /** The step that asks a question: its module's, Personal info for facts about the person. */
   const stepOfQuestion = (id: string): Step => {
     const module = rules.questions.get(id)?.module;
     return module === "income" || module === "deductions" || module === "credits" ? module : "personal";
   };
   const other = spouseOf(estimate.result.people, owner.id);
-  const spouse = other ? { name: year.people.find((each) => each.id === other.personId)?.name ?? "Your spouse", result: other } : undefined;
+  // The dependants this return claims (the person preparing's unless said), with what is still unanswered about each.
+  const selfId = year.people.find((each) => each.relationship === "self")?.id;
+  const dependantsOfReturn = estimate.input.family.dependants
+    .filter((dependant) => members.some((member) => member.id === (dependant.claimedBy ?? selfId)))
+    .flatMap((dependant) => {
+      const result = estimate.result.dependants.find((each) => each.dependantId === dependant.id);
+      return result ? [{ name: dependant.name, result }] : [];
+    });
+  // On a joint return the spouse's items are this return's, named by person rather than by return.
+  const joint = filesJointly(year);
+  const spouse = other ? { name: year.people.find((each) => each.id === other.personId)?.name ?? "Your spouse", result: other, joint } : undefined;
   const checks = groupUnanswered(
-    printBlockers({ rules, issues: year.issues, answers: estimate.input.answers, slips: slips.slips }, person, spouse).map((blocker) => ({
+    printBlockers({ rules, issues: year.issues, answers: estimate.input.answers, slips: slips.slips }, person, spouse, dependantsOfReturn).map((blocker) => ({
       text: blocker.text,
       personId: blocker.personId ?? owner.id,
       step: blocker.confirm ? ("confirm" as const) : blocker.issue ? ("personal" as const) : blocker.question ? stepOfQuestion(blocker.question) : null,
       ask: blocker.question && blocker.unanswered ? (rules.questions.get(blocker.question)?.ask ?? null) : null,
     })),
-    (personId) => (personId === owner.id ? "" : `${spouse?.name ?? "Your spouse"}'s return: `),
+    (personId) => (personId === owner.id ? "" : joint ? `${spouse?.name ?? "Your spouse"}: ` : `${spouse?.name ?? "Your spouse"}'s return: `),
   );
   return (
     <Card>
       <CardContent className="flex flex-col gap-5">
-        {quebecRefund && quebecOwing ? (
+        {balances.length > 1 ? (
           <div className="grid gap-2 sm:grid-cols-2">
-            <Headline title="Federal" refund={refund?.value ?? null} owing={owing?.value ?? null} />
-            <Headline title="Quebec" refund={quebecRefund.value} owing={quebecOwing.value} />
+            {balances.map((balance) => (
+              <Headline key={balance.name} title={balance.name} refund={balance.refund.value} owing={balance.owing.value} />
+            ))}
           </div>
         ) : (
-          <Headline refund={refund?.value ?? null} owing={owing?.value ?? null} />
+          <Headline refund={balances[0]?.refund.value ?? null} owing={balances[0]?.owing.value ?? null} />
         )}
         <ul className="flex flex-col" aria-label="Key lines">
           {person.lines
@@ -100,13 +116,25 @@ function Results({ estimate, slips }: { estimate: Estimate; slips: SlipList }) {
             </ul>
           </section>
         ) : null}
+        {rules.forms.size === 0 ? (
+          <section aria-label="Your forms" className="flex flex-col gap-1.5">
+            <h2 className="text-sm font-medium">Your forms</h2>
+            <p className="text-sm text-muted-foreground">
+              Printing this return on the official forms comes in a later version of the app. Copy the amounts above into the forms or into tax
+              software to file.
+            </p>
+          </section>
+        ) : (
         <Download
           ready={checks.length === 0}
-          quebec={Boolean(quebecRefund && quebecOwing)}
-          toAdd={formsToAdd(evaluation, owner.id)}
+          country={year.country}
+          quebec={balances.some((balance) => balance.name === "Quebec")}
+          states={balances.map((balance) => balance.name).filter((name) => name in STATE_RETURNS)}
+          toAdd={formsToAdd(rules, evaluation, owner.id)}
           href={`/api/years/${year.year}/returns/${owner.id}/forms`}
           fileName={`Taxi ${year.year} return - ${owner.name}.pdf`}
         />
+        )}
       </CardContent>
     </Card>
   );
@@ -132,20 +160,25 @@ function Headline({ title, refund, owing }: { title?: string; refund: string | n
 }
 
 /**
- * The return on the CRA's forms (and, for a resident of Quebec, on Revenu Québec's TP-1 after them), with its
- * worksheet: only a finished return can be printed. Revenu Québec's forms print in English or in French. `toAdd` are
+ * The return on the CRA's forms (and, for a resident of Quebec, on Revenu Québec's TP-1 after them), or on the IRS's (and
+ * for a resident of a state Taxi prepares a return for, the state's forms after them), with its worksheet: only a finished return can be printed. Revenu Québec's forms print in English or in French. `toAdd` are
  * the forms the return needs that aren't printed. The PDF is fetched here and saved, so the page can say it is being
  * prepared (a first print downloads each official form) and why it couldn't be.
  */
 function Download({
   ready,
+  country,
   quebec,
+  states,
   toAdd,
   href,
   fileName,
 }: {
   ready: boolean;
+  country: string;
   quebec: boolean;
+  /** The state returns printed after the federal forms (STATE_RETURNS), by their balance's name. */
+  states: string[];
   toAdd: { form: string; why: string }[];
   href: string;
   fileName: string;
@@ -167,7 +200,14 @@ function Download({
   return (
     <section aria-label="Your forms" className="flex flex-col gap-2 rounded-lg border p-4">
       <h2 className="text-sm font-medium">Your forms</h2>
-      {quebec ? (
+      {country === "us" ? (
+        <p className="text-xs text-muted-foreground">
+          Form 1040 and the schedules and forms your return uses, filled in with what Taxi knows, and a worksheet that shows how each amount was worked
+          out. Add the social security numbers, your address and the other answers Taxi doesn't ask by hand. Attach Copy B of each W-2, sign Form 1040
+          and mail it to the IRS; or copy the amounts into IRS e-file software.
+          {states.map((name) => ` ${STATE_RETURNS[name]}`).join("")}
+        </p>
+      ) : quebec ? (
         <p className="text-xs text-muted-foreground">
           Both of your returns, filled in with what Taxi knows: the CRA's T1 for residents of Quebec with the schedules and forms it uses, then Revenu
           Québec's TP-1 with its schedules, and a worksheet that shows how each amount was worked out. Add your social insurance number, address and the

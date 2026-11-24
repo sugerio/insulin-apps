@@ -1,21 +1,25 @@
-import { useState } from "react";
+import { useId, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
 import { ArrowRight, Check, Plus } from "lucide-react";
-import { STEPS, canPrepare, filingDeadline, routes, type Person, type YearList } from "#shared";
+import { COUNTRY_NAMES, STEPS, canPrepare, filingDeadline, routes, type Country, type Person, type YearList } from "#shared";
 import { Badge } from "@/components/ui/badge.tsx";
 import { Button } from "@/components/ui/button.tsx";
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card.tsx";
+import { Label } from "@/components/ui/label.tsx";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group.tsx";
 import { apiRequest, describeError } from "../api/client.ts";
 import { useMe } from "../auth/AuthProvider.tsx";
 import { Banner, ResourceView } from "../components/Feedback.tsx";
 import { Page, PageHead } from "../components/Page.tsx";
 import { MemberPicker } from "../components/PeopleEditor.tsx";
+import { YearPeople } from "../components/YearPeople.tsx";
 import { STEP_LABELS, nextStep, stepPath } from "../components/YearFrame.tsx";
 import { RELATIONSHIP_LABELS, formatDate } from "../lib/format.ts";
 import { useResource } from "../lib/useResource.ts";
 
-// `/returns`: the tax years. Each year shows the filing deadline and each adult's return with its six
-// steps and their state; a year not yet started can be started by someone who prepares returns.
+// `/returns`: the tax years. Each year shows its country, the filing deadline and each adult's return with its
+// steps and their state; a year not yet started can be started, for Canada or the United States, by someone who
+// prepares returns.
 
 export function ReturnsPage() {
   const resource = useResource("years", (signal) => apiRequest(routes.listYears, { signal }));
@@ -30,7 +34,11 @@ export function ReturnsPage() {
 function Years({ data, reload }: { data: YearList; reload: () => void }) {
   const me = useMe();
   const started = new Set(data.years.map((year) => year.year));
-  const notStarted = data.supportedYears.filter((year) => !started.has(year));
+  // A year is of one country: each year not started yet, with the countries that have rules for it.
+  const notStarted = [...new Set(data.supported.flatMap((each) => each.years))]
+    .filter((year) => !started.has(year))
+    .sort((a, b) => b - a)
+    .map((year) => ({ year, countries: data.supported.filter((each) => each.years.includes(year)).map((each) => each.country) }));
   return (
     <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
       <div className="flex min-w-0 flex-col gap-4">
@@ -40,10 +48,12 @@ function Years({ data, reload }: { data: YearList; reload: () => void }) {
               <CardTitle>
                 <h2 className="text-lg font-semibold">{year.year} tax year</h2>
               </CardTitle>
-              <CardDescription>File by {formatDate(filingDeadline(year.year))}.</CardDescription>
+              <CardDescription>
+                {COUNTRY_NAMES[year.country]}. File by {formatDate(filingDeadline(year.country, year.year))}.
+              </CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col gap-5">
-              <YearPeople year={year} people={data.people} onChanged={reload} />
+              <YearPeople year={year.year} revision={year.revision} members={year.members} people={data.people} onSaved={reload} back="/returns" />
               <ul className="flex flex-col divide-y" aria-label={`${year.year} returns`}>
                 {year.returns.map((progress) => (
                   <ReturnRow key={progress.personId} year={year.year} progress={progress} />
@@ -52,8 +62,8 @@ function Years({ data, reload }: { data: YearList; reload: () => void }) {
             </CardContent>
           </Card>
         ))}
-        {notStarted.map((year) => (
-          <StartYear key={year} year={year} people={data.people} />
+        {notStarted.map(({ year, countries }) => (
+          <StartYear key={year} year={year} countries={countries} people={data.people} />
         ))}
       </div>
       <aside className="flex flex-col gap-4">
@@ -93,95 +103,14 @@ function Years({ data, reload }: { data: YearList; reload: () => void }) {
             <p>Residents of every province and territory, with income from work, pensions, benefits, investments, a business or rent.</p>
             <p>Quebec residents get both returns: the federal T1 and Revenu Québec's TP-1, worked out from their RL slips.</p>
             <p>Nothing is sent to the CRA. You get the CRA's own forms, filled in, to sign and mail.</p>
+            <p>
+              United States: the federal Form 1040 for wages and interest, in every filing status, with dependants, the child tax credit, the
+              earned income credit and the credit for child care, printed on the IRS's own forms.
+            </p>
           </CardContent>
         </Card>
       </aside>
     </div>
-  );
-}
-
-/**
- * Who is in a started year, and the choice to change it: you always; your spouse or partner to prepare their return
- * too; the dependants who lived with you. Someone taken out loses their facts, answers and slips for that year.
- */
-function YearPeople({ year, people, onChanged }: { year: YearList["years"][number]; people: Person[]; onChanged: () => void }) {
-  const me = useMe();
-  const [changing, setChanging] = useState(false);
-  const [selected, setSelected] = useState<Set<string>>(() => new Set(year.members));
-  const [state, setState] = useState<{ status: "idle" | "saving" } | { status: "error"; error: unknown }>({ status: "idle" });
-  const members = people.filter((person) => year.members.includes(person.id));
-  const leaving = members.filter((person) => person.relationship !== "self" && !selected.has(person.id));
-  const addPerson = `/profile?back=${encodeURIComponent("/returns")}`;
-
-  async function save() {
-    setState({ status: "saving" });
-    try {
-      const ids = people.filter((person) => person.relationship === "self" || selected.has(person.id)).map((person) => person.id);
-      await apiRequest(routes.setYearPeople, { params: { year: year.year }, body: { revision: year.revision, people: ids } });
-      setChanging(false);
-      setState({ status: "idle" });
-      onChanged();
-    } catch (error) {
-      setState({ status: "error", error });
-    }
-  }
-
-  return (
-    <section aria-label={`People in ${year.year}`} className="flex flex-col gap-2">
-      <div className="flex items-center justify-between gap-3">
-        <h3 className="text-sm font-medium">People in {year.year}</h3>
-        {canPrepare(me) && !changing ? (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => {
-              setSelected(new Set(year.members));
-              setChanging(true);
-            }}
-          >
-            Change
-          </Button>
-        ) : null}
-      </div>
-      {changing ? (
-        <>
-          <MemberPicker
-            people={people}
-            selected={selected}
-            onChange={setSelected}
-            disabled={state.status === "saving"}
-            footer={
-              <Link to={addPerson} className="flex items-center gap-2 rounded-lg border border-dashed px-3 py-2.5 text-sm font-medium hover:bg-muted">
-                <Plus className="size-4" aria-hidden="true" />
-                Add a new person
-              </Link>
-            }
-          />
-          {leaving.length > 0 ? (
-            <Banner kind="warning" title={`Taking ${leaving.map((person) => person.name).join(" and ")} out of ${year.year}`}>
-              Their facts, answers and slips for {year.year} are deleted when you save.
-            </Banner>
-          ) : null}
-          {state.status === "error" ? <Banner kind="error" title="Who is in the year wasn't changed">{describeError(state.error)}</Banner> : null}
-          <div className="flex gap-2">
-            <Button size="sm" onClick={() => void save()} disabled={state.status === "saving"}>
-              {state.status === "saving" ? "Saving…" : "Save people"}
-            </Button>
-            <Button size="sm" variant="ghost" onClick={() => setChanging(false)} disabled={state.status === "saving"}>
-              Cancel
-            </Button>
-          </div>
-        </>
-      ) : (
-        <ul className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
-          {members.map((person) => (
-            <li key={person.id} className="min-w-0 wrap-anywhere">
-              <span className="font-medium">{person.name}</span> <span className="text-muted-foreground">· {RELATIONSHIP_LABELS[person.relationship]}</span>
-            </li>
-          ))}
-        </ul>
-      )}
-    </section>
   );
 }
 
@@ -229,25 +158,29 @@ function ReturnRow({ year, progress }: { year: number; progress: YearList["years
 }
 
 /**
- * A supported year not started yet. Starting it asks who is in it: you always, and whoever you choose of the profile
- * (your spouse to prepare their return too, the dependants who lived with you). `?start=<year>` opens the choice (the way back from the Profile).
+ * A supported year not started yet. Starting it asks whose return it is (Canada's or the United States') and who is in
+ * it: you always, and whoever you choose of the profile (your spouse to prepare their return too, the dependants who
+ * lived with you). `?start=<year>` opens the choice (the way back from the Profile), and `&country=us` keeps the country.
  */
-function StartYear({ year, people }: { year: number; people: Person[] }) {
+function StartYear({ year, countries, people }: { year: number; countries: Country[]; people: Person[] }) {
   const me = useMe();
   const navigate = useNavigate();
   const [search] = useSearchParams();
   const [choosing, setChoosing] = useState(search.get("start") === String(year));
+  const asked = search.get("country");
+  const [country, setCountry] = useState<Country>(countries.find((each) => each === asked) ?? countries[0]!);
+  const countryChoice = useId();
   // Only you to begin with: everyone else is added by choice.
   const [selected, setSelected] = useState<Set<string>>(() => new Set());
   const [state, setState] = useState<{ status: "idle" | "starting" } | { status: "error"; error: unknown }>({ status: "idle" });
   const self = people.find((person) => person.relationship === "self");
-  const addPerson = `/profile?back=${encodeURIComponent(`/returns?start=${year}`)}`;
+  const addPerson = `/profile?back=${encodeURIComponent(`/returns?start=${year}&country=${country}`)}`;
 
   async function start() {
     setState({ status: "starting" });
     try {
       const ids = people.filter((person) => person.relationship === "self" || selected.has(person.id)).map((person) => person.id);
-      await apiRequest(routes.startYear, { body: { year, people: ids } });
+      await apiRequest(routes.startYear, { body: { year, country, people: ids } });
       navigate(`/returns/${year}`);
     } catch (error) {
       setState({ status: "error", error });
@@ -260,7 +193,9 @@ function StartYear({ year, people }: { year: number; people: Person[] }) {
         <CardTitle>
           <h2 className="text-lg font-semibold">{choosing ? `Start ${year}: who is in this year?` : `${year} tax year`}</h2>
         </CardTitle>
-        <CardDescription>File by {formatDate(filingDeadline(year))}.</CardDescription>
+        <CardDescription>
+          {choosing ? `${COUNTRY_NAMES[country]}. File by ${formatDate(filingDeadline(country, year))}.` : `Canada or the United States, one return each year.`}
+        </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
         {!canPrepare(me) ? (
@@ -273,6 +208,21 @@ function StartYear({ year, people }: { year: number; people: Person[] }) {
           </div>
         ) : choosing ? (
           <>
+            {countries.length > 1 ? (
+              <fieldset className="flex flex-col gap-2">
+                <legend id={countryChoice} className="mb-2 text-sm font-medium">
+                  Which country's return?
+                </legend>
+                <RadioGroup aria-labelledby={countryChoice} value={country} onValueChange={(value) => setCountry(value as Country)} className="flex gap-4">
+                  {countries.map((each) => (
+                    <Label key={each} className="flex items-center gap-2 font-normal">
+                      <RadioGroupItem value={each} disabled={state.status === "starting"} />
+                      {COUNTRY_NAMES[each]}
+                    </Label>
+                  ))}
+                </RadioGroup>
+              </fieldset>
+            ) : null}
             <MemberPicker
               people={people}
               selected={selected}

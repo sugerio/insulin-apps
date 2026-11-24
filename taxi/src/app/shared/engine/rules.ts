@@ -14,17 +14,26 @@ import { parseFormula, references, type Formula } from "./formula.ts";
 //   <SLIP>.box<key>               that box of every one of the person's slips of that type (a list: sum, count,
 //                                 countNonZero, countIssuers, max)
 //   <SLIP>.slips                  how many slips of that type the person has, whatever boxes they show
-//   person.age, person.province, person.role   the person's age and province on December 31, and "self" for the
-//                                 person preparing or "spouse"; person.residentAllYear whether they lived in Canada all year
+//   person.age, person.province, person.role   the person's age and province (or state) on December 31, and "self"
+//                                 for the person preparing or "spouse"; person.residentAllYear whether they were a
+//                                 resident all year (the rule set's `residency` says of which country)
 //   person.birthMonth             the month the person was born, 1 to 12 (with person.age, the month they turned an
 //                                 age this year, which prorates CPP in the year they turn 18 or 70)
+//   family.filingStatus           a married couple's filing status where the country has one (US: joint or separate)
 //   family.maritalStatus, family.partnerInYear, family.childrenUnder18, family.childrenUnder19
 //                                 the year's marital status, whether the spouse's return is prepared too, and the
 //                                 number of dependants under 18 (or 19) at the end of the year; also childrenUnder6,
-//                                 childrenUnder7 and childrenUnder17
+//                                 childrenUnder7 and childrenUnder17, and family.dependants, the dependants of any age
 //   family.childMonthsUnder6      for each dependant under 18, the months on whose first day they were born and under 6
 //                                 (a list: sum, min)
 //   spouse.<any of the above but param>   the same, for the spouse
+//   dependants.<line>             a line with `each: dependant`, worked out for each dependant claimed on this return
+//                                 (a list: sum, count, max, min)
+// A line with `each: dependant` is worked out once for each dependant in the year and reads:
+//   dependant.age                 the dependant's age on December 31
+//   dependant.answer.<question>   an answer about the dependant (a question with `dependant: true`)
+//   line.<form>.<line>            another line worked out for the same dependant
+//   param.<name>, family.<fact>   as above
 
 export const STATUSES = ["complete", "estimate", "missing"] as const;
 /** How sure a value is: `estimate` when a question's default stood in for an answer, `missing` when nothing could. */
@@ -65,6 +74,8 @@ export interface Line {
   source?: string;
   /** A line worked out from slips, shown in this module so people see what their slips already claim. */
   module?: Module;
+  /** `dependant`: worked out once for each dependant in the year, reading dependant.<…> (rules.ts header). */
+  each?: "dependant";
 }
 export type QuestionType = "money" | "percent" | "count" | "boolean" | "choice";
 /** A question whose answer is a number: an amount, a percent or a count. */
@@ -99,6 +110,8 @@ export interface Question {
   default?: string | boolean;
   /** The default is the app's choice, not a guess: the result is complete without an answer (a hint may change it). */
   decision?: boolean;
+  /** Asked about each dependant in the year (dependant.answer.<id>), not about an adult. */
+  dependant?: boolean;
   options?: string[];
   /** For a count: the most it can be, where the year sets one (12 months, 365 days). */
   max?: number;
@@ -112,6 +125,11 @@ export interface SlipType {
   informational: string[];
   /** Boxes that hold a count (months of study), not an amount of money. */
   counts: string[];
+  /**
+   * Boxes that hold a code from a list, not an amount: a 1099-R's distribution code (box 7), which part of Form 8949 a
+   * 1099-B summary is for. A formula reads them only through sumWhere and countWhere.
+   */
+  codes: Record<string, string[]>;
   /** A receipt or notice rather than a numbered slip: its "boxes" are amounts with no number printed beside them. */
   receipt: boolean;
   /** The years it may carry, relative to the tax year (0 the year itself; -1 last year's notice of assessment). */
@@ -148,14 +166,40 @@ export interface Hint {
   amount?: { formula: Formula; text: string; label: string };
   /** For an info hint with a change: what the difference the change makes is called. */
   effectLabel?: string;
+  /**
+   * The what-if files the year this way instead (a married couple's US return). Only an info hint can: the person
+   * changes the filing status on Personal info, as it changes who is on each return.
+   */
+  filingStatus?: "joint" | "separate";
+  /** An info hint shown only when its what-if raises the year's outcome by $1 or more, as a saving is. */
+  onlyIfSaving?: boolean;
 }
 
 /**
  * What a form's text box can hold: facts about the person that no tax line computes, kept out of the formulas. A name
  * is split at its last space (first name, last name). The TP-1 asks for the spouse's last name and date of birth too.
+ * The IRS's forms ask for the spouse's whole name (filing separately), each schedule for the names on the return
+ * (`returnNames`: both spouses' on a joint return), and a person's own schedule for their whole name (`name`).
  */
-export const PERSONAL_FACTS = ["firstName", "lastName", "birthDate", "province", "spouseFirstName", "spouseLastName", "spouseBirthDate"] as const;
+export const PERSONAL_FACTS = [
+  "firstName",
+  "lastName",
+  "birthDate",
+  "province",
+  "spouseFirstName",
+  "spouseLastName",
+  "spouseBirthDate",
+  "spouseName",
+  "returnNames",
+  "name",
+] as const;
 export type PersonalFact = (typeof PERSONAL_FACTS)[number];
+/**
+ * What a dependant's text box can hold: their name split at its last space, their whole name, and their year of birth.
+ * A field can also write a dependant's answer to a choice question in the form's own words (`labels`).
+ */
+export const DEPENDANT_FACTS = ["firstName", "lastName", "name", "birthYear"] as const;
+export type DependantFact = (typeof DEPENDANT_FACTS)[number];
 export const FIELD_KINDS = ["amount", "count", "tick", "text"] as const;
 
 /** Where a form's field is (form-layout.yaml): the page, and x and y in PDF points from the bottom left. */
@@ -171,13 +215,70 @@ interface FieldPlace {
 /**
  * What a form gets, by kind: an amount in dollars and cents (x is the line between them, or the right end of a `plain`
  * box with no such line; `zero` writes 0.00 where the CRA asks for an amount even when it is zero), a whole number (x is
- * where its box ends), a tick (x and y are the box's centre) and a personal fact as text (x is where it starts; a date's
- * boxes have a cell width).
+ * where its box ends; with `digits`, written with that many digits, zeros included, even when it is zero), a tick (x
+ * and y are the box's centre) and a personal fact as text (x is where it starts; a date's boxes have a cell width).
  */
 export type FormField =
   | (FieldPlace & { kind: "amount"; formula: Formula; text: string; zero: boolean; plain: boolean })
-  | (FieldPlace & { kind: "count" | "tick"; formula: Formula; text: string })
+  | (FieldPlace & { kind: "count"; formula: Formula; text: string; digits?: number })
+  | (FieldPlace & { kind: "tick"; formula: Formula; text: string })
   | (FieldPlace & { kind: "text"; fact: PersonalFact; width?: number; cell?: number });
+
+/**
+ * A field of a form's table of dependants, in the column (or row) of the table it is in: worked out for the dependant
+ * written there, from their side (`dependant.`), like a line with `each: dependant`. Its `when` is about the return
+ * instead (the filer's social security number): a dependant's side can't read the return's lines. Text is one of the
+ * dependant's facts, or their answer to a choice question in the form's words (an answer with no words leaves the box
+ * blank).
+ */
+export type DependantField =
+  | (FieldPlace & { column: number; kind: "amount"; formula: Formula; text: string; plain: boolean })
+  | (FieldPlace & { column: number; kind: "count" | "tick"; formula: Formula; text: string })
+  | (FieldPlace & { column: number; kind: "text"; fact: DependantFact; width?: number; cell?: number })
+  | (FieldPlace & { column: number; kind: "choice"; question: string; labels: Record<string, string>; width?: number });
+
+/**
+ * A form's table of dependants (Form 1040's, Schedule EIC's): when `when` is yes for the return, the dependants of the
+ * return for whom `which` is yes, in the year's order, one per column, as many as the form has columns. When there are
+ * more and the form has a "more" box (Form 1040's "more than four dependents"), it is ticked and the others are named
+ * on the worksheet; a form without one (Schedule EIC, which counts three at most) takes the first.
+ */
+export interface DependantTable {
+  when?: Formula;
+  which: Formula;
+  whichText: string;
+  columns: number;
+  more?: { page: number; x: number; y: number };
+  fields: DependantField[];
+}
+/**
+ * A field of a form's table of slips, in the column of the table it is in: a box of the slip written there (its amount,
+ * or its code as text) or the slip's issuer, when the slip's box `if.box` holds one of `if.is` (with `not`, none).
+ */
+export interface SlipTableField extends FieldPlace {
+  column: number;
+  kind: "amount" | "text";
+  box?: string;
+  issuer?: true;
+  width?: number;
+  plain: boolean;
+  if?: { box: string; is: string[]; not: boolean };
+}
+
+/**
+ * A form's table of slips (Form IT-2's W-2 records): the return's slips of `types` whose box `which.box` holds one of
+ * `which.is` (with `not`, none of them), the person's and, when `spouse` is yes for the return, the spouse's after
+ * them, in the year's order, one per column, as many as the form has columns. The others are named on the worksheet,
+ * for another copy of the form.
+ */
+export interface SlipTable {
+  types: string[];
+  which?: { box: string; is: string[]; not: boolean };
+  spouse?: Formula;
+  spouseText?: string;
+  columns: number;
+  fields: SlipTableField[];
+}
 
 /**
  * A bracket table printed on a form (one column per bracket, in one or more parts): the column of the bracket the amount
@@ -210,6 +311,28 @@ export interface FormSpec extends FormVersion {
   appliesText: string;
   /** The publisher's French version, with the same fields at that version's places. */
   french?: FormVersion;
+  /** The form's table of dependants. */
+  dependants?: DependantTable;
+  /** The form's table of slips. */
+  slips?: SlipTable;
+  /**
+   * Whose form it is on a joint return: the spouse's copy of a form each spouse files (Schedule C, Schedule SE) works
+   * its rows out from the spouse's side, and writes the spouse's name where the form asks for the person's.
+   */
+  side?: "spouse";
+  /** Whole dollars, with the cents printed on the form (California's): a whole amount is written without them. */
+  wholeDollars?: true;
+}
+
+/**
+ * A form a return needs that isn't printed (forms.yaml `toAdd`): the worksheet and Finish name it, with what it is for,
+ * for the person to fill in and file with the printed forms.
+ */
+export interface FormToAdd {
+  id: string;
+  form: string;
+  why: string;
+  applies: Formula;
 }
 
 /** The languages a return's forms print in: English, or French where the form has a French version. */
@@ -244,10 +367,31 @@ export interface RuleSet {
   /** Per slip type, the boxes some formula reads, and the informational ones. Any other box with an amount is shown as not handled. */
   usedBoxes: Map<string, Set<string>>;
   hints: Map<string, Hint>;
-  /** The CRA forms a return is printed on, in order. */
+  /** The official forms a return is printed on, in order. */
   forms: Map<string, FormSpec>;
+  /** The forms a return can need that aren't printed, in the order they're attached. */
+  formsToAdd: FormToAdd[];
   /** The line a hint's what-if compares, added up over the year's returns: the refund less the balance owing. */
   outcome?: string;
+  /**
+   * Each refund-or-balance a return shows, in order, as a pair of result lines: the federal one, then (for a resident
+   * of Quebec) Revenu Québec's. A return shows the ones whose lines are in its result.
+   */
+  balances: Balance[];
+  /** What person.residentAllYear means, as an explanation names it. */
+  residency: string;
+  /**
+   * What AI reading is told about this country's documents: what they are ("Canadian personal tax slips, receipts and
+   * notices"), and notes on reading the ones that need it. `{year}`, `{nextYear}` and `{lastYear}` in a note are years.
+   */
+  reading: { documents: string; notes: string[] };
+}
+
+export interface Balance {
+  /** "Federal", "Quebec": the title when a return shows more than one. */
+  name: string;
+  refund: string;
+  owing: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -266,6 +410,42 @@ const tablePartSchema = z.strictObject({
   rows: z.tuple([z.string(), z.string(), z.string(), z.string()]),
 });
 
+/** A form's field as compiled: its place, and a formula (for text, the fact; for a choice, the question). */
+const compiledFieldSchema = z.strictObject({
+  key: z.string(),
+  kind: z.enum([...FIELD_KINDS, "choice"]),
+  page: z.number().int().min(1),
+  x: z.number(),
+  y: z.number(),
+  value: z.string(),
+  when: z.string().optional(),
+  zero: z.boolean().optional(),
+  plain: z.boolean().optional(),
+  width: z.number().optional(),
+  cell: z.number().optional(),
+  /** A count written with this many digits, zeros included. */
+  digits: z.number().int().min(1).optional(),
+  /** In a table of dependants: the column. */
+  column: z.number().int().min(1).optional(),
+  /** A choice's answers in the form's words. */
+  labels: z.record(z.string(), z.string()).optional(),
+});
+
+const compiledSlipConditionSchema = z.strictObject({ box: z.string(), is: z.array(z.string()).min(1), not: z.literal(true).optional() });
+const compiledSlipFieldSchema = z.strictObject({
+  key: z.string(),
+  column: z.number().int().min(1),
+  kind: z.enum(["amount", "text"]),
+  page: z.number().int().min(1),
+  x: z.number(),
+  y: z.number(),
+  width: z.number().optional(),
+  plain: z.boolean().optional(),
+  box: z.string().optional(),
+  issuer: z.literal(true).optional(),
+  if: compiledSlipConditionSchema.optional(),
+});
+
 export const compiledRulesSchema = z.strictObject({
   country: z.string().regex(/^[a-z]{2}$/),
   year: z.number().int(),
@@ -274,7 +454,16 @@ export const compiledRulesSchema = z.strictObject({
   result: z.array(z.string()),
   resultWhen: z.record(z.string(), z.string()),
   params: z.record(z.string(), z.strictObject({ label: z.string(), value: z.union([decimalText, z.array(bracketRowSchema).min(1)]), source: z.string() })),
-  lines: z.record(z.string(), z.strictObject({ label: z.string(), formula: z.string(), source: z.string().optional(), module: z.enum(MODULES).optional() })),
+  lines: z.record(
+    z.string(),
+    z.strictObject({
+      label: z.string(),
+      formula: z.string(),
+      source: z.string().optional(),
+      module: z.enum(MODULES).optional(),
+      each: z.literal("dependant").optional(),
+    }),
+  ),
   questions: z.record(
     z.string(),
     z.strictObject({
@@ -287,6 +476,7 @@ export const compiledRulesSchema = z.strictObject({
       suggest: z.string().optional(),
       default: z.union([z.string(), z.boolean()]).optional(),
       decision: z.boolean().optional(),
+      dependant: z.boolean().optional(),
       options: z.array(z.string()).optional(),
       parent: z.string().optional(),
       askedWhen: z.strictObject({ question: z.string(), options: z.array(z.string()) }).optional(),
@@ -306,9 +496,14 @@ export const compiledRulesSchema = z.strictObject({
       amount: z.string().optional(),
       amountLabel: z.string().optional(),
       effectLabel: z.string().optional(),
+      filingStatus: z.enum(["joint", "separate"]).optional(),
+      onlyIfSaving: z.boolean().optional(),
     }),
   ),
   outcome: z.string().optional(),
+  balances: z.array(z.strictObject({ name: z.string(), refund: z.string(), owing: z.string() })),
+  residency: z.string().optional(),
+  reading: z.strictObject({ documents: z.string(), notes: z.array(z.string()) }).optional(),
   forms: z.record(
     z.string(),
     z.strictObject({
@@ -317,22 +512,27 @@ export const compiledRulesSchema = z.strictObject({
       sha256: z.string().regex(/^[0-9a-f]{64}$/),
       pages: z.number().int().min(1),
       applies: z.string(),
-      fields: z.array(
-        z.strictObject({
-          key: z.string(),
-          kind: z.enum(FIELD_KINDS),
-          page: z.number().int().min(1),
-          x: z.number(),
-          y: z.number(),
-          /** A formula; for text, the personal fact. */
-          value: z.string(),
+      side: z.literal("spouse").optional(),
+      wholeDollars: z.literal(true).optional(),
+      fields: z.array(compiledFieldSchema),
+      dependants: z
+        .strictObject({
           when: z.string().optional(),
-          zero: z.boolean().optional(),
-          plain: z.boolean().optional(),
-          width: z.number().optional(),
-          cell: z.number().optional(),
-        }),
-      ),
+          which: z.string(),
+          columns: z.number().int().min(1),
+          more: z.tuple([z.number().int().min(1), z.number(), z.number()]).optional(),
+          fields: z.array(compiledFieldSchema),
+        })
+        .optional(),
+      slips: z
+        .strictObject({
+          types: z.array(z.string()).min(1),
+          which: compiledSlipConditionSchema.optional(),
+          spouse: z.string().optional(),
+          columns: z.number().int().min(1),
+          fields: z.array(compiledSlipFieldSchema),
+        })
+        .optional(),
       /** The French version: its file, and each field's place on it (in the fields' order), and each table's parts. */
       french: z
         .strictObject({
@@ -362,6 +562,7 @@ export const compiledRulesSchema = z.strictObject({
       ),
     }),
   ),
+  formsToAdd: z.array(z.strictObject({ id: z.string(), form: z.string(), why: z.string(), applies: z.string() })),
   slips: z.record(
     z.string(),
     z.strictObject({
@@ -370,6 +571,7 @@ export const compiledRulesSchema = z.strictObject({
       boxes: z.record(z.string(), z.string()),
       informational: z.array(z.string()),
       counts: z.array(z.string()),
+      codes: z.record(z.string(), z.array(z.string())).default({}),
       receipt: z.boolean(),
       printedYears: z.array(z.number().int()).min(1),
       name: z.string().optional(),
@@ -406,6 +608,15 @@ export function loadRuleSet(json: unknown, where: (entry: string) => string = ()
       throw error;
     }
   };
+  /** A compiled field's place, and its condition. */
+  const placeOf = (where: string, field: z.infer<typeof compiledFieldSchema>) => ({
+    key: field.key,
+    page: field.page,
+    x: field.x,
+    y: field.y,
+    ...(field.when === undefined ? {} : { when: { formula: parse(where, field.when), text: field.when } }),
+  });
+  const sizeOf = (field: z.infer<typeof compiledFieldSchema>) => ({ ...(field.width === undefined ? {} : { width: field.width }), ...(field.cell === undefined ? {} : { cell: field.cell }) });
   const lines = new Map<string, Line>();
   for (const [id, line] of Object.entries(compiled.lines)) {
     const formula = parse(`lines.${id}`, line.formula);
@@ -416,6 +627,7 @@ export function loadRuleSet(json: unknown, where: (entry: string) => string = ()
       formula,
       ...(line.source === undefined ? {} : { source: line.source }),
       ...(line.module === undefined ? {} : { module: line.module }),
+      ...(line.each === undefined ? {} : { each: line.each }),
     });
   }
   const questions = new Map(Object.entries(compiled.questions).map(([id, question]) => [id, { id, ...question } satisfies Question]));
@@ -439,6 +651,8 @@ export function loadRuleSet(json: unknown, where: (entry: string) => string = ()
       change,
       ...(hint.amount === undefined ? {} : { amount: { formula: parse(entry, hint.amount), text: hint.amount, label: hint.amountLabel! } }),
       ...(hint.effectLabel === undefined ? {} : { effectLabel: hint.effectLabel }),
+      ...(hint.filingStatus === undefined ? {} : { filingStatus: hint.filingStatus }),
+      ...(hint.onlyIfSaving === undefined ? {} : { onlyIfSaving: hint.onlyIfSaving }),
     });
   }
 
@@ -446,6 +660,12 @@ export function loadRuleSet(json: unknown, where: (entry: string) => string = ()
   for (const slip of slips.values()) {
     for (const box of slip.informational) if (!(box in slip.boxes)) fail(`slips.${slip.id}`, `informational box ${box} isn't one of its boxes`);
     for (const box of slip.counts) if (!(box in slip.boxes)) fail(`slips.${slip.id}`, `count box ${box} isn't one of its boxes`);
+    for (const [box, codes] of Object.entries(slip.codes)) {
+      if (!(box in slip.boxes)) fail(`slips.${slip.id}`, `code box ${box} isn't one of its boxes`);
+      // A code is a distribution code or a state's (1A, CA) or a locality's name (YONKERS): capital letters or digits.
+      if (codes.length === 0 || codes.some((code) => !/^[0-9A-Z]{1,12}$/.test(code))) fail(`slips.${slip.id}`, `code box ${box} needs codes of 1 to 12 capital letters or digits`);
+      if (slip.counts.includes(box) || slip.informational.includes(box)) fail(`slips.${slip.id}`, `code box ${box} can't also be a count or informational`);
+    }
     usedBoxes.set(slip.id, new Set(slip.informational));
   }
   for (const line of lines.values()) {
@@ -470,6 +690,7 @@ export function loadRuleSet(json: unknown, where: (entry: string) => string = ()
     slips,
     usedBoxes,
     hints,
+    formsToAdd: compiled.formsToAdd.map((each) => ({ id: each.id, form: each.form, why: each.why, applies: parse(`formsToAdd.${each.id}`, each.applies) })),
     forms: new Map(
       Object.entries(compiled.forms).map(([id, form]) => {
         const entry = `forms.${id}`;
@@ -481,22 +702,71 @@ export function loadRuleSet(json: unknown, where: (entry: string) => string = ()
           pages: form.pages,
           applies: parse(entry, form.applies),
           appliesText: form.applies,
+          ...(form.side === undefined ? {} : { side: form.side }),
+          ...(form.wholeDollars ? { wholeDollars: true as const } : {}),
           fields: form.fields.map((field): FormField => {
             const where = `${entry}.fields.${field.key}`;
-            const place = {
-              key: field.key,
-              page: field.page,
-              x: field.x,
-              y: field.y,
-              ...(field.when === undefined ? {} : { when: { formula: parse(where, field.when), text: field.when } }),
-            };
+            const place = placeOf(where, field);
+            if (field.kind === "choice") return fail(where, "A choice is written only in a table of dependants");
             if (field.kind === "text") {
               const fact = PERSONAL_FACTS.find((each) => each === field.value) ?? fail(where, `No personal fact ${field.value}`);
-              return { ...place, kind: "text", fact, ...(field.width === undefined ? {} : { width: field.width }), ...(field.cell === undefined ? {} : { cell: field.cell }) };
+              return { ...place, kind: "text", fact, ...sizeOf(field) };
             }
             const formula = { formula: parse(where, field.value), text: field.value };
-            return field.kind === "amount" ? { ...place, kind: "amount", ...formula, zero: field.zero ?? false, plain: field.plain ?? false } : { ...place, kind: field.kind, ...formula };
+            if (field.kind === "amount") return { ...place, kind: "amount", ...formula, zero: field.zero ?? false, plain: field.plain ?? false };
+            if (field.kind === "count") return { ...place, kind: "count", ...formula, ...(field.digits === undefined ? {} : { digits: field.digits }) };
+            return { ...place, kind: field.kind, ...formula };
           }),
+          ...(form.dependants === undefined
+            ? {}
+            : {
+                dependants: {
+                  ...(form.dependants.when === undefined ? {} : { when: parse(`${entry}.dependants`, form.dependants.when) }),
+                  which: parse(`${entry}.dependants`, form.dependants.which),
+                  whichText: form.dependants.which,
+                  columns: form.dependants.columns,
+                  ...(form.dependants.more === undefined ? {} : { more: { page: form.dependants.more[0], x: form.dependants.more[1], y: form.dependants.more[2] } }),
+                  fields: form.dependants.fields.map((field): DependantField => {
+                    const where = `${entry}.dependants.${field.key}`;
+                    const column = field.column ?? fail(where, "A field of a table of dependants has a column");
+                    const place = { ...placeOf(where, field), column };
+                    if (field.kind === "text") {
+                      const fact = DEPENDANT_FACTS.find((each) => each === field.value) ?? fail(where, `No dependant's fact ${field.value}`);
+                      return { ...place, kind: "text", fact, ...sizeOf(field) };
+                    }
+                    if (field.kind === "choice") {
+                      return { ...place, kind: "choice", question: field.value, labels: field.labels ?? {}, ...(field.width === undefined ? {} : { width: field.width }) };
+                    }
+                    const formula = { formula: parse(where, field.value), text: field.value };
+                    return field.kind === "amount" ? { ...place, kind: "amount", ...formula, plain: field.plain ?? false } : { ...place, kind: field.kind, ...formula };
+                  }),
+                },
+              }),
+          ...(form.slips === undefined
+            ? {}
+            : {
+                slips: {
+                  types: form.slips.types,
+                  ...(form.slips.which === undefined ? {} : { which: { box: form.slips.which.box, is: form.slips.which.is, not: form.slips.which.not ?? false } }),
+                  ...(form.slips.spouse === undefined ? {} : { spouse: parse(`${entry}.slips`, form.slips.spouse), spouseText: form.slips.spouse }),
+                  columns: form.slips.columns,
+                  fields: form.slips.fields.map(
+                    (field): SlipTableField => ({
+                      key: field.key,
+                      page: field.page,
+                      x: field.x,
+                      y: field.y,
+                      column: field.column,
+                      kind: field.kind,
+                      plain: field.plain ?? false,
+                      ...(field.width === undefined ? {} : { width: field.width }),
+                      ...(field.box === undefined ? {} : { box: field.box }),
+                      ...(field.issuer ? { issuer: true as const } : {}),
+                      ...(field.if === undefined ? {} : { if: { box: field.if.box, is: field.if.is, not: field.if.not ?? false } }),
+                    }),
+                  ),
+                },
+              }),
           tables: form.tables.map((table) => ({ brackets: table.brackets, amount: parse(entry, table.amount), amountText: table.amount, parts: table.parts })),
         };
         if (form.french) {
@@ -522,6 +792,9 @@ export function loadRuleSet(json: unknown, where: (entry: string) => string = ()
       }),
     ),
     ...(compiled.outcome === undefined ? {} : { outcome: compiled.outcome }),
+    balances: compiled.balances,
+    residency: compiled.residency ?? "Lived in the country all year",
+    reading: compiled.reading ?? { documents: "personal tax documents", notes: [] },
   };
   checkRuleSet(ruleSet, fail);
   return ruleSet;
@@ -537,8 +810,20 @@ function checkBrackets(rows: BracketRow[], fail: (message: string) => never) {
     const previous = rows[index - 1]?.upTo ?? null;
     if (row.upTo && previous && !row.upTo.gt(previous)) fail("Brackets must go up");
     if (row.rate.isNegative()) fail("A rate can't be negative");
-    // A printed base is the exact tax below the bracket, rounded to the cent: anything else is a typo.
-    if (row.base !== undefined && !row.base.eq(exact.roundTo(2, "HALF_UP"))) {
+    // A printed base is the exact tax below the bracket, rounded to the cent or (as New York's schedules print it) to
+    // the dollar, or (as California's print it) the printed base below it plus that bracket's tax, rounded to the cent:
+    // anything else is a typo.
+    const below = rows[index - 1];
+    const chained =
+      below?.base !== undefined && below.upTo !== null
+        ? below.base.add(below.upTo.sub(rows[index - 2]?.upTo ?? Dec.ZERO).mul(below.rate)).roundTo(2, "HALF_UP")
+        : null;
+    if (
+      row.base !== undefined &&
+      !row.base.eq(exact.roundTo(2, "HALF_UP")) &&
+      !row.base.eq(exact.roundTo(0, "HALF_UP")) &&
+      !(chained !== null && row.base.eq(chained))
+    ) {
       fail(`The base of bracket ${index + 1} is ${row.base.toString()}; the brackets below it give ${exact.roundTo(2, "HALF_UP").toString()}`);
     }
     if (row.upTo) exact = exact.add(row.upTo.sub(previous ?? Dec.ZERO).mul(row.rate));
@@ -548,7 +833,8 @@ function checkBrackets(rows: BracketRow[], fail: (message: string) => never) {
 // ---------------------------------------------------------------------------
 // Checks: every name exists, types agree, and no line depends on itself
 
-type Type = "number" | "string" | "boolean" | "list" | "table";
+// "codes": a slip box holding a code, which only sumWhere and countWhere read.
+type Type = "number" | "string" | "boolean" | "list" | "table" | "codes";
 
 const FUNCTIONS: Record<string, { args: [number, number]; check: (types: Type[], args: Formula[]) => Type | string }> = {
   min: { args: [1, 20], check: (types) => (types.every((t) => t === "number" || t === "list") ? "number" : "takes numbers or slip boxes") },
@@ -574,6 +860,16 @@ const FUNCTIONS: Record<string, { args: [number, number]; check: (types: Type[],
     },
   },
   clamp: { args: [3, 3], check: (types) => (types.every((t) => t === "number") ? "number" : "takes three numbers: value, low, high") },
+  // The amount rounded down to a multiple of a positive number: the start of a printed tax table's row (the IRS Tax
+  // Table's rows are $50 wide, so floor(line.F1040.15, 50)).
+  floor: {
+    args: [2, 2],
+    check: (types, args) => {
+      if (types[0] !== "number") return "rounds a number down";
+      const unit = args[1];
+      return unit?.kind === "number" && Number(unit.value) > 0 ? "number" : "takes a positive number to round down to a multiple of";
+    },
+  },
   if: {
     args: [3, 3],
     check: (types) => {
@@ -585,6 +881,10 @@ const FUNCTIONS: Record<string, { args: [number, number]; check: (types: Type[],
   // A chart of rates by amount (a rate that steps down as income goes up), read as a bracket table: the rate of the
   // row the amount falls in, not a progressive tax.
   step: { args: [2, 2], check: (types) => (types[0] === "table" && types[1] === "number" ? "number" : "takes a bracket table and an amount") },
+  // sumWhere(B.box1D, B.boxCAT, "A", "D"): the amounts of the slips whose code box holds one of the codes;
+  // countWhere(...) the number of those slips. The amount and the code are boxes of one slip type, on one side.
+  sumWhere: { args: [3, 40], check: whereCheck },
+  countWhere: { args: [3, 40], check: whereCheck },
   // A case the rules know about but the app can't compute yet: the value is missing, and the text says why.
   unsupported: {
     args: [1, 1],
@@ -593,6 +893,15 @@ const FUNCTIONS: Record<string, { args: [number, number]; check: (types: Type[],
 };
 
 export const FUNCTION_NAMES = Object.keys(FUNCTIONS);
+
+function whereCheck(types: Type[], args: Formula[]): Type | string {
+  const [amount, code] = args;
+  const usage = "takes a slip box of amounts, a code box of the same slip type, then the codes in quotes";
+  if (types[0] !== "list" || types[1] !== "codes" || amount?.kind !== "ref" || code?.kind !== "ref") return usage;
+  if (args.slice(2).some((arg) => arg.kind !== "string")) return usage;
+  const slipOf = (path: string[]) => (path[0] === "spouse" ? path.slice(1, 2).concat("spouse") : path.slice(0, 1)).join(".");
+  return slipOf(amount.path) === slipOf(code.path) ? "number" : usage;
+}
 
 function checkRuleSet(ruleSet: RuleSet, fail: (entry: string, message: string, column?: number) => never) {
   for (const id of ruleSet.result) if (!ruleSet.lines.has(id)) fail("result", `No line ${id}`);
@@ -657,12 +966,15 @@ function checkRuleSet(ruleSet: RuleSet, fail: (entry: string, message: string, c
   for (const line of ruleSet.lines.values()) {
     const entry = `lines.${line.id}`;
     const reads = new Set<string>();
-    if (formulaType(ruleSet, line.formula, (message, column) => fail(entry, message, column), reads) !== "number") fail(entry, "A line must be a number");
+    if (formulaType(ruleSet, line.formula, (message, column) => fail(entry, message, column), reads, line.each ?? "person") !== "number") fail(entry, "A line must be a number");
     edges.set(line.id, reads);
   }
 
   // A hint's formulas: `when` a yes/no value, its amount a number, each change of its answer's type.
   if (ruleSet.outcome !== undefined && !ruleSet.lines.has(ruleSet.outcome)) fail("outcome", `No line ${ruleSet.outcome}`);
+  for (const balance of ruleSet.balances) {
+    for (const id of [balance.refund, balance.owing]) if (!ruleSet.result.includes(id)) fail(`balances.${balance.name}`, `${id} must be a line of the result`);
+  }
   for (const hint of ruleSet.hints.values()) {
     const entry = `hints.${hint.id}`;
     const at = (message: string, column?: number) => fail(entry, message, column);
@@ -677,10 +989,13 @@ function checkRuleSet(ruleSet: RuleSet, fail: (entry: string, message: string, c
     }
     if (hint.kind === "saving" && hint.change.length === 0) fail(entry, "A saving hint changes at least one answer");
     if (hint.kind === "saving" && hint.effectLabel !== undefined) fail(entry, "A saving hint shows what it saves; effectLabel is for info hints");
-    if (hint.kind !== "saving" && (hint.change.length > 0) !== (hint.effectLabel !== undefined)) {
+    const whatIf = hint.change.length > 0 || hint.filingStatus !== undefined;
+    if (hint.kind !== "saving" && whatIf !== (hint.effectLabel !== undefined)) {
       fail(entry, "An info hint with a change names its effect (effectLabel), and only then");
     }
-    if (hint.change.length > 0 && ruleSet.outcome === undefined) fail(entry, "A hint with a change needs the year's outcome line (outcome in year.yaml)");
+    if (whatIf && ruleSet.outcome === undefined) fail(entry, "A hint with a change needs the year's outcome line (outcome in year.yaml)");
+    if (hint.filingStatus !== undefined && hint.kind !== "info") fail(entry, "Only an info hint changes the filing status: the person changes it on Personal info");
+    if (hint.onlyIfSaving && (hint.kind !== "info" || !whatIf)) fail(entry, "onlyIfSaving is for an info hint with a change");
   }
 
   // A form's formulas: which returns get it (yes/no), each amount and count a number, each tick and condition yes/no. A bracket table
@@ -702,6 +1017,58 @@ function checkRuleSet(ruleSet: RuleSet, fail: (entry: string, message: string, c
       }
       if (field.when && formulaType(ruleSet, field.when.formula, at(where), new Set()) !== "boolean") fail(where, "when must be a yes/no value");
     }
+    if (form.dependants) {
+      const table = form.dependants;
+      const at2 = (where: string) => (message: string, column?: number) => fail(where, message, column);
+      if (form.french) fail(entry, "A form with a table of dependants has no French version");
+      if (formulaType(ruleSet, table.which, at2(`${entry}.dependants`), new Set(), "dependant") !== "boolean") fail(`${entry}.dependants`, "which must be a yes/no value");
+      if (table.when && formulaType(ruleSet, table.when, at2(`${entry}.dependants`), new Set()) !== "boolean") fail(`${entry}.dependants`, "when must be a yes/no value");
+      for (const field of table.fields) {
+        const where = `${entry}.dependants.${field.key}`;
+        if (field.page > form.pages) fail(where, `The form has ${form.pages} pages`);
+        if (field.column > table.columns) fail(where, `The table has ${table.columns} columns`);
+        if (field.kind === "amount" || field.kind === "count") {
+          if (formulaType(ruleSet, field.formula, at2(where), new Set(), "dependant") !== "number") fail(where, `${field.kind === "amount" ? "An amount" : "A count"} on a form must be a number`);
+        } else if (field.kind === "tick") {
+          if (formulaType(ruleSet, field.formula, at2(where), new Set(), "dependant") !== "boolean") fail(where, "A tick must be a yes/no value");
+        } else if (field.kind === "choice") {
+          const question = ruleSet.questions.get(field.question);
+          if (!question || question.type !== "choice" || !question.dependant) fail(where, `${field.question} isn't a choice question about a dependant`);
+          for (const option of Object.keys(field.labels)) if (!question!.options?.includes(option)) fail(where, `${field.question} has no answer ${option}`);
+        }
+        if (field.when && formulaType(ruleSet, field.when.formula, at2(where), new Set()) !== "boolean") fail(where, "when must be a yes/no value");
+      }
+    }
+    if (form.slips) {
+      const table = form.slips;
+      const where = `${entry}.slips`;
+      if (form.french) fail(entry, "A form with a table of slips has no French version");
+      const types = table.types.map((type) => ruleSet.slips.get(type) ?? fail(where, `No slip type ${type}`));
+      if (table.spouse && formulaType(ruleSet, table.spouse, (message, column) => fail(where, message, column), new Set()) !== "boolean") fail(where, "spouse must be a yes/no value");
+      const checkCondition = (at: string, condition: { box: string; is: string[] }) => {
+        for (const slip of types) {
+          const codes = slip.codes[condition.box] ?? fail(at, `Box ${condition.box} of ${slip.id} doesn't hold a code`);
+          for (const each of condition.is) if (!codes.includes(each)) fail(at, `Box ${condition.box} of ${slip.id} has no code ${each}`);
+        }
+      };
+      if (table.which) checkCondition(where, table.which);
+      for (const field of table.fields) {
+        const at3 = `${where}.${field.key}`;
+        if (field.page > form.pages) fail(at3, `The form has ${form.pages} pages`);
+        if (field.column > table.columns) fail(at3, `The table has ${table.columns} columns`);
+        for (const slip of types) {
+          if (field.box !== undefined) {
+            if (!(field.box in slip.boxes)) fail(at3, `${slip.id} has no box ${field.box}`);
+            const code = field.box in slip.codes;
+            if (field.kind === "text" && !code) fail(at3, `Box ${field.box} holds an amount: write it in an amount row`);
+            if (field.kind === "amount" && code) fail(at3, `Box ${field.box} holds a code: write it in a text box`);
+          } else if (field.kind !== "text") {
+            fail(at3, "The issuer's name goes in a text box");
+          }
+        }
+        if (field.if) checkCondition(at3, field.if);
+      }
+    }
     for (const table of form.tables) {
       const param = ruleSet.params.get(table.brackets);
       if (!param || !Array.isArray(param.value)) return fail(entry, `No bracket table param ${table.brackets}`);
@@ -710,6 +1077,11 @@ function checkRuleSet(ruleSet: RuleSet, fail: (entry: string, message: string, c
       if (columns !== param.value.length) fail(entry, `The table has ${columns} columns; ${table.brackets} has ${param.value.length} brackets`);
       if (formulaType(ruleSet, table.amount, at(entry), new Set()) !== "number") fail(entry, "A table's amount must be a number");
     }
+  }
+
+  for (const each of ruleSet.formsToAdd) {
+    const at = (message: string, column?: number) => fail(`formsToAdd.${each.id}`, message, column);
+    if (formulaType(ruleSet, each.applies, at, new Set()) !== "boolean") at("applies must be a yes/no value");
   }
 
   // Depth-first search for a cycle; the message lists it.
@@ -725,8 +1097,11 @@ function checkRuleSet(ruleSet: RuleSet, fail: (entry: string, message: string, c
 }
 
 /** The type of a formula, checking every name and function in it. Lines it reads are added to `reads`. */
-function formulaType(ruleSet: RuleSet, formula: Formula, fail: (message: string, column?: number) => never, reads: Set<string>): Type {
-  const typeOf = (inner: Formula) => formulaType(ruleSet, inner, fail, reads);
+/** Where a formula is worked out: for an adult's return, or for each dependant (a line with `each: dependant`). */
+type Scope = "person" | "dependant";
+
+function formulaType(ruleSet: RuleSet, formula: Formula, fail: (message: string, column?: number) => never, reads: Set<string>, scope: Scope = "person"): Type {
+  const typeOf = (inner: Formula) => formulaType(ruleSet, inner, fail, reads, scope);
   switch (formula.kind) {
     case "number":
       return "number";
@@ -735,7 +1110,7 @@ function formulaType(ruleSet: RuleSet, formula: Formula, fail: (message: string,
     case "boolean":
       return "boolean";
     case "ref":
-      return refType(ruleSet, formula.path, (message) => fail(message, formula.column), reads);
+      return refType(ruleSet, formula.path, (message) => fail(message, formula.column), reads, false, scope);
     case "unary": {
       const operand = typeOf(formula.operand);
       const want = formula.op === "-" ? "number" : "boolean";
@@ -759,6 +1134,15 @@ function formulaType(ruleSet: RuleSet, formula: Formula, fail: (message: string,
       }
       const type = fn.check(formula.args.map(typeOf), formula.args);
       if (!["number", "string", "boolean", "list", "table"].includes(type)) fail(`${formula.name} ${type}`, formula.column);
+      if (formula.name === "sumWhere" || formula.name === "countWhere") {
+        // Each code must be one the code box can hold.
+        const path = (formula.args[1] as Extract<Formula, { kind: "ref" }>).path;
+        const [slipId, boxRef] = path[0] === "spouse" ? path.slice(1) : path;
+        const codes = ruleSet.slips.get(slipId!)!.codes[boxRef!.slice(3)]!;
+        for (const arg of formula.args.slice(2) as Extract<Formula, { kind: "string" }>[]) {
+          if (!codes.includes(arg.value)) fail(`${formula.name}: ${slipId} box ${boxRef!.slice(3)} holds ${codes.join(", ")}, not ${arg.value}`, formula.column);
+        }
+      }
       return type as Type;
     }
   }
@@ -790,10 +1174,35 @@ function binaryType(formula: Extract<Formula, { kind: "binary" }>, left: Type, r
 }
 
 /** The type of a name, checking that it exists. Lines it reads are added to `reads`. */
-function refType(ruleSet: RuleSet, path: string[], fail: (message: string) => never, reads: Set<string>, spouse = false): Type {
+function refType(ruleSet: RuleSet, path: string[], fail: (message: string) => never, reads: Set<string>, spouse = false, scope: Scope = "person"): Type {
   const name = path.join(".");
   const [head, ...rest] = path;
+  // A dependant's line reads the dependant, its other lines, the params and the family facts; nothing of an adult's.
+  if (scope === "dependant" && !["dependant", "line", "param", "family"].includes(head ?? "")) {
+    return fail(`${name}: a line for each dependant reads dependant.<…>, its own lines, params and family facts`);
+  }
   switch (head) {
+    case "dependant": {
+      if (scope !== "dependant") return fail(`${name}: only a line with each: dependant reads dependant.<…>; a return reads dependants.<line>`);
+      if (rest.length === 1 && rest[0] === "age") return "number";
+      if (rest.length === 2 && rest[0] === "answer") {
+        const question = ruleSet.questions.get(rest[1]!);
+        if (!question) return fail(`No question ${rest[1]}`);
+        if (!question.dependant) return fail(`${name}: ${question.id} is asked about an adult (add dependant: true to ask it about each dependant)`);
+        return isNumberQuestion(question.type) ? "number" : question.type === "boolean" ? "boolean" : "string";
+      }
+      return fail(`${name}: a dependant has age and answer.<question>`);
+    }
+    case "dependants": {
+      // One value per dependant claimed on this return: a list, like a slip box.
+      if (spouse) return fail(`${name}: a return reads its own dependants`);
+      const id = rest.join(".");
+      const line = ruleSet.lines.get(id);
+      if (rest.length !== 2 || !line) return fail(`No line ${id}`);
+      if (line.each !== "dependant") return fail(`${name}: ${id} isn't worked out for each dependant`);
+      reads.add(id);
+      return "list";
+    }
     case "spouse":
       if (spouse) return fail(`${name}: spouse. can't be repeated`);
       if (rest[0] === "param") return fail(`${name}: params are the same for both spouses; write param.${rest.slice(1).join(".")}`);
@@ -805,22 +1214,27 @@ function refType(ruleSet: RuleSet, path: string[], fail: (message: string) => ne
     }
     case "line": {
       const id = rest.join(".");
-      if (rest.length !== 2 || !ruleSet.lines.has(id)) return fail(`No line ${id}`);
+      const line = ruleSet.lines.get(id);
+      if (rest.length !== 2 || !line) return fail(`No line ${id}`);
+      if ((line.each === "dependant") !== (scope === "dependant")) {
+        return fail(scope === "dependant" ? `${name}: a dependant's line reads only lines worked out for each dependant` : `${name}: read a dependant's line through dependants.${id}`);
+      }
       reads.add(id);
       return "number";
     }
     case "answer": {
       const question = rest.length === 1 ? ruleSet.questions.get(rest[0]!) : undefined;
       if (!question) return fail(`No question ${rest.join(".")}`);
+      if (question.dependant) return fail(`${name}: ${question.id} is asked about each dependant; read it in a line with each: dependant`);
       return isNumberQuestion(question.type) ? "number" : question.type === "boolean" ? "boolean" : "string";
     }
     case "family":
       if (spouse) return fail(`${name}: the family facts are the same for both spouses; write family.${rest.join(".")}`);
-      if (rest.length === 1 && rest[0] === "maritalStatus") return "string";
+      if (rest.length === 1 && (rest[0] === "maritalStatus" || rest[0] === "filingStatus")) return "string";
       if (rest.length === 1 && rest[0] === "partnerInYear") return "boolean";
-      if (rest.length === 1 && ["childrenUnder6", "childrenUnder7", "childrenUnder17", "childrenUnder18", "childrenUnder19"].includes(rest[0]!)) return "number";
+      if (rest.length === 1 && ["dependants", "childrenUnder6", "childrenUnder7", "childrenUnder17", "childrenUnder18", "childrenUnder19"].includes(rest[0]!)) return "number";
       if (rest.length === 1 && rest[0] === "childMonthsUnder6") return "list";
-      return fail(`${name}: family has maritalStatus, partnerInYear, childrenUnder6, childrenUnder7, childrenUnder17, childrenUnder18, childrenUnder19 and childMonthsUnder6`);
+      return fail(`${name}: family has maritalStatus, filingStatus, partnerInYear, dependants, childrenUnder6, childrenUnder7, childrenUnder17, childrenUnder18, childrenUnder19 and childMonthsUnder6`);
     case "person":
       if (rest.length === 1 && (rest[0] === "age" || rest[0] === "birthMonth")) return "number";
       if (rest.length === 1 && (rest[0] === "province" || rest[0] === "role")) return "string";
@@ -832,7 +1246,7 @@ function refType(ruleSet: RuleSet, path: string[], fail: (message: string) => ne
       if (rest.length === 1 && rest[0] === "slips") return "number";
       const box = rest.length === 1 && rest[0]!.startsWith("box") ? rest[0]!.slice(3) : undefined;
       if (box === undefined || !(box in slip.boxes)) return fail(`${name}: ${slip.id} has boxes ${Object.keys(slip.boxes).join(", ")} (and ${slip.id}.slips counts them)`);
-      return "list";
+      return box in slip.codes ? "codes" : "list";
     }
   }
 }
@@ -840,7 +1254,7 @@ function refType(ruleSet: RuleSet, path: string[], fail: (message: string) => ne
 /** `answer.x == "text"`: the text must be one of the question's options. */
 function checkChoice(ruleSet: RuleSet, ref: Formula, other: Formula, fail: (message: string) => never) {
   if (ref.kind !== "ref" || other.kind !== "string") return;
-  const path = ref.path[0] === "spouse" ? ref.path.slice(1) : ref.path;
+  const path = ref.path[0] === "spouse" || ref.path[0] === "dependant" ? ref.path.slice(1) : ref.path;
   const question = path[0] === "answer" ? ruleSet.questions.get(path[1] ?? "") : undefined;
   if (question?.options && !question.options.includes(other.value)) {
     fail(`"${other.value}" isn't an option of ${question.id}: ${question.options.join(", ")}`);

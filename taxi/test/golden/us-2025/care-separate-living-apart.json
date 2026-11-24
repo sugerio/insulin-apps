@@ -1,0 +1,205 @@
+{
+  "about": "Married filing separately, living apart for the last 6 months with a child of 4 and $2,500 of care: treated as unmarried for the credit",
+  "input": {
+    "country": "us",
+    "year": 2025,
+    "people": [
+      {
+        "id": "p1",
+        "name": "Tom Byrd",
+        "role": "self",
+        "birthDate": "1989-12-12",
+        "province": "FL",
+        "residentAllYear": true
+      },
+      {
+        "id": "p2",
+        "name": "Liz Byrd",
+        "role": "spouse",
+        "birthDate": "1990-01-01",
+        "province": "FL",
+        "residentAllYear": true
+      }
+    ],
+    "family": {
+      "maritalStatus": "married",
+      "dependants": [
+        {
+          "id": "d1",
+          "name": "Ann Byrd",
+          "birthDate": "2021-04-04",
+          "answers": {
+            "relationship": "child",
+            "monthsWithYou": "12",
+            "hasSSN": true,
+            "paidOwnSupport": false,
+            "filedJointReturn": false,
+            "citizenOrResident": true,
+            "careExpenses": "2500"
+          }
+        }
+      ],
+      "filingStatus": "separate"
+    },
+    "answers": {
+      "p1": {
+        "hasWages": true,
+        "hasInterest": false,
+        "hasTipsOrOvertime": false,
+        "canBeClaimed": false,
+        "isBlind": false,
+        "estimatedPayments": "0",
+        "hasCarLoan": false,
+        "hasSelfEmployment": false,
+        "hasStudentLoan": false,
+        "paidForEducation": false,
+        "hasDividends": false,
+        "hasBrokerSales": false,
+        "hasIraDistribution": false,
+        "hasPension": false,
+        "hasSocialSecurity": false,
+        "hasLossCarryover": false,
+        "hasHsa": false,
+        "hasIraContribution": false,
+        "hasItemized": false,
+        "hasOtherIncome": false,
+        "paidForCare": true,
+        "householdEmployer": false,
+        "priorYearCare": false,
+        "hasValidSSN": true,
+        "livedApartLastSixMonths": true,
+        "paidHalfOfHome": true,
+        "spouseItemizes": false
+      },
+      "p2": {
+        "hasWages": true,
+        "hasInterest": false,
+        "hasTipsOrOvertime": false,
+        "canBeClaimed": false,
+        "isBlind": false,
+        "estimatedPayments": "0",
+        "hasCarLoan": false,
+        "hasSelfEmployment": false,
+        "hasStudentLoan": false,
+        "paidForEducation": false,
+        "hasDividends": false,
+        "hasBrokerSales": false,
+        "hasIraDistribution": false,
+        "hasPension": false,
+        "hasSocialSecurity": false,
+        "hasLossCarryover": false,
+        "hasHsa": false,
+        "hasIraContribution": false,
+        "hasItemized": false,
+        "hasOtherIncome": false,
+        "spouseItemizes": false
+      }
+    },
+    "slips": [
+      {
+        "id": "p1-w2-0",
+        "person": "p1",
+        "type": "W2",
+        "issuer": "Depot",
+        "boxes": {
+          "1": "36000",
+          "2": "1500",
+          "4": "2232",
+          "5": "36000",
+          "6": "522"
+        }
+      },
+      {
+        "id": "p2-w2-0",
+        "person": "p2",
+        "type": "W2",
+        "issuer": "Salon",
+        "boxes": {
+          "1": "28000",
+          "2": "1200",
+          "4": "1736",
+          "5": "28000",
+          "6": "406"
+        }
+      }
+    ]
+  },
+  "expected": {
+    "p1": {
+      "F1040.19": "1595",
+      "F1040.27a": "2303",
+      "F1040.28": "605",
+      "S8812.12": "2200",
+      "F1040.1a": "36000",
+      "F1040.1e": "0",
+      "S3.2": "600",
+      "F1040.2a": "0",
+      "F1040.2b": "0",
+      "F1040.9": "36000",
+      "F1040.11a": "36000",
+      "F1040.12e": "15750",
+      "F1040.13b": "0",
+      "F1040.13a": "0",
+      "F1040.8": "0",
+      "F1040.10": "0",
+      "F1040.15": "20250",
+      "F1040.16": "2195",
+      "F8959.7": "0",
+      "F8960.17": "0",
+      "F1040.24": "0",
+      "F1040.25c": "0",
+      "S3.11": "0",
+      "F1040.33": "4408",
+      "F1040.34": "4408",
+      "F1040.37": "0",
+      "F6251.4": "36000",
+      "F6251.6": "0",
+      "F6251.11": "0",
+      "F1040.18": "2195",
+      "F2441.2": "1",
+      "F2441.3": "2500",
+      "F2441.4": "36000",
+      "F2441.5": "36000",
+      "F2441.6": "2500",
+      "F2441.8": "0.24",
+      "F2441.9a": "600",
+      "F2441.12": "0",
+      "F2441.15": "0",
+      "F2441.16": "2500",
+      "F2441.25": "0",
+      "F2441.26": "0"
+    },
+    "p2": {
+      "F1040.19": "0",
+      "F1040.27a": "0",
+      "F1040.28": "0",
+      "S8812.12": "0",
+      "F1040.1a": "28000",
+      "F1040.1e": "0",
+      "S3.2": "0",
+      "F1040.2a": "0",
+      "F1040.2b": "0",
+      "F1040.9": "28000",
+      "F1040.11a": "28000",
+      "F1040.12e": "15750",
+      "F1040.13b": "0",
+      "F1040.13a": "0",
+      "F1040.8": "0",
+      "F1040.10": "0",
+      "F1040.15": "12250",
+      "F1040.16": "1235",
+      "F8959.7": "0",
+      "F8960.17": "0",
+      "F1040.24": "1235",
+      "F1040.25c": "0",
+      "S3.11": "0",
+      "F1040.33": "1200",
+      "F1040.34": "0",
+      "F1040.37": "35",
+      "F6251.4": "28000",
+      "F6251.6": "0",
+      "F6251.11": "0",
+      "F1040.18": "1235"
+    }
+  }
+}

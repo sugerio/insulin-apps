@@ -1,0 +1,391 @@
+# The education credits (Form 8863): the American opportunity credit, part of it refundable, and the lifetime learning
+# credit; and the student loan interest deduction (Schedule 1, line 21). "8863 instructions" is the 2025 Instructions
+# for Form 8863; "Form 8863" the 2025 form; "Instructions" the 2025 Instructions for Form 1040.
+#
+# A student is you, your spouse on a joint return, or a dependant this return claims. Each student's expenses are
+# asked already adjusted: paid in 2025, less tax-free scholarships and grants. Not worked out: a refund or a
+# scholarship that reduces expenses claimed in an earlier year (recapture), and a scholarship you choose to include in
+# income so that the credit counts more expenses.
+#
+# A Form 1098-T only starts a student's expenses (box 1 less boxes 5 and 10): it shows what the school was paid, not
+# what the credit counts. A Form 1098-E is added to the student loan interest. A 1098-T of a dependant isn't added to
+# a return (a dependant has none): its amounts are entered on the dependant's card.
+
+slips:
+  F1098T:
+    title: Form 1098-T Tuition Statement
+    name: 1098-T
+    about: >-
+      From a college, university or other eligible school: the tuition and required fees it was paid for the student in
+      2025, and the scholarships or grants it handled
+    boxes:
+      1: Payments received for qualified tuition and related expenses
+      4: Adjustments made for a prior year
+      5: Scholarships or grants
+      6: Adjustments to scholarships or grants for a prior year
+      10: Ins. contract reimb./refund
+    # Boxes 4 and 6 change an earlier year's credit, which this app doesn't work out: an amount in them says so.
+
+  F1098E:
+    title: Form 1098-E Student Loan Interest Statement
+    name: 1098-E
+    about: From a lender, the interest it received in 2025 on a student loan
+    boxes:
+      1: Student loan interest received by lender
+
+params:
+  aotcFullRate:
+    label: Expenses the American opportunity credit counts in full
+    source: "Form 8863, lines 27 to 30: the first $2,000 of each student's adjusted qualified education expenses"
+    value: 2000
+  aotcMaxExpenses:
+    label: Most expenses the American opportunity credit counts for each student
+    source: "Form 8863, line 27: don't enter more than $4,000"
+    value: 4000
+  aotcPartRate:
+    label: Share of the expenses over $2,000 the American opportunity credit counts
+    source: "Form 8863, line 29: 25% (0.25)"
+    value: 25%
+  aotcRefundableRate:
+    label: Refundable part of the American opportunity credit
+    source: "Form 8863, line 8: 40% (0.40)"
+    value: 40%
+  llcMaxExpenses:
+    label: Most expenses the lifetime learning credit counts for the return
+    source: "Form 8863, line 11: the smaller of line 10 or $10,000"
+    value: 10000
+  llcRate:
+    label: Lifetime learning credit rate
+    source: "Form 8863, line 12: 20% (0.20)"
+    value: 20%
+  educationLimit:
+    label: Modified AGI from which there is no education credit
+    source: "Form 8863, lines 2 and 13: $90,000 if single, head of household, or qualifying surviving spouse"
+    value: 90000
+  educationLimitJoint:
+    label: Modified AGI from which there is no education credit, Married filing jointly
+    source: "Form 8863, lines 2 and 13: $180,000 if married filing jointly"
+    value: 180000
+  educationRange:
+    label: Modified AGI range over which the education credits are reduced
+    source: "Form 8863, lines 5 and 16: $10,000 if single, head of household, or qualifying surviving spouse"
+    value: 10000
+  educationRangeJoint:
+    label: Modified AGI range over which the education credits are reduced, Married filing jointly
+    source: "Form 8863, lines 5 and 16: $20,000 if married filing jointly"
+    value: 20000
+  studentLoanMax:
+    label: Most student loan interest deducted
+    source: "Instructions, Schedule 1, line 21, Student Loan Interest Deduction Worksheet, line 1: don't enter more than $2,500"
+    value: 2500
+  studentLoanStart:
+    label: Modified AGI over which the student loan interest deduction is reduced
+    source: "Instructions, Student Loan Interest Deduction Worksheet, line 5: $85,000 if single, head of household, or qualifying surviving spouse"
+    value: 85000
+  studentLoanStartJoint:
+    label: Modified AGI over which the student loan interest deduction is reduced, Married filing jointly
+    source: "Instructions, Student Loan Interest Deduction Worksheet, line 5: $170,000 if married filing jointly"
+    value: 170000
+  studentLoanRange:
+    label: Modified AGI range over which the student loan interest deduction is reduced
+    source: "Instructions, Student Loan Interest Deduction Worksheet, line 7: divide line 6 by $15,000"
+    value: 15000
+  studentLoanRangeJoint:
+    label: Modified AGI range over which the student loan interest deduction is reduced, Married filing jointly
+    source: "Instructions, Student Loan Interest Deduction Worksheet, line 7: $30,000 if married filing jointly"
+    value: 30000
+
+questions:
+  # Asked about you (Personal info)
+  paidForEducation:
+    type: boolean
+    module: about
+    ask: You paid for college or other higher education in 2025, for yourself or for a dependant
+    help: >-
+      Tuition and required fees for a university, college, vocational school or other school after high school that
+      can take part in federal student aid. A Form 1098-T from the school shows what it received. It can give you the
+      American opportunity credit or the lifetime learning credit (Form 8863). Each dependant's expenses are asked under
+      their name.
+    default: false
+  educationExpenses:
+    type: money
+    module: about
+    ask: Your own qualified education expenses in 2025
+    help: >-
+      Tuition and the fees and course materials the school requires, that you paid in 2025 for your own courses, less
+      tax-free scholarships, grants and employer education aid. Start from box 1 of your Form 1098-T, less box 5. Not
+      room and board, insurance, medical expenses or transportation. Enter 0 if you weren't a student.
+    suggest: US.tuitionStatements
+  educationCredit:
+    type: choice
+    module: about
+    ask: The credit for your expenses
+    options: [aotc, llc]
+    optionLabels:
+      aotc: American opportunity credit (all of its conditions are true)
+      llc: Lifetime learning credit
+    help: &aotcConditions >-
+      The American opportunity credit is larger and partly refundable, but all of these must be true: the courses lead
+      to a degree or other recognized credential; the student was enrolled at least half-time for at least one academic
+      period that began in 2025; the student hadn't completed the first 4 years of college before 2025; the credit
+      wasn't claimed for the student for 4 earlier years; and the student has no felony drug conviction. Otherwise,
+      the lifetime learning credit counts any course at an eligible school, even one to improve job skills.
+  parentAlive:
+    type: boolean
+    module: about
+    ask: At least one of your parents was alive at the end of 2025
+    help: >-
+      With the American opportunity credit, someone under 24 who isn't filing jointly may get no refundable part of it
+      (Form 8863, line 7).
+  fullTimeStudentSelf:
+    type: boolean
+    module: about
+    ask: You were a full-time student in at least 5 months of 2025
+  earnedUnderHalfSupport:
+    type: boolean
+    module: about
+    ask: Your earned income was less than half of your support in 2025
+    help: >-
+      Earned income is wages and self-employment income. Support is food, housing, clothing, medical care, education
+      and the like, paid by you, your parents and others. A scholarship isn't support if you were a full-time student.
+
+  # Asked about each dependant
+  studentExpenses:
+    type: money
+    module: about
+    dependant: true
+    ask: Qualified education expenses you paid for them in 2025
+    help: >-
+      Tuition and the fees and course materials the school requires, paid in 2025 by you or by them, less tax-free
+      scholarships, grants and employer education aid. Start from box 1 of their Form 1098-T, less box 5. Not room and
+      board. Enter 0 if they weren't a student after high school.
+  studentCredit:
+    type: choice
+    module: about
+    dependant: true
+    ask: The credit for their expenses
+    options: [aotc, llc]
+    optionLabels:
+      aotc: American opportunity credit (all of its conditions are true)
+      llc: Lifetime learning credit
+    help: *aotcConditions
+
+  # Deductions
+  hasStudentLoan:
+    type: boolean
+    module: deductions
+    ask: Interest on a student loan
+    help: >-
+      Interest you paid in 2025 on a loan taken out only to pay higher education expenses for you, your spouse or your
+      dependant (Schedule 1, line 21). Your lender's Form 1098-E shows it. Filing separately, or if someone can claim
+      you as a dependent, you can't deduct it.
+    default: false
+  studentLoanInterest:
+    type: money
+    module: deductions
+    parent: hasStudentLoan
+    receipts: F1098E
+    ask: Student loan interest not on a Form 1098-E
+    help: >-
+      Uploaded Forms 1098-E are added. Enter interest you paid in 2025 that isn't on one (a lender sends it only for $600
+      or more): the interest only, not the payments of the loan itself.
+
+lines:
+  # Who can take the credits: not filing separately, and not someone who can be claimed as a dependent.
+  US.educationAllowed:
+    label: This return can take the education credits and the student loan interest deduction (1 for yes)
+    formula: "if(line.US.separate == 1, 0, if(line.US.claimable == 1, 0, 1))"
+    source: >-
+      8863 instructions, Who Can Claim an Education Credit: not married filing separately, and not someone listed as a
+      dependent on another's return; Instructions, Schedule 1, line 21: the same for the student loan interest deduction
+  US.educationAsked:
+    label: You, or your spouse on a joint return, paid for higher education (1 for yes)
+    formula: "if(line.US.educationAllowed == 0, 0, if(answer.paidForEducation, 1, if(line.US.joint == 1, if(spouse.answer.paidForEducation, 1, 0), 0)))"
+
+  # Each adult's own courses (Part III for you or your spouse)
+  US.ownStudentExpenses:
+    label: This person's own adjusted qualified education expenses
+    formula: "if(line.US.educationAllowed == 0, 0, if(answer.paidForEducation, answer.educationExpenses, 0))"
+    source: "8863 instructions, Adjusted Qualified Education Expenses Worksheet: expenses paid in 2025, less tax-free educational assistance"
+  US.tuitionStatements:
+    label: Payments on this person's Forms 1098-T, less scholarships and refunds
+    formula: "max(0, sum(F1098T.box1) - sum(F1098T.box5) - sum(F1098T.box10))"
+    source: "8863 instructions, Qualified Education Expenses: you may get a Form 1098-T; reduce the expenses by tax-free educational assistance and refunds"
+  US.ownAotcStudent:
+    label: This person takes the American opportunity credit (1 for yes)
+    formula: 'if(line.US.ownStudentExpenses == 0, 0, if(answer.educationCredit == "aotc", 1, 0))'
+    source: "Form 8863, lines 23 to 26: the student meets each condition"
+  US.ownAotc27:
+    label: This person's expenses for the American opportunity credit, up to $4,000
+    formula: "if(line.US.ownAotcStudent == 1, min(line.US.ownStudentExpenses, param.aotcMaxExpenses), 0)"
+  US.ownAotc30:
+    label: This person's American opportunity credit before the limits
+    formula: "min(line.US.ownAotc27, param.aotcFullRate) + round(max(0, line.US.ownAotc27 - param.aotcFullRate) * param.aotcPartRate, 2)"
+    source: "Form 8863, lines 28 to 30: line 27, up to $2,000, plus 25% of the rest"
+  US.ownLlc31:
+    label: This person's expenses for the lifetime learning credit
+    formula: 'if(line.US.ownStudentExpenses == 0, 0, if(answer.educationCredit == "llc", line.US.ownStudentExpenses, 0))'
+    source: "Form 8863, line 31: not for a student who takes the American opportunity credit"
+
+  # Each dependant's courses
+  DEP.studentExpenses:
+    each: dependant
+    label: Adjusted qualified education expenses for this dependant
+    formula: "if(dependant.age < 14, 0, if(line.DEP.dependent == 1, dependant.answer.studentExpenses, 0))"
+    source: >-
+      8863 instructions, Who Can Claim an Education Credit: expenses for a dependent you claim, paid by you or by the
+      dependent. They aren't asked for a child under 14 at the end of 2025, who isn't likely to be in college
+  DEP.aotcStudent:
+    each: dependant
+    label: This dependant takes the American opportunity credit (1 for yes)
+    formula: 'if(line.DEP.studentExpenses == 0, 0, if(dependant.answer.studentCredit == "aotc", 1, 0))'
+  DEP.aotc27:
+    each: dependant
+    label: Expenses for the American opportunity credit, up to $4,000
+    formula: "if(line.DEP.aotcStudent == 1, min(line.DEP.studentExpenses, param.aotcMaxExpenses), 0)"
+  DEP.aotc30:
+    each: dependant
+    label: American opportunity credit for this dependant before the limits
+    formula: "min(line.DEP.aotc27, param.aotcFullRate) + round(max(0, line.DEP.aotc27 - param.aotcFullRate) * param.aotcPartRate, 2)"
+    source: "Form 8863, lines 28 to 30"
+  DEP.llc31:
+    each: dependant
+    label: Expenses for the lifetime learning credit for this dependant
+    formula: 'if(line.DEP.studentExpenses == 0, 0, if(dependant.answer.studentCredit == "llc", line.DEP.studentExpenses, 0))'
+  DEP.student:
+    each: dependant
+    label: A student with an education credit (1 for yes)
+    formula: "if(line.DEP.aotc30 + line.DEP.llc31 > 0, 1, 0)"
+
+  # The return's students
+  US.dependantAotc:
+    label: The American opportunity credit for the dependants, before the limits
+    formula: "if(line.US.educationAsked == 0, 0, sum(dependants.DEP.aotc30))"
+  US.dependantLlc:
+    label: The dependants' expenses for the lifetime learning credit
+    formula: "if(line.US.educationAsked == 0, 0, sum(dependants.DEP.llc31))"
+  US.adultStudents:
+    label: Adults on this return with an education credit
+    formula: >-
+      if(line.US.ownAotc30 + line.US.ownLlc31 > 0, 1, 0)
+      + if(line.US.joint == 1, if(spouse.line.US.ownAotc30 + spouse.line.US.ownLlc31 > 0, 1, 0), 0)
+  US.students:
+    label: Students on this return with an education credit
+    formula: "line.US.adultStudents + if(line.US.educationAsked == 0, 0, sum(dependants.DEP.student))"
+  US.page2:
+    label: The student printed on page 2 of Form 8863 (1 for you, 2 for your spouse, 0 for a dependant)
+    formula: "if(line.US.ownAotc30 + line.US.ownLlc31 > 0, 1, if(line.US.joint == 1, if(spouse.line.US.ownAotc30 + spouse.line.US.ownLlc31 > 0, 2, 0), 0))"
+    source: "8863 instructions, Part III: one page 2 for each student; Taxi fills in the first, and the worksheet names the others"
+
+  # Form 8863, Part I: the American opportunity credit
+  F8863.1:
+    label: American opportunity credit before the income limit
+    formula: "line.US.ownAotc30 + if(line.US.joint == 1, spouse.line.US.ownAotc30, 0) + line.US.dependantAotc"
+    source: "Form 8863, line 1: each student's Part III, line 30"
+  F8863.2:
+    label: Modified AGI from which there is no credit
+    formula: "if(line.US.joint == 1, param.educationLimitJoint, param.educationLimit)"
+  F8863.3:
+    label: Modified adjusted gross income
+    formula: "line.F1040.11a"
+    source: "8863 instructions, line 3: Form 1040, line 11b (no income excluded from Puerto Rico or abroad)"
+  F8863.4:
+    label: Modified AGI under the limit
+    formula: "max(0, line.F8863.2 - line.F8863.3)"
+    source: "Form 8863, line 4: if zero or less, you can't take any education credit"
+  F8863.5:
+    label: Range over which the credit is reduced
+    formula: "if(line.US.joint == 1, param.educationRangeJoint, param.educationRange)"
+  F8863.6:
+    label: Share of the credit allowed
+    formula: "if(line.F8863.4 >= line.F8863.5, 1, round(line.F8863.4 / line.F8863.5, 3))"
+    source: "Form 8863, line 6: 1.000, or line 4 divided by line 5 as a decimal rounded to three places"
+  F8863.7:
+    label: American opportunity credit after the income limit
+    formula: "round(line.F8863.1 * line.F8863.6, 2)"
+  US.aotcNoRefund:
+    label: None of the American opportunity credit is refundable (1 for yes)
+    formula: >-
+      if(line.US.joint == 1, 0, if(person.age >= 24, 0, if(line.F8863.7 == 0, 0, if(answer.parentAlive,
+      if(person.age < 18, 1, if(person.age == 18, if(answer.earnedUnderHalfSupport, 1, 0),
+      if(answer.fullTimeStudentSelf, if(answer.earnedUnderHalfSupport, 1, 0), 0))), 0))))
+    source: >-
+      8863 instructions, line 7: you were under 18; or 18, or a full-time student under 24, with earned income less
+      than half of your support; at least one of your parents was alive at the end of 2025; and you aren't filing
+      jointly. The age is the year less the birth year
+  F8863.8:
+    label: Refundable American opportunity credit
+    formula: "if(line.US.aotcNoRefund == 1, 0, round(line.F8863.7 * param.aotcRefundableRate, 2))"
+    source: "Form 8863, line 8: 40% of line 7, on Form 1040, line 29"
+  F8863.9:
+    label: Nonrefundable American opportunity credit
+    formula: "line.F8863.7 - line.F8863.8"
+
+  # Form 8863, Part II: the lifetime learning credit and the nonrefundable credits
+  F8863.10:
+    label: Expenses for the lifetime learning credit
+    formula: "line.US.ownLlc31 + if(line.US.joint == 1, spouse.line.US.ownLlc31, 0) + line.US.dependantLlc"
+    source: "Form 8863, line 10: each student's Part III, line 31"
+  F8863.11:
+    label: Expenses for the lifetime learning credit, up to $10,000
+    formula: "min(line.F8863.10, param.llcMaxExpenses)"
+  F8863.12:
+    label: Lifetime learning credit before the income limit
+    formula: "round(line.F8863.11 * param.llcRate, 2)"
+  F8863.15:
+    label: Modified AGI under the limit, for the lifetime learning credit
+    formula: "max(0, line.F8863.2 - line.F8863.3)"
+    source: "Form 8863, lines 13 to 15: the same as lines 2 to 4"
+  F8863.17:
+    label: Share of the lifetime learning credit allowed
+    formula: "if(line.F8863.15 >= line.F8863.5, 1, round(line.F8863.15 / line.F8863.5, 3))"
+    source: "Form 8863, lines 16 and 17: as lines 5 and 6"
+  F8863.18:
+    label: Lifetime learning credit
+    formula: "round(line.F8863.12 * line.F8863.17, 2)"
+  F8863.19:
+    label: Nonrefundable education credits
+    formula: "min(line.F8863.18 + line.F8863.9, max(0, line.F1040.18 - line.S3.1 - line.S3.2))"
+    source: >-
+      8863 instructions, Credit Limit Worksheet: lines 18 and 9, up to Form 1040 line 18 less Schedule 3 lines 1, 2,
+      6d and 6l (only line 2, the credit for child and dependent care expenses, is worked out by this app)
+  S3.3:
+    label: Education credits
+    formula: "line.F8863.19"
+    source: "Schedule 3, line 3: Form 8863, line 19"
+  F1040.29:
+    label: American opportunity credit
+    formula: "line.F8863.8"
+    source: "Form 1040, line 29: Form 8863, line 8"
+
+  # Schedule 1, line 21: the Student Loan Interest Deduction Worksheet in the Instructions
+  US.ownStudentLoan:
+    label: Student loan interest this person paid
+    formula: >-
+      if(answer.hasStudentLoan, answer.studentLoanInterest + sum(F1098E.box1),
+      if(count(F1098E.box1) > 0, unsupported("A Form 1098-E is added, but no student loan interest: say you paid it on Deductions, or remove the 1098-E"), 0))
+  SLW.1:
+    label: Student loan interest, up to $2,500
+    formula: "min(line.US.ownStudentLoan + if(line.US.joint == 1, spouse.line.US.ownStudentLoan, 0), param.studentLoanMax)"
+    source: "Student Loan Interest Deduction Worksheet, line 1: $2,500 for the return, filing jointly too"
+  SLW.4:
+    label: Modified adjusted gross income
+    formula: "line.F1040.9 - line.S1.13 - line.S1.15 - line.S1.20"
+    source: "Student Loan Interest Deduction Worksheet, lines 2 to 4: Form 1040 line 9, less Schedule 1 lines 11 to 20, 23 and 25 (only line 15 is worked out by this app)"
+  SLW.5:
+    label: Modified AGI over which the deduction is reduced
+    formula: "if(line.US.joint == 1, param.studentLoanStartJoint, param.studentLoanStart)"
+  SLW.6:
+    label: Modified AGI over the threshold
+    formula: "max(0, line.SLW.4 - line.SLW.5)"
+  SLW.7:
+    label: Share of the interest not deducted
+    formula: "min(1, round(line.SLW.6 / if(line.US.joint == 1, param.studentLoanRangeJoint, param.studentLoanRange), 3))"
+    source: "Student Loan Interest Deduction Worksheet, line 7: line 6 divided by $15,000 ($30,000 jointly), rounded to three places, 1.000 at most"
+  SLW.8:
+    label: Interest not deducted
+    formula: "round(line.SLW.1 * line.SLW.7, 2)"
+  S1.21:
+    label: Student loan interest deduction
+    formula: "if(line.SLW.1 == 0, 0, if(line.US.educationAllowed == 0, 0, line.SLW.1 - line.SLW.8))"
+    source: "Student Loan Interest Deduction Worksheet, line 9: line 1 less line 8; not filing separately, or when someone can claim you"

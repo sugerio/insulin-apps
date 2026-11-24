@@ -1,0 +1,110 @@
+{
+  "about": "Single, 20, a full-time student whose earned income is under half of their support, a parent alive: the American opportunity credit isn't refundable and is limited to the tax",
+  "input": {
+    "country": "us",
+    "year": 2025,
+    "people": [
+      {
+        "id": "p1",
+        "name": "Kit Young",
+        "role": "self",
+        "birthDate": "2005-10-10",
+        "province": "FL",
+        "residentAllYear": true
+      }
+    ],
+    "family": {
+      "maritalStatus": "single",
+      "dependants": []
+    },
+    "answers": {
+      "p1": {
+        "hasWages": true,
+        "hasInterest": false,
+        "hasTipsOrOvertime": false,
+        "canBeClaimed": false,
+        "isBlind": false,
+        "estimatedPayments": "0",
+        "hasCarLoan": false,
+        "hasSelfEmployment": false,
+        "hasStudentLoan": false,
+        "paidForEducation": true,
+        "hasDividends": false,
+        "hasBrokerSales": false,
+        "hasIraDistribution": false,
+        "hasPension": false,
+        "hasSocialSecurity": false,
+        "hasLossCarryover": false,
+        "hasHsa": false,
+        "hasIraContribution": false,
+        "hasItemized": false,
+        "hasOtherIncome": false,
+        "educationExpenses": "3000",
+        "educationCredit": "aotc",
+        "paidForCare": false,
+        "parentAlive": true,
+        "fullTimeStudentSelf": true,
+        "earnedUnderHalfSupport": true
+      }
+    },
+    "slips": [
+      {
+        "id": "p1-w2-0",
+        "person": "p1",
+        "type": "W2",
+        "issuer": "Book Store",
+        "boxes": {
+          "1": "25000",
+          "2": "1100",
+          "4": "1550",
+          "5": "25000",
+          "6": "362.50"
+        }
+      }
+    ]
+  },
+  "expected": {
+    "p1": {
+      "F1040.19": "0",
+      "F1040.27a": "0",
+      "F1040.28": "0",
+      "S8812.12": "0",
+      "F1040.1a": "25000",
+      "F1040.1e": "0",
+      "S3.2": "0",
+      "F1040.2a": "0",
+      "F1040.2b": "0",
+      "F1040.9": "25000",
+      "F1040.11a": "25000",
+      "F1040.12e": "15750",
+      "F1040.13b": "0",
+      "F1040.13a": "0",
+      "F1040.8": "0",
+      "F1040.10": "0",
+      "F1040.15": "9250",
+      "F1040.16": "928",
+      "F8959.7": "0",
+      "F8960.17": "0",
+      "F1040.24": "0",
+      "F1040.25c": "0",
+      "S3.11": "0",
+      "F1040.33": "1100",
+      "F1040.34": "1100",
+      "F1040.37": "0",
+      "F6251.4": "25000",
+      "F6251.6": "0",
+      "F6251.11": "0",
+      "F1040.18": "928",
+      "F8863.1": "2250",
+      "F8863.6": "1",
+      "F8863.7": "2250",
+      "F8863.8": "0",
+      "F8863.9": "2250",
+      "F8863.10": "0",
+      "F8863.18": "0",
+      "F8863.19": "928",
+      "S3.3": "928",
+      "F1040.29": "0"
+    }
+  }
+}

@@ -1,0 +1,127 @@
+{
+  "about": "Single, with a parent of 80 at home all year who can't care for themselves and earned $9,000: not a dependent, still a qualifying person for $5,000 of care",
+  "input": {
+    "country": "us",
+    "year": 2025,
+    "people": [
+      {
+        "id": "p1",
+        "name": "Noel Park",
+        "role": "self",
+        "birthDate": "1970-07-07",
+        "province": "FL",
+        "residentAllYear": true
+      }
+    ],
+    "family": {
+      "maritalStatus": "single",
+      "dependants": [
+        {
+          "id": "d1",
+          "name": "Grace Park",
+          "birthDate": "1945-01-01",
+          "answers": {
+            "relationship": "parent",
+            "monthsWithYou": "12",
+            "grossIncome": "9000",
+            "supportedByYou": true,
+            "paidOwnSupport": false,
+            "filedJointReturn": false,
+            "citizenOrResident": true,
+            "cantCareForSelf": true,
+            "careExpenses": "5000"
+          }
+        }
+      ]
+    },
+    "answers": {
+      "p1": {
+        "hasWages": true,
+        "hasInterest": false,
+        "hasTipsOrOvertime": false,
+        "canBeClaimed": false,
+        "isBlind": false,
+        "estimatedPayments": "0",
+        "hasCarLoan": false,
+        "hasSelfEmployment": false,
+        "hasStudentLoan": false,
+        "paidForEducation": false,
+        "hasDividends": false,
+        "hasBrokerSales": false,
+        "hasIraDistribution": false,
+        "hasPension": false,
+        "hasSocialSecurity": false,
+        "hasLossCarryover": false,
+        "hasHsa": false,
+        "hasIraContribution": false,
+        "hasItemized": false,
+        "hasOtherIncome": false,
+        "paidForCare": true,
+        "householdEmployer": false,
+        "priorYearCare": false,
+        "hasValidSSN": true
+      }
+    },
+    "slips": [
+      {
+        "id": "p1-w2-0",
+        "person": "p1",
+        "type": "W2",
+        "issuer": "Library Co",
+        "boxes": {
+          "1": "45000",
+          "2": "4000",
+          "4": "2790",
+          "5": "45000",
+          "6": "652.50"
+        }
+      }
+    ]
+  },
+  "expected": {
+    "p1": {
+      "F1040.19": "0",
+      "F1040.27a": "0",
+      "F1040.28": "0",
+      "S8812.12": "0",
+      "F1040.1a": "45000",
+      "F1040.1e": "0",
+      "S3.2": "600",
+      "F1040.2a": "0",
+      "F1040.2b": "0",
+      "F1040.9": "45000",
+      "F1040.11a": "45000",
+      "F1040.12e": "15750",
+      "F1040.13b": "0",
+      "F1040.13a": "0",
+      "F1040.8": "0",
+      "F1040.10": "0",
+      "F1040.15": "29250",
+      "F1040.16": "3275",
+      "F8959.7": "0",
+      "F8960.17": "0",
+      "F1040.24": "2675",
+      "F1040.25c": "0",
+      "S3.11": "0",
+      "F1040.33": "4000",
+      "F1040.34": "1325",
+      "F1040.37": "0",
+      "F6251.4": "45000",
+      "F6251.6": "0",
+      "F6251.11": "0",
+      "F1040.18": "3275",
+      "F2441.2": "1",
+      "F2441.3": "3000",
+      "F2441.4": "45000",
+      "F2441.5": "45000",
+      "F2441.6": "3000",
+      "F2441.8": "0.2",
+      "F2441.9a": "600",
+      "F2441.12": "0",
+      "F2441.15": "0",
+      "F2441.16": "5000",
+      "F2441.25": "0",
+      "F2441.26": "0"
+    }
+  }
+}

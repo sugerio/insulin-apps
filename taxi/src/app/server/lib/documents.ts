@@ -1,5 +1,5 @@
 import { DOCUMENT_TYPES, MAX_DOCUMENT_BYTES, maybeSameSlip, type DocumentList, type DocumentRecord, type Person, type ReadResult, type Slip, type TaxYear } from "#shared";
-import { normalizeAmount } from "../../shared/amount.ts";
+import { normalizeAmount, sameBoxValue } from "../../shared/amount.ts";
 import { Dec } from "../../shared/engine/decimal.ts";
 import { documentName } from "../../shared/engine/rules.ts";
 import { rulesFor } from "../../shared/rules/index.ts";
@@ -379,12 +379,13 @@ const membersOf = (view: TaxYear) => view.people.filter((person) => view.members
 
 /** AI's reading of a file, told the names and relationships of the year's people so it can say whose each slip is. */
 function readFile(year: number, view: TaxYear, file: FileToRead, reader: SlipReader): Promise<ReadOutcome> {
-  return reader.read(file, { year, rules: rulesFor(year)!, people: membersOf(view).map((person) => ({ name: person.name, relationship: person.relationship })) });
+  // The year's rules say which documents of its country are read (slips.yaml) and how (year.yaml, reading).
+  return reader.read(file, { year, rules: rulesFor(view.country, year)!, people: membersOf(view).map((person) => ({ name: person.name, relationship: person.relationship })) });
 }
 
 /** AI's reading of a file, checked against the year's rules and the slips already in it (less those of the files it replaces). */
 function checkReading(outcome: ReadOutcome, year: number, view: TaxYear, uploader: Person, slips: Slip[], replacing: string[] = []): Reading {
-  const rules = rulesFor(year)!;
+  const rules = rulesFor(view.country, year)!;
   if (outcome.kind !== "read") return { status: outcome.kind, message: outcome.message, modelId: null, found: [] };
   const modelId = outcome.model;
   const read = plan(outcome.slips, view, year, uploader);
@@ -476,7 +477,7 @@ function uploaderOf(view: TaxYear, header: string | null): Person {
  * several, leaves the slip in that return too, to be checked.
  */
 function plan(slips: ReadSlip[], view: TaxYear, year: number, uploader: Person): { planned: Planned[]; skipped: Skipped[] } {
-  const rules = rulesFor(year)!;
+  const rules = rulesFor(view.country, year)!;
   const adults = new Set(view.adults.map((adult) => adult.personId));
   const members = membersOf(view);
   const planned: Planned[] = [];
@@ -489,6 +490,13 @@ function plan(slips: ReadSlip[], view: TaxYear, year: number, uploader: Person):
     for (const [rawBox, rawAmount] of Object.entries(slip.boxes)) {
       const box = rawBox.trim().toUpperCase();
       if (!(box in type.boxes)) continue;
+      // A code box keeps one of its codes; anything else read there is for a person to enter.
+      if (box in type.codes) {
+        const code = rawAmount.trim().toUpperCase();
+        if (type.codes[box]!.includes(code)) boxes[box] = code;
+        else unsure.add(box);
+        continue;
+      }
       const amount = normalizeAmount(rawAmount);
       if (/^\d{1,9}(\.\d{1,2})?$/.test(amount)) boxes[box] = Dec.from(amount).toString();
       else unsure.add(box);
@@ -530,7 +538,7 @@ function addsNothing(reading: Planned, slip: { type: string; issuer: string; per
   const amounts = Object.entries(reading.boxes);
   return (
     amounts.length > 0 &&
-    amounts.every(([box, amount]) => slip.boxes[box] !== undefined && Dec.from(slip.boxes[box]).eq(amount)) &&
+    amounts.every(([box, amount]) => slip.boxes[box] !== undefined && sameBoxValue(slip.boxes[box], amount)) &&
     reading.unsure.every((box) => slip.boxes[box] !== undefined)
   );
 }

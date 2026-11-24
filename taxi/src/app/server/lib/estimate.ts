@@ -11,7 +11,7 @@ export async function getEstimate(db: D1Database, orgId: string, year: number): 
   const view = await getYear(db, orgId, year);
   const row = (await yearRow(db, orgId, year))!;
   const evaluation = evaluateYear(view, await loadWorkspace(db, orgId, row.id));
-  if (!rulesFor(year)) throw notFound(`No tax rules for ${year}`);
+  if (!rulesFor(view.country, year)) throw notFound(`No tax rules for ${year}`);
   // The rules are there but refuse what is stored (logged by evaluateYear), for example an answer to an option a later
   // release renamed: that is the app's fault, not a year without rules.
   if (!evaluation) throw new ApiError("internal", `The returns of ${year} can't be worked out from what is stored. The error is logged.`);

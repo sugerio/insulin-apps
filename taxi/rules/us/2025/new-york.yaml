@@ -1,0 +1,1650 @@
+# The New York State resident return for 2025: Form IT-201, with Form IT-196 (New York itemized deductions) and the
+# credit forms IT-213 (Empire State child credit), IT-215 (earned income credits), IT-216 (child and dependent care),
+# IT-270 (New York City income tax elimination credit) and IT-272 (college tuition credit), for a person whose state on
+# December 31 is New York (person.province "NY") and who lived there all year; the New York City resident tax and its
+# credits, the Yonkers resident surcharge and the MCTMT are on the same return. Each number names its source:
+# "Instructions" is the 2025 Instructions for Form IT-201 (IT-201-I), "IT-196-I", "IT-213-I", "IT-215-I", "IT-216-I",
+# "IT-270-I" and "IT-272" the 2025 instructions or form named, and "Tax Table" the 2025 New York State and New York City
+# Tax Tables (tax.ny.gov, search: table); check it there before changing it.
+#
+# The return starts from the federal one: lines 1 to 19 are the federal amounts (federal AGI is line 19), changed by
+# New York's additions and subtractions to New York AGI (line 33), then New York's deductions, tax, credits and
+# payments. Form IT-201 is in whole dollars, so each amount carried from the federal return is rounded to the dollar. A
+# joint return is one Form IT-201, the person preparing's, like the federal one. What New York needs that this app
+# doesn't work out is said on the New York return only (NYSCOPE.return): the federal return stays complete.
+
+params:
+  nysStandardSingle:
+    label: New York standard deduction, Single or Married filing separately
+    source: "Instructions, line 34, New York State standard deduction table: $8,000"
+    value: 8000
+  nysStandardClaimable:
+    label: New York standard deduction, Single and someone can claim you as a dependent
+    source: "Instructions, line 34, standard deduction table: Single and you marked item C Yes, $3,100"
+    value: 3100
+  nysStandardJoint:
+    label: New York standard deduction, Married filing jointly or Qualifying surviving spouse
+    source: "Instructions, line 34, standard deduction table: $16,050"
+    value: 16050
+  nysStandardHead:
+    label: New York standard deduction, Head of household
+    source: "Instructions, line 34, standard deduction table: $11,200"
+    value: 11200
+  nysDependentExemption:
+    label: New York dependent exemption, for each dependent
+    source: "Instructions, line 36: the value of each New York State dependent exemption is $1,000"
+    value: 1000
+  nysTaxTableLimit:
+    label: Taxable income from which the New York State Tax Table isn't used
+    source: "Instructions, line 39: the Tax Table, or if line 38 is $65,000 or more, the tax rate schedule"
+    value: 65000
+  nysRecaptureFloor:
+    label: New York AGI over which the tax computation worksheets take back the lower rates
+    source: "Instructions, line 39: New York adjusted gross income of more than $107,650"
+    value: 107650
+  nysRecaptureStep:
+    label: Amount of New York AGI over which the tax computation worksheets phase each benefit out
+    source: "Instructions, Tax computation worksheets, line 7 or 8: divide by $50,000"
+    value: 50000
+  nysTopFloor:
+    label: New York AGI over which all taxable income is taxed at the top rate
+    source: "Instructions, Tax computation worksheets 6, 11 and 16: New York adjusted gross income more than $25,000,000"
+    value: 25000000
+  nysTopRate:
+    label: New York State top tax rate
+    source: "Instructions, Tax computation worksheets 6, 11 and 16: multiply line 1 by 10.9% (0.109)"
+    value: 10.9%
+  nysRatesJoint:
+    label: New York State tax rate schedule, Married filing jointly or Qualifying surviving spouse
+    source: "Instructions, New York State tax rate schedule, filing status 2 and 5"
+    value:
+      - { upTo: 17150, rate: 4%, base: 0 }
+      - { upTo: 23600, rate: 4.5%, base: 686 }
+      - { upTo: 27900, rate: 5.25%, base: 976 }
+      - { upTo: 161550, rate: 5.5%, base: 1202 }
+      - { upTo: 323200, rate: 6%, base: 8553 }
+      - { upTo: 2155350, rate: 6.85%, base: 18252 }
+      - { upTo: 5000000, rate: 9.65%, base: 143754 }
+      - { upTo: 25000000, rate: 10.3%, base: 418263 }
+      - { rate: 10.9%, base: 2478263 }
+  nysRatesSingle:
+    label: New York State tax rate schedule, Single or Married filing separately
+    source: "Instructions, New York State tax rate schedule, filing status 1 and 3"
+    value:
+      - { upTo: 8500, rate: 4%, base: 0 }
+      - { upTo: 11700, rate: 4.5%, base: 340 }
+      - { upTo: 13900, rate: 5.25%, base: 484 }
+      - { upTo: 80650, rate: 5.5%, base: 600 }
+      - { upTo: 215400, rate: 6%, base: 4271 }
+      - { upTo: 1077550, rate: 6.85%, base: 12356 }
+      - { upTo: 5000000, rate: 9.65%, base: 71413 }
+      - { upTo: 25000000, rate: 10.3%, base: 449929 }
+      - { rate: 10.9%, base: 2509929 }
+  nysRatesHead:
+    label: New York State tax rate schedule, Head of household
+    source: "Instructions, New York State tax rate schedule, filing status 4"
+    value:
+      - { upTo: 12800, rate: 4%, base: 0 }
+      - { upTo: 17650, rate: 4.5%, base: 512 }
+      - { upTo: 20900, rate: 5.25%, base: 730 }
+      - { upTo: 107650, rate: 5.5%, base: 901 }
+      - { upTo: 269300, rate: 6%, base: 5672 }
+      - { upTo: 1616450, rate: 6.85%, base: 15371 }
+      - { upTo: 5000000, rate: 9.65%, base: 107651 }
+      - { upTo: 25000000, rate: 10.3%, base: 434163 }
+      - { rate: 10.9%, base: 2494163 }
+  # The Tax Table's rows are the schedule at the row's middle, to the nearest dollar, but with one base the schedule
+  # doesn't print: the table's 5.25% rows filing jointly start from $976.25, the exact tax on $23,600 (test/engine
+  # checks every row of the table with these).
+  nysTableRatesJoint:
+    label: The rates the New York State Tax Table is worked out on, Married filing jointly or Qualifying surviving spouse
+    source: "Tax Table, Married filing jointly column, every row: the schedule with $976.25 as the base of the 5.25% bracket"
+    value:
+      - { upTo: 17150, rate: 4%, base: 0 }
+      - { upTo: 23600, rate: 4.5%, base: 686 }
+      - { upTo: 27900, rate: 5.25%, base: 976.25 }
+      - { upTo: 161550, rate: 5.5%, base: 1202 }
+      - { rate: 6%, base: 8553 }
+  nysFlatJoint:
+    label: Rate of the first tax computation worksheet, Married filing jointly or Qualifying surviving spouse
+    source: "Instructions, Tax computation worksheet 1, line 3: multiply line 2 by 5.5% (0.055)"
+    value: 5.5%
+  nysFlatSingle:
+    label: Rate of the first tax computation worksheet, Single, Married filing separately or Head of household
+    source: "Instructions, Tax computation worksheets 7 and 12, line 3: multiply line 2 by 6% (0.06)"
+    value: 6%
+  # A tax computation worksheet by taxable income (line 38), for each filing status: upTo is the most taxable income
+  # it is used for, and rate its amount (the first row is the worksheet that phases in the flat rate).
+  nysRecaptureStartJoint:
+    label: The amount the excess of New York AGI is worked out over, by the worksheet, Married filing jointly or Qualifying surviving spouse
+    source: "Instructions, Tax computation worksheets 1 to 5, line 6: the excess of line 1 over $107,650, $161,550, $323,200, $2,155,350 or $5,000,000"
+    value:
+      - { upTo: 161550, rate: 107650 }
+      - { upTo: 323200, rate: 161550 }
+      - { upTo: 2155350, rate: 323200 }
+      - { upTo: 5000000, rate: 2155350 }
+      - { rate: 5000000 }
+  nysRecaptureBaseJoint:
+    label: Recapture base amount, Married filing jointly or Qualifying surviving spouse
+    source: "Instructions, Tax computation worksheets 2 to 5, line 4: $333, $1,140, $3,887 and $64,237"
+    value:
+      - { upTo: 161550, rate: 0 }
+      - { upTo: 323200, rate: 333 }
+      - { upTo: 2155350, rate: 1140 }
+      - { upTo: 5000000, rate: 3887 }
+      - { rate: 64237 }
+  nysRecaptureBenefitJoint:
+    label: Incremental benefit amount, Married filing jointly or Qualifying surviving spouse
+    source: "Instructions, Tax computation worksheets 2 to 5, line 5: $807, $2,747, $60,350 and $32,500"
+    value:
+      - { upTo: 161550, rate: 0 }
+      - { upTo: 323200, rate: 807 }
+      - { upTo: 2155350, rate: 2747 }
+      - { upTo: 5000000, rate: 60350 }
+      - { rate: 32500 }
+  nysRecaptureStartSingle:
+    label: The amount the excess of New York AGI is worked out over, by the worksheet, Single or Married filing separately
+    source: "Instructions, Tax computation worksheets 7 to 10, line 6: the excess of line 1 over $107,650, $215,400, $1,077,550 or $5,000,000"
+    value:
+      - { upTo: 215400, rate: 107650 }
+      - { upTo: 1077550, rate: 215400 }
+      - { upTo: 5000000, rate: 1077550 }
+      - { rate: 5000000 }
+  nysRecaptureBaseSingle:
+    label: Recapture base amount, Single or Married filing separately
+    source: "Instructions, Tax computation worksheets 8 to 10, line 4: $568, $2,399 and $32,571"
+    value:
+      - { upTo: 215400, rate: 0 }
+      - { upTo: 1077550, rate: 568 }
+      - { upTo: 5000000, rate: 2399 }
+      - { rate: 32571 }
+  nysRecaptureBenefitSingle:
+    label: Incremental benefit amount, Single or Married filing separately
+    source: "Instructions, Tax computation worksheets 8 to 10, line 5: $1,831, $30,172 and $32,500"
+    value:
+      - { upTo: 215400, rate: 0 }
+      - { upTo: 1077550, rate: 1831 }
+      - { upTo: 5000000, rate: 30172 }
+      - { rate: 32500 }
+  nysRecaptureStartHead:
+    label: The amount the excess of New York AGI is worked out over, by the worksheet, Head of household
+    source: "Instructions, Tax computation worksheets 12 to 15, line 6: the excess of line 1 over $107,650, $269,300, $1,616,450 or $5,000,000"
+    value:
+      - { upTo: 269300, rate: 107650 }
+      - { upTo: 1616450, rate: 269300 }
+      - { upTo: 5000000, rate: 1616450 }
+      - { rate: 5000000 }
+  nysRecaptureBaseHead:
+    label: Recapture base amount, Head of household
+    source: "Instructions, Tax computation worksheets 13 to 15, line 4: $787, $3,076 and $48,337"
+    value:
+      - { upTo: 269300, rate: 0 }
+      - { upTo: 1616450, rate: 787 }
+      - { upTo: 5000000, rate: 3076 }
+      - { rate: 48337 }
+  nysRecaptureBenefitHead:
+    label: Incremental benefit amount, Head of household
+    source: "Instructions, Tax computation worksheets 13 to 15, line 5: $2,289, $45,261 and $32,500"
+    value:
+      - { upTo: 269300, rate: 0 }
+      - { upTo: 1616450, rate: 2289 }
+      - { upTo: 5000000, rate: 45261 }
+      - { rate: 32500 }
+
+  # Household credits: by federal AGI and the number of people (the dependents on item H, plus one for you and one for
+  # a spouse filing jointly); each person over 7 adds the "over 7" amount. A table whose amounts go up the same for
+  # each person is written as its amount for one and for each more. Filing separately, tables 3 and 6 are half of
+  # tables 2 and 5, rounded (and half the "over 7" amount, rounded, for each person over 7).
+  nysHouseholdSingle:
+    label: New York State household credit, Single (table 1)
+    source: "Instructions, line 40, New York State household credit table 1"
+    value:
+      - { upTo: 5000, rate: 75 }
+      - { upTo: 6000, rate: 60 }
+      - { upTo: 7000, rate: 50 }
+      - { upTo: 20000, rate: 45 }
+      - { upTo: 25000, rate: 40 }
+      - { upTo: 28000, rate: 20 }
+      - { rate: 0 }
+  nysHouseholdFirst:
+    label: New York State household credit for one person, Married filing jointly, Head of household or Qualifying surviving spouse (table 2, column 1)
+    source: "Instructions, line 40, New York State household credit table 2, column 1"
+    value:
+      - { upTo: 5000, rate: 90 }
+      - { upTo: 6000, rate: 75 }
+      - { upTo: 7000, rate: 65 }
+      - { upTo: 20000, rate: 60 }
+      - { upTo: 22000, rate: 60 }
+      - { upTo: 25000, rate: 50 }
+      - { upTo: 28000, rate: 40 }
+      - { upTo: 32000, rate: 20 }
+      - { rate: 0 }
+  nysHouseholdMore:
+    label: New York State household credit for each more person (table 2, columns 2 to 7 and over 7)
+    source: "Instructions, line 40, New York State household credit table 2: each column adds $15, $15, $15, $15, $10, $10, $5 or $5 by row"
+    value:
+      - { upTo: 5000, rate: 15 }
+      - { upTo: 6000, rate: 15 }
+      - { upTo: 7000, rate: 15 }
+      - { upTo: 20000, rate: 15 }
+      - { upTo: 22000, rate: 10 }
+      - { upTo: 25000, rate: 10 }
+      - { upTo: 28000, rate: 5 }
+      - { upTo: 32000, rate: 5 }
+      - { rate: 0 }
+  nycHouseholdSingle:
+    label: New York City household credit, Single (table 4)
+    source: "Instructions, line 48, New York City household credit table 4"
+    value:
+      - { upTo: 10000, rate: 15 }
+      - { upTo: 12500, rate: 10 }
+      - { rate: 0 }
+  nycHouseholdEach:
+    label: New York City household credit for each person, Married filing jointly, Head of household or Qualifying surviving spouse (table 5)
+    source: "Instructions, line 48, New York City household credit table 5: $30, $25, $15 or $10 for each person, by row"
+    value:
+      - { upTo: 15000, rate: 30 }
+      - { upTo: 17500, rate: 25 }
+      - { upTo: 20000, rate: 15 }
+      - { upTo: 22500, rate: 10 }
+      - { rate: 0 }
+
+  # New York City
+  nycRatesJoint:
+    label: New York City tax rate schedule, Married filing jointly or Qualifying surviving spouse
+    source: "Instructions, New York City tax rate schedule, filing status 2 and 5"
+    value:
+      - { upTo: 21600, rate: 3.078%, base: 0 }
+      - { upTo: 45000, rate: 3.762%, base: 665 }
+      - { upTo: 90000, rate: 3.819%, base: 1545 }
+      - { rate: 3.876%, base: 3264 }
+  nycRatesSingle:
+    label: New York City tax rate schedule, Single or Married filing separately
+    source: "Instructions, New York City tax rate schedule, filing status 1 and 3"
+    value:
+      - { upTo: 12000, rate: 3.078%, base: 0 }
+      - { upTo: 25000, rate: 3.762%, base: 369 }
+      - { upTo: 50000, rate: 3.819%, base: 858 }
+      - { rate: 3.876%, base: 1813 }
+  nycRatesHead:
+    label: New York City tax rate schedule, Head of household
+    source: "Instructions, New York City tax rate schedule, filing status 4"
+    value:
+      - { upTo: 14400, rate: 3.078%, base: 0 }
+      - { upTo: 30000, rate: 3.762%, base: 443 }
+      - { upTo: 60000, rate: 3.819%, base: 1030 }
+      - { rate: 3.876%, base: 2176 }
+  nycTaxTableLimit:
+    label: New York City taxable income from which the New York City Tax Table isn't used
+    source: "Instructions, line 47a: the New York City Tax Table if line 47 is less than $65,000"
+    value: 65000
+  nycSchoolFixedSingle:
+    label: New York City school tax credit (fixed amount), Single, Married filing separately or Head of household
+    source: "Instructions, line 69: $63"
+    value: 63
+  nycSchoolFixedJoint:
+    label: New York City school tax credit (fixed amount), Married filing jointly or Qualifying surviving spouse
+    source: "Instructions, line 69: $125"
+    value: 125
+  nycSchoolFixedLimit:
+    label: Income up to which the New York City school tax credit (fixed amount) is allowed
+    source: "Instructions, line 69: income (federal AGI less IRA distributions) of $250,000 or less"
+    value: 250000
+  nycSchoolRateLimit:
+    label: Income up to which the New York City school tax credit (rate reduction amount) is allowed
+    source: "Instructions, line 69a: income more than $500,000, you do not qualify"
+    value: 500000
+  nycSchoolRatesJoint:
+    label: New York City school tax credit (rate reduction amount), Married filing jointly or Qualifying surviving spouse
+    source: "Instructions, line 69a: 0.171% of taxable income up to $21,600; $37 plus 0.228% of the excess"
+    value:
+      - { upTo: 21600, rate: 0.171%, base: 0 }
+      - { rate: 0.228%, base: 37 }
+  nycSchoolRatesSingle:
+    label: New York City school tax credit (rate reduction amount), Single or Married filing separately
+    source: "Instructions, line 69a: 0.171% of taxable income up to $12,000; $21 plus 0.228% of the excess"
+    value:
+      - { upTo: 12000, rate: 0.171%, base: 0 }
+      - { rate: 0.228%, base: 21 }
+  nycSchoolRatesHead:
+    label: New York City school tax credit (rate reduction amount), Head of household
+    source: "Instructions, line 69a: 0.171% of taxable income up to $14,400; $25 plus 0.228% of the excess"
+    value:
+      - { upTo: 14400, rate: 0.171%, base: 0 }
+      - { rate: 0.228%, base: 25 }
+
+  # MCTMT and Yonkers
+  mctmtThreshold:
+    label: Net earnings from self-employment in a zone over which the MCTMT applies
+    source: "Instructions, lines 54a and 54b: net earnings allocated to a zone that exceed $50,000, for each spouse"
+    value: 50000
+  mctmtZone1Rate:
+    label: MCTMT rate, Zone 1 (New York City)
+    source: "Instructions, line 54c: multiply line 54a by 0.60% (0.0060)"
+    value: 0.6%
+  mctmtZone2Rate:
+    label: MCTMT rate, Zone 2 (Dutchess, Nassau, Orange, Putnam, Rockland, Suffolk and Westchester counties)
+    source: "Instructions, line 54d: multiply line 54b by 0.34% (0.0034)"
+    value: 0.34%
+  yonkersRate:
+    label: Yonkers resident income tax surcharge rate
+    source: "Instructions, line 55, Yonkers worksheet, line n: 16.75%"
+    value: 16.75%
+
+  # Additions and subtractions
+  nysPensionExclusion:
+    label: Most pension and annuity income excluded for each person
+    source: "Instructions, line 29: not more than $20,000"
+    value: 20000
+  nys529Limit:
+    label: Most New York 529 college savings program contributions subtracted for each account owner
+    source: "Instructions, line 30: up to $5,000 for each account owner ($10,000 filing jointly when both are owners)"
+    value: 5000
+
+  # Itemized deductions (Form IT-196)
+  nysMedicalFloor:
+    label: Share of federal AGI New York medical expenses must be over
+    source: "IT-196, line 3: multiply line 2 by 10% (0.10)"
+    value: 10%
+  nysGiftLimit:
+    label: Share of federal AGI New York lets you deduct for gifts to charity
+    source: "IT-196-I, line 16: the 50% of federal AGI limit of the IRC before the 2018 changes"
+    value: 50%
+  nysPeaseJoint:
+    label: Federal AGI over which IT-196's total itemized deductions are limited, Married filing jointly or Qualifying surviving spouse
+    source: "IT-196-I, Line 40 worksheet, line 6: $408,850"
+    value: 408850
+  nysPeaseSingle:
+    label: Federal AGI over which IT-196's total itemized deductions are limited, Single
+    source: "IT-196-I, Line 40 worksheet, line 6: $340,700"
+    value: 340700
+  nysPeaseHead:
+    label: Federal AGI over which IT-196's total itemized deductions are limited, Head of household
+    source: "IT-196-I, Line 40 worksheet, line 6: $374,800"
+    value: 374800
+  nysPeaseSeparate:
+    label: Federal AGI over which IT-196's total itemized deductions are limited, Married filing separately
+    source: "IT-196-I, Line 40 worksheet, line 6: $204,400"
+    value: 204400
+  nysPeaseShare:
+    label: Most of the itemized deductions (other than medical) the line 40 limitation can take away
+    source: "IT-196-I, Line 40 worksheet, line 4: multiply line 3 by 80% (.80)"
+    value: 80%
+  nysPeaseRate:
+    label: Line 40 limitation rate on federal AGI over the limit
+    source: "IT-196-I, Line 40 worksheet, line 8: multiply line 7 by 3% (.03)"
+    value: 3%
+  nysAdjustmentFloorSingle:
+    label: New York AGI over which IT-196's itemized deduction adjustment starts, Single or Married filing separately
+    source: "IT-196-I, line 46, Worksheet 3, line 2: $100,000"
+    value: 100000
+  nysAdjustmentFloorHead:
+    label: New York AGI over which IT-196's itemized deduction adjustment starts, Head of household
+    source: "IT-196-I, line 46, Worksheet 3, line 2: $150,000"
+    value: 150000
+  nysAdjustmentFloorJoint:
+    label: New York AGI over which IT-196's itemized deduction adjustment starts, Married filing jointly or Qualifying surviving spouse
+    source: "IT-196-I, line 46, Worksheet 3, line 2: $200,000"
+    value: 200000
+  nysAdjustmentStep:
+    label: Amount of New York AGI the itemized deduction adjustment is phased in over
+    source: "IT-196-I, line 46, Worksheets 3 and 4: the lesser of the excess or $50,000, divided by $50,000"
+    value: 50000
+  nysAdjustmentRate:
+    label: Itemized deduction adjustment, each step
+    source: "IT-196-I, line 46, Worksheets 3 and 4: 25% (.25) of line 45"
+    value: 25%
+  nysAdjustmentSecond:
+    label: New York AGI over which IT-196's second step of the adjustment starts
+    source: "IT-196-I, line 46: more than $475,000 but not more than $525,000, Worksheet 4"
+    value: 475000
+  nysAdjustmentHalf:
+    label: New York AGI over which the adjustment is half of the deductions
+    source: "IT-196-I, line 46: more than $525,000 but not more than $1,000,000, 50% (.50) of line 45"
+    value: 525000
+  nysAdjustmentGiftsOnly:
+    label: New York AGI over which only gifts to charity are deducted
+    source: "IT-196-I, line 47: more than $1,000,000, 50% of line 19; more than $10,000,000, 25% of line 19"
+    value: 1000000
+  nysAdjustmentGiftsQuarter:
+    label: New York AGI over which a quarter of the gifts to charity are deducted
+    source: "IT-196-I, line 47: more than $10,000,000, enter 25% of line 19"
+    value: 10000000
+
+  # Empire State child credit (IT-213)
+  esccYoung:
+    label: Empire State child credit for each qualifying child under 4
+    source: "IT-213, line 2: multiply line 1 by 1,000"
+    value: 1000
+  esccOlder:
+    label: Empire State child credit for each qualifying child at least 4 and under 17
+    source: "IT-213, line 4: multiply line 3 by 330"
+    value: 330
+  esccThresholdJoint:
+    label: Federal AGI over which the Empire State child credit goes down, Married filing jointly
+    source: "IT-213, line 7: $110,000"
+    value: 110000
+  esccThresholdSingle:
+    label: Federal AGI over which the Empire State child credit goes down, Single, Head of household or Qualifying surviving spouse
+    source: "IT-213, line 7: $75,000"
+    value: 75000
+  esccThresholdSeparate:
+    label: Federal AGI over which the Empire State child credit goes down, Married filing separately
+    source: "IT-213, line 7: $55,000"
+    value: 55000
+  esccReduction:
+    label: Empire State child credit reduction rate
+    source: "IT-213, line 8: multiply line 7 by 1.65% (.0165), $16.50 for each $1,000 (IT-213-I)"
+    value: 1.65%
+
+  # Earned income credits (IT-215)
+  nysEicRate:
+    label: New York State earned income credit rate
+    source: "IT-215, line 11: 30% (.30)"
+    value: 30%
+  nycEicStep:
+    label: New York City EIC rate reduction for each dollar of New York AGI in a phase-down band
+    source: "IT-215-I, NYC EIC rate worksheet, line 4: multiply line 3 by .00002"
+    value: 0.00002
+
+  # Child and dependent care (IT-216)
+  nysCareLimitOne:
+    label: Most expenses counted for one qualifying person
+    source: "IT-216, line 5: 3,000 if one qualifying person"
+    value: 3000
+  nysCareLimitTwo:
+    label: Most expenses counted for two qualifying persons
+    source: "IT-216, line 5: 6,000 if two qualifying persons"
+    value: 6000
+  nysCareLimitThree:
+    label: Most expenses counted for three qualifying persons
+    source: "IT-216, line 5: 7,500 if three qualifying persons"
+    value: 7500
+  nysCareLimitFour:
+    label: Most expenses counted for four qualifying persons
+    source: "IT-216, line 5: 8,500 if four qualifying persons"
+    value: 8500
+  nysCareLimitFive:
+    label: Most expenses counted for five or more qualifying persons
+    source: "IT-216, line 5: 9,000 if five or more qualifying persons"
+    value: 9000
+  nycCareAgiLimit:
+    label: Federal AGI up to which the New York City child and dependent care credit is allowed
+    source: "IT-216, line 23: federal adjusted gross income of $30,000 or less"
+    value: 30000
+  nycCareAge:
+    label: Age under which a child's care counts for the New York City credit
+    source: "IT-216, line 23: a child under 4 years old as of December 31"
+    value: 4
+  nysCareLimitation:
+    label: New York State child and dependent care credit limitation decimal, by New York AGI
+    source: "IT-216-I, New York State child and dependent care credit limitation table (page 7), every row"
+    value:
+      - { upTo: 25000, rate: 110% }
+      - { upTo: 25200, rate: 109.9% }
+      - { upTo: 25400, rate: 109.8% }
+      - { upTo: 25600, rate: 109.7% }
+      - { upTo: 25800, rate: 109.5% }
+      - { upTo: 26000, rate: 109.4% }
+      - { upTo: 26200, rate: 109.3% }
+      - { upTo: 26400, rate: 109.1% }
+      - { upTo: 26600, rate: 109% }
+      - { upTo: 26800, rate: 108.9% }
+      - { upTo: 27000, rate: 108.7% }
+      - { upTo: 27200, rate: 108.6% }
+      - { upTo: 27400, rate: 108.5% }
+      - { upTo: 27600, rate: 108.3% }
+      - { upTo: 27800, rate: 108.2% }
+      - { upTo: 28000, rate: 108.1% }
+      - { upTo: 28200, rate: 107.9% }
+      - { upTo: 28400, rate: 107.8% }
+      - { upTo: 28600, rate: 107.7% }
+      - { upTo: 28800, rate: 107.5% }
+      - { upTo: 29000, rate: 107.4% }
+      - { upTo: 29200, rate: 107.3% }
+      - { upTo: 29400, rate: 107.1% }
+      - { upTo: 29600, rate: 107% }
+      - { upTo: 29800, rate: 106.9% }
+      - { upTo: 30000, rate: 106.7% }
+      - { upTo: 30200, rate: 106.6% }
+      - { upTo: 30400, rate: 106.5% }
+      - { upTo: 30600, rate: 106.3% }
+      - { upTo: 30800, rate: 106.2% }
+      - { upTo: 31000, rate: 106.1% }
+      - { upTo: 31200, rate: 105.9% }
+      - { upTo: 31400, rate: 105.8% }
+      - { upTo: 31600, rate: 105.7% }
+      - { upTo: 31800, rate: 105.5% }
+      - { upTo: 32000, rate: 105.4% }
+      - { upTo: 32200, rate: 105.3% }
+      - { upTo: 32400, rate: 105.1% }
+      - { upTo: 32600, rate: 105% }
+      - { upTo: 32800, rate: 104.9% }
+      - { upTo: 33000, rate: 104.7% }
+      - { upTo: 33200, rate: 104.6% }
+      - { upTo: 33400, rate: 104.5% }
+      - { upTo: 33600, rate: 104.3% }
+      - { upTo: 33800, rate: 104.2% }
+      - { upTo: 34000, rate: 104.1% }
+      - { upTo: 34200, rate: 103.9% }
+      - { upTo: 34400, rate: 103.8% }
+      - { upTo: 34600, rate: 103.7% }
+      - { upTo: 34800, rate: 103.5% }
+      - { upTo: 35000, rate: 103.4% }
+      - { upTo: 35200, rate: 103.3% }
+      - { upTo: 35400, rate: 103.1% }
+      - { upTo: 35600, rate: 103% }
+      - { upTo: 35800, rate: 102.9% }
+      - { upTo: 36000, rate: 102.7% }
+      - { upTo: 36200, rate: 102.6% }
+      - { upTo: 36400, rate: 102.5% }
+      - { upTo: 36600, rate: 102.3% }
+      - { upTo: 36800, rate: 102.2% }
+      - { upTo: 37000, rate: 102.1% }
+      - { upTo: 37200, rate: 101.9% }
+      - { upTo: 37400, rate: 101.8% }
+      - { upTo: 37600, rate: 101.7% }
+      - { upTo: 37800, rate: 101.5% }
+      - { upTo: 38000, rate: 101.4% }
+      - { upTo: 38200, rate: 101.3% }
+      - { upTo: 38400, rate: 101.1% }
+      - { upTo: 38600, rate: 101% }
+      - { upTo: 38800, rate: 100.9% }
+      - { upTo: 39000, rate: 100.7% }
+      - { upTo: 39200, rate: 100.6% }
+      - { upTo: 39400, rate: 100.5% }
+      - { upTo: 39600, rate: 100.3% }
+      - { upTo: 39800, rate: 100.2% }
+      - { upTo: 40000, rate: 100.1% }
+      - { upTo: 50000, rate: 100% }
+      - { upTo: 50200, rate: 116.2% }
+      - { upTo: 50400, rate: 115% }
+      - { upTo: 50600, rate: 113.7% }
+      - { upTo: 50800, rate: 112.5% }
+      - { upTo: 51000, rate: 111.2% }
+      - { upTo: 51200, rate: 109.9% }
+      - { upTo: 51400, rate: 108.8% }
+      - { upTo: 51600, rate: 107.5% }
+      - { upTo: 51800, rate: 106.2% }
+      - { upTo: 52000, rate: 105% }
+      - { upTo: 52200, rate: 103.7% }
+      - { upTo: 52400, rate: 102.5% }
+      - { upTo: 52600, rate: 101.3% }
+      - { upTo: 52800, rate: 100% }
+      - { upTo: 53000, rate: 98.7% }
+      - { upTo: 53200, rate: 97.5% }
+      - { upTo: 53400, rate: 96.3% }
+      - { upTo: 53600, rate: 95% }
+      - { upTo: 53800, rate: 93.8% }
+      - { upTo: 54000, rate: 92.5% }
+      - { upTo: 54200, rate: 91.2% }
+      - { upTo: 54400, rate: 90.1% }
+      - { upTo: 54600, rate: 88.8% }
+      - { upTo: 54800, rate: 87.5% }
+      - { upTo: 55000, rate: 86.3% }
+      - { upTo: 55200, rate: 92.7% }
+      - { upTo: 55400, rate: 91.3% }
+      - { upTo: 55600, rate: 90% }
+      - { upTo: 55800, rate: 88.6% }
+      - { upTo: 56000, rate: 87.2% }
+      - { upTo: 56200, rate: 85.9% }
+      - { upTo: 56400, rate: 84.5% }
+      - { upTo: 56600, rate: 83.1% }
+      - { upTo: 56800, rate: 81.9% }
+      - { upTo: 57000, rate: 80.5% }
+      - { upTo: 57200, rate: 79.1% }
+      - { upTo: 57400, rate: 77.8% }
+      - { upTo: 57600, rate: 76.4% }
+      - { upTo: 57800, rate: 75% }
+      - { upTo: 58000, rate: 73.7% }
+      - { upTo: 58200, rate: 72.3% }
+      - { upTo: 58400, rate: 70.9% }
+      - { upTo: 58600, rate: 69.6% }
+      - { upTo: 58800, rate: 68.2% }
+      - { upTo: 59000, rate: 66.8% }
+      - { upTo: 59200, rate: 65.6% }
+      - { upTo: 59400, rate: 64.2% }
+      - { upTo: 59600, rate: 62.8% }
+      - { upTo: 59800, rate: 61.5% }
+      - { upTo: 60000, rate: 60.1% }
+      - { upTo: 60200, rate: 107% }
+      - { upTo: 60400, rate: 104.7% }
+      - { upTo: 60600, rate: 102.2% }
+      - { upTo: 60800, rate: 99.6% }
+      - { upTo: 61000, rate: 97.3% }
+      - { upTo: 61200, rate: 94.7% }
+      - { upTo: 61400, rate: 92.2% }
+      - { upTo: 61600, rate: 89.9% }
+      - { upTo: 61800, rate: 87.3% }
+      - { upTo: 62000, rate: 84.8% }
+      - { upTo: 62200, rate: 82.4% }
+      - { upTo: 62400, rate: 79.9% }
+      - { upTo: 62600, rate: 77.3% }
+      - { upTo: 62800, rate: 75% }
+      - { upTo: 63000, rate: 72.4% }
+      - { upTo: 63200, rate: 69.9% }
+      - { upTo: 63400, rate: 67.6% }
+      - { upTo: 63600, rate: 65% }
+      - { upTo: 63800, rate: 62.5% }
+      - { upTo: 64000, rate: 60.1% }
+      - { upTo: 64200, rate: 57.6% }
+      - { upTo: 64400, rate: 55% }
+      - { upTo: 64600, rate: 52.7% }
+      - { upTo: 64800, rate: 50.2% }
+      - { upTo: 65000, rate: 47.6% }
+      - { upTo: 150000, rate: 60% }
+      - { rate: 20% }
+  nycCareLimitation:
+    label: New York City child and dependent care credit limitation decimal, by federal AGI
+    source: "IT-216-I, New York City child and dependent care credit limitation table (page 7), every row"
+    value:
+      - { upTo: 25000, rate: 75% }
+      - { upTo: 25200, rate: 73.5% }
+      - { upTo: 25400, rate: 70.5% }
+      - { upTo: 25600, rate: 67.5% }
+      - { upTo: 25800, rate: 64.5% }
+      - { upTo: 26000, rate: 61.5% }
+      - { upTo: 26200, rate: 58.5% }
+      - { upTo: 26400, rate: 55.5% }
+      - { upTo: 26600, rate: 52.5% }
+      - { upTo: 26800, rate: 49.5% }
+      - { upTo: 27000, rate: 46.5% }
+      - { upTo: 27200, rate: 43.5% }
+      - { upTo: 27400, rate: 40.5% }
+      - { upTo: 27600, rate: 37.5% }
+      - { upTo: 27800, rate: 34.5% }
+      - { upTo: 28000, rate: 31.5% }
+      - { upTo: 28200, rate: 28.5% }
+      - { upTo: 28400, rate: 25.5% }
+      - { upTo: 28600, rate: 22.5% }
+      - { upTo: 28800, rate: 19.5% }
+      - { upTo: 29000, rate: 16.5% }
+      - { upTo: 29200, rate: 13.5% }
+      - { upTo: 29400, rate: 10.5% }
+      - { upTo: 29600, rate: 7.5% }
+      - { upTo: 29800, rate: 4.5% }
+      - { upTo: 30000, rate: 1.5% }
+      - { rate: 0% }
+
+  # New York City income tax elimination credit (IT-270)
+  nycEliminationRange:
+    label: Federal AGI over the threshold up to which a part of the elimination credit is allowed
+    source: "IT-270, line 3: if the result is more than $5,000, stop; line 4: subtract line 3 from $5,000"
+    value: 5000
+  nycEliminationInvestment:
+    label: Most investment income someone can have and get the New York City income tax elimination credit
+    source: "IT-270, line D: investment income greater than $10,000, stop"
+    value: 10000
+  nycEliminationJoint:
+    label: Elimination credit income threshold by number of dependents, Married filing jointly or Qualifying surviving spouse
+    source: "IT-270-I, Part 2, line 2, Income thresholds table: 1 $36,789; 2 $46,350; 3 $54,545; 4 $61,071; 5 $68,403; 6 $75,204; 7 or more $91,902"
+    value:
+      - { upTo: 1, rate: 36789 }
+      - { upTo: 2, rate: 46350 }
+      - { upTo: 3, rate: 54545 }
+      - { upTo: 4, rate: 61071 }
+      - { upTo: 5, rate: 68403 }
+      - { upTo: 6, rate: 75204 }
+      - { rate: 91902 }
+  nycEliminationSingle:
+    label: Elimination credit income threshold by number of dependents, Single, Married filing separately or Head of household
+    source: "IT-270-I, Part 2, line 2, Income thresholds table: 1 $31,503; 2 $36,824; 3 $46,512; 4 $53,711; 5 $59,928; 6 $65,712; 7 $74,565; 8 or more $88,361"
+    value:
+      - { upTo: 1, rate: 31503 }
+      - { upTo: 2, rate: 36824 }
+      - { upTo: 3, rate: 46512 }
+      - { upTo: 4, rate: 53711 }
+      - { upTo: 5, rate: 59928 }
+      - { upTo: 6, rate: 65712 }
+      - { upTo: 7, rate: 74565 }
+      - { rate: 88361 }
+
+  # College tuition credit (IT-272)
+  tuitionStudentLimit:
+    label: Most qualified college tuition counted for each student
+    source: "IT-272, line I: the lesser of line H or 10,000"
+    value: 10000
+  tuitionSmall:
+    label: Total tuition under which the college tuition credit is at most $200
+    source: "IT-272, Part 2: complete Part 2 if your total qualified college tuition expenses on line 3 are less than $5,000"
+    value: 5000
+  tuitionSmallCredit:
+    label: College tuition credit limitation for total tuition under $5,000
+    source: "IT-272, line 4: credit limitation ($200)"
+    value: 200
+  tuitionRate:
+    label: College tuition credit rate
+    source: "IT-272, line 7: multiply line 6 by 4% (0.04)"
+    value: 4%
+
+questions:
+  livedInNewYorkAllYear:
+    type: boolean
+    module: about
+    ask: You lived in New York State all of 2025
+    help: >-
+      New York was your home (your domicile) for the whole year. If you moved in or out during 2025, you file Form
+      IT-203 as a part-year resident, which this app doesn't prepare.
+  nyLocality:
+    type: choice
+    module: about
+    ask: Where you lived in New York in 2025
+    options: [elsewhere, nyc, yonkers, partYear]
+    optionLabels:
+      elsewhere: Outside New York City and Yonkers, all year
+      nyc: New York City (the Bronx, Brooklyn, Manhattan, Queens or Staten Island), all year
+      yonkers: Yonkers, all year
+      partYear: New York City or Yonkers for only part of the year
+    help: >-
+      New York City and Yonkers have their own income tax on the New York return. Someone who moved in or out of
+      either during 2025 files Form IT-360.1, which this app doesn't prepare.
+  nyBondInterest:
+    type: money
+    module: income
+    ask: Tax-exempt interest from New York bonds
+    help: >-
+      Of your tax-exempt interest (box 8 of your 1099-INT and box 12 of your 1099-DIV), the part from bonds of New York
+      State or its local governments, or from a fund's New York bonds (the fund's year-end statement says how much).
+      New York taxes the rest (Form IT-201, line 20).
+  nyPublicRetirement:
+    type: money
+    module: income
+    ask: 414(h) retirement contributions from your wages
+    help: >-
+      Only for an employee of New York State or a local government in New York: the 414(h) retirement contributions
+      in box 14 of your W-2 (with the New York City flexible benefits program, IRC 125, if you work for New York City).
+      New York adds them back (Form IT-201, line 21). Enter 0 if you have none.
+    default: 0
+  nyOtherAdditions:
+    type: boolean
+    module: income
+    ask: You have another New York addition
+    help: >-
+      Such as a withdrawal from a New York 529 college savings account not used for education, or another addition of
+      Form IT-225. This app doesn't work them out (Form IT-201, lines 22 and 23).
+    default: false
+  nyGovernmentPension:
+    type: money
+    module: income
+    ask: Your pension from New York State, a New York local government or the federal government
+    help: >-
+      Of your taxable pensions, annuities and IRA distributions, the part paid by a pension plan of New York State, its
+      local governments, certain public authorities or the U.S. government (including the military). New York doesn't
+      tax it (Form IT-201, line 26). Enter 0 if none of it is.
+    default: 0
+  nyPensionAfter59:
+    type: money
+    module: income
+    ask: Your taxable pension and IRA income received after you turned 59½
+    help: >-
+      You turned 59½ during 2025, so New York excludes only the pension, annuity and IRA income paid to you after that
+      day, up to $20,000 (Form IT-201, line 29). Leave out a pension from New York State, a local government or the
+      federal government.
+  nyOtherSubtractions:
+    type: boolean
+    module: income
+    ask: You have another New York subtraction
+    help: >-
+      Such as a refund of state or local income tax you included in income, or another subtraction of Form IT-225.
+      This app doesn't work them out (Form IT-201, lines 25 and 31).
+    default: false
+  ny529:
+    type: money
+    module: deductions
+    ask: Contributions to a New York 529 college savings account you own
+    help: >-
+      What you put in 2025 into a New York's 529 College Savings Program account you are the owner of. New York
+      subtracts up to $5,000 for each owner (Form IT-201, line 30). Enter 0 if none.
+    default: 0
+  nyBusinessZone:
+    type: choice
+    module: income
+    ask: Where your business is carried on
+    options: [zone1, zone2, outside, both]
+    optionLabels:
+      zone1: All in New York City (Zone 1)
+      zone2: All in Dutchess, Nassau, Orange, Putnam, Rockland, Suffolk or Westchester County (Zone 2)
+      outside: All outside those counties
+      both: Partly in those counties and partly outside, or in both zones
+    help: >-
+      Net earnings from self-employment of more than $50,000 in New York City or the seven counties near it have the
+      metropolitan commuter transportation mobility tax (MCTMT, Form IT-201, lines 54a to 54e). Splitting earnings
+      between places needs Form IT-203-A, which this app doesn't prepare.
+  nyUnder4CareExpenses:
+    type: money
+    module: credits
+    ask: Care expenses you paid for children under 4
+    help: >-
+      Of your care expenses, the part for children who were under 4 at the end of 2025. The New York City child care
+      credit counts only that part (Form IT-216, line 23).
+  nyTuition:
+    type: money
+    module: credits
+    ask: Undergraduate tuition you paid for your own courses in 2025
+    help: >-
+      Tuition only (not fees, books, room or board) for undergraduate courses at a college or university, less
+      scholarships and grants that paid it. It gives the New York college tuition credit (Form IT-272). Enter 0 for
+      graduate courses.
+  nyStudentTuition:
+    type: money
+    module: credits
+    dependant: true
+    ask: Undergraduate tuition you paid for them in 2025
+    help: >-
+      Tuition only (not fees, books, room or board) for their undergraduate courses at a college or university, less
+      scholarships and grants that paid it. It gives the New York college tuition credit (Form IT-272). Enter 0 for
+      graduate courses.
+  nyRealPropertyCredit:
+    type: boolean
+    module: credits
+    ask: You rented or owned your home in New York and lived there at least six months of 2025
+    help: >-
+      With a household income of $18,000 or less, you may get the real property tax credit (Form IT-214), which this
+      app doesn't prepare.
+  nyEstimatedPayments:
+    type: money
+    module: credits
+    ask: New York estimated tax payments
+    help: New York State, New York City and Yonkers estimated tax you paid for 2025 (Form IT-2105), any 2024 New York refund you applied to 2025, and a payment with an extension (Form IT-370) (Form IT-201, line 75).
+    default: 0
+  nySalesTax:
+    type: money
+    module: credits
+    ask: New York sales or use tax
+    help: >-
+      Sales or use tax on things you bought for use in New York without paying New York sales tax (often online or
+      out of state). Enter 0 if you owe none. The Instructions' Sales and use tax worksheet and chart help you work it
+      out (Form IT-201, line 59, which can't be left blank).
+
+lines:
+  # Whether this return has a New York return: the person preparing is a resident on December 31, or, filing jointly,
+  # either spouse is (both must be: NYSCOPE.residency says so otherwise).
+  NYS.files:
+    label: A New York return is filed with this one (1 for yes)
+    formula: 'if(person.province == "NY", 1, if(line.US.joint == 1, if(spouse.person.province == "NY", 1, 0), 0))'
+  NYS.nyc:
+    label: A New York City resident all year (1 for yes)
+    formula: 'if(answer.nyLocality == "nyc", 1, 0)'
+    source: "Instructions, item D and line 47: New York City full-year residents"
+  NYS.yonkers:
+    label: A Yonkers resident all year (1 for yes)
+    formula: 'if(answer.nyLocality == "yonkers", 1, 0)'
+    source: "Instructions, item D and line 55: Yonkers residents"
+  NYS.dependents:
+    label: Dependents listed on item H
+    formula: "if(line.US.claimsDependants == 1, sum(dependants.DEP.dependent), 0)"
+    source: "Instructions, item H: the dependents you claim on your federal return"
+
+  # Lines 1 to 19: the federal amounts, in whole dollars. Lines 4, 5, 8 and 11 to 14 and 16 stay empty: this app's
+  # Schedule 1 has business income only, and the other income it doesn't handle says so on the federal return.
+  IT201.1:
+    label: Wages, salaries, tips, etc.
+    formula: "round(line.F1040.1z, 0)"
+  IT201.2:
+    label: Taxable interest income
+    formula: "round(line.F1040.2b, 0)"
+  IT201.3:
+    label: Ordinary dividends
+    formula: "round(line.F1040.3b, 0)"
+  IT201.6:
+    label: Business income or loss
+    formula: "round(line.S1.3, 0)"
+  IT201.7:
+    label: Capital gain or loss
+    formula: "round(line.F1040.7a, 0)"
+  IT201.9:
+    label: Taxable amount of IRA distributions
+    formula: "round(line.F1040.4b, 0)"
+  IT201.10:
+    label: Taxable amount of pensions and annuities
+    formula: "round(line.F1040.5b, 0)"
+  IT201.15:
+    label: Taxable amount of social security benefits
+    formula: "round(line.F1040.6b, 0)"
+  IT201.17:
+    label: Total federal income
+    formula: "round(line.F1040.9, 0)"
+    source: "Instructions, line 17: federal Form 1040, line 9"
+  IT201.19:
+    label: Federal adjusted gross income
+    formula: "round(line.F1040.11a, 0)"
+    source: "Instructions, line 19: federal Form 1040, line 11"
+  IT201.18:
+    label: Total federal adjustments to income
+    formula: "line.IT201.17 - line.IT201.19"
+    source: "Instructions, line 18: federal Form 1040, line 10 (here line 17 less line 19, so the lines add up in whole dollars)"
+
+  # New York additions (lines 20 to 24)
+  NYS.ownOtherStateBondInterest:
+    label: This person's tax-exempt interest not from New York bonds
+    formula: "if(line.US.ownExemptInterest == 0, 0, max(0, line.US.ownExemptInterest - answer.nyBondInterest))"
+    source: "Instructions, line 20: interest on bonds of other states and their local governments, and from funds that hold them"
+  IT201.20:
+    label: Interest income on state and local bonds and obligations
+    formula: "round(line.NYS.ownOtherStateBondInterest + if(line.US.joint == 1, spouse.line.NYS.ownOtherStateBondInterest, 0), 0)"
+  NYS.ownPublicRetirement:
+    label: This person's 414(h) retirement contributions
+    formula: "if(line.US.ownWages == 0, 0, answer.nyPublicRetirement)"
+  IT201.21:
+    label: Public employee 414(h) retirement contributions
+    formula: "round(line.NYS.ownPublicRetirement + if(line.US.joint == 1, spouse.line.NYS.ownPublicRetirement, 0), 0)"
+    source: "Instructions, line 21: the 414(h) contributions shown on your W-2 if you are a public employee of New York State or its local governments"
+  IT201.24:
+    label: Federal AGI with the additions
+    formula: "line.IT201.19 + line.IT201.20 + line.IT201.21"
+    source: "Instructions, line 24: lines 19 to 23 (no 529 withdrawal or other additions, lines 22 and 23: NYSCOPE.adjustments)"
+
+  # New York subtractions (lines 25 to 33)
+  NYS.ownRetirementIncome:
+    label: This person's taxable pensions, annuities and IRA distributions
+    formula: "line.US.ownIraTaxable + line.US.ownPensionTaxable"
+  NYS.ownGovernmentPension:
+    label: This person's pension from New York State, a New York local government or the federal government
+    formula: "if(line.NYS.ownRetirementIncome == 0, 0, min(answer.nyGovernmentPension, line.NYS.ownRetirementIncome))"
+  IT201.26:
+    label: Pensions of New York State and local governments and the federal government
+    formula: "round(line.NYS.ownGovernmentPension + if(line.US.joint == 1, spouse.line.NYS.ownGovernmentPension, 0), 0)"
+  IT201.27:
+    label: Taxable amount of social security benefits
+    formula: "line.IT201.15"
+    source: "Instructions, line 27: the amount on line 15"
+  NYS.ownTreasuryInterest:
+    label: This person's interest on U.S. savings bonds and Treasury obligations, Forms 1099-INT box 3
+    formula: "sum(INT.box3)"
+  IT201.28:
+    label: Interest income on U.S. government bonds
+    formula: "round(line.NYS.ownTreasuryInterest + if(line.US.joint == 1, spouse.line.NYS.ownTreasuryInterest, 0), 0)"
+    source: "Instructions, line 28: interest on bonds and other obligations of the U.S. government"
+  NYS.ownAge59Before:
+    label: This person was 59½ before 2025 (1 for yes)
+    formula: "if(person.age >= 61, 1, if(person.age == 60 and person.birthMonth <= 6, 1, 0))"
+    source: "Instructions, line 29: 59½ before January 1, 2025 (born before July 1965)"
+  NYS.ownAge59During:
+    label: This person turned 59½ during 2025 (1 for yes)
+    formula: "if(line.NYS.ownAge59Before == 1, 0, if(person.age == 60 or (person.age == 59 and person.birthMonth <= 6), 1, 0))"
+    source: "Instructions, line 29: if you became 59½ during 2025, only the amount you received after"
+  NYS.ownPensionExclusion:
+    label: This person's pension and annuity income exclusion
+    formula: >-
+      if(line.NYS.ownRetirementIncome - line.NYS.ownGovernmentPension <= 0, 0,
+      if(line.NYS.ownAge59Before == 1, min(param.nysPensionExclusion, line.NYS.ownRetirementIncome - line.NYS.ownGovernmentPension),
+      if(line.NYS.ownAge59During == 1, min(param.nysPensionExclusion, line.NYS.ownRetirementIncome - line.NYS.ownGovernmentPension, answer.nyPensionAfter59), 0)))
+    source: >-
+      Instructions, line 29: periodic payments and IRA distributions included in federal AGI, other than a government
+      pension on line 26, up to $20,000 for each spouse on their own income
+  IT201.29:
+    label: Pension and annuity income exclusion
+    formula: "round(line.NYS.ownPensionExclusion + if(line.US.joint == 1, spouse.line.NYS.ownPensionExclusion, 0), 0)"
+  NYS.own529:
+    label: This person's New York 529 college savings program deduction
+    formula: "min(answer.ny529, param.nys529Limit)"
+  IT201.30:
+    label: New York's 529 college savings program deduction
+    formula: "round(line.NYS.own529 + if(line.US.joint == 1, spouse.line.NYS.own529, 0), 0)"
+  IT201.32:
+    label: New York subtractions
+    formula: "line.IT201.26 + line.IT201.27 + line.IT201.28 + line.IT201.29 + line.IT201.30"
+    source: "Instructions, line 32: lines 25 to 31 (no taxable refunds or other subtractions, lines 25 and 31: NYSCOPE.adjustments)"
+  IT201.33:
+    label: New York adjusted gross income
+    formula: "line.IT201.24 - line.IT201.32"
+
+  # Deductions (lines 34 to 38)
+  NYS.standard:
+    label: New York standard deduction
+    formula: >-
+      if(line.US.jointRates == 1, param.nysStandardJoint, if(line.US.hoh == 1, param.nysStandardHead,
+      if(line.US.single == 1 and line.US.claimable == 1, param.nysStandardClaimable, param.nysStandardSingle)))
+    source: "Instructions, line 34, New York State standard deduction table"
+  NYS.itemizes:
+    label: The New York return itemizes (1 for yes)
+    formula: "if(line.US.separate == 1, line.US.itemizes, if(line.IT196.49 > line.NYS.standard, 1, 0))"
+    source: >-
+      Instructions, line 34: the larger of the standard deduction and Form IT-196, whatever the federal return does;
+      filing separately, both spouses take the standard deduction unless both itemize, which this app takes as the
+      federal return's choice (both spouses make it the same there)
+  IT201.34:
+    label: Standard or itemized deduction
+    formula: "if(line.NYS.itemizes == 1, line.IT196.49, line.NYS.standard)"
+  IT201.35:
+    label: New York AGI less the deduction
+    formula: "max(0, line.IT201.33 - line.IT201.34)"
+    source: "IT-201, line 35: if line 34 is more than line 33, enter 0"
+  IT201.36:
+    label: Dependent exemption amount
+    formula: "line.NYS.dependents * param.nysDependentExemption"
+  IT201.38:
+    label: New York taxable income
+    formula: "max(0, line.IT201.35 - line.IT201.36)"
+    source: "Instructions, lines 37 and 38: line 35 less line 36; blank (zero) if line 36 is more"
+
+  # Form IT-196: New York itemized deductions, from federal Schedule A (itemized.yaml) without the 2018 changes.
+  IT196.1:
+    label: Medical and dental expenses
+    formula: "round(line.SA.1, 0)"
+  IT196.3:
+    label: 10% of federal AGI
+    formula: "round(line.IT201.19 * param.nysMedicalFloor, 0)"
+  IT196.4:
+    label: Medical and dental expenses over 10% of federal AGI
+    formula: "max(0, line.IT196.1 - line.IT196.3)"
+  IT196.5:
+    label: State and local income taxes
+    formula: "round(line.SA.5a, 0)"
+  IT196.6:
+    label: State and local real estate taxes
+    formula: "round(line.SA.5b, 0)"
+  IT196.7:
+    label: State and local personal property taxes
+    formula: "round(line.SA.5c, 0)"
+  IT196.9:
+    label: Taxes you paid
+    formula: "line.IT196.5 + line.IT196.6 + line.IT196.7"
+    source: "IT-196, line 9: lines 5 to 8, with no $40,000 limit (no other taxes, line 8)"
+  IT196.10:
+    label: Home mortgage interest and points on Form 1098
+    formula: "round(line.SA.8a, 0)"
+    source: "IT-196-I, line 10: the deductible interest and points on Form 1098 (the federal amount, which is under New York's $1,000,000 limit)"
+  IT196.15:
+    label: Interest you paid
+    formula: "line.IT196.10"
+  IT196.16:
+    label: Gifts by cash or check
+    formula: "round(line.SA.11, 0)"
+  IT196.17:
+    label: Gifts other than by cash or check
+    formula: "round(line.SA.12, 0)"
+  IT196.19:
+    label: Gifts to charity
+    formula: >-
+      if(line.SA.14 > round(line.IT201.19 * param.nysGiftLimit, 2),
+      unsupported("Gifts to charity over 50% of federal AGI are limited and carried over in New York, which this app doesn't work out"),
+      line.IT196.16 + line.IT196.17)
+    source: "IT-196, line 19: lines 16 to 18 (no carryover), while under 50% of federal AGI"
+  NYS.peaseFloor:
+    label: Federal AGI over which IT-196's total itemized deductions are limited
+    formula: >-
+      if(line.US.jointRates == 1, param.nysPeaseJoint, if(line.US.hoh == 1, param.nysPeaseHead,
+      if(line.US.separate == 1, param.nysPeaseSeparate, param.nysPeaseSingle)))
+  NYS.peaseTotal:
+    label: IT-196's deductions before the limitation
+    formula: "line.IT196.4 + line.IT196.9 + line.IT196.15 + line.IT196.19"
+    source: "IT-196-I, Line 40 worksheet, line 1: lines 4, 9, 15 and 19 (no casualty, miscellaneous or other deductions, lines 20, 28 and 39)"
+  NYS.peaseReduction:
+    label: Line 40 limitation
+    formula: >-
+      if(line.IT201.19 <= line.NYS.peaseFloor, 0, if(line.NYS.peaseTotal - line.IT196.4 <= 0, 0,
+      min(round((line.NYS.peaseTotal - line.IT196.4) * param.nysPeaseShare, 0), round((line.IT201.19 - line.NYS.peaseFloor) * param.nysPeaseRate, 0))))
+    source: "IT-196-I, Line 40 worksheet: the smaller of 80% of the deductions other than medical (line 2), or 3% of federal AGI over the limit"
+  IT196.40:
+    label: Total itemized deductions
+    formula: "line.NYS.peaseTotal - line.NYS.peaseReduction"
+  IT196.41:
+    label: State and local income taxes, subtracted
+    formula: "line.IT196.5"
+    source: "IT-196-I, line 41, A: state and local income taxes from line 5"
+  IT196.42:
+    label: Total itemized deductions less the subtraction adjustments
+    formula: "line.IT196.40 - line.IT196.41"
+  IT196.45:
+    label: Itemized deductions after the addition adjustments
+    formula: "line.IT196.42"
+    source: "IT-196, line 45: lines 42 to 44 (no college tuition on line 43 for IT-201, no additions on line 44)"
+  NYS.adjustmentFloor:
+    label: New York AGI over which IT-196's itemized deduction adjustment starts
+    formula: "if(line.US.jointRates == 1, param.nysAdjustmentFloorJoint, if(line.US.hoh == 1, param.nysAdjustmentFloorHead, param.nysAdjustmentFloorSingle))"
+  IT196.46:
+    label: Itemized deduction adjustment
+    formula: >-
+      if(line.IT201.33 <= 100000, 0,
+      if(line.IT201.33 <= param.nysAdjustmentSecond,
+      round(round(min(max(0, line.IT201.33 - line.NYS.adjustmentFloor), param.nysAdjustmentStep) / param.nysAdjustmentStep, 4) * round(line.IT196.45 * param.nysAdjustmentRate, 0), 0),
+      if(line.IT201.33 <= param.nysAdjustmentHalf,
+      round(line.IT196.45 * param.nysAdjustmentRate, 0) + round(round(min(line.IT201.33 - param.nysAdjustmentSecond, param.nysAdjustmentStep) / param.nysAdjustmentStep, 4) * round(line.IT196.45 * param.nysAdjustmentRate, 0), 0),
+      if(line.IT201.33 <= param.nysAdjustmentGiftsOnly, round(line.IT196.45 / 2, 0), 0))))
+    source: >-
+      IT-196-I, line 46: none up to $100,000 of New York AGI; Worksheet 3 up to $475,000 (25% of line 45, phased in over
+      $50,000 above $100,000, $150,000 or $200,000); Worksheet 4 up to $525,000; half of line 45 up to $1,000,000
+  IT196.47:
+    label: Itemized deduction after adjustment
+    formula: >-
+      if(line.IT201.33 <= param.nysAdjustmentGiftsOnly, line.IT196.45 - line.IT196.46,
+      if(line.IT201.33 <= param.nysAdjustmentGiftsQuarter, round(line.IT196.19 / 2, 0), round(line.IT196.19 / 4, 0)))
+    source: "IT-196-I, line 47: line 45 less line 46; over $1,000,000 of New York AGI, 50% of line 19; over $10,000,000, 25%"
+  IT196.49:
+    label: New York State itemized deduction
+    formula: "line.IT196.47"
+    source: "IT-196, line 49: lines 47 and 48 (the college tuition credit is taken on IT-272 instead of the deduction, line 48)"
+
+  # New York State tax (line 39)
+  NYS.tableMiddle:
+    label: The middle of the New York State Tax Table's row for line 38
+    formula: "if(line.IT201.38 < 13, 6.5, if(line.IT201.38 < 25, 19, if(line.IT201.38 < 50, 37.5, floor(line.IT201.38, 50) + 25)))"
+    source: >-
+      Tax Table: rows of $0 to $13, $13 to $25 and $25 to $50, then $50 wide to $65,000; each row's tax is the tax on
+      its middle, to the nearest dollar, which test/engine checks for every row
+  NYS.tableTax:
+    label: Tax from the New York State Tax Table
+    formula: >-
+      round(if(line.US.jointRates == 1, bracket(param.nysTableRatesJoint, line.NYS.tableMiddle),
+      if(line.US.hoh == 1, bracket(param.nysRatesHead, line.NYS.tableMiddle), bracket(param.nysRatesSingle, line.NYS.tableMiddle))), 0)
+  NYS.scheduleTax:
+    label: Tax on line 38 from the New York State tax rate schedule
+    formula: >-
+      if(line.US.jointRates == 1, bracket(param.nysRatesJoint, line.IT201.38),
+      if(line.US.hoh == 1, bracket(param.nysRatesHead, line.IT201.38), bracket(param.nysRatesSingle, line.IT201.38)))
+  NYS.flatRate:
+    label: Rate of the first tax computation worksheet
+    formula: "if(line.US.jointRates == 1, param.nysFlatJoint, param.nysFlatSingle)"
+  NYS.recaptureStart:
+    label: The amount the tax computation worksheet's excess of New York AGI is over
+    formula: >-
+      if(line.US.jointRates == 1, step(param.nysRecaptureStartJoint, line.IT201.38),
+      if(line.US.hoh == 1, step(param.nysRecaptureStartHead, line.IT201.38), step(param.nysRecaptureStartSingle, line.IT201.38)))
+  NYS.recaptureShare:
+    label: Share of the benefit taken back (rounded to four decimals)
+    formula: "round(min(max(0, line.IT201.33 - line.NYS.recaptureStart), param.nysRecaptureStep) / param.nysRecaptureStep, 4)"
+    source: "Instructions, Tax computation worksheets, lines 6 to 8: the excess (at most $50,000) divided by $50,000, rounded to the fourth decimal place"
+  NYS.recaptureBase:
+    label: Recapture base amount
+    formula: >-
+      if(line.US.jointRates == 1, step(param.nysRecaptureBaseJoint, line.IT201.38),
+      if(line.US.hoh == 1, step(param.nysRecaptureBaseHead, line.IT201.38), step(param.nysRecaptureBaseSingle, line.IT201.38)))
+  NYS.recaptureBenefit:
+    label: Incremental benefit amount
+    formula: >-
+      if(line.US.jointRates == 1, step(param.nysRecaptureBenefitJoint, line.IT201.38),
+      if(line.US.hoh == 1, step(param.nysRecaptureBenefitHead, line.IT201.38), step(param.nysRecaptureBenefitSingle, line.IT201.38)))
+  NYS.worksheetTax:
+    label: Tax from the tax computation worksheet
+    formula: >-
+      if(line.IT201.33 > param.nysTopFloor, line.IT201.38 * param.nysTopRate,
+      if(line.NYS.recaptureStart == param.nysRecaptureFloor,
+      line.NYS.scheduleTax + (line.IT201.38 * line.NYS.flatRate - line.NYS.scheduleTax) * line.NYS.recaptureShare,
+      line.NYS.scheduleTax + line.NYS.recaptureBase + line.NYS.recaptureBenefit * line.NYS.recaptureShare))
+    source: >-
+      Instructions, Tax computation – New York adjusted gross income of more than $107,650: the first worksheet moves
+      the schedule's tax toward the flat rate (5.5% jointly, 6% otherwise) as New York AGI goes over $107,650; the
+      others add the recapture base and a share of the incremental benefit; over $25,000,000, 10.9% of it all
+  IT201.39:
+    label: New York State tax
+    formula: >-
+      if(line.IT201.38 <= 0, 0, if(line.IT201.33 > param.nysRecaptureFloor, round(line.NYS.worksheetTax, 0),
+      if(line.IT201.38 < param.nysTaxTableLimit, line.NYS.tableTax, round(line.NYS.scheduleTax, 0))))
+    source: "Instructions, line 39: the Tax Table, the tax rate schedule from $65,000 of taxable income, or the tax computation worksheets over $107,650 of New York AGI"
+
+  # Credits and other New York State taxes (lines 40 to 46)
+  NYS.householdSize:
+    label: People counted for the household credit
+    formula: "line.NYS.dependents + if(line.US.joint == 1, 2, 1)"
+    source: "Instructions, line 40, table 2: the dependents on item H plus one for you and one for your spouse on a joint return"
+  NYS.separateSize:
+    label: People counted for the household credits filing separately
+    formula: "line.NYS.dependents + spouse.line.NYS.dependents + 2"
+    source: "Instructions, line 40, table 3: the dependents on both returns plus one for you and one for your spouse"
+  NYS.separateAgi:
+    label: Federal AGI of both spouses filing separately
+    formula: "line.IT201.19 + spouse.line.IT201.19"
+    source: "Instructions, line 40, Note 4: the federal AGI total from both returns"
+  IT201.40:
+    label: New York State household credit
+    formula: >-
+      if(line.US.claimable == 1, 0, if(line.US.single == 1, step(param.nysHouseholdSingle, line.IT201.19),
+      if(line.US.separate == 1,
+      round((step(param.nysHouseholdFirst, line.NYS.separateAgi) + step(param.nysHouseholdMore, line.NYS.separateAgi) * (min(line.NYS.separateSize, 7) - 1)) / 2, 0)
+      + round(step(param.nysHouseholdMore, line.NYS.separateAgi) / 2, 0) * max(0, line.NYS.separateSize - 7),
+      step(param.nysHouseholdFirst, line.IT201.19) + step(param.nysHouseholdMore, line.IT201.19) * (line.NYS.householdSize - 1))))
+    source: >-
+      Instructions, line 40: none if someone can claim you (item C); table 1 for Single, table 2 for the others by the
+      people in the household, and table 3 filing separately, on both spouses' federal AGI and both returns' people
+      (test/engine checks every cell of tables 2 and 3)
+  IT201.43:
+    label: New York State nonrefundable credits
+    formula: "line.IT201.40"
+    source: "Instructions, line 43: lines 40, 41 and 42 (no resident credit, line 41: NYSCOPE.withholding, or other credits, line 42)"
+  IT201.44:
+    label: New York State tax after credits
+    formula: "max(0, line.IT201.39 - line.IT201.43)"
+  IT201.46:
+    label: Total New York State taxes
+    formula: "line.IT201.44"
+    source: "Instructions, line 46: lines 44 and 45 (no other New York State taxes, line 45)"
+
+  # New York City (lines 47 to 54)
+  IT201.47:
+    label: New York City taxable income
+    formula: "if(line.NYS.nyc == 1, line.IT201.38, 0)"
+    source: "Instructions, line 47: the line 38 amount (no Charitable Gifts Trust Fund deduction)"
+  NYS.nycTableMiddle:
+    label: The middle of the New York City Tax Table's row for line 47
+    formula: "if(line.IT201.47 < 18, 9, if(line.IT201.47 < 25, 21.5, if(line.IT201.47 < 50, 37.5, floor(line.IT201.47, 50) + 25)))"
+    source: "Tax Table, New York City: rows of $0 to $18, $18 to $25 and $25 to $50, then $50 wide to $65,000, each the tax on its middle"
+  NYS.nycRateTax:
+    label: Tax on an amount at the New York City rates
+    formula: >-
+      if(line.US.jointRates == 1, bracket(param.nycRatesJoint, if(line.IT201.47 < param.nycTaxTableLimit, line.NYS.nycTableMiddle, line.IT201.47)),
+      if(line.US.hoh == 1, bracket(param.nycRatesHead, if(line.IT201.47 < param.nycTaxTableLimit, line.NYS.nycTableMiddle, line.IT201.47)),
+      bracket(param.nycRatesSingle, if(line.IT201.47 < param.nycTaxTableLimit, line.NYS.nycTableMiddle, line.IT201.47))))
+  IT201.47a:
+    label: New York City resident tax
+    formula: "if(line.IT201.47 <= 0, 0, round(line.NYS.nycRateTax, 0))"
+    source: "Instructions, line 47a: the New York City Tax Table if line 47 is less than $65,000, the New York City tax rate schedule otherwise"
+  IT201.48:
+    label: New York City household credit
+    formula: >-
+      if(line.NYS.nyc == 0, 0, if(line.US.claimable == 1, 0, if(line.US.single == 1, step(param.nycHouseholdSingle, line.IT201.19),
+      if(line.US.separate == 1,
+      round(step(param.nycHouseholdEach, line.NYS.separateAgi) * min(line.NYS.separateSize, 7) / 2, 0)
+      + round(step(param.nycHouseholdEach, line.NYS.separateAgi) / 2, 0) * max(0, line.NYS.separateSize - 7),
+      step(param.nycHouseholdEach, line.IT201.19) * line.NYS.householdSize))))
+    source: >-
+      Instructions, line 48: none if someone can claim you; table 4 for Single, table 5 by the people in the household,
+      table 6 filing separately (test/engine checks every cell of tables 5 and 6)
+  IT201.49:
+    label: New York City tax after the household credit
+    formula: "max(0, line.IT201.47a - line.IT201.48)"
+  IT201.52:
+    label: New York City taxes
+    formula: "line.IT201.49"
+    source: "Instructions, line 52: lines 49, 50 and 51 (no part-year or other New York City taxes)"
+  IT201.54:
+    label: New York City taxes after nonrefundable credits
+    formula: "line.IT201.52"
+    source: "Instructions, line 54: line 52 less line 53 (no New York City nonrefundable credits)"
+
+  # MCTMT (lines 54a to 54e): each spouse's net earnings from self-employment in a zone, when over $50,000.
+  NYS.ownZone1:
+    label: This person's net earnings from self-employment in Zone 1 over the MCTMT threshold
+    formula: 'if(line.SE.6 <= param.mctmtThreshold, 0, if(answer.nyBusinessZone == "zone1", line.SE.6, 0))'
+    source: "Instructions, lines 54a and 54b: Schedule SE, line 6, all allocated to the zone where all the business activity is, only over $50,000"
+  NYS.ownZone2:
+    label: This person's net earnings from self-employment in Zone 2 over the MCTMT threshold
+    formula: 'if(line.SE.6 <= param.mctmtThreshold, 0, if(answer.nyBusinessZone == "zone2", line.SE.6, 0))'
+  IT201.54a:
+    label: MCTMT net earnings base for Zone 1
+    formula: "round(line.NYS.ownZone1 + if(line.US.joint == 1, spouse.line.NYS.ownZone1, 0), 0)"
+  IT201.54b:
+    label: MCTMT net earnings base for Zone 2
+    formula: "round(line.NYS.ownZone2 + if(line.US.joint == 1, spouse.line.NYS.ownZone2, 0), 0)"
+  IT201.54c:
+    label: MCTMT for Zone 1
+    formula: "round(line.IT201.54a * param.mctmtZone1Rate, 0)"
+  IT201.54d:
+    label: MCTMT for Zone 2
+    formula: "round(line.IT201.54b * param.mctmtZone2Rate, 0)"
+  IT201.54e:
+    label: Total MCTMT
+    formula: "line.IT201.54c + line.IT201.54d"
+
+  # Yonkers (line 55)
+  NYS.yonkersBase:
+    label: New York State tax less the credits the Yonkers worksheet takes off
+    formula: >-
+      max(0, line.IT201.46 - (line.IT201.63 + line.IT216.14 + line.IT201.65 + line.IT201.68))
+    source: >-
+      Instructions, line 55, Yonkers worksheet, lines a to m: line 46 less the Empire State child credit, the New York
+      State care credit (IT-216, line 14), the New York State EIC and the college tuition credit (no real property tax,
+      noncustodial parent, school tax or other credits, lines c, f, h and i)
+  IT201.55:
+    label: Yonkers resident income tax surcharge
+    formula: "if(line.NYS.yonkers == 1, round(line.NYS.yonkersBase * param.yonkersRate, 0), 0)"
+    source: "Instructions, Yonkers worksheet, lines n and o: 16.75% of line m"
+  IT201.58:
+    label: Total New York City and Yonkers taxes, surcharges and MCTMT
+    formula: "line.IT201.54 + line.IT201.54e + line.IT201.55"
+    source: "Instructions, line 58: lines 54 and 54e to 57 (no Yonkers nonresident or part-year tax, lines 56 and 57)"
+  IT201.59:
+    label: Sales or use tax
+    formula: "round(answer.nySalesTax, 0)"
+    source: "Instructions, line 59: required; enter 0 if you owe none"
+  IT201.61:
+    label: Total New York State, New York City, Yonkers, sales or use taxes and MCTMT
+    formula: "line.IT201.46 + line.IT201.58 + line.IT201.59 + line.NYSCOPE.return"
+    source: "Instructions, line 61: lines 46, 58, 59 and 60 (no voluntary contributions, line 60)"
+  IT201.62:
+    label: Total taxes
+    formula: "line.IT201.61"
+
+  # Form IT-213: the Empire State child credit.
+  DEP.esccChild:
+    each: dependant
+    label: A qualifying child for the Empire State child credit (1 for yes)
+    formula: "if(dependant.age < 17, line.DEP.qualifyingChild, 0)"
+    source: >-
+      IT-213-I: your child, sibling, stepsibling or a descendant of one, who lived with you more than half the year, was
+      under 17 on December 31, didn't provide over half of their own support, filed no joint return and is a U.S.
+      citizen or national or has an ITIN (as the federal qualifying child of dependants.yaml)
+  DEP.esccYoung:
+    each: dependant
+    label: A qualifying child under 4 for the Empire State child credit (1 for yes)
+    formula: "if(dependant.age < 4, line.DEP.esccChild, 0)"
+  IT213.1:
+    label: Qualifying children under 4
+    formula: "if(line.US.claimsDependants == 1, sum(dependants.DEP.esccYoung), 0)"
+  IT213.2:
+    label: Credit for children under 4
+    formula: "line.IT213.1 * param.esccYoung"
+  IT213.3:
+    label: Qualifying children at least 4 and under 17
+    formula: "if(line.US.claimsDependants == 1, sum(dependants.DEP.esccChild), 0) - line.IT213.1"
+  IT213.4:
+    label: Credit for children at least 4 and under 17
+    formula: "line.IT213.3 * param.esccOlder"
+  IT213.5:
+    label: Credit before the reduction
+    formula: "line.IT213.2 + line.IT213.4"
+  IT213.6:
+    label: Federal AGI rounded down to the nearest $1,000
+    formula: "max(0, floor(line.IT201.19, 1000))"
+    source: "IT-213-I, line 6: round line 19 down to the nearest $1,000; zero or less, enter 0"
+  NYS.esccThreshold:
+    label: Federal AGI over which the Empire State child credit goes down
+    formula: "if(line.US.joint == 1, param.esccThresholdJoint, if(line.US.separate == 1, param.esccThresholdSeparate, param.esccThresholdSingle))"
+  IT213.7:
+    label: Federal AGI over the threshold
+    formula: "max(0, line.IT213.6 - line.NYS.esccThreshold)"
+  IT213.8:
+    label: Reduction
+    formula: "round(line.IT213.7 * param.esccReduction, 0)"
+  IT213.9:
+    label: Empire State child credit
+    formula: "max(0, line.IT213.5 - line.IT213.8)"
+  IT201.63:
+    label: Empire State child credit
+    formula: "line.IT213.9"
+
+  # Form IT-216: the New York State and New York City child and dependent care credits, from federal Form 2441
+  # (care.yaml).
+  NYS.careLimit:
+    label: Most expenses counted for the qualifying persons
+    formula: >-
+      if(line.F2441.2 >= 5, param.nysCareLimitFive, if(line.F2441.2 == 4, param.nysCareLimitFour,
+      if(line.F2441.2 == 3, param.nysCareLimitThree, if(line.F2441.2 == 2, param.nysCareLimitTwo, param.nysCareLimitOne))))
+    source: "IT-216, line 5: 3,000, 6,000, 7,500, 8,500 or 9,000 for one to five or more qualifying persons"
+  IT216.3a:
+    label: Qualified expenses paid
+    formula: "round(line.US.careExpenses, 0)"
+  IT216.3b:
+    label: Expenses left after excluded dependent care benefits
+    formula: "max(0, min(line.NYS.careLimit - round(line.F2441.25, 0), line.IT216.3a - round(line.F2441.25, 0)))"
+    source: "IT-216-I, Worksheet 1, lines 12 to 16: the line 5 limit and the expenses, each less the excluded benefits (federal Form 2441, line 25)"
+  IT216.5:
+    label: The smallest of the expenses and the limits
+    formula: "if(line.F2441.12 > 0, min(line.IT216.3a, line.IT216.3b, line.NYS.careLimit), min(line.IT216.3a, line.NYS.careLimit))"
+    source: "IT-216, line 5: the smallest of line 3a, line 3b (with dependent care benefits) and the limit for the qualifying persons"
+  IT216.6:
+    label: Your earned income
+    formula: "round(line.F2441.4, 0)"
+  IT216.7:
+    label: Your spouse's earned income, or yours
+    formula: "round(line.F2441.5, 0)"
+  IT216.8:
+    label: The smallest of lines 5, 6 and 7
+    formula: "max(0, min(line.IT216.5, line.IT216.6, line.IT216.7))"
+  IT216.10:
+    label: Decimal amount for federal AGI
+    formula: "line.F2441.8"
+    source: "IT-216-I, Table for line 10: the same chart as federal Form 2441, line 8 (.35 down to .20)"
+  IT216.11:
+    label: Line 8 times line 10
+    formula: "round(line.IT216.8 * line.IT216.10, 0)"
+  IT216.13:
+    label: New York State limitation decimal for New York AGI
+    formula: "step(param.nysCareLimitation, line.IT201.33)"
+  IT216.14:
+    label: New York State child and dependent care credit
+    formula: >-
+      if(line.US.careExpenses == 0, 0, if(line.F2441.2 == 0, 0, if(line.US.careUnmarried == 0, 0,
+      if(line.F2441.12 > 0 and line.IT216.3b <= 0, 0, round(line.IT216.11 * line.IT216.13, 0)))))
+    source: "IT-216, line 14: line 12 times line 13, for the qualifying persons and the conditions of federal Form 2441"
+  DEP.nycCareChild:
+    each: dependant
+    label: A qualifying person under 4 for the New York City care credit (1 for yes)
+    formula: "if(dependant.age < param.nycCareAge, line.DEP.careChild, 0)"
+  NYS.nycCareChildren:
+    label: Qualifying persons under 4
+    formula: "if(line.US.claimsDependants == 1, sum(dependants.DEP.nycCareChild), 0)"
+  IT216.23:
+    label: Expenses paid for children under 4
+    formula: >-
+      if(line.NYS.nycCareChildren == 0, 0, if(line.NYS.nycCareChildren == line.F2441.2, line.IT216.3a,
+      min(line.IT216.3a, round(answer.nyUnder4CareExpenses, 0))))
+    source: "IT-216, line 23: the part of line 3a paid for children under 4 (all of it when every qualifying person is under 4)"
+  NYS.nycCareShare:
+    label: Share of the expenses for children under 4 (rounded to four decimals)
+    formula: "if(line.IT216.3a == 0, 0, min(1, round(line.IT216.23 / line.IT216.3a, 4)))"
+    source: "IT-216-I, Worksheet 2, line 4"
+  NYS.nycCareDecimal:
+    label: New York City limitation decimal for federal AGI
+    formula: "step(param.nycCareLimitation, line.IT201.19)"
+    source: "IT-216-I, Worksheet 2, line 6: the New York City child and dependent care credit limitation table"
+  IT216.24:
+    label: Refundable New York City child and dependent care credit
+    formula: >-
+      if(line.NYS.nyc == 0, 0, if(line.IT201.19 > param.nycCareAgiLimit, 0, if(line.NYS.nycCareChildren == 0, 0,
+      round(round(line.IT216.14 * line.NYS.nycCareShare, 0) * line.NYS.nycCareDecimal, 0))))
+    source: "IT-216-I, Worksheet 2, lines 1 to 7: the New York State credit's share for children under 4, times the New York City limitation decimal, for federal AGI of $30,000 or less"
+  IT216.25:
+    label: New York State and New York City child and dependent care credit
+    formula: "line.IT216.14 + line.IT216.24"
+  IT201.64:
+    label: New York State and New York City child and dependent care credit
+    formula: "line.IT216.25"
+
+  # Form IT-215: the New York State and New York City earned income credits, from the federal earned income credit
+  # (eic.yaml).
+  IT215.10:
+    label: Federal earned income credit
+    formula: "round(line.F1040.27a, 0)"
+  IT215.12:
+    label: Tentative New York State earned income credit
+    formula: "round(line.IT215.10 * param.nysEicRate, 0)"
+  IT215.13:
+    label: New York State tax less the resident credit
+    formula: "line.IT201.39"
+    source: "IT-215, Worksheet B, line 5: IT-201, line 39, less the resident credit and accumulation distribution credit (none)"
+  IT215.15:
+    label: The smaller of line 13 and the household credit
+    formula: "min(line.IT215.13, line.IT201.40)"
+  IT215.16:
+    label: New York State earned income credit
+    formula: "max(0, line.IT215.12 - line.IT215.15)"
+  IT201.65:
+    label: New York State earned income credit
+    formula: "line.IT215.16"
+  NYS.nycEicRate:
+    label: New York City earned income credit rate
+    formula: >-
+      if(line.IT201.33 < 5000, 0.30, if(line.IT201.33 < 7500, 0.30 - round((line.IT201.33 - 4999) * param.nycEicStep, 4),
+      if(line.IT201.33 < 15000, 0.25, if(line.IT201.33 < 17500, 0.25 - round((line.IT201.33 - 14999) * param.nycEicStep, 4),
+      if(line.IT201.33 < 20000, 0.20, if(line.IT201.33 < 22500, 0.20 - round((line.IT201.33 - 19999) * param.nycEicStep, 4),
+      if(line.IT201.33 < 40000, 0.15, if(line.IT201.33 < 42500, 0.15 - round((line.IT201.33 - 39999) * param.nycEicStep, 4), 0.10))))))))
+    source: >-
+      IT-215-I, NYC EIC rate table and worksheet: .30 under $5,000 of New York AGI, .25 from $7,500, .20 from $17,500,
+      .15 from $22,500 and .10 from $42,500; in the bands between, the higher rate less .00002 for each dollar over
+      $4,999, $14,999, $19,999 or $39,999 (rounded to four decimals)
+  IT201.70:
+    label: New York City earned income credit
+    formula: "if(line.NYS.nyc == 0, 0, round(line.IT215.10 * line.NYS.nycEicRate, 0))"
+    source: "IT-215-I, Worksheet C, lines 1 to 3: the federal credit times the rate"
+
+  # Form IT-272: the college tuition credit, for each student (you, your spouse filing jointly and each dependent) with
+  # undergraduate tuition.
+  NYS.ownTuition:
+    label: This person's undergraduate tuition, up to $10,000
+    formula: "if(answer.paidForEducation, if(answer.educationExpenses > 0, min(answer.nyTuition, param.tuitionStudentLimit), 0), 0)"
+    source: "IT-272, Part 1, lines H and I: qualified college tuition, at most $10,000 for each student"
+  DEP.nyTuition:
+    each: dependant
+    label: This dependant's undergraduate tuition, up to $10,000
+    formula: "if(line.DEP.studentExpenses > 0, min(dependant.answer.nyStudentTuition, param.tuitionStudentLimit), 0)"
+  IT272.3:
+    label: Total qualified college tuition expenses
+    formula: >-
+      round(line.NYS.ownTuition + if(line.US.joint == 1, spouse.line.NYS.ownTuition, 0)
+      + if(line.US.claimsDependants == 1, sum(dependants.DEP.nyTuition), 0), 0)
+  IT272.credit:
+    label: College tuition credit
+    formula: >-
+      if(line.US.claimable == 1, 0, if(line.IT272.3 < param.tuitionSmall, min(line.IT272.3, param.tuitionSmallCredit),
+      round(line.IT272.3 * param.tuitionRate, 0)))
+    source: "IT-272, lines 4 to 7: the lesser of the tuition and $200 under $5,000, 4% of it otherwise; none if you can be claimed (question 1)"
+  IT201.68:
+    label: College tuition credit
+    formula: "line.IT272.credit"
+
+  # New York City school tax credits (lines 69 and 69a)
+  NYS.schoolIncome:
+    label: Income for the New York City school tax credit
+    formula: "line.IT201.19 - line.IT201.9"
+    source: "Instructions, line 69: federal AGI less IRA distributions (line 9)"
+  IT201.69:
+    label: New York City school tax credit (fixed amount)
+    formula: >-
+      if(line.NYS.nyc == 0, 0, if(line.US.claimable == 1, 0, if(line.NYS.schoolIncome > param.nycSchoolFixedLimit, 0,
+      if(line.US.jointRates == 1, param.nycSchoolFixedJoint, param.nycSchoolFixedSingle))))
+  IT201.69a:
+    label: New York City school tax credit (rate reduction amount)
+    formula: >-
+      if(line.NYS.nyc == 0, 0, if(line.US.claimable == 1, 0, if(line.NYS.schoolIncome > param.nycSchoolRateLimit, 0,
+      round(if(line.US.jointRates == 1, bracket(param.nycSchoolRatesJoint, line.IT201.47),
+      if(line.US.hoh == 1, bracket(param.nycSchoolRatesHead, line.IT201.47), bracket(param.nycSchoolRatesSingle, line.IT201.47))), 0))))
+    source: "Instructions, line 69a: on New York City taxable income (line 47), for income of $500,000 or less"
+
+  # Form IT-270: the New York City income tax elimination credit.
+  NYS.investmentIncome:
+    label: Investment income
+    formula: "round(line.F1040.2a + line.F1040.2b + line.F1040.3b + max(0, line.F1040.7a), 0)"
+    source: "IT-270-I, line D: taxable and tax-exempt interest, ordinary dividends and a capital gain net income above zero"
+  IT270.2:
+    label: Income threshold for the filing status and dependents
+    formula: >-
+      if(line.US.jointRates == 1, step(param.nycEliminationJoint, line.NYS.dependents), step(param.nycEliminationSingle, line.NYS.dependents))
+  IT270.3:
+    label: Federal AGI over the threshold
+    formula: "max(0, line.IT201.19 - line.IT270.2)"
+  IT270.5:
+    label: Share of the credit (rounded to four decimals)
+    formula: "round((param.nycEliminationRange - line.IT270.3) / param.nycEliminationRange, 4)"
+  IT270.10:
+    label: New York City taxes less the refundable care credit and the EIC
+    formula: "line.IT201.54 - (line.IT216.24 + line.IT201.70)"
+  IT270.11:
+    label: New York City income tax elimination credit
+    formula: >-
+      if(line.NYS.nyc == 0, 0, if(line.NYS.dependents == 0, 0, if(line.IT201.54 == 0, 0, if(line.IT270.3 > param.nycEliminationRange, 0,
+      if(line.NYS.investmentIncome > param.nycEliminationInvestment, 0, if(line.IT270.10 <= 0, 0, round(line.IT270.10 * line.IT270.5, 0)))))))
+    source: "IT-270, Part 1, A to D (dependents on item H, New York City tax, federal AGI at most $5,000 over the threshold, investment income of $10,000 or less), and lines 1 to 11"
+  IT201.70a:
+    label: New York City income tax elimination credit
+    formula: "line.IT270.11"
+
+  # Payments (lines 72 to 76)
+  NYS.ownWithheld:
+    label: New York State income tax withheld on this person's forms
+    formula: >-
+      sumWhere(W2.box17, W2.box15, "NY") + sumWhere(INT.box17, INT.box15, "NY") + sumWhere(DIV.box16, DIV.box14, "NY")
+      + sumWhere(NEC.box5, NEC.box6, "NY") + sumWhere(RIRA.box14, RIRA.box15, "NY") + sumWhere(R.box14, R.box15, "NY")
+    source: "Instructions, line 72: state tax withheld for New York on Forms W-2 (box 17), 1099-INT, 1099-DIV, 1099-NEC and 1099-R"
+  NYS.ownOtherStateTax:
+    label: State income tax withheld on this person's forms for another state, or for no state named
+    formula: >-
+      sum(W2.box17) + sum(INT.box17) + sum(DIV.box16) + sum(NEC.box5) + sum(RIRA.box14) + sum(R.box14) - line.NYS.ownWithheld
+  NYS.ownNycWithheld:
+    label: New York City income tax withheld on this person's forms
+    formula: 'sumWhere(W2.box19, W2.box20, "NYC") + sumWhere(RIRA.box17, RIRA.box18, "NYC") + sumWhere(R.box17, R.box18, "NYC")'
+    source: "Instructions, line 73: local tax withheld for New York City on Forms W-2 (box 19, with box 20) and 1099-R (box 17, with box 18)"
+  NYS.ownYonkersWithheld:
+    label: Yonkers income tax withheld on this person's forms
+    formula: 'sumWhere(W2.box19, W2.box20, "YONKERS") + sumWhere(RIRA.box17, RIRA.box18, "YONKERS") + sumWhere(R.box17, R.box18, "YONKERS")'
+  NYS.ownOtherLocalTax:
+    label: Local income tax withheld on this person's forms for another place, or for no place named
+    formula: "sum(W2.box19) + sum(RIRA.box17) + sum(R.box17) - line.NYS.ownNycWithheld - line.NYS.ownYonkersWithheld"
+  NYS.ownYonkersWages:
+    label: Wages on this person's Forms W-2 with Yonkers as the locality
+    formula: 'countWhere(W2.box1, W2.box20, "YONKERS")'
+  NYS.ownRetirementSlips:
+    label: This person's Forms 1099-R with New York State tax withheld (each needs a record on Form IT-1099-R)
+    formula: 'countWhere(RIRA.box14, RIRA.box15, "NY") + countWhere(R.box14, R.box15, "NY")'
+  NYS.ownW2s:
+    label: This person's Forms W-2 (each needs a record on Form IT-2)
+    formula: "count(W2.box1)"
+  IT201.72:
+    label: Total New York State tax withheld
+    formula: "round(line.NYS.ownWithheld + if(line.US.joint == 1, spouse.line.NYS.ownWithheld, 0), 0)"
+  IT201.73:
+    label: Total New York City tax withheld
+    formula: "round(line.NYS.ownNycWithheld + if(line.US.joint == 1, spouse.line.NYS.ownNycWithheld, 0), 0)"
+  IT201.74:
+    label: Total Yonkers tax withheld
+    formula: "round(line.NYS.ownYonkersWithheld + if(line.US.joint == 1, spouse.line.NYS.ownYonkersWithheld, 0), 0)"
+  NYS.ownEstimated:
+    label: This person's New York estimated tax payments
+    formula: "answer.nyEstimatedPayments"
+  IT201.75:
+    label: Total estimated tax payments and amount paid with Form IT-370
+    formula: "round(line.NYS.ownEstimated + if(line.US.joint == 1, spouse.line.NYS.ownEstimated, 0), 0)"
+  IT201.76:
+    label: Total payments
+    formula: >-
+      line.IT201.63 + line.IT201.64 + line.IT201.65 + line.IT201.68 + line.IT201.69 + line.IT201.69a + line.IT201.70
+      + line.IT201.70a + line.IT201.72 + line.IT201.73 + line.IT201.74 + line.IT201.75
+    source: "Instructions, line 76: lines 63 to 75 (no noncustodial parent EIC, real property tax credit or other refundable credits, lines 66, 67 and 71)"
+  IT201.77:
+    label: Amount overpaid
+    formula: "max(0, line.IT201.76 - line.IT201.62)"
+  IT201.78:
+    label: Refund
+    formula: "line.IT201.77"
+    source: "Instructions, line 78: line 77 less the amount applied to 2026 estimated tax (line 79, none)"
+  IT201.80:
+    label: Amount you owe
+    formula: "max(0, line.IT201.62 - line.IT201.76)"
+
+  # What the New York return needs that this app doesn't work out: each one says so on the New York return.
+  NYSCOPE.return:
+    label: New York situations this app doesn't handle yet
+    formula: >-
+      line.NYSCOPE.residency + line.NYSCOPE.locality + line.NYSCOPE.adjustments + line.NYSCOPE.withholding
+      + line.NYSCOPE.mctmt + line.NYSCOPE.realProperty
+  NYSCOPE.residency:
+    label: A nonresident or part-year resident of New York
+    formula: >-
+      if(line.US.joint == 1, if(person.province == "NY" and spouse.person.province == "NY", 0,
+      unsupported("One of you lived in another state on December 31: a joint New York return then is Form IT-203, which this app doesn't prepare")), 0)
+      + if(answer.livedInNewYorkAllYear, 0, unsupported("You didn't live in New York all year: you file Form IT-203, which this app doesn't prepare"))
+      + if(line.US.joint == 1, if(spouse.answer.livedInNewYorkAllYear, 0, unsupported("Your spouse didn't live in New York all year: you file Form IT-203, which this app doesn't prepare")), 0)
+    source: "Instructions, Who must file: Form IT-201 is for full-year residents"
+  NYSCOPE.locality:
+    label: A part-year New York City or Yonkers resident, or spouses living in different places
+    formula: >-
+      if(answer.nyLocality == "partYear", unsupported("You lived in New York City or Yonkers for part of 2025: that tax is worked out on Form IT-360.1, which this app doesn't prepare"), 0)
+      + if(line.US.joint == 1, if(spouse.answer.nyLocality == answer.nyLocality, 0,
+      unsupported("You and your spouse lived in different places in New York: the New York City or Yonkers tax of one spouse is then worked out on a separate sheet, which this app doesn't do")), 0)
+      + if(line.NYS.yonkers == 0 and line.NYS.ownYonkersWages + if(line.US.joint == 1, spouse.line.NYS.ownYonkersWages, 0) > 0,
+      unsupported("A W-2 names Yonkers, where you didn't live: Yonkers nonresident earnings tax (Form Y-203) may apply, which this app doesn't work out"), 0)
+  NYSCOPE.adjustments:
+    label: Other New York additions and subtractions
+    formula: >-
+      if(answer.nyOtherAdditions, unsupported("Other New York additions (Form IT-225) aren't worked out by this app"), 0)
+      + if(answer.nyOtherSubtractions, unsupported("Other New York subtractions (Form IT-225) aren't worked out by this app"), 0)
+      + if(line.US.joint == 1, if(spouse.answer.nyOtherAdditions, unsupported("Other New York additions (Form IT-225) aren't worked out by this app"), 0)
+      + if(spouse.answer.nyOtherSubtractions, unsupported("Other New York subtractions (Form IT-225) aren't worked out by this app"), 0), 0)
+  NYSCOPE.withholding:
+    label: State or local tax withheld for another state or place
+    formula: >-
+      if(line.NYS.ownOtherStateTax + if(line.US.joint == 1, spouse.line.NYS.ownOtherStateTax, 0) > 0,
+      unsupported("A form shows state tax withheld for another state, or doesn't say for which state: check box 15 of each W-2 (and the state box of each 1099) at Confirm. Tax paid to another state may give a resident credit (Form IT-112-R), which this app doesn't work out"), 0)
+      + if(line.NYS.ownOtherLocalTax + if(line.US.joint == 1, spouse.line.NYS.ownOtherLocalTax, 0) > 0,
+      unsupported("A form shows local tax withheld for a place other than New York City or Yonkers, or doesn't name the place: check box 20 of each W-2 (and box 18 of each 1099-R) at Confirm"), 0)
+  NYSCOPE.mctmt:
+    label: Self-employment earnings both inside and outside the MCTMT zones
+    formula: >-
+      if(line.SE.6 > param.mctmtThreshold, if(answer.nyBusinessZone == "both", unsupported("Your business is carried on both inside and outside the MCTMT zones: the net earnings are allocated on Form IT-203-A, which this app doesn't prepare"), 0), 0)
+      + if(line.US.joint == 1, if(spouse.line.SE.6 > param.mctmtThreshold, if(spouse.answer.nyBusinessZone == "both", unsupported("Your spouse's business is carried on both inside and outside the MCTMT zones: the net earnings are allocated on Form IT-203-A, which this app doesn't prepare"), 0), 0), 0)
+  NYSCOPE.realProperty:
+    label: The real property tax credit
+    formula: >-
+      if(line.IT201.19 > 18000, 0, if(answer.nyRealPropertyCredit,
+      unsupported("With federal AGI of $18,000 or less and a New York home, you may get the real property tax credit (Form IT-214), which this app doesn't work out"), 0))
+    source: "IT-214-I: household gross income of $18,000 or less"

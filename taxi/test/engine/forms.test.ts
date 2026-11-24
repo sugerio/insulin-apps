@@ -12,7 +12,7 @@ import { PROVINCE_NAMES, type Province } from "../../src/app/shared/people.ts";
 // every amount written on them against the case's expected lines, the bracket tables against the tax lines, and
 // the other kinds of field (Step 1's name and dates, ticks, counts).
 
-const rules = rulesFor(2025)!;
+const rules = rulesFor("ca", 2025)!;
 const GOLDEN = resolve(import.meta.dirname, "../golden/ca-2025");
 
 interface Golden {
@@ -501,5 +501,103 @@ describe("form rules", () => {
       compile({ fields: {}, tables: [{ brackets: "brackets", amount: "line.R.net", parts: [{ columns: "1", amount: "1", over: "2", times: "3", tax: "4" }] }] }),
     ).toThrow(/no preprinted columns/);
     expect(() => compile({ fields: {} }, { pages: 1, rows: {}, sha256: "b".repeat(64) })).not.toThrow();
+  });
+
+  describe("a table of dependants", () => {
+    const compileTable = (dependants: object, more: object = {}) =>
+      compileRules(
+        [
+          {
+            dir: "rules/xx/2025",
+            files: [
+              { path: "rules/xx/2025/year.yaml", data: { country: "xx", year: 2025, filingUnit: "person", extends: null, result: ["R.net"] } },
+              {
+                path: "rules/xx/2025/rules.yaml",
+                data: {
+                  lines: {
+                    "R.net": { label: "Net", formula: "sum(dependants.D.kid)" },
+                    "D.kid": { label: "Kid", each: "dependant", formula: "if(dependant.age < 17, 1, 0)" },
+                  },
+                  questions: {
+                    relation: { type: "choice", ask: "Relation", dependant: true, options: ["child", "other"] },
+                    moved: { type: "boolean", ask: "Moved", default: false },
+                  },
+                  forms: { F1: { title: "F", url: "https://example.com/f.pdf", applies: "true", fields: {}, dependants } },
+                  formLayout: {
+                    F1: {
+                      sha256: "a".repeat(64),
+                      pages: 1,
+                      rows: { "cost@1": [1, 500, 700], "cost@2": [1, 500, 680] },
+                      plain: ["cost@1", "cost@2"],
+                      text: { "name@1": [1, 40, 700, 100], "name@2": [1, 40, 680, 100], "relation@1": [1, 150, 700, 60], "relation@2": [1, 150, 680, 60] },
+                      ticks: { "kid@1": [1, 300, 700], "kid@2": [1, 300, 680], more: [1, 20, 720] },
+                      ...more,
+                    },
+                  },
+                  formsToAdd: { B: { form: "Schedule B", why: "for interest", applies: "line.R.net > 1" } },
+                },
+              },
+            ],
+          },
+        ],
+        () => "test",
+      );
+
+    it("places each field once per column, at <name>@<column>, a second field at its place's, and the 'more' box", () => {
+      const compiled = compileTable({
+        which: "line.D.kid == 1",
+        when: "answer.moved",
+        columns: 2,
+        more: "more",
+        fields: {
+          name: { text: "name" },
+          kid: { tick: "line.D.kid == 1" },
+          older: { tick: "line.D.kid == 0", when: "answer.moved", place: "kid" },
+          relation: { choice: "relation", labels: { child: "Child" } },
+          cost: "dependant.age * 10",
+        },
+      });
+      const table = compiled.forms.F1!.dependants!;
+      expect([table.which, table.when, table.columns, table.more]).toEqual(["line.D.kid == 1", "answer.moved", 2, [1, 20, 720]]);
+      expect(table.fields.filter((field) => field.column === 2).map(({ key, kind }) => [key, kind])).toEqual([
+        ["name@2", "text"],
+        ["kid@2", "tick"],
+        ["kid@2", "tick"],
+        ["relation@2", "choice"],
+        ["cost@2", "amount"],
+      ]);
+      expect(compiled.formsToAdd).toEqual([{ id: "B", form: "Schedule B", why: "for interest", applies: "line.R.net > 1" }]);
+    });
+
+    it("works a field out from the dependant's side, and its condition from the return's", () => {
+      // A dependant's side reads dependant. and their lines, not the return's lines or answers.
+      expect(() => compileTable({ which: "line.R.net > 0", columns: 1, fields: {} })).toThrow();
+      expect(() => compileTable({ which: "true", columns: 1, fields: { cost: "answer.moved" } })).toThrow();
+      // A condition reads the return's side, not the dependant's.
+      expect(() => compileTable({ which: "true", columns: 1, fields: { kid: { tick: "true", when: "dependant.age > 1" } } })).toThrow();
+      expect(() => compileTable({ which: "true", columns: 1, when: "dependant.age > 1", fields: {} })).toThrow();
+    });
+
+    it("refuses an unknown fact, a choice with an answer its question hasn't, a place the form doesn't have, and a wrong forms-to-add", () => {
+      expect(() => compileTable({ which: "true", columns: 1, fields: { name: { text: "ssn" } } })).toThrow();
+      expect(() => compileTable({ which: "true", columns: 1, fields: { name: { choice: "relation", labels: { cousin: "Cousin" } } } })).toThrow(/relation has no answer cousin/);
+      expect(() => compileTable({ which: "true", columns: 1, fields: { name: { choice: "moved", labels: {} } } })).toThrow(/isn't a choice question about a dependant/);
+      expect(() => compileTable({ which: "true", columns: 3, fields: { name: { text: "name" } } })).toThrow(/no text box or boxes name@3/);
+      expect(() => compileTable({ which: "true", columns: 1, more: "most", fields: {} })).toThrow(/no tick box most/);
+      expect(() =>
+        compileRules(
+          [
+            {
+              dir: "rules/xx/2025",
+              files: [
+                { path: "rules/xx/2025/year.yaml", data: { country: "xx", year: 2025, filingUnit: "person", extends: null, result: [] } },
+                { path: "rules/xx/2025/rules.yaml", data: { formsToAdd: { B: { form: "B", why: "w", applies: "line.R.none > 1" } } } },
+              ],
+            },
+          ],
+          () => "test",
+        ),
+      ).toThrow();
+    });
   });
 });

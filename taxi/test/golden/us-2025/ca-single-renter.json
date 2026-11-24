@@ -1,0 +1,145 @@
+{
+  "about": "California, single, $45,000 of wages and $300 of Treasury interest: the Tax Table, the personal exemption credit, the renter's credit and withholding",
+  "input": {
+    "country": "us",
+    "year": 2025,
+    "people": [
+      {
+        "id": "p1",
+        "name": "Ivy Chen",
+        "role": "self",
+        "birthDate": "1995-04-04",
+        "province": "CA",
+        "residentAllYear": true
+      }
+    ],
+    "family": {
+      "maritalStatus": "single",
+      "dependants": []
+    },
+    "answers": {
+      "p1": {
+        "hasWages": true,
+        "hasInterest": true,
+        "hasTipsOrOvertime": false,
+        "canBeClaimed": false,
+        "isBlind": false,
+        "estimatedPayments": "0",
+        "hasCarLoan": false,
+        "hasSelfEmployment": false,
+        "hasStudentLoan": false,
+        "paidForEducation": false,
+        "hasDividends": false,
+        "hasBrokerSales": false,
+        "hasIraDistribution": false,
+        "hasPension": false,
+        "hasSocialSecurity": false,
+        "hasLossCarryover": false,
+        "hasHsa": false,
+        "hasIraContribution": false,
+        "hasItemized": false,
+        "hasOtherIncome": false,
+        "paidForCare": false,
+        "livedInCaliforniaAllYear": true,
+        "caFullYearCoverage": true,
+        "caUseTax": "0",
+        "caPaidRent": true,
+        "caEstimatedPayments": "0"
+      }
+    },
+    "slips": [
+      {
+        "id": "p1-w2-0",
+        "person": "p1",
+        "type": "W2",
+        "issuer": "Bay Cafe",
+        "boxes": {
+          "1": "45000",
+          "2": "4200",
+          "4": "2790",
+          "5": "45000",
+          "6": "652.50",
+          "15": "CA",
+          "16": "45000",
+          "17": "1100"
+        }
+      },
+      {
+        "id": "p1-int-0",
+        "person": "p1",
+        "type": "INT",
+        "issuer": "TreasuryDirect",
+        "boxes": {
+          "1": "200",
+          "3": "300"
+        }
+      }
+    ]
+  },
+  "expected": {
+    "p1": {
+      "F1040.19": "0",
+      "F1040.27a": "0",
+      "F1040.28": "0",
+      "S8812.12": "0",
+      "F1040.1a": "45000",
+      "F1040.1e": "0",
+      "S3.2": "0",
+      "F1040.2a": "0",
+      "F1040.2b": "500",
+      "F1040.9": "45500",
+      "F1040.11a": "45500",
+      "F1040.12e": "15750",
+      "F1040.13b": "0",
+      "F1040.13a": "0",
+      "F1040.8": "0",
+      "F1040.10": "0",
+      "F1040.15": "29750",
+      "F1040.16": "3335",
+      "F8959.7": "0",
+      "F8960.17": "0",
+      "F1040.24": "3335",
+      "F1040.25c": "0",
+      "S3.11": "0",
+      "F1040.33": "4200",
+      "F1040.34": "865",
+      "F1040.37": "0",
+      "SA.4": "0",
+      "SA.5e": "1100",
+      "SA.17": "1100",
+      "US.standard": "15750",
+      "F6251.4": "45500",
+      "F6251.6": "0",
+      "F6251.11": "0",
+      "F1040.18": "3335",
+      "F540.13": "45500",
+      "F540.14": "300",
+      "F540.16": "0",
+      "F540.17": "45200",
+      "F540.18": "5706",
+      "F540.19": "39494",
+      "F540.31": "944",
+      "F540.32": "153",
+      "F540.35": "791",
+      "F540.40": "0",
+      "F540.46": "60",
+      "F540.48": "731",
+      "F540.61": "0",
+      "F540.62": "0",
+      "F540.63": "0",
+      "F540.64": "731",
+      "F540.71": "1100",
+      "F540.72": "0",
+      "F540.75": "0",
+      "F540.76": "0",
+      "F540.77": "0",
+      "F540.78": "1100",
+      "F540.91": "0",
+      "F540.115": "369",
+      "F540.111": "0",
+      "SP.21": "45200",
+      "SP.24": "0",
+      "F3514.19": "45000"
+    }
+  }
+}

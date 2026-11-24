@@ -7,7 +7,7 @@ import { rulesFor } from "../../src/app/shared/rules/index.ts";
 
 // What keeps a return from its forms, its own and, for a couple, what is left on the other return it reads.
 
-const rules = rulesFor(2025)!;
+const rules = rulesFor("ca", 2025)!;
 const result = (personId: string, overrides: Partial<PersonResult> = {}): PersonResult => ({
   personId,
   lines: [{ id: "T1.48400", label: "Refund", value: "100", status: "complete" }],
@@ -102,7 +102,7 @@ describe("printBlockers", () => {
 
 describe("formsToAdd", () => {
   const golden = (name: string): EngineInput => JSON.parse(readFileSync(resolve(import.meta.dirname, `../golden/ca-2025/${name}.json`), "utf8")).input;
-  const named = (input: EngineInput, personId = "p1") => formsToAdd(new Evaluation(rules, input), personId).map(({ form }) => form.split(",")[0]);
+  const named = (input: EngineInput, personId = "p1") => formsToAdd(rules, new Evaluation(rules, input), personId).map(({ form }) => form.split(",")[0]);
 
   it.each([
     ["single-employee-on", []],

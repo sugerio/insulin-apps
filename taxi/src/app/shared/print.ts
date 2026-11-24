@@ -1,5 +1,4 @@
 import type { Evaluation, PersonResult } from "./engine/evaluate.ts";
-import { parseFormula } from "./engine/formula.ts";
 import { documentName, type RuleSet } from "./engine/rules.ts";
 import { isIssueOf, type Issue } from "./people.ts";
 import { leftInModule } from "./progress.ts";
@@ -38,9 +37,20 @@ export interface PrintYear {
   slips: Slip[];
 }
 
+/** What the rules asked about a dependant and is still unanswered. */
+export interface DependantAnswers {
+  missing: { question: string; ask: string }[];
+  estimates: { question: string; ask: string; assumed: string | boolean }[];
+}
+
 const SLIP_MODULES = ["income", "deductions", "credits"] as const;
 
-export function printBlockers(year: PrintYear, person: PersonResult, spouse?: { name: string; result: PersonResult }): PrintBlocker[] {
+export function printBlockers(
+  year: PrintYear,
+  person: PersonResult,
+  spouse?: { name: string; result: PersonResult; joint?: boolean },
+  dependants: { name: string; result: DependantAnswers }[] = [],
+): PrintBlocker[] {
   const own = slipsLeft(year, person);
   const blockers: PrintBlocker[] = [
     ...year.issues.filter((issue) => isIssueOf(issue, person.personId)).map((issue) => ({ text: issue.message, issue: issue.code })),
@@ -53,7 +63,8 @@ export function printBlockers(year: PrintYear, person: PersonResult, spouse?: { 
   const incomplete = person.lines.some((line) => line.status !== "complete");
   if (spouse) {
     const theirs = spouse.result.personId;
-    const on = `${spouse.name}'s return:`;
+    // On a joint return the spouse's items are this return's: named by person, not by return.
+    const on = spouse.joint ? `${spouse.name}:` : `${spouse.name}'s return:`;
     const other = slipsLeft(year, spouse.result);
     // Their facts, slips and what the app doesn't handle never show in a line's status, so they hold this return
     // whatever it reads. The issues the returns share are listed above already.
@@ -72,6 +83,13 @@ export function printBlockers(year: PrintYear, person: PersonResult, spouse?: { 
       );
     }
   }
+  // The questions about the dependants this return claims, by the dependant (asked on Personal info).
+  for (const { name, result } of dependants) {
+    blockers.push(
+      ...result.missing.map((item) => ({ text: `${name}: needed: ${item.ask}.`, question: item.question })),
+      ...result.estimates.map((item) => ({ text: `${name}: not answered yet: ${item.ask}.`, question: item.question, unanswered: true as const })),
+    );
+  }
   // A line can still be incomplete without a reason above (a value the rules can't work out): never print it.
   if (blockers.length === 0 && incomplete) blockers.push({ text: "Some lines of the return can't be worked out yet." });
   return blockers;
@@ -89,56 +107,9 @@ function slipsLeft(year: PrintYear, result: PersonResult): { toConfirm: number; 
 
 const toConfirmText = (count: number) => `${count} ${count === 1 ? "slip is" : "slips are"} not confirmed yet.`;
 
-// Forms a return needs that aren't printed (forms.yaml has no layout for them), in the order they're attached: the
-// worksheet and Finish name them, for the person to fill in and file with the forms. Each applies when its formula,
-// read like a printed form's `applies`, is yes.
-const FORMS_TO_ADD = [
-  // CWB.schedule: a benefit on line 45300, or advance payments on an RC210 slip (Step 4), even with no benefit.
-  {
-    form: "Schedule 6 (5005-S6), Canada Workers Benefit for residents of Quebec",
-    why: "for the Canada workers benefit on line 45300 of your return, or its advance payments on an RC210 slip",
-    applies: 'person.province == "QC" and line.CWB.schedule == 1',
-  },
-  {
-    form: "Schedule 6 (5009-S6), Canada Workers Benefit for residents of Alberta",
-    why: "for the Canada workers benefit on line 45300 of your return, or its advance payments on an RC210 slip",
-    applies: 'person.province == "AB" and line.CWB.schedule == 1',
-  },
-  {
-    form: "Schedule 6 (5014-S6), Canada Workers Benefit for residents of Nunavut",
-    why: "for the Canada workers benefit on line 45300 of your return, or its advance payments on an RC210 slip",
-    applies: 'person.province == "NU" and line.CWB.schedule == 1',
-  },
-  {
-    form: "Schedule MB428-A (5007-A), Manitoba Family Tax Benefit",
-    why: "for the family tax benefit on line 41 of your MB428",
-    applies: 'person.province == "MB" and line.MB428.41 > 0',
-  },
-  {
-    form: "Schedule ON(S11) (5006-S11), Ontario Tuition and Education Amounts",
-    why: "for your unused Ontario tuition and education amounts",
-    applies: 'person.province == "ON" and answer.unusedProvincialTuition > 0',
-  },
-  {
-    form: "Schedule BC(S11) (5010-S11), British Columbia Tuition Amounts",
-    why: "for your British Columbia tuition amounts",
-    applies: 'person.province == "BC" and answer.unusedProvincialTuition + line.BCS11.2 > 0',
-  },
-  {
-    form: "Schedule SK(S11) (5008-S11), Saskatchewan Tuition and Education Amounts",
-    why: "for your unused Saskatchewan tuition and education amounts",
-    applies: 'person.province == "SK" and answer.unusedProvincialTuition > 0',
-  },
-  {
-    form: "Schedule D, Solidarity Tax Credit (Revenu Québec)",
-    why: "with your TP-1, to get the solidarity tax credit: Revenu Québec works it out from this schedule",
-    applies: 'person.province == "QC"',
-  },
-].map((each) => ({ ...each, applies: parseFormula(each.applies) }));
-
-/** The forms a person's return needs that aren't printed, each with what it is for. */
-export function formsToAdd(evaluation: Evaluation, personId: string): { form: string; why: string }[] {
-  return FORMS_TO_ADD.filter((each) => evaluation.evaluate(personId, each.applies).value === true).map(({ form, why }) => ({ form, why }));
+/** The forms a person's return needs that aren't printed (forms.yaml `formsToAdd`), each with what it is for. */
+export function formsToAdd(rules: RuleSet, evaluation: Evaluation, personId: string): { form: string; why: string }[] {
+  return rules.formsToAdd.filter((each) => evaluation.evaluate(personId, each.applies).value === true).map(({ form, why }) => ({ form, why }));
 }
 
 /** The spouse's result, for printBlockers: the other adult of the year, when both returns are prepared here. */

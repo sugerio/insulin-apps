@@ -1,10 +1,10 @@
-import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from "pdf-lib";
+import { PDFArray, PDFDict, PDFDocument, PDFName, StandardFonts, rgb, type PDFFont, type PDFPage } from "pdf-lib";
 import { formAmount, type FilledForm, type PlacedMark } from "../../shared/engine/forms.ts";
 import { decryptPdf } from "./pdf-decrypt.ts";
 
-// Builds one return's PDF: each form (the CRA's, then for a resident of Quebec Revenu Québec's) with its amounts written
-// in, then a worksheet that says how every number was worked out. The forms are print versions (no form fields), so
-// each amount is drawn at its place on the form's own page: dollars ending just left of the line between dollars and
+// Builds one return's PDF: each form (the CRA's, then for a resident of Quebec Revenu Québec's; or the IRS's) with its
+// amounts written in, then a worksheet that says how every number was worked out. Each amount is drawn at its place on
+// the form's own page (the IRS's fill-in forms lose their empty fields first, so a reader shows only what is drawn): dollars ending just left of the line between dollars and
 // cents, cents just right of it (in a box with no such line, the amount with its decimal point ends at the box's end).
 // A whole number ends where its dollars would; text starts at its box (smaller when it doesn't fit), a date has one
 // digit per cell, and a tick is an X.
@@ -35,12 +35,19 @@ export async function buildReturnPdf(forms: { filled: FilledForm; template: Uint
   for (const { filled, template } of forms) {
     // Revenu Québec's forms are encrypted (with an empty password), which pdf-lib can't read.
     const source = await PDFDocument.load(await decryptPdf(template));
+    dropFields(source);
     const pages = await out.copyPages(source, source.getPageIndices());
     for (const page of pages) out.addPage(page);
     for (const amount of filled.amounts) {
       const page = pages[amount.page - 1];
       if (!page) continue;
       const { dollars, cents } = formAmount(amount.value, filled.form.url.includes("revenuquebec.ca") ? "minus" : "brackets", filled.language);
+      // A whole-dollar form (California's) prints its own cents: a whole amount is written as dollars only, and a
+      // decimal (FTB 3506's line 7, FTB 3514's line 26) with its decimal point.
+      if (filled.form.wholeDollars && amount.value.isInteger()) {
+        page.drawText(dollars, { x: amount.x - 2.5 - font.widthOfTextAtSize(dollars, SIZE), y: amount.y, size: SIZE, font, color: INK });
+        continue;
+      }
       if (amount.plain) {
         const text = `${dollars}${filled.language === "fr" ? "," : "."}${cents}`;
         page.drawText(text, { x: amount.x - 2.5 - font.widthOfTextAtSize(text, SIZE), y: amount.y, size: SIZE, font, color: INK });
@@ -59,6 +66,23 @@ export async function buildReturnPdf(forms: { filled: FilledForm; template: Uint
   out.setProducer("Taxi");
   out.setCreator("Taxi");
   return out.save();
+}
+
+/**
+ * Takes a fill-in form's fields off its pages, and its form (with the XFA part, which a reader would show instead of
+ * the pages): what Taxi writes is drawn on the page, and an empty field left over it would be shaded, or typed into
+ * over Taxi's text.
+ */
+function dropFields(doc: PDFDocument): void {
+  for (const page of doc.getPages()) {
+    const annots = page.node.lookupMaybe(PDFName.of("Annots"), PDFArray);
+    if (!annots) continue;
+    const kept = annots.asArray().filter((ref) => doc.context.lookupMaybe(ref, PDFDict)?.get(PDFName.of("Subtype"))?.toString() !== "/Widget");
+    if (kept.length === annots.size()) continue;
+    if (kept.length === 0) page.node.delete(PDFName.of("Annots"));
+    else page.node.set(PDFName.of("Annots"), doc.context.obj(kept));
+  }
+  doc.catalog.delete(PDFName.of("AcroForm"));
 }
 
 /** Writes a name, a date, a whole number or a tick at its place. */

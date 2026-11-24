@@ -1,6 +1,6 @@
-import { useMemo, useState } from "react";
-import { ChevronRight } from "lucide-react";
-import type { Estimate } from "#shared";
+import { useMemo, useState, type ReactNode } from "react";
+import { ChevronRight, ChevronUp } from "lucide-react";
+import { balancesOf, type Estimate } from "#shared";
 import { Button } from "@/components/ui/button.tsx";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet.tsx";
 import { cn } from "@/lib/utils.ts";
@@ -10,27 +10,39 @@ import { rulesFor } from "../shared/rules/index.ts";
 import { formatMoney, formatRate } from "../lib/format.ts";
 import { useEstimate } from "../lib/useYearData.ts";
 import { ResourceView } from "./Feedback.tsx";
-import { useReturn } from "./YearFrame.tsx";
+import { useReturn, useYear } from "./YearFrame.tsx";
 
-// The open return's estimate above each step: its refund or balance owing in one line, and on "Details" its result
-// lines in a panel from the side, with "why" for each line, which the browser works out with the same engine and the
-// input the server sent (both adults' returns are worked out together, so what one adult's return takes from the
-// other's shows in the "why").
+// The open return's estimate beside or above each step: its refund or balance owing, and its result lines with "why"
+// for each, which the browser works out with the same engine and the input the server sent (both adults' returns are
+// worked out together, so what one adult's return takes from the other's shows in the "why"). On a wide screen the lines
+// show in a column beside the step (EstimateColumn); otherwise, or with that column collapsed, the bar above the step
+// says the result in one line and "Details" opens the lines in a panel from the side (EstimateSummary).
 
+/** The result in one line, as "Estimate" over the refund or balance owing. */
+function Headline({ large = false }: { large?: boolean }) {
+  const resource = useEstimate();
+  const { owner } = useReturn();
+  const { year } = useYear();
+  const result = resource.status === "ready" ? headline(rulesFor(year.country, year.year)!, resource.data, owner.id) : null;
+  return (
+    <span className={cn("flex flex-col leading-tight", !large && "items-end")}>
+      <span className="text-xs text-muted-foreground">Estimate</span>
+      <span className={cn("font-semibold tabular-nums", large && "text-lg")}>
+        {resource.status === "loading" ? "…" : result ? result.text : "Not worked out yet"}
+        {result?.estimate ? <span className="ml-1 text-xs font-normal text-muted-foreground">est.</span> : null}
+      </span>
+    </span>
+  );
+}
+
+/** The bar's estimate: the result in one line, and "Details" opening its lines in a panel from the side. */
 export function EstimateSummary() {
   const resource = useEstimate();
-  const { person } = useReturn();
-  const result = resource.status === "ready" ? headline(resource.data, person.id) : null;
+  const { owner } = useReturn();
   return (
     <Sheet>
       <div className="flex items-center gap-3" role="group" aria-label="Estimate">
-        <span className="flex flex-col items-end leading-tight">
-          <span className="text-xs text-muted-foreground">Estimate</span>
-          <span className="font-semibold tabular-nums">
-            {resource.status === "loading" ? "…" : result ? result.text : "Not worked out yet"}
-            {result?.estimate ? <span className="ml-1 text-xs font-normal text-muted-foreground">est.</span> : null}
-          </span>
-        </span>
+        <Headline />
         <SheetTrigger asChild>
           <Button variant="outline" size="sm" aria-label="Estimate details">
             Details
@@ -40,7 +52,7 @@ export function EstimateSummary() {
       <SheetContent side="right" className="w-full overflow-y-auto sm:max-w-md">
         <SheetHeader>
           <SheetTitle>Estimate</SheetTitle>
-          <SheetDescription className="wrap-anywhere">{person.name}'s return. Select a line to see why.</SheetDescription>
+          <SheetDescription className="wrap-anywhere">{owner.name}'s return. Select a line to see why.</SheetDescription>
         </SheetHeader>
         <div className="px-4 pb-6">
           <ResourceView resource={resource}>{(estimate) => <EstimateBody estimate={estimate} />}</ResourceView>
@@ -50,31 +62,53 @@ export function EstimateSummary() {
   );
 }
 
+/**
+ * The column beside a step on a wide screen: whose return it is, then its estimate with every result line, kept in
+ * view as the step scrolls. `lines={false}` shows only the result (Finish shows the lines itself). It collapses into
+ * the bar above the step.
+ */
+export function EstimateColumn({ switcher, lines, onCollapse }: { switcher: ReactNode; lines: boolean; onCollapse: () => void }) {
+  const resource = useEstimate();
+  return (
+    <aside aria-label="Return and estimate" className="sticky top-4 flex max-h-[calc(100svh-2rem)] min-w-0 flex-col gap-3 overflow-y-auto rounded-xl border bg-card p-3">
+      <div className="flex items-start justify-between gap-1">
+        <div className="min-w-0 flex-1">{switcher}</div>
+        <Button variant="ghost" size="icon-sm" onClick={onCollapse} aria-label="Collapse the estimate" title="Collapse the estimate">
+          <ChevronUp aria-hidden="true" />
+        </Button>
+      </div>
+      <div className="flex flex-col gap-2 border-t px-1 pt-3" role="group" aria-label="Estimate">
+        <Headline large />
+        {lines ? (
+          <>
+            <p className="text-xs text-muted-foreground">Select a line to see why.</p>
+            <ResourceView resource={resource}>{(estimate) => <EstimateBody estimate={estimate} />}</ResourceView>
+          </>
+        ) : null}
+      </div>
+    </aside>
+  );
+}
+
 /** The refund or balance owing, and whether an answer assumed for now went into it. */
-function headline(estimate: Estimate, personId: string): { text: string; estimate: boolean } | null {
+function headline(rules: RuleSet, estimate: Estimate, personId: string): { text: string; estimate: boolean } | null {
   const lines = estimate.result.people.find((person) => person.personId === personId)?.lines ?? [];
-  const one = (refundId: string, owingId: string) => {
-    const refund = lines.find((line) => line.id === refundId);
-    const owing = lines.find((line) => line.id === owingId);
-    if (!refund || !owing || refund.value === null || owing.value === null) return null;
-    const owes = Number(owing.value) > 0;
-    const line = owes ? owing : refund;
-    return { owes, value: line.value!, estimate: line.status === "estimate" };
-  };
-  const federal = one("T1.48400", "T1.48500");
-  if (!federal) return null;
-  // A resident of Quebec also files the TP-1, whose refund or balance is shown after the federal one.
-  const hasQuebec = lines.some((line) => line.id === "TP1.478");
-  const quebec = hasQuebec ? one("TP1.478", "TP1.479") : null;
-  if (hasQuebec && !quebec) return null;
-  const text = (each: { owes: boolean; value: string }, name: string) => `${name}${each.owes ? "balance owing" : "refund"} ${formatMoney(each.value)}`;
-  if (!quebec) return { text: text(federal, "").replace(/^./, (first) => first.toUpperCase()), estimate: federal.estimate };
-  return { text: `${text(federal, "Federal ")} · ${text(quebec, "Quebec ")}`, estimate: federal.estimate || quebec.estimate };
+  // The federal refund or balance, and a resident of Quebec's after it (TP-1 lines 478 and 479).
+  const balances = balancesOf(rules, lines);
+  if (balances.length === 0 || balances.some((balance) => balance.refund.value === null || balance.owing.value === null)) return null;
+  const parts = balances.map((balance) => {
+    const owes = Number(balance.owing.value) > 0;
+    const line = owes ? balance.owing : balance.refund;
+    const name = balances.length > 1 ? `${balance.name} ` : "";
+    return { text: `${name}${owes ? "balance owing" : "refund"} ${formatMoney(line.value!)}`, estimate: line.status === "estimate" };
+  });
+  return { text: parts.map((part) => part.text).join(" · ").replace(/^./, (first) => first.toUpperCase()), estimate: parts.some((part) => part.estimate) };
 }
 
 function EstimateBody({ estimate }: { estimate: Estimate }) {
-  const { person: owner } = useReturn();
-  const rules = rulesFor(estimate.input.year)!;
+  const { owner } = useReturn();
+  const { year } = useYear();
+  const rules = rulesFor(year.country, estimate.input.year)!;
   const evaluation = useMemo(() => new Evaluation(rules, estimate.input), [rules, estimate.input]);
   const person = estimate.result.people.find((each) => each.personId === owner.id);
   if (!person) return <p className="text-sm text-muted-foreground">Nothing to work out yet.</p>;

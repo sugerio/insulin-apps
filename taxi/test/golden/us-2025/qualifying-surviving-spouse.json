@@ -1,0 +1,113 @@
+{
+  "about": "A widow whose spouse died in 2024, with a child of 10 at home all year: joint return rates and deduction",
+  "input": {
+    "country": "us",
+    "year": 2025,
+    "people": [
+      {
+        "id": "p1",
+        "name": "Lee Grant",
+        "role": "self",
+        "birthDate": "1979-09-09",
+        "province": "FL",
+        "residentAllYear": true
+      }
+    ],
+    "family": {
+      "maritalStatus": "widowed",
+      "dependants": [
+        {
+          "id": "d1",
+          "name": "Noa Grant",
+          "birthDate": "2015-03-03",
+          "answers": {
+            "relationship": "child",
+            "monthsWithYou": "12",
+            "hasSSN": true,
+            "paidOwnSupport": false,
+            "filedJointReturn": false,
+            "citizenOrResident": true
+          }
+        }
+      ]
+    },
+    "answers": {
+      "p1": {
+        "hasWages": true,
+        "hasInterest": false,
+        "hasTipsOrOvertime": false,
+        "canBeClaimed": false,
+        "isBlind": false,
+        "estimatedPayments": "0",
+        "hasCarLoan": false,
+        "hasSelfEmployment": false,
+        "hasStudentLoan": false,
+        "paidForEducation": false,
+        "hasDividends": false,
+        "hasBrokerSales": false,
+        "hasIraDistribution": false,
+        "hasPension": false,
+        "hasSocialSecurity": false,
+        "hasLossCarryover": false,
+        "hasHsa": false,
+        "hasIraContribution": false,
+        "hasItemized": false,
+        "hasOtherIncome": false,
+        "paidForCare": false,
+        "spouseDiedIn2025": false,
+        "spouseDiedIn2023Or2024": true,
+        "paidHalfOfHome": true,
+        "hasValidSSN": true
+      }
+    },
+    "slips": [
+      {
+        "id": "p1-w2-0",
+        "person": "p1",
+        "type": "W2",
+        "issuer": "Harbor Inc",
+        "boxes": {
+          "1": "65000",
+          "2": "4000",
+          "4": "4030",
+          "5": "65000",
+          "6": "942.50"
+        }
+      }
+    ]
+  },
+  "expected": {
+    "p1": {
+      "F1040.19": "2200",
+      "F1040.27a": "0",
+      "F1040.28": "0",
+      "S8812.12": "2200",
+      "F1040.1a": "65000",
+      "F1040.1e": "0",
+      "S3.2": "0",
+      "F1040.2a": "0",
+      "F1040.2b": "0",
+      "F1040.9": "65000",
+      "F1040.11a": "65000",
+      "F1040.12e": "31500",
+      "F1040.13b": "0",
+      "F1040.13a": "0",
+      "F1040.8": "0",
+      "F1040.10": "0",
+      "F1040.15": "33500",
+      "F1040.16": "3546",
+      "F8959.7": "0",
+      "F8960.17": "0",
+      "F1040.24": "1346",
+      "F1040.25c": "0",
+      "S3.11": "0",
+      "F1040.33": "4000",
+      "F1040.34": "2654",
+      "F1040.37": "0",
+      "F6251.4": "65000",
+      "F6251.6": "0",
+      "F6251.11": "0",
+      "F1040.18": "3546"
+    }
+  }
+}

@@ -1,0 +1,190 @@
+{
+  "about": "Married filing jointly, two children, $5,000 of dependent care benefits and $8,000 of care: the benefits excluded, the credit on the $1,000 left",
+  "input": {
+    "country": "us",
+    "year": 2025,
+    "people": [
+      {
+        "id": "p1",
+        "name": "Kay Lund",
+        "role": "self",
+        "birthDate": "1984-08-08",
+        "province": "FL",
+        "residentAllYear": true
+      },
+      {
+        "id": "p2",
+        "name": "Eli Lund",
+        "role": "spouse",
+        "birthDate": "1985-09-09",
+        "province": "FL",
+        "residentAllYear": true
+      }
+    ],
+    "family": {
+      "maritalStatus": "married",
+      "dependants": [
+        {
+          "id": "d1",
+          "name": "Ivy Lund",
+          "birthDate": "2019-01-01",
+          "answers": {
+            "relationship": "child",
+            "monthsWithYou": "12",
+            "hasSSN": true,
+            "paidOwnSupport": false,
+            "filedJointReturn": false,
+            "citizenOrResident": true,
+            "careExpenses": "5000"
+          }
+        },
+        {
+          "id": "d2",
+          "name": "Ned Lund",
+          "birthDate": "2021-02-02",
+          "answers": {
+            "relationship": "child",
+            "monthsWithYou": "12",
+            "hasSSN": true,
+            "paidOwnSupport": false,
+            "filedJointReturn": false,
+            "citizenOrResident": true,
+            "careExpenses": "3000"
+          }
+        }
+      ],
+      "filingStatus": "joint"
+    },
+    "answers": {
+      "p1": {
+        "hasWages": true,
+        "hasInterest": false,
+        "hasTipsOrOvertime": false,
+        "canBeClaimed": false,
+        "isBlind": false,
+        "estimatedPayments": "0",
+        "hasCarLoan": false,
+        "hasSelfEmployment": false,
+        "hasStudentLoan": false,
+        "paidForEducation": false,
+        "hasDividends": false,
+        "hasBrokerSales": false,
+        "hasIraDistribution": false,
+        "hasPension": false,
+        "hasSocialSecurity": false,
+        "hasLossCarryover": false,
+        "hasHsa": false,
+        "hasIraContribution": false,
+        "hasItemized": false,
+        "hasOtherIncome": false,
+        "paidForCare": true,
+        "householdEmployer": false,
+        "priorYearCare": false,
+        "careBenefitsCarriedOver": "0",
+        "careBenefitsForfeited": "0",
+        "spouseNeedsCare": false,
+        "hasValidSSN": true,
+        "studentOrDisabledMonths": "0"
+      },
+      "p2": {
+        "hasWages": true,
+        "hasInterest": false,
+        "hasTipsOrOvertime": false,
+        "canBeClaimed": false,
+        "isBlind": false,
+        "estimatedPayments": "0",
+        "hasCarLoan": false,
+        "hasSelfEmployment": false,
+        "hasStudentLoan": false,
+        "paidForEducation": false,
+        "hasDividends": false,
+        "hasBrokerSales": false,
+        "hasIraDistribution": false,
+        "hasPension": false,
+        "hasSocialSecurity": false,
+        "hasLossCarryover": false,
+        "hasHsa": false,
+        "hasIraContribution": false,
+        "hasItemized": false,
+        "hasOtherIncome": false,
+        "hasValidSSN": true,
+        "studentOrDisabledMonths": "0"
+      }
+    },
+    "slips": [
+      {
+        "id": "p1-w2-0",
+        "person": "p1",
+        "type": "W2",
+        "issuer": "Fabrikam",
+        "boxes": {
+          "1": "70000",
+          "2": "6000",
+          "4": "4340",
+          "5": "75000",
+          "6": "1087.50",
+          "10": "5000"
+        }
+      },
+      {
+        "id": "p2-w2-0",
+        "person": "p2",
+        "type": "W2",
+        "issuer": "Tailspin",
+        "boxes": {
+          "1": "30000",
+          "2": "1500",
+          "4": "1860",
+          "5": "30000",
+          "6": "435"
+        }
+      }
+    ]
+  },
+  "expected": {
+    "p1": {
+      "F1040.19": "4400",
+      "F1040.27a": "0",
+      "F1040.28": "0",
+      "S8812.12": "4400",
+      "F1040.1a": "100000",
+      "F1040.1e": "0",
+      "S3.2": "200",
+      "F1040.2a": "0",
+      "F1040.2b": "0",
+      "F1040.9": "100000",
+      "F1040.11a": "100000",
+      "F1040.12e": "31500",
+      "F1040.13b": "0",
+      "F1040.13a": "0",
+      "F1040.8": "0",
+      "F1040.10": "0",
+      "F1040.15": "68500",
+      "F1040.16": "7746",
+      "F8959.7": "0",
+      "F8960.17": "0",
+      "F1040.24": "3146",
+      "F1040.25c": "0",
+      "S3.11": "0",
+      "F1040.33": "7500",
+      "F1040.34": "4354",
+      "F1040.37": "0",
+      "F6251.4": "100000",
+      "F6251.6": "0",
+      "F6251.11": "0",
+      "F1040.18": "7746",
+      "F2441.2": "2",
+      "F2441.3": "1000",
+      "F2441.4": "70000",
+      "F2441.5": "30000",
+      "F2441.6": "1000",
+      "F2441.8": "0.2",
+      "F2441.9a": "200",
+      "F2441.12": "5000",
+      "F2441.15": "5000",
+      "F2441.16": "8000",
+      "F2441.25": "5000",
+      "F2441.26": "0"
+    }
+  }
+}

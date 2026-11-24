@@ -26,7 +26,7 @@ interface DecisionRow {
 export async function listHints(db: Db, orgId: string, year: number): Promise<HintList> {
   const { row, view } = await openYear(db, orgId, year);
   const [workspace, decisions] = await Promise.all([loadWorkspace(db, orgId, row.id), loadDecisions(db, orgId, row.id)]);
-  const rules = rulesFor(year)!;
+  const rules = rulesFor(view.country, year)!;
   const adults = new Set(view.adults.map((adult) => adult.personId));
   const decisionOf = (personId: string, hint: string) => decisions.find((each) => each.person_id === personId && each.hint === hint);
   const offers = hintsOf(view, workspace);
@@ -68,7 +68,7 @@ export async function listHints(db: Db, orgId: string, year: number): Promise<Hi
 export async function decideHint(db: Db, caller: Caller, year: number, hintId: string, input: DecideHint, now: number): Promise<TaxYear> {
   const { row, view } = await openYear(db, caller.orgId, year);
   checkAdult(view, input.personId, "personId");
-  const hint = rulesFor(year)!.hints.get(hintId);
+  const hint = rulesFor(view.country, year)!.hints.get(hintId);
   if (!hint) throw notFound(`There is no hint ${hintId} for ${year}`);
   const decisions = await loadDecisions(db, caller.orgId, row.id);
   const current = decisions.find((each) => each.person_id === input.personId && each.hint === hintId);
@@ -170,10 +170,11 @@ export function stillApplied<T extends Pick<DecisionRow, "person_id" | "hint" | 
 
 /** The hints the year's returns get from what is stored; none when the rules can't read it (logged). */
 export function hintsOf(view: TaxYear, workspace: Workspace): FoundHint[] {
-  const rules = rulesFor(view.year);
+  const rules = rulesFor(view.country, view.year);
   if (!rules || view.adults.length === 0) return [];
   try {
-    return findHints(rules, engineInputOf(view, workspace));
+    // A hint that files the year the other way works out from what is stored, as the year would be filed.
+    return findHints(rules, engineInputOf(view, workspace), (_, filingStatus) => engineInputOf({ ...view, filingStatus }, workspace));
   } catch (error) {
     logError("hints_failed", error, { year: view.year });
     return [];

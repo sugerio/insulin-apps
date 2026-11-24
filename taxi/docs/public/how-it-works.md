@@ -14,7 +14,8 @@ Taxi keeps its own database. Each organization has one profile, with:
 - **People:** name, relationship and birth date.
 - **Tax years:** who is in each one, the marital status on December 31, and a revision number that changes with each
   save. Both returns are prepared together when your spouse is in the year.
-- **Returns:** for each adult and year, the province on December 31 and whether they lived in Canada all year.
+- **Returns:** for each adult and year, the province (a US year: the state) on December 31 and whether they lived in
+  the country all year.
 - **Slips:** each adult's slips for the year, box by box as printed, and whether someone confirmed them against the
   paper slip (who and when).
 - **Answers:** each adult's answers to the year's questions, such as an RRSP deduction or whether they had rental
@@ -34,9 +35,13 @@ own Anthropic credential: an admin stores it on the app's **Integrations** page 
 `https://api.anthropic.com`, sent as the named header `x-api-key`). Insulin Apps adds the key to each request, so Taxi
 never holds it. Without that credential, files are stored but not read, and slips can be typed in by hand.
 
-With the file, Claude gets the year, the names of the people in the year, and the slip types the app reads with their
-boxes. It answers in a fixed shape: each slip's type, the name on it, the issuer, its boxes and the boxes it couldn't
-read clearly. It is told never to return a social insurance number. Taxi then checks the answer itself: only known
+With the file, Claude gets the year, the names of the people in the year, the slip types the app reads with their
+boxes, and notes on reading the documents of the year's country (`reading` in `year.yaml`). On a US year these are
+Forms W-2, 1099-INT, 1099-DIV, 1099-B, 1099-R, 1099-NEC, SSA-1099, 1098, 1098-T and 1098-E. A box that holds a code,
+not an amount (a 1099-R's distribution code, the part of Form 8949 a 1099-B summary is for), is kept only when the
+code is one the form can have; any other is marked for a person to enter at Confirm. It answers in a fixed shape: each slip's type, the name on it, the
+issuer, its boxes and the boxes it couldn't read clearly. It is told never to return an identification number (a
+social insurance, social security or employer identification number), and no field of the answer can hold one. Taxi then checks the answer itself: only known
 slip types and boxes are kept, amounts must be numbers, a slip for another year is left out (the message says which),
 and a slip already in the year, or printed twice in the file, isn't added again. Slips are never merged: a reading is
 left out when it adds nothing to a slip already here (or to a fuller copy in the same file) of the same type, person
@@ -50,7 +55,9 @@ assessment, say) is best uploaded one document at a time. Each slip goes to the 
 naming someone else in the year, such as a child's T4, isn't added, since they have no return here, and the message
 says whose it is; a receipt for them, such as a child's medical receipt, stays in the return it was uploaded in. A
 slip whose name matches no one in the year stays there too, marked to check whose it is. Every slip read this way
-starts unconfirmed: someone checks it against the paper slip at Confirm, where **Download the original file** saves the
+starts unconfirmed: someone checks it against the paper slip, on the Income, Deductions or Credits step that shows it
+(each slip shows open there; Save and continue saves any changes and confirms the slips the step shows; a slip
+removed there leaves its file on Upload) or at Confirm, where **Download the original file** saves the
 file it was read from (on Upload documents, a file's name downloads it). A box AI wasn't sure of is marked; one it
 couldn't read at all shows as couldn't be read, and the slip can't be confirmed until that box is entered (0 when it
 is blank on the paper slip). Saving the slip's other boxes leaves it marked.
@@ -94,7 +101,7 @@ boxes. Money is computed exactly, without rounding errors, and rounded to the ce
 
 ## Hints
 
-Hints are checks on each return, in `rules/ca/2025/hints.yaml` next to the other rules. A hint shows when its condition
+Hints are checks on each return, in `rules/<country>/2025/hints.yaml` next to the other rules. A hint shows when its condition
 holds for the return. It is one of:
 
 - **A saving:** a change of answers, such as claiming both spouses' donations on one return. The engine computes both
@@ -111,6 +118,16 @@ The 2025 hints: claim both spouses' donations on one return; claim the family's 
 the lower income); transfer this year's tuition the student doesn't need to their spouse; deduct RRSP contributions in a
 later year when this year's income is in the lowest bracket; RRSP contributions over the limit; and interest without a
 T5. Moving claims between the returns works only when both spouses' returns are prepared here.
+
+The 2025 US hints are something to know, on the return of the person preparing when it is a joint return:
+
+- **Filing jointly or separately would cost less.** For a married couple, the engine works out the year again with the
+  other filing status, from what is stored, and the hint shows only when the two of you would pay $1 or more less.
+  Filed separately, it has both of you take the standard deduction and puts every dependant on your return. You change
+  the filing status on Personal info: it changes who is on each return, so the hint can't be applied for you.
+- **A penalty for paying too little during the year** (Form 2210), when the amount owed is $1,000 or more and more
+  than a tenth of the tax on the return. The app doesn't work out the penalty.
+- **Interest without a 1099-INT**, which is taxable even when no form was sent.
 
 ## The CRA's forms
 
@@ -139,8 +156,36 @@ left under Before you file, and the download is refused.
   under the other person, with a link to it.
 - A row Taxi doesn't know (a dependant's details, each expense category, a property's address) is left blank. The
   worksheet lists the slips, the answers, the hints applied and every line with its formula.
+- A US return prints on the IRS's own forms: Form 1040, then each schedule and form the return uses, in the order the
+  IRS asks them attached (Schedules 1, 1-A, 2, 3, A, C, D and SE, Forms 2441 and 6251, Schedule EIC, Schedule 8812,
+  and Forms 8863, 8889, 8995, 8959 and 8960). On a joint return each spouse with a business gets their own Schedule C
+  and SE, and each spouse with an HSA their own Form 8889. Form 6251 prints when there is an AMT to pay. Form 8863 has
+  one page 2 for each student: Taxi fills it in for one student (you, else your spouse, else the first dependant), and
+  the worksheet asks for a copy for each other student. Lines 6 and 17 of Form 8863 are decimals: the digit before the
+  point and the three after it are written in their own boxes.
+  Taxi downloads them from irs.gov the first time, and checks each file the same way. Form 1040 gets the names, the
+  filing status, the standard deduction boxes, and each dependent's name, relationship and boxes (four at most; the
+  worksheet lists the others for the statement the IRS asks for). Each schedule gets the names on the return. On a
+  joint return there is one PDF, the person preparing's. The social security numbers, the address and the questions
+  Taxi doesn't ask stay blank, as do the care providers on Form 2441.
+- A California return prints after the federal forms on the Franchise Tax Board's own forms: Form 540, then Schedule
+  CA (540) when California changes an amount or Form 540 itemizes, Schedule P (540) when there is a California AMT or
+  the care credit is limited by it, form FTB 3506 for the care credit and form FTB 3514 for the California earned
+  income, Young Child and Foster Youth tax credits. Taxi downloads them from ftb.ca.gov and checks each file the same
+  way. FTB's fill-in fields carry their line in a tooltip, which places each row; FTB's forms are in whole dollars, with
+  the cents printed. Form 540 gets the names, the filing status, the exemption boxes and up to three dependents. The
+  worksheet says where to mail Form 540 (apart from the federal return) and what is left to fill in.
+- A New York return prints after the federal forms on the Department of Taxation and Finance's own forms: Form IT-201,
+  then Form IT-196 when the New York return itemizes, Forms IT-213, IT-215, IT-216, IT-270 and IT-272 when their credit
+  applies, and Form IT-2 (and Form IT-1099-R for a 1099-R with New York tax withheld) last. Taxi downloads them from
+  tax.ny.gov and checks each file the same way. New York's fill-in fields are named for their line (`Line33`, `6
+  dollars15`), which places each row; the forms are in whole dollars, with the cents printed. Form IT-201 gets the names,
+  the filing status, items B and C, the months in New York City or Yonkers, and up to seven dependents. Form IT-2 gets a
+  record for each W-2, two to a form: the employer, boxes 1, 8, 10 and 11, and the state and local boxes. The worksheet
+  asks for another copy when there are more, says where to mail Form IT-201 (apart from the federal return), and what is
+  left to fill in.
 - A form the return needs that Taxi doesn't print is named under "Forms to fill in yourself", on Finish and on the
-  worksheet: Revenu Québec's Schedule D (the solidarity tax credit) for a resident of Quebec; Schedule 6 for residents
+  worksheet: for a US return, Schedule B when the taxable interest is more than $1,500; Revenu Québec's Schedule D (the solidarity tax credit) for a resident of Quebec; Schedule 6 for residents
   of Quebec, Alberta or Nunavut (5005-S6, 5009-S6, 5014-S6) when the return gets the Canada workers benefit or reports
   its advance payments from an RC210 slip, even with no benefit; Schedule MB428-A for Manitoba's family tax benefit;
   and Schedule ON(S11), BC(S11) or SK(S11) for provincial tuition amounts.

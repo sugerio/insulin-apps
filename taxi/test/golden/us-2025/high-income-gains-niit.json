@@ -1,0 +1,125 @@
+{
+  "about": "Single, $520,000 of wages, a $60,000 long-term gain and $10,000 of qualified dividends: part taxed at 20%, the net investment income tax and the Additional Medicare Tax",
+  "input": {
+    "country": "us",
+    "year": 2025,
+    "people": [
+      {
+        "id": "p1",
+        "name": "Vera Stone",
+        "role": "self",
+        "birthDate": "1970-07-07",
+        "province": "FL",
+        "residentAllYear": true
+      }
+    ],
+    "family": {
+      "maritalStatus": "single",
+      "dependants": []
+    },
+    "answers": {
+      "p1": {
+        "hasWages": true,
+        "hasInterest": false,
+        "hasTipsOrOvertime": false,
+        "canBeClaimed": false,
+        "isBlind": false,
+        "estimatedPayments": "0",
+        "hasCarLoan": false,
+        "hasSelfEmployment": false,
+        "hasStudentLoan": false,
+        "paidForEducation": false,
+        "hasDividends": true,
+        "hasBrokerSales": true,
+        "hasIraDistribution": false,
+        "hasPension": false,
+        "hasSocialSecurity": false,
+        "hasLossCarryover": false,
+        "hasHsa": false,
+        "hasIraContribution": false,
+        "hasItemized": false,
+        "hasOtherIncome": false,
+        "paidForCare": false
+      }
+    },
+    "slips": [
+      {
+        "id": "p1-w2-0",
+        "person": "p1",
+        "type": "W2",
+        "issuer": "Big Corp",
+        "boxes": {
+          "1": "520000",
+          "2": "140000",
+          "4": "10918.20",
+          "5": "520000",
+          "6": "10420"
+        }
+      },
+      {
+        "id": "p1-div-0",
+        "person": "p1",
+        "type": "DIV",
+        "issuer": "Big Broker",
+        "boxes": {
+          "1A": "10000",
+          "1B": "10000"
+        }
+      },
+      {
+        "id": "p1-b-0",
+        "person": "p1",
+        "type": "B",
+        "issuer": "Big Broker",
+        "boxes": {
+          "CAT": "D",
+          "1D": "100000",
+          "1E": "40000"
+        }
+      }
+    ]
+  },
+  "expected": {
+    "p1": {
+      "F1040.19": "0",
+      "F1040.27a": "0",
+      "F1040.28": "0",
+      "S8812.12": "0",
+      "F1040.1a": "520000",
+      "F1040.1e": "0",
+      "S3.2": "0",
+      "F1040.2a": "0",
+      "F1040.2b": "0",
+      "F1040.9": "590000",
+      "F1040.11a": "590000",
+      "F1040.12e": "15750",
+      "F1040.13b": "0",
+      "F1040.13a": "0",
+      "F1040.8": "0",
+      "F1040.10": "0",
+      "F1040.15": "574250",
+      "F1040.16": "158577.25",
+      "F8959.7": "2880",
+      "F8960.17": "2660",
+      "F1040.24": "164117.25",
+      "F1040.25c": "2880",
+      "S3.11": "0",
+      "F1040.33": "142880",
+      "F1040.34": "0",
+      "F1040.37": "21237.25",
+      "F1040.3a": "10000",
+      "F1040.3b": "10000",
+      "F1040.7a": "60000",
+      "F8960.12": "70000",
+      "SD.7": "0",
+      "SD.15": "60000",
+      "SD.16": "60000",
+      "SD.21": "0",
+      "QDW.5": "504250",
+      "F6251.4": "590000",
+      "F6251.6": "501900",
+      "F6251.11": "0",
+      "F1040.18": "158577.25"
+    }
+  }
+}

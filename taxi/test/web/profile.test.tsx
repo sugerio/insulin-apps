@@ -98,7 +98,7 @@ describe("starting a year", () => {
   it("sends you to the Profile when you haven't added yourself", async () => {
     await renderApp("/returns");
     const link = await screen.findByRole("link", { name: "Go to Profile" });
-    expect(link.getAttribute("href")).toBe(`/profile?back=${encodeURIComponent("/returns?start=2025")}`);
+    expect(link.getAttribute("href")).toBe(`/profile?back=${encodeURIComponent("/returns?start=2025&country=ca")}`);
   });
 
   it("says what the app covers, without calling what it handles not yet done", async () => {
@@ -119,7 +119,7 @@ describe("starting a year", () => {
     expect(checkbox("Sam Martin").getAttribute("aria-checked")).toBe("false");
     expect(checkbox("Jamie Martin").getAttribute("aria-checked")).toBe("false");
     fireEvent.click(checkbox("Sam Martin"));
-    expect(screen.getByRole("link", { name: "Add a new person" }).getAttribute("href")).toBe(`/profile?back=${encodeURIComponent("/returns?start=2025")}`);
+    expect(screen.getByRole("link", { name: "Add a new person" }).getAttribute("href")).toBe(`/profile?back=${encodeURIComponent("/returns?start=2025&country=ca")}`);
     fireEvent.click(screen.getByRole("button", { name: "Start 2025" }));
     await waitFor(() => expect(router.state.location.pathname).toMatch(/^\/returns\/2025\/[0-9a-f-]{36}\/personal$/));
     const year = (await (await server.call("GET", "/api/years/2025")).json()) as TaxYear;
@@ -144,6 +144,29 @@ describe("starting a year", () => {
     const year = (await (await server.call("GET", "/api/years/2025")).json()) as TaxYear;
     expect(year.members.map((id) => year.people.find((person) => person.id === id)?.name)).toEqual(["Alex Martin", "Jamie Martin"]);
     expect(year.prepareTogether).toBe(false);
+  });
+
+  it("changes who is in the year on Personal info too", async () => {
+    const { server } = await renderApp("/returns/2025/personal", { seed: seedCouple });
+    const people = await screen.findByRole("region", { name: "People in 2025" });
+    expect(within(people).getByText("Sam Martin")).toBeTruthy();
+    fireEvent.click(within(people).getByRole("button", { name: "Change" }));
+    expect(within(people).getByRole("link", { name: "Add a new person" }).getAttribute("href")).toMatch(/^\/profile\?back=%2Freturns%2F2025%2F.+%2Fpersonal$/);
+    fireEvent.click(checkbox("Jamie Martin"));
+    fireEvent.click(within(people).getByRole("button", { name: "Save people" }));
+    await waitFor(async () => {
+      const year = (await (await server.call("GET", "/api/years/2025")).json()) as TaxYear;
+      expect(year.members.map((id) => year.people.find((person) => person.id === id)?.name)).toEqual(["Alex Martin", "Sam Martin", "Jamie Martin"]);
+    });
+    expect(await within(people).findByText("Jamie Martin")).toBeTruthy();
+    fireEvent.click(within(people).getByRole("button", { name: "Change" }));
+    fireEvent.click(checkbox("Jamie Martin"));
+    expect(within(people).getByText("Taking Jamie Martin out of 2025")).toBeTruthy();
+    fireEvent.click(within(people).getByRole("button", { name: "Save people" }));
+    await waitFor(async () => {
+      const year = (await (await server.call("GET", "/api/years/2025")).json()) as TaxYear;
+      expect(year.members.map((id) => year.people.find((person) => person.id === id)?.name)).toEqual(["Alex Martin", "Sam Martin"]);
+    });
   });
 
   it("opens the choice straight away on the way back from the Profile", async () => {

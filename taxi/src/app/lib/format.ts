@@ -49,8 +49,9 @@ export function formatMoney(value: string): string {
   return `${value.startsWith("-") ? "-" : ""}$${GROUPED.format(BigInt(whole))}.${cents}`;
 }
 
-/** A slip box as printed: a count (months of study) as a number, an amount as money. */
-export function formatBox(slipType: { counts: string[] } | undefined, box: string, value: string): string {
+/** A slip box as printed: a code as it is, a count (months of study) as a number, an amount as money. */
+export function formatBox(slipType: { counts: string[]; codes?: Record<string, string[]> } | undefined, box: string, value: string): string {
+  if (slipType?.codes?.[box]) return value;
   return slipType?.counts.includes(box) ? GROUPED.format(Number(value)) : formatMoney(value);
 }
 

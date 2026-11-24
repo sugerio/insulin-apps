@@ -1,0 +1,163 @@
+{
+  "about": "California, head of household, a child of 9, $24,000 of freelance income with California withholding: the California EITC on business income",
+  "input": {
+    "country": "us",
+    "year": 2025,
+    "people": [
+      {
+        "id": "p1",
+        "name": "Lena Ortiz",
+        "role": "self",
+        "birthDate": "1988-04-04",
+        "province": "CA",
+        "residentAllYear": true
+      }
+    ],
+    "family": {
+      "maritalStatus": "single",
+      "dependants": [
+        {
+          "id": "d1",
+          "name": "Sol Ortiz",
+          "birthDate": "2016-08-08",
+          "answers": {
+            "relationship": "child",
+            "monthsWithYou": "12",
+            "hasSSN": true,
+            "paidOwnSupport": false,
+            "filedJointReturn": false,
+            "citizenOrResident": true
+          }
+        }
+      ]
+    },
+    "answers": {
+      "p1": {
+        "hasWages": false,
+        "hasInterest": false,
+        "hasTipsOrOvertime": false,
+        "canBeClaimed": false,
+        "isBlind": false,
+        "estimatedPayments": "0",
+        "hasCarLoan": false,
+        "hasSelfEmployment": true,
+        "hasStudentLoan": false,
+        "paidForEducation": false,
+        "hasDividends": false,
+        "hasBrokerSales": false,
+        "hasIraDistribution": false,
+        "hasPension": false,
+        "hasSocialSecurity": false,
+        "hasLossCarryover": false,
+        "hasHsa": false,
+        "hasIraContribution": false,
+        "hasItemized": false,
+        "hasOtherIncome": false,
+        "businessIncome": "0",
+        "businessExtras": "none",
+        "businessAdvertising": "0",
+        "businessCar": "0",
+        "businessContractLabor": "0",
+        "businessInsurance": "0",
+        "businessProfessional": "0",
+        "businessOffice": "0",
+        "businessRent": "0",
+        "businessSupplies": "2000",
+        "businessTravel": "0",
+        "businessMeals": "0",
+        "businessUtilities": "0",
+        "businessOtherExpenses": "0",
+        "paidForCare": false,
+        "paidHalfOfHome": true,
+        "hasValidSSN": true,
+        "livedInCaliforniaAllYear": true,
+        "caFullYearCoverage": true,
+        "caUseTax": "0",
+        "caPaidRent": false,
+        "caEstimatedPayments": "0"
+      }
+    },
+    "slips": [
+      {
+        "id": "p1-nec-0",
+        "person": "p1",
+        "type": "NEC",
+        "issuer": "Studio",
+        "boxes": {
+          "1": "24000",
+          "5": "200",
+          "6": "CA"
+        }
+      }
+    ]
+  },
+  "expected": {
+    "p1": {
+      "F1040.19": "0",
+      "F1040.27a": "4328",
+      "F1040.28": "1700",
+      "S8812.12": "2200",
+      "F1040.1a": "0",
+      "F1040.1e": "0",
+      "S3.2": "0",
+      "F1040.2a": "0",
+      "F1040.2b": "0",
+      "F1040.9": "22000",
+      "F1040.11a": "20445.75",
+      "F1040.12e": "23625",
+      "F1040.13b": "0",
+      "F1040.13a": "0",
+      "F1040.8": "22000",
+      "F1040.10": "1554.25",
+      "F1040.15": "0",
+      "F1040.16": "0",
+      "F8959.7": "0",
+      "F8960.17": "0",
+      "F1040.24": "3108.5",
+      "F1040.25c": "0",
+      "S3.11": "0",
+      "F1040.33": "6028",
+      "F1040.34": "2919.5",
+      "F1040.37": "0",
+      "SC.31": "22000",
+      "SE.12": "3108.5",
+      "S1.3": "22000",
+      "S1.15": "1554.25",
+      "S2.4": "3108.5",
+      "F8995.15": "0",
+      "F8959.18": "0",
+      "F6251.4": "20445.75",
+      "F6251.6": "0",
+      "F6251.11": "0",
+      "F1040.18": "0",
+      "F540.13": "20446",
+      "F540.14": "0",
+      "F540.16": "0",
+      "F540.17": "20446",
+      "F540.18": "11412",
+      "F540.19": "9034",
+      "F540.31": "90",
+      "F540.32": "628",
+      "F540.35": "0",
+      "F540.40": "0",
+      "F540.46": "0",
+      "F540.48": "0",
+      "F540.61": "0",
+      "F540.62": "0",
+      "F540.63": "0",
+      "F540.64": "0",
+      "F540.71": "200",
+      "F540.72": "0",
+      "F540.75": "375",
+      "F540.76": "0",
+      "F540.77": "0",
+      "F540.78": "575",
+      "F540.91": "0",
+      "F540.115": "575",
+      "F540.111": "0",
+      "SP.21": "20446",
+      "SP.24": "0",
+      "F3514.19": "20446"
+    }
+  }
+}

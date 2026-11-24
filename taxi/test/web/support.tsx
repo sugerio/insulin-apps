@@ -1,4 +1,4 @@
-import { fireEvent, render, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { createMemoryRouter, RouterProvider } from "react-router";
 import { afterEach, expect, onTestFinished, vi } from "vitest";
 import { AuthProvider } from "../../src/app/auth/AuthProvider.tsx";
@@ -57,6 +57,9 @@ export function holdRequests(match: (method: string, path: string) => boolean) {
   });
   return { release, held: () => held };
 }
+
+/** A step's own Save: the last on the page, as each slip open on it has one too. */
+export const pageSave = () => screen.getAllByRole("button", { name: "Save" }).at(-1)!;
 
 /**
  * Clicks a control once it is enabled: one an earlier request disabled is enabled again only once that request has

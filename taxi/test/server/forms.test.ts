@@ -10,7 +10,7 @@ import { VIEWER, startServer, type TestServer } from "../support/server.ts";
 // repository, so these tests print on blank stand-in pages of the same size and count, and read the amounts back from
 // where they were written.
 
-const rules = rulesFor(2025)!;
+const rules = rulesFor("ca", 2025)!;
 let server: TestServer;
 afterEach(() => server.close());
 
@@ -397,7 +397,7 @@ describe("downloading the forms from canada.ca and revenuquebec.ca", () => {
     return download(alex.id);
   }
 
-  it("asks for each form with a User-Agent naming the app, and a time limit", async () => {
+  it("asks for each form with a User-Agent naming the app and a contact URL, and a time limit", async () => {
     const asked: { url: string; init?: RequestInit }[] = [];
     await printWith(async (url, init) => {
       asked.push({ url: String(url), init });
@@ -405,7 +405,8 @@ describe("downloading the forms from canada.ca and revenuquebec.ca", () => {
     });
     expect(asked[0]!.url).toBe(rules.forms.get("T1")!.url);
     const headers = new Headers(asked[0]!.init?.headers);
-    expect(headers.get("User-Agent")).toMatch(/Taxi/);
+    // canada.ca drops a bot's request whose User-Agent has no contact URL.
+    expect(headers.get("User-Agent")).toMatch(/Taxi\/\d.*\+https:\/\/\S+/);
     expect(headers.get("Accept")).toBe("application/pdf");
     expect(asked[0]!.init?.signal).toBeInstanceOf(AbortSignal);
   });

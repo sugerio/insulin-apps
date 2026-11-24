@@ -1,0 +1,530 @@
+# Form 1040 for 2025, with Schedules 1-A, 2 and 3 and Forms 8959 and 8960 as far as wages and interest reach them.
+# The credits and adjustments of other parts are in their own files (care, dependants, eic, education,
+# schedule1a, self-employment).
+# "Instructions" is the 2025 Instructions for Form 1040 (i1040gi, February 25, 2026).
+
+params:
+  standardSingle:
+    label: Standard deduction, Single
+    source: "Form 1040, line 12e: $15,750 for Single or Married filing separately"
+    value: 15750
+  standardSeparate:
+    label: Standard deduction, Married filing separately
+    source: "Form 1040, line 12e: $15,750 for Single or Married filing separately"
+    value: 15750
+  standardJoint:
+    label: Standard deduction, Married filing jointly
+    source: "Form 1040, line 12e: $31,500 for Married filing jointly or Qualifying surviving spouse"
+    value: 31500
+  standardHead:
+    label: Standard deduction, Head of household
+    source: "Form 1040, line 12e: $23,625 for Head of household"
+    value: 23625
+  additionalUnmarried:
+    label: Additional standard deduction for each box on line 12d, unmarried
+    source: "Instructions, Standard Deduction Chart for People Who Were Born Before January 2, 1961, or Were Blind: Single, 1 box $17,750, 2 boxes $19,750"
+    value: 2000
+  additionalMarried:
+    label: Additional standard deduction for each box on line 12d, married
+    source: "Instructions, the same chart: Married filing separately, 1 box $17,350, 2 boxes $18,950"
+    value: 1600
+  dependentMinimum:
+    label: Smallest standard deduction for someone claimed as a dependent
+    source: "Instructions, Standard Deduction Worksheet for Dependents, line 2: $1,350"
+    value: 1350
+  dependentEarnedAdd:
+    label: Added to earned income for a dependent's standard deduction
+    source: "Instructions, Standard Deduction Worksheet for Dependents, line 2: earned income plus $450"
+    value: 450
+  bracketsSingle:
+    label: Tax brackets, Single
+    source: "Instructions, 2025 Tax Computation Worksheet, Section A (22% less $5,086.00 from $100,000; 24% less $7,153.00 over $103,350; 32% less $22,937.00 over $197,300; 35% less $30,452.75 over $250,525; 37% less $42,979.75 over $626,350)"
+    value:
+      - { upTo: 11925, rate: 10% }
+      - { upTo: 48475, rate: 12% }
+      - { upTo: 103350, rate: 22% }
+      - { upTo: 197300, rate: 24% }
+      - { upTo: 250525, rate: 32% }
+      - { upTo: 626350, rate: 35% }
+      - { rate: 37% }
+  bracketsSeparate:
+    label: Tax brackets, Married filing separately
+    source: "Instructions, 2025 Tax Computation Worksheet, Section C (as Single to $250,525; 35% less $30,452.75 to $375,800; 37% less $37,968.75 over $375,800)"
+    value:
+      - { upTo: 11925, rate: 10% }
+      - { upTo: 48475, rate: 12% }
+      - { upTo: 103350, rate: 22% }
+      - { upTo: 197300, rate: 24% }
+      - { upTo: 250525, rate: 32% }
+      - { upTo: 375800, rate: 35% }
+      - { rate: 37% }
+  bracketsJoint:
+    label: Tax brackets, Married filing jointly
+    source: "Instructions, 2025 Tax Computation Worksheet, Section B (22% less $10,172.00 from $100,000; 24% less $14,306.00 over $206,700; 32% less $45,874.00 over $394,600; 35% less $60,905.50 over $501,050; 37% less $75,937.50 over $751,600)"
+    value:
+      - { upTo: 23850, rate: 10% }
+      - { upTo: 96950, rate: 12% }
+      - { upTo: 206700, rate: 22% }
+      - { upTo: 394600, rate: 24% }
+      - { upTo: 501050, rate: 32% }
+      - { upTo: 751600, rate: 35% }
+      - { rate: 37% }
+  bracketsHead:
+    label: Tax brackets, Head of household
+    source: "Instructions, 2025 Tax Computation Worksheet, Section D (22% less $6,825.00 from $100,000; 24% less $8,892.00 over $103,350; 32% less $24,676.00 over $197,300; 35% less $32,191.00 over $250,500; 37% less $44,718.00 over $626,350)"
+    value:
+      - { upTo: 17000, rate: 10% }
+      - { upTo: 64850, rate: 12% }
+      - { upTo: 103350, rate: 22% }
+      - { upTo: 197300, rate: 24% }
+      - { upTo: 250500, rate: 32% }
+      - { upTo: 626350, rate: 35% }
+      - { rate: 37% }
+  taxTableLimit:
+    label: Taxable income from which the Tax Computation Worksheet is used instead of the Tax Table
+    source: "Instructions, line 16: if your taxable income is $100,000 or more, use the Tax Computation Worksheet"
+    value: 100000
+  seniorAmount:
+    label: Enhanced deduction for seniors
+    source: "Schedule 1-A (2025), Part V, line 35: $6,000"
+    value: 6000
+  seniorPhaseOutStart:
+    label: Modified AGI over which the enhanced deduction for seniors is reduced
+    source: "Schedule 1-A (2025), line 32: $75,000 ($150,000 if married filing jointly)"
+    value: 75000
+  seniorPhaseOutStartJoint:
+    label: Modified AGI over which the enhanced deduction for seniors is reduced, Married filing jointly
+    source: "Schedule 1-A (2025), line 32: $150,000 if married filing jointly"
+    value: 150000
+  seniorPhaseOutRate:
+    label: Reduction of the enhanced deduction for seniors
+    source: "Schedule 1-A (2025), line 34: 6% of modified AGI over line 32"
+    value: 6%
+  medicareThresholdSingle:
+    label: Medicare wages over which Additional Medicare Tax applies, Single
+    source: "Instructions, Schedule 2, line 11: $200,000 if single"
+    value: 200000
+  medicareThresholdSeparate:
+    label: Medicare wages over which Additional Medicare Tax applies, Married filing separately
+    source: "Instructions, Schedule 2, line 11: $125,000 if married filing separately"
+    value: 125000
+  medicareThresholdJoint:
+    label: Medicare wages over which Additional Medicare Tax applies, Married filing jointly
+    source: "Instructions, Schedule 2, line 11: $250,000 if married filing jointly"
+    value: 250000
+  additionalMedicareRate:
+    label: Additional Medicare Tax rate
+    source: "Form 8959, line 7: 0.9%"
+    value: 0.9%
+  medicareRate:
+    label: Regular Medicare tax withholding rate
+    source: "Form 8959, line 21: 1.45%"
+    value: 1.45%
+  niitThresholdSingle:
+    label: Modified AGI over which the net investment income tax applies, Single
+    source: "Instructions, Schedule 2, line 12: $200,000 if single"
+    value: 200000
+  niitThresholdSeparate:
+    label: Modified AGI over which the net investment income tax applies, Married filing separately
+    source: "Instructions, Schedule 2, line 12: $125,000 if married filing separately"
+    value: 125000
+  niitThresholdJoint:
+    label: Modified AGI over which the net investment income tax applies, Married filing jointly
+    source: "Instructions, Schedule 2, line 12: $250,000 if married filing jointly"
+    value: 250000
+  niitRate:
+    label: Net investment income tax rate
+    source: "Form 8960, line 17: 3.8%"
+    value: 3.8%
+  socialSecurityMax:
+    label: Most social security tax withheld on 2025 wages
+    source: "Instructions, Schedule 3, line 11: 6.2% of the $176,100 wage base, $10,918.20"
+    value: 10918.20
+  kiddieThreshold:
+    label: Unearned income over which a child's tax is figured on Form 8615
+    source: "Instructions, line 16, Form 8615: unearned income over $2,700"
+    value: 2700
+
+lines:
+  # Filing status. Unmarried on December 31 (never married, divorced, legally separated under a decree, or widowed
+  # before 2025) files Single. A married couple chooses (family.filingStatus): one joint return, on the person
+  # preparing's, with the spouse's income on it; or a separate return each. Each `if` leaves the status missing, and
+  # asks nothing that depends on it, until it is known. A dependant makes head of household or a qualifying surviving
+  # spouse possible: those come with dependants (SCOPE.dependants).
+  US.single:
+    label: Filing status is Single (1 for yes)
+    formula: 'if(family.maritalStatus == "married", 0, if(line.US.qss == 1, 0, if(line.US.hoh == 1, 0, 1)))'
+    source: "Instructions, Filing Status"
+  US.hoh:
+    label: Filing status is Head of household (1 for yes)
+    formula: >-
+      if(family.maritalStatus == "married", 0, if(line.US.qss == 1, 0, if(line.US.claimsDependants == 0, 0,
+      if(sum(dependants.DEP.hohQualifying) == 0, 0, if(answer.paidHalfOfHome, 1, 0)))))
+    source: "Instructions, Head of Household: unmarried, paid over half the cost of keeping up a home, with a qualifying person; it is never worse than Single"
+  US.qss:
+    label: Filing status is Qualifying surviving spouse (1 for yes)
+    formula: >-
+      if(family.maritalStatus == "widowed", if(answer.spouseDiedIn2025, 0, if(answer.spouseDiedIn2023Or2024,
+      if(line.US.claimsDependants == 0, 0, if(sum(dependants.DEP.qssChild) == 0, 0, if(answer.paidHalfOfHome, 1, 0))), 0)), 0)
+    source: "Instructions, Qualifying Surviving Spouse: spouse died in 2023 or 2024, a dependent child who lived with you all year, and you paid over half the cost of the home"
+  US.jointRates:
+    label: Joint return rates, Married filing jointly or Qualifying surviving spouse (1 for yes)
+    formula: "if(line.US.joint == 1, 1, line.US.qss)"
+  US.joint:
+    label: Filing status is Married filing jointly (1 for yes)
+    formula: 'if(family.maritalStatus == "married", if(family.filingStatus == "joint", 1, 0), 0)'
+  US.separate:
+    label: Filing status is Married filing separately (1 for yes)
+    formula: 'if(family.maritalStatus == "married", if(family.filingStatus == "separate", 1, 0), 0)'
+
+  # Each person's own amounts. A joint return adds the spouse's (`spouse.line.US.own…`); a separate one doesn't.
+  US.ownWages:
+    label: Wages on this person's Forms W-2, box 1
+    formula: "sum(W2.box1)"
+  US.ownTaxableInterest:
+    label: This person's taxable interest, Forms 1099-INT boxes 1 and 3
+    formula: "sum(INT.box1) + sum(INT.box3)"
+  US.ownExemptInterest:
+    label: This person's tax-exempt interest, Forms 1099-INT box 8 and 1099-DIV box 12
+    formula: "sum(INT.box8) + sum(DIV.box12)"
+  US.ownMedicareWages:
+    label: This person's Medicare wages and tips, Forms W-2 box 5
+    formula: "sum(W2.box5)"
+  US.ownMedicareTax:
+    label: This person's Medicare tax withheld, Forms W-2 box 6
+    formula: "sum(W2.box6)"
+  US.ownWithheldW2:
+    label: Federal income tax withheld on this person's Forms W-2
+    formula: "sum(W2.box2)"
+  US.ownWithheld1099:
+    label: Federal income tax withheld on this person's Forms 1099
+    formula: "sum(INT.box4) + sum(NEC.box4) + sum(DIV.box4) + sum(B.box4) + sum(RIRA.box4) + sum(R.box4) + sum(SSA.box6)"
+  US.ownEstimated:
+    label: This person's estimated tax payments
+    formula: "answer.estimatedPayments"
+  US.ownBoxes:
+    label: This person's boxes on line 12d (born before January 2, 1961; blind)
+    formula: "if(person.age >= 65, 1, 0) + if(answer.isBlind, 1, 0)"
+    source: >-
+      Form 1040, line 12d. Someone born on January 1, 1961 counts as 65 for 2025; the app knows the birth year only and
+      counts them as 64. On a separate return the spouse's boxes, which count only when the spouse had no income and
+      files no return, aren't counted
+  US.ownExcessSocialSecurity:
+    label: Social security tax withheld on this person's wages over the 2025 maximum
+    formula: >-
+      if(max(W2.box4) > param.socialSecurityMax,
+      unsupported("An employer withheld more social security tax than the 2025 maximum of $10,918.20; ask it to refund the excess"),
+      if(countIssuers(W2.box4) > 1, max(0, sum(W2.box4) - param.socialSecurityMax), 0))
+    source: "Instructions, Schedule 3, line 11: with more than one employer, the tax withheld over $10,918.20, figured separately for you and your spouse"
+
+  # Income
+  F1040.1a:
+    label: Wages from Forms W-2, box 1
+    formula: "line.US.ownWages + if(line.US.joint == 1, spouse.line.US.ownWages, 0)"
+  F1040.1e:
+    label: Taxable dependent care benefits
+    formula: "line.F2441.26"
+    source: "Form 1040, line 1e: Form 2441, line 26"
+  F1040.1z:
+    label: Wages and other earned income
+    formula: "line.F1040.1a + line.F1040.1e"
+  F1040.2a:
+    label: Tax-exempt interest
+    formula: "line.US.ownExemptInterest + if(line.US.joint == 1, spouse.line.US.ownExemptInterest, 0)"
+    source: "Form 1040, line 2a: Form 1099-INT, box 8, and Form 1099-DIV, box 12. It isn't taxed; it is reported"
+  F1040.2b:
+    label: Taxable interest
+    formula: "line.US.ownTaxableInterest + if(line.US.joint == 1, spouse.line.US.ownTaxableInterest, 0)"
+    source: "Form 1040, line 2b: Form 1099-INT, boxes 1 and 3 (savings bond and Treasury interest is taxed federally)"
+  F1040.8:
+    label: Additional income from Schedule 1
+    formula: "line.S1.10"
+  F1040.9:
+    label: Total income
+    formula: "line.F1040.1z + line.F1040.2b + line.F1040.3b + line.F1040.4b + line.F1040.5b + line.F1040.6b + line.F1040.7a + line.F1040.8"
+    source: "Form 1040, line 9: lines 1z, 2b, 3b, 4b, 5b, 6b, 7a and 8 (investments.yaml, retirement.yaml)"
+  F1040.10:
+    label: Adjustments to income from Schedule 1
+    formula: "line.S1.26"
+  F1040.11a:
+    label: Adjusted gross income
+    formula: "line.F1040.9 - line.F1040.10"
+  US.earnedIncome:
+    label: Earned income
+    formula: "line.F1040.1z + line.S1.3 - line.S1.15"
+    source: >-
+      Instructions, line 27a, Worksheet B, and the Standard Deduction Worksheet for Dependents: wages (line 1z) plus the
+      net profit from self-employment, less the deductible part of self-employment tax (Schedule 1, line 15)
+
+  # Standard deduction
+  US.boxes:
+    label: Boxes checked on line 12d
+    formula: "line.US.ownBoxes + if(line.US.joint == 1, spouse.line.US.ownBoxes, 0)"
+  US.claimable:
+    label: Someone can claim you, or your spouse on a joint return, as a dependent (1 for yes)
+    formula: "if(answer.canBeClaimed, 1, if(line.US.joint == 1, if(spouse.answer.canBeClaimed, 1, 0), 0))"
+    source: "Form 1040, line 12a"
+  US.basicStandard:
+    label: Standard deduction for the filing status
+    formula: "if(line.US.jointRates == 1, param.standardJoint, if(line.US.hoh == 1, param.standardHead, if(line.US.single == 1, param.standardSingle, param.standardSeparate)))"
+  US.dependentStandard:
+    label: Standard deduction for someone who can be claimed as a dependent, before line 12d's boxes
+    formula: "min(line.US.basicStandard, max(param.dependentMinimum, line.US.earnedIncome + param.dependentEarnedAdd))"
+    source: "Instructions, Standard Deduction Worksheet for Dependents, lines 2 to 4"
+  US.standard:
+    label: Standard deduction with line 12d's boxes
+    formula: >-
+      if(line.US.claimable == 1, line.US.dependentStandard, line.US.basicStandard)
+      + line.US.boxes * if(line.US.single == 1 or line.US.hoh == 1, param.additionalUnmarried, param.additionalMarried)
+  # `if`, not `and`: until the filing status is known, a separate return's question isn't asked.
+  F1040.12e:
+    label: Standard deduction or itemized deductions
+    formula: "if(line.US.itemizes == 1, line.SA.17, line.US.standard)"
+    source: "Form 1040, line 12e: the standard deduction, or itemized deductions from Schedule A (itemized.yaml)"
+
+  # Schedule 1-A, Part V: the enhanced deduction for seniors, for each spouse 65 or older on a joint return. A married
+  # person filing separately can't claim it.
+  S1A.3:
+    label: Modified adjusted gross income
+    formula: "line.F1040.11a"
+    source: "Schedule 1-A, line 3: line 11b, plus income excluded from Puerto Rico or abroad (not handled)"
+  S1A.32:
+    label: Modified AGI over which the deduction is reduced
+    formula: "if(line.US.joint == 1, param.seniorPhaseOutStartJoint, param.seniorPhaseOutStart)"
+  S1A.35:
+    label: Enhanced deduction for seniors, after the reduction
+    formula: "max(0, param.seniorAmount - round(max(0, line.S1A.3 - line.S1A.32) * param.seniorPhaseOutRate, 2))"
+    source: "Schedule 1-A, lines 31 to 35"
+  S1A.37:
+    label: Enhanced deduction for seniors
+    formula: >-
+      if(line.US.separate == 1, 0, if(person.age >= 65, line.S1A.35, 0)
+      + if(line.US.joint == 1, if(spouse.person.age >= 65, line.S1A.35, 0), 0))
+    source: "Schedule 1-A, lines 36a and 36b: you, and your spouse on a joint return, born before January 2, 1961, with a valid social security number"
+  F1040.13b:
+    label: Additional deductions from Schedule 1-A
+    formula: "line.S1A.38"
+    source: "Schedule 1-A, line 38: the deductions for qualified tips, overtime and car loan interest (schedule1a.yaml) and for seniors"
+  F1040.13a:
+    label: Qualified business income deduction
+    formula: "line.F8995.15"
+    source: "Form 1040, line 13a: Form 8995, line 15 (self-employment.yaml)"
+  F1040.14:
+    label: Total deductions
+    formula: "line.F1040.12e + line.F1040.13a + line.F1040.13b"
+  F1040.15:
+    label: Taxable income
+    formula: "max(0, line.F1040.11a - line.F1040.14)"
+
+  # Tax
+  US.tableRow:
+    label: The middle of the Tax Table's row for line 15
+    formula: >-
+      if(line.F1040.15 < 5, 2.5, if(line.F1040.15 < 15, 10, if(line.F1040.15 < 25, 20,
+      if(line.F1040.15 < 3000, floor(line.F1040.15, 25) + 12.5, floor(line.F1040.15, 50) + 25))))
+    source: >-
+      2025 Tax Table: rows of $5, $10 and $10, then $25 wide to $3,000 and $50 wide to $100,000. Each row's tax is the
+      tax on the middle of the row, to the nearest dollar ($3,000 to $3,050: $303)
+  US.tableTax:
+    label: Tax from the Tax Table
+    formula: >-
+      round(if(line.US.jointRates == 1, bracket(param.bracketsJoint, line.US.tableRow), if(line.US.hoh == 1, bracket(param.bracketsHead, line.US.tableRow),
+      if(line.US.single == 1, bracket(param.bracketsSingle, line.US.tableRow), bracket(param.bracketsSeparate, line.US.tableRow)))), 0)
+  US.worksheetTax:
+    label: Tax from the Tax Computation Worksheet
+    formula: >-
+      round(if(line.US.jointRates == 1, bracket(param.bracketsJoint, line.F1040.15), if(line.US.hoh == 1, bracket(param.bracketsHead, line.F1040.15),
+      if(line.US.single == 1, bracket(param.bracketsSingle, line.F1040.15), bracket(param.bracketsSeparate, line.F1040.15)))), 2)
+  US.regularTax:
+    label: Tax on taxable income at the regular rates
+    formula: "if(line.F1040.15 < param.taxTableLimit, line.US.tableTax, line.US.worksheetTax)"
+  F1040.16:
+    label: Tax
+    formula: "if(line.QDW.applies == 1, line.QDW.25, line.US.regularTax)"
+    source: >-
+      Instructions, line 16: the Tax Table under $100,000, the Tax Computation Worksheet from $100,000, or the Qualified
+      Dividends and Capital Gain Tax Worksheet (investments.yaml) with qualified dividends or capital gains
+  F1040.18:
+    label: Tax and the alternative minimum tax
+    formula: "line.F1040.16 + line.F1040.17"
+  F1040.19:
+    label: Child tax credit and credit for other dependents
+    formula: "line.S8812.14"
+    source: "Schedule 8812, line 14"
+  F1040.20:
+    label: Nonrefundable credits from Schedule 3
+    formula: "line.S3.8"
+  F1040.21:
+    label: Total nonrefundable credits
+    formula: "line.F1040.19 + line.F1040.20"
+  F1040.22:
+    label: Tax after nonrefundable credits
+    formula: "max(0, line.F1040.18 - line.F1040.21)"
+
+  # Schedule 2: other taxes
+  F8959.1:
+    label: Medicare wages and tips
+    formula: "line.US.ownMedicareWages + if(line.US.joint == 1, spouse.line.US.ownMedicareWages, 0)"
+    source: "Form 8959, line 1: Form W-2, box 5 (both spouses' on a joint return)"
+  F8959.5:
+    label: Threshold for Additional Medicare Tax
+    formula: "if(line.US.joint == 1, param.medicareThresholdJoint, if(line.US.separate == 1, param.medicareThresholdSeparate, param.medicareThresholdSingle))"
+    source: "Instructions, Schedule 2, line 11: $200,000 for single, head of household or qualifying surviving spouse"
+  F8959.7:
+    label: Additional Medicare Tax on Medicare wages
+    formula: "round(max(0, line.F8959.1 - line.F8959.5) * param.additionalMedicareRate, 2)"
+    source: "Form 8959, lines 4 to 7"
+  F8959.8:
+    label: Self-employment income for Additional Medicare Tax
+    formula: "line.SE.6 + if(line.US.joint == 1, spouse.line.SE.6, 0)"
+    source: "Form 8959, line 8: Schedule SE, Part I, line 6 (both spouses' on a joint return)"
+  F8959.11:
+    label: Threshold left after Medicare wages
+    formula: "max(0, line.F8959.5 - line.F8959.1)"
+    source: "Form 8959, lines 9 to 11: the line 5 threshold less the Medicare wages of line 4"
+  F8959.13:
+    label: Additional Medicare Tax on self-employment income
+    formula: "round(max(0, line.F8959.8 - line.F8959.11) * param.additionalMedicareRate, 2)"
+    source: "Form 8959, lines 12 and 13"
+  F8959.18:
+    label: Total Additional Medicare Tax
+    formula: "line.F8959.7 + line.F8959.13"
+    source: "Form 8959, line 18: lines 7 and 13 (no railroad retirement compensation, line 17)"
+  F8960.8:
+    label: Total investment income
+    formula: "line.F1040.2b + line.F1040.3b + line.F1040.7a"
+    source: "Form 8960, lines 1, 2, 5a and 8: taxable interest, ordinary dividends, and the net gain or loss of Form 1040 line 7a; no annuities, rents or business income here"
+  F8960.12:
+    label: Net investment income
+    formula: "max(0, line.F8960.8)"
+    source: "Form 8960, line 12: line 8 less the deductions of lines 9 to 11 (none worked out); if zero or less, 0"
+  F8960.13:
+    label: Modified adjusted gross income
+    formula: "line.F1040.11a"
+  F8960.14:
+    label: Threshold for the net investment income tax
+    formula: "if(line.US.jointRates == 1, param.niitThresholdJoint, if(line.US.separate == 1, param.niitThresholdSeparate, param.niitThresholdSingle))"
+    source: "Instructions, Schedule 2, line 12: $250,000 married filing jointly or qualifying surviving spouse; $200,000 single or head of household"
+  F8960.17:
+    label: Net investment income tax
+    formula: "round(min(line.F8960.12, max(0, line.F8960.13 - line.F8960.14)) * param.niitRate, 2)"
+    source: "Form 8960, lines 13 to 17: the smaller of the net investment income and the MAGI over the threshold, times 3.8%"
+  S2.4:
+    label: Self-employment tax
+    formula: "line.SE.12 + if(line.US.joint == 1, spouse.line.SE.12, 0)"
+    source: "Schedule 2, line 4: Schedule SE, line 12 (each spouse's on a joint return)"
+  S2.21:
+    label: Total other taxes
+    formula: "line.S2.4 + line.S2.8 + line.F8959.18 + line.F8960.17"
+    source: "Schedule 2, line 21: lines 4 (Schedule SE), 8 (the 10% tax on early distributions, retirement.yaml), 11 (Form 8959) and 12 (Form 8960)"
+  F1040.23:
+    label: Other taxes
+    formula: "line.S2.21"
+  F1040.24:
+    label: Total tax
+    formula: "line.F1040.22 + line.F1040.23 + line.SCOPE.return"
+
+  # Payments
+  F1040.25a:
+    label: Federal income tax withheld on Forms W-2
+    formula: "line.US.ownWithheldW2 + if(line.US.joint == 1, spouse.line.US.ownWithheldW2, 0)"
+  F1040.25b:
+    label: Federal income tax withheld on Forms 1099
+    formula: "line.US.ownWithheld1099 + if(line.US.joint == 1, spouse.line.US.ownWithheld1099, 0)"
+  F8959.19:
+    label: Medicare tax withheld
+    formula: "line.US.ownMedicareTax + if(line.US.joint == 1, spouse.line.US.ownMedicareTax, 0)"
+  F8959.21:
+    label: Regular Medicare tax withholding on Medicare wages
+    formula: "round(line.F8959.1 * param.medicareRate, 2)"
+  F8959.24:
+    label: Additional Medicare Tax withheld
+    formula: "max(0, line.F8959.19 - line.F8959.21)"
+    source: "Form 8959, lines 19 to 24: what box 6 holds above 1.45% of box 5"
+  F1040.25c:
+    label: Federal income tax withheld on other forms
+    formula: "line.F8959.24"
+    source: "Instructions, line 25c: the Additional Medicare Tax withheld, Form 8959 line 24"
+  F1040.25d:
+    label: Federal income tax withheld
+    formula: "line.F1040.25a + line.F1040.25b + line.F1040.25c"
+  F1040.26:
+    label: Estimated tax payments
+    formula: "line.US.ownEstimated + if(line.US.joint == 1, spouse.line.US.ownEstimated, 0)"
+  S3.11:
+    label: Excess social security tax withheld
+    formula: "line.US.ownExcessSocialSecurity + if(line.US.joint == 1, spouse.line.US.ownExcessSocialSecurity, 0)"
+    source: "Instructions, Schedule 3, line 11: figured separately for you and your spouse, then added"
+  F1040.28:
+    label: Additional child tax credit
+    formula: "line.S8812.27"
+  F1040.31:
+    label: Credits and payments from Schedule 3
+    formula: "line.S3.11"
+  F1040.32:
+    label: Other payments and refundable credits
+    formula: "line.F1040.27a + line.F1040.28 + line.F1040.29 + line.F1040.31"
+    source: "Form 1040, line 32: lines 27a, 28, 29 and 31"
+  F1040.33:
+    label: Total payments
+    formula: "line.F1040.25d + line.F1040.26 + line.F1040.32"
+  F1040.34:
+    label: Refund
+    formula: "max(0, line.F1040.33 - line.F1040.24)"
+    source: "Form 1040, line 34: the amount you overpaid"
+  F1040.37:
+    label: Amount you owe
+    formula: "max(0, line.F1040.24 - line.F1040.33)"
+  RESULT.net:
+    label: Refund, less the amount owed
+    formula: >-
+      if(person.role == "self" or line.US.joint == 0, line.F1040.34 - line.F1040.37
+      + if(line.CAL.files == 1, line.F540.115 - line.F540.111, 0) + if(line.NYS.files == 1, line.IT201.78 - line.IT201.80, 0), 0)
+    source: >-
+      The federal refund less the amount owed, and California's for a California return (california.yaml) and New
+      York's for a New York return (new-york.yaml). On a joint
+      return the spouse has no refund or amount owed of their own: hints add this line over both returns
+
+  # What this part of the app doesn't prepare: each one says so on the return instead of giving a wrong amount.
+  SCOPE.return:
+    label: Situations this app doesn't handle yet
+    formula: >-
+      line.SCOPE.residency + line.SCOPE.widowed + line.SCOPE.kiddie + line.SCOPE.care + line.SCOPE.otherIncome + line.SCOPE.investments + line.SCOPE.retirement
+      + line.SCOPE.communityProperty
+  SCOPE.residency:
+    label: A nonresident or dual-status alien
+    formula: >-
+      if(person.residentAllYear, 0, unsupported("A nonresident or dual-status alien files Form 1040-NR or a dual-status return, which this app doesn't prepare"))
+      + if(line.US.joint == 1, if(spouse.person.residentAllYear, 0,
+      unsupported("Your spouse wasn't a U.S. citizen or resident alien all year: filing jointly then takes an election to treat them as a resident, which this app doesn't handle")), 0)
+  # Married filing separately while living in a community property state, each spouse reports half of the community
+  # income (Pub. 555 and Form 8958), which this app doesn't split.
+  SCOPE.communityProperty:
+    label: Married filing separately in a community property state
+    formula: >-
+      if(line.US.separate == 0, 0, if(person.province == "AZ" or person.province == "CA" or person.province == "ID" or person.province == "LA"
+      or person.province == "NV" or person.province == "NM" or person.province == "TX" or person.province == "WA" or person.province == "WI",
+      unsupported("Filing separately in a community property state, each spouse reports half of the income you earned together (Form 8958), which this app doesn't work out"), 0))
+    source: "Instructions, Married Filing Separately, and Pub. 555: Arizona, California, Idaho, Louisiana, Nevada, New Mexico, Texas, Washington and Wisconsin"
+  SCOPE.widowed:
+    label: A spouse who died in 2025
+    formula: 'if(family.maritalStatus == "widowed", if(answer.spouseDiedIn2025, unsupported("Your spouse died in 2025, so you can file jointly for 2025; this app doesn''t prepare that return yet"), 0), 0)'
+  SCOPE.kiddie:
+    label: A child's investment income taxed at the parent's rate
+    formula: >-
+      if(line.US.joint == 1, 0, if(person.age < 24 and line.US.unearnedIncome > param.kiddieThreshold,
+      unsupported("Unearned income (interest, dividends, capital gains, pensions, taxable benefits) over $2,700 for someone under 24 may be taxed on Form 8615 (the kiddie tax), which this app doesn't prepare"), 0))
+    source: "Instructions, line 16, Form 8615: unearned income over $2,700; not for someone filing a joint return"
+  US.unearnedIncome:
+    label: Unearned income
+    formula: "line.F1040.2b + line.F1040.3b + line.F1040.4b + line.F1040.5b + line.F1040.6b + max(0, line.F1040.7a)"
+    source: "Form 8615 instructions: unearned income is income other than earned income, such as taxable interest, dividends, capital gains, pensions and taxable social security benefits"
+  SCOPE.otherIncome:
+    label: Other income this app doesn't take yet
+    formula: 'if(answer.hasOtherIncome, unsupported("Other income (unemployment, rent, alimony, gambling and the like) isn''t worked out yet: this return would leave it out"), 0) + if(line.US.joint == 1, if(spouse.answer.hasOtherIncome, unsupported("Your spouse has other income (unemployment, rent, alimony, gambling and the like), which isn''t worked out yet"), 0), 0)'
+  SCOPE.investments:
+    label: Investment income this app doesn't take yet
+    formula: "line.US.ownBrokerUnsupported + if(line.US.joint == 1, spouse.line.US.ownBrokerUnsupported, 0)"
+  SCOPE.retirement:
+    label: Retirement income this app doesn't take yet
+    formula: "line.US.ownRetirementScope + if(line.US.joint == 1, spouse.line.US.ownRetirementScope, 0)"

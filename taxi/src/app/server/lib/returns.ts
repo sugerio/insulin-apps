@@ -1,4 +1,4 @@
-import { unreadBoxes, type ConfirmSlips, type CreateSlip, type SaveAnswers, type SlipList, type TaxYear, type UpdateSlip } from "#shared";
+import { isAdult, unreadBoxes, type ConfirmSlips, type CreateSlip, type SaveAnswers, type SlipList, type TaxYear, type UpdateSlip } from "#shared";
 import { Dec } from "../../shared/engine/decimal.ts";
 import { documentName } from "../../shared/engine/rules.ts";
 import { rulesFor } from "../../shared/rules/index.ts";
@@ -33,13 +33,16 @@ export async function listSlips(db: Db, orgId: string, year: number): Promise<Sl
 /** Saves answers to the year's questions, each checked against its question; null clears one. */
 export async function saveAnswers(db: Db, caller: Caller, year: number, input: SaveAnswers, now: number): Promise<TaxYear> {
   const { row, view } = await openYear(db, caller.orgId, year);
-  checkAdult(view, input.personId, "personId");
-  const rules = rulesFor(year)!;
+  // An adult answers about themselves; a dependant in the year has answers too, to the questions asked about dependants.
+  const dependant = view.members.includes(input.personId) && view.people.some((person) => person.id === input.personId && !isAdult(person.relationship));
+  if (!dependant) checkAdult(view, input.personId, "personId");
+  const rules = rulesFor(view.country, year)!;
   const issues: { path: string; message: string }[] = [];
   for (const [id, value] of Object.entries(input.answers)) {
     const question = rules.questions.get(id);
     const path = `answers.${id}`;
     if (!question) issues.push({ path, message: "Not a question of this year" });
+    else if (Boolean(question.dependant) !== dependant) issues.push({ path, message: dependant ? "Not a question about a dependant" : "A question about a dependant" });
     else if (value === null) continue;
     else if (question.type === "money" && !(typeof value === "string" && /^\d{1,9}(\.\d{1,2})?$/.test(value))) {
       issues.push({ path, message: "Enter an amount like 1234.56" });
@@ -81,8 +84,8 @@ function canonical(value: string | boolean): string | boolean {
 }
 
 /** The slip's type must be one of the year's, and every box one that type has. */
-function checkSlip(year: number, type: string, boxes: Record<string, string> | undefined): Record<string, string> | undefined {
-  const slip = rulesFor(year)!.slips.get(type);
+function checkSlip(view: TaxYear, year: number, type: string, boxes: Record<string, string> | undefined): Record<string, string> | undefined {
+  const slip = rulesFor(view.country, year)!.slips.get(type);
   if (!slip) throw new ApiError("validation_failed", "Not a slip type of this year", [{ path: "type", message: "Unknown slip type" }]);
   if (!boxes) return undefined;
   const unknown = Object.keys(boxes).filter((box) => !(box in slip.boxes));
@@ -93,13 +96,22 @@ function checkSlip(year: number, type: string, boxes: Record<string, string> | u
       unknown.map((box) => ({ path: `boxes.${box}`, message: `${type} has no box ${box}` })),
     );
   }
-  return Object.fromEntries(Object.entries(boxes).map(([box, amount]) => [box, Dec.from(amount).toString()]));
+  // A code box holds one of its codes; every other box an amount.
+  const wrong = Object.entries(boxes).filter(([box, value]) => (box in slip.codes ? !slip.codes[box]!.includes(value) : !/^\d/.test(value)));
+  if (wrong.length > 0) {
+    throw new ApiError(
+      "validation_failed",
+      "Some boxes don't hold what they can",
+      wrong.map(([box]) => ({ path: `boxes.${box}`, message: box in slip.codes ? `One of ${slip.codes[box]!.join(", ")}` : "Enter an amount like 1234.56" })),
+    );
+  }
+  return Object.fromEntries(Object.entries(boxes).map(([box, value]) => [box, box in slip.codes ? value : Dec.from(value).toString()]));
 }
 
 export async function addSlip(db: Db, caller: Caller, year: number, input: CreateSlip, now: number): Promise<TaxYear> {
   const { row, view } = await openYear(db, caller.orgId, year);
   checkAdult(view, input.personId, "personId");
-  const boxes = checkSlip(year, input.type, input.boxes)!;
+  const boxes = checkSlip(view, year, input.type, input.boxes)!;
   const id = crypto.randomUUID();
   await runGuarded(db, [
     bumpRevision(db, caller.orgId, row.id, input.revision, now),
@@ -133,7 +145,7 @@ export async function updateSlip(db: Db, caller: Caller, year: number, id: strin
   const { row, view } = await openYear(db, caller.orgId, year);
   if (input.personId !== undefined) checkAdult(view, input.personId, "personId");
   const current = await slipRow(db, caller.orgId, row.id, id);
-  const boxes = checkSlip(year, current.type, input.boxes);
+  const boxes = checkSlip(view, year, current.type, input.boxes);
   const unsure = boxes ? current.unsure.filter((box) => !(box in boxes)) : current.unsure;
   await runGuarded(db, [
     bumpRevision(db, caller.orgId, row.id, input.revision, now),
@@ -161,15 +173,26 @@ export async function removeSlip(db: Db, caller: Caller, year: number, id: strin
 }
 
 /**
- * Confirms the unconfirmed slips of one adult (or, with no person, of every adult), recording who did and when. A box
+ * Confirms the unconfirmed slips of one adult (or, with no person, of every adult; with slip ids, only those of them),
+ * recording who did and when. A box
  * AI couldn't read and has no amount is refused: confirmed, the slip would put nothing on that line.
  */
 export async function confirmSlips(db: Db, caller: Caller, year: number, input: ConfirmSlips, now: number): Promise<TaxYear> {
   const { row, view } = await openYear(db, caller.orgId, year);
   if (input.personId !== undefined) checkAdult(view, input.personId, "personId");
-  const rules = rulesFor(year)!;
-  const unread = (await loadWorkspace(db, caller.orgId, row.id)).slips
-    .filter((slip) => slip.status === "unconfirmed" && (input.personId === undefined || slip.personId === input.personId))
+  const rules = rulesFor(view.country, year)!;
+  const slips = (await loadWorkspace(db, caller.orgId, row.id)).slips;
+  const chosen = input.slipIds === undefined ? null : new Set(input.slipIds);
+  const strangers = (input.slipIds ?? []).filter((id) => !slips.some((slip) => slip.id === id && (input.personId === undefined || slip.personId === input.personId)));
+  if (strangers.length > 0) {
+    throw new ApiError(
+      "validation_failed",
+      input.personId === undefined ? `No such slip in ${year}` : "Each slip must be the adult's",
+      strangers.map((id) => ({ path: "slipIds", message: `No slip ${id}${input.personId === undefined ? "" : " of this adult"}` })),
+    );
+  }
+  const unread = slips
+    .filter((slip) => slip.status === "unconfirmed" && (input.personId === undefined || slip.personId === input.personId) && (chosen === null || chosen.has(slip.id)))
     .map((slip) => ({ slip, boxes: unreadBoxes(slip) }))
     .filter((each) => each.boxes.length > 0);
   if (unread.length > 0) {
@@ -190,9 +213,10 @@ export async function confirmSlips(db: Db, caller: Caller, year: number, input: 
     db
       .prepare(
         `UPDATE slips SET status = 'confirmed', confirmed_at = ?, confirmed_by = ?, updated_at = ?
-         WHERE org_id = ? AND tax_year_id = ? AND status = 'unconfirmed' AND (? IS NULL OR person_id = ?)`,
+         WHERE org_id = ? AND tax_year_id = ? AND status = 'unconfirmed' AND (? IS NULL OR person_id = ?)
+           AND (? IS NULL OR id IN (SELECT value FROM json_each(?)))`,
       )
-      .bind(now, caller.userId, now, caller.orgId, row.id, input.personId ?? null, input.personId ?? null),
+      .bind(now, caller.userId, now, caller.orgId, row.id, input.personId ?? null, input.personId ?? null, chosen === null ? null : 1, chosen === null ? "[]" : JSON.stringify([...chosen])),
     audit(db, caller, "slips.confirmed", row.id, now),
   ]);
   return getYear(db, caller.orgId, year);

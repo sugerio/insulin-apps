@@ -22,6 +22,23 @@ export const gettingStarted: DocTopic = {
             copy the numbers into certified tax software.
           </p>
           <p>
+            <b>United States:</b> when you start a year, choose Canada or the United States. A US year prepares the federal Form 1040 of a U.S.
+            citizen or resident alien for the whole year, in every filing status (single, married filing jointly or separately, head of
+            household, qualifying surviving spouse), with wages (W-2), interest (1099-INT), one business for each person (1099-NEC, Schedules C
+            and SE), the standard deduction, the 2025 deduction for
+            seniors, tips, overtime pay and car loan interest, dependants with the child tax credit and the credit for other dependents, the
+            earned income credit, the credit for child and dependent care, the education credits and the student loan interest deduction. A
+            finished return downloads on the IRS's own forms: Form 1040 and the schedules it uses, filled in. Add
+            the social security numbers and your address by hand, attach Copy B of each W-2, sign and mail it to the IRS. Investments (1099-DIV, 1099-B and
+            Schedule D), retirement income (1099-R, SSA-1099), IRA and HSA contributions, itemized deductions (Schedule A) and the alternative
+            minimum tax are worked out too. AI reads the W-2, 1099, 1098 and SSA-1099 forms you upload. Finish shows hints, such as what filing jointly or separately would save a married couple.
+            Personal info asks each person's state. For a California resident, Taxi also prepares California's Form 540 (with Schedule CA, the
+            California earned income tax credit and the renter's credit), and for a New York resident New York's Form IT-201 (with the New York
+            City tax, the Empire State child credit and Form IT-2), each printed after the federal forms on the state's own forms and mailed apart.
+            For another state, it prepares the federal return only. It says on the return when something it doesn't handle yet applies. See{" "}
+            <DocLink to="us-tax-basics">US tax basics</DocLink>.
+          </p>
+          <p>
             <b>Who it is for:</b> residents of every province and territory, also in the year they moved to or from Canada (except in Quebec),
             with income from work, pensions, EI, investments, self-employment (a business, a profession, farming or fishing), rent or abroad. For
             a Quebec resident it also prepares the Quebec return (TP-1) from the RL slips, and prints it on Revenu Québec's forms, in English or
@@ -122,7 +139,10 @@ export const gettingStarted: DocTopic = {
       body: (
         <>
           <p>
-            Above each step but Finish, <b>Estimate</b> shows the refund or balance owing; <b>Details</b> opens the return's key lines: total income, net income, taxable income, net
+            On a wide screen, a column beside each step shows whose return it is and the <b>Estimate</b>: the refund or balance owing, then the return's key lines. The arrow at the
+            top of the column collapses it into a bar above the step, and the arrow in that bar opens it again; this browser remembers the choice. On a narrower screen, or with the
+            column collapsed, the bar shows the refund or balance owing, and <b>Details</b> opens the key lines. On Finish, which shows the lines itself, the column keeps only
+            the result. The key lines are total income, net income, taxable income, net
             federal tax, provincial or territorial tax (for a Quebec resident, the Quebec refund or balance instead), the total payable, the tax already deducted, and the refund or
             balance owing. When both returns are prepared together, each uses the other's numbers, such as the spouse amount; the line's
             "why" shows them.

@@ -2,7 +2,7 @@ import { z } from "zod";
 import { Dec } from "./decimal.ts";
 import { EngineError } from "./errors.ts";
 import type { BinaryOperator, Formula } from "./formula.ts";
-import { isNumberQuestion, type BracketRow, type RuleSet, type Status } from "./rules.ts";
+import { isNumberQuestion, type BracketRow, type Question, type RuleSet, type Status } from "./rules.ts";
 
 // Evaluates the returns of one year. The input is one JSON document per year (the people,
 // their answers and their slips); the screens, AI reading and API clients all produce it. Evaluation is lazy and
@@ -10,6 +10,8 @@ import { isNumberQuestion, type BracketRow, type RuleSet, type Status } from "./
 // reached reads it. Each value records what it read, which is what `explain` walks.
 
 export const engineInputSchema = z.strictObject({
+  /** The rule set's country: the input is refused by another country's rules. Left out, it isn't checked. */
+  country: z.string().regex(/^[a-z]{2}$/).optional(),
   year: z.number().int(),
   /** The adults whose returns are prepared: one per return, as the rule set's filing unit is `person`. */
   people: z
@@ -20,7 +22,7 @@ export const engineInputSchema = z.strictObject({
         role: z.enum(["self", "spouse"]),
         birthDate: z.iso.date(),
         province: z.string().nullable(),
-        /** Lived in Canada all year; null when not said yet. Left out, it is taken as yes. */
+        /** Resident all year (the rule set's `residency`); null when not said yet. Left out, it is taken as yes. */
         residentAllYear: z.boolean().nullable().optional(),
       }),
     )
@@ -30,7 +32,19 @@ export const engineInputSchema = z.strictObject({
   /** The family facts of the year: the marital status on December 31 and the dependants in the year. */
   family: z.strictObject({
     maritalStatus: z.string().nullable(),
-    dependants: z.array(z.strictObject({ id: z.string().min(1), name: z.string(), birthDate: z.iso.date() })),
+    /** A married couple's filing status where the rules ask for one (a US return: joint or separate). */
+    filingStatus: z.string().nullable().optional(),
+    dependants: z.array(
+      z.strictObject({
+        id: z.string().min(1),
+        name: z.string(),
+        birthDate: z.iso.date(),
+        /** Answers about the dependant (questions with `dependant: true`), as an adult's answers. */
+        answers: z.record(z.string(), z.union([z.string(), z.boolean()])).optional(),
+        /** The adult whose return claims the dependant; left out, the person preparing's. */
+        claimedBy: z.string().nullable().optional(),
+      }),
+    ),
   }),
   /** Per person, the answers given: money as decimal text, yes/no, a choice's option. */
   answers: z.record(z.string(), z.record(z.string(), z.union([z.string(), z.boolean()]))),
@@ -85,10 +99,20 @@ export interface PersonResult {
    */
   questions: string[];
 }
+/** What the rules asked about one dependant, in the year's returns. */
+export interface DependantResult {
+  dependantId: string;
+  missing: { question: string; ask: string }[];
+  estimates: { question: string; ask: string; assumed: string | boolean }[];
+  /** Every question a result line reads about this dependant, answered or not. */
+  questions: string[];
+}
+
 export interface EvaluationResult {
   year: number;
   rulesVersion: string;
   people: PersonResult[];
+  dependants: DependantResult[];
 }
 
 type Value = Dec | string | boolean | Dec[] | BracketRow[] | null;
@@ -103,7 +127,7 @@ interface Node extends Computed {
   /** The keys of the nodes it read, in order. */
   reads: string[];
   /** For a slip box: one entry per slip that has it. */
-  items?: { label: string; value: Dec; issuer?: string }[];
+  items?: { label: string; value: Dec; issuer?: string; boxes?: Record<string, string> }[];
   /** Why the value is missing when the rules can't compute it (`unsupported`). */
   notes?: string[];
 }
@@ -124,14 +148,29 @@ export class Evaluation {
     this.rules = rules;
     this.input = engineInputSchema.parse(input);
     if (this.input.year !== rules.year) throw new EngineError("ENGINE_YEAR", `The input is for ${this.input.year}; the rules are for ${rules.year}`);
+    if (this.input.country !== undefined && this.input.country !== rules.country) {
+      throw new EngineError("ENGINE_COUNTRY", `The input is for ${this.input.country}; the rules are for ${rules.country}`);
+    }
     const ids = new Set(this.input.people.map((person) => person.id));
     for (const slip of this.input.slips) {
       if (!ids.has(slip.person)) throw new EngineError("ENGINE_INPUT", `Slip ${slip.id} belongs to no one in the input`);
       if (!rules.slips.has(slip.type)) throw new EngineError("ENGINE_INPUT", `Slip ${slip.id} has an unknown type ${slip.type}`);
-      for (const amount of Object.values(slip.boxes)) Dec.from(amount);
+      const type = rules.slips.get(slip.type)!;
+      for (const [box, value] of Object.entries(slip.boxes)) {
+        if (!(box in type.codes)) Dec.from(value);
+        else if (!type.codes[box]!.includes(value)) throw new EngineError("ENGINE_INPUT", `Slip ${slip.id} box ${box} holds ${value}, not one of ${type.codes[box]!.join(", ")}`);
+      }
     }
-    for (const [personId, answers] of Object.entries(this.input.answers)) {
-      if (!ids.has(personId)) throw new EngineError("ENGINE_INPUT", `Answers for ${personId}, who is not in the input`);
+    for (const dependant of this.input.family.dependants) {
+      if (dependant.claimedBy != null && !ids.has(dependant.claimedBy)) {
+        throw new EngineError("ENGINE_INPUT", `Dependant ${dependant.id} is claimed by ${dependant.claimedBy}, who is not in the input`);
+      }
+    }
+    const answerSets = [...Object.entries(this.input.answers), ...this.input.family.dependants.map((each) => [each.id, each.answers ?? {}] as const)];
+    for (const [personId, answers] of answerSets) {
+      if (!ids.has(personId) && !this.input.family.dependants.some((each) => each.id === personId)) {
+        throw new EngineError("ENGINE_INPUT", `Answers for ${personId}, who is not in the input`);
+      }
       for (const [id, answer] of Object.entries(answers)) {
         const question = rules.questions.get(id);
         if (!question) continue; // reported as unhandled
@@ -177,6 +216,11 @@ export class Evaluation {
       const when = this.rules.resultWhen.get(id);
       return when === undefined || this.evaluate(personId, when).value === true;
     });
+  }
+
+  /** The dependants a person's return claims (the person preparing's, when no one is named), in the year's order. */
+  dependantsOf(personId: string): EngineInput["family"]["dependants"] {
+    return this.claimedDependants().filter((each) => (each.claimedBy ?? this.selfId()) === personId);
   }
 
   /** The other adult of the year, if both returns are prepared together. */
@@ -228,9 +272,11 @@ export class Evaluation {
         const unhandled: string[] = [];
         for (const slip of this.input.slips.filter((each) => each.person === person.id)) {
           const used = this.rules.usedBoxes.get(slip.type) ?? new Set();
+          const codes = this.rules.slips.get(slip.type)?.codes ?? {};
           for (const [box, amount] of Object.entries(slip.boxes)) {
+            if (box in codes) continue;
             // A box blank on the paper slip is entered as 0: it adds nothing, so it needs no handling.
-            if (!used.has(box) && !Dec.from(amount).isZero()) unhandled.push(`${slip.type} from ${slip.issuer}: box ${box} isn't handled by this app`);
+            if (!used.has(box) && !Dec.from(amount).isZero()) unhandled.push(`${this.rules.slips.get(slip.type)?.name ?? slip.type} from ${slip.issuer}: box ${box} isn't handled by this app`);
           }
         }
         for (const id of Object.keys(answered)) {
@@ -247,6 +293,20 @@ export class Evaluation {
           .map((question) => question.id);
         return { personId: person.id, lines, missing, estimates, unhandled, questions: [...asked, ...slipQuestions] };
       }),
+      // What the returns asked about each dependant, by the dependant.
+      dependants: this.claimedDependants().map((dependant) => {
+        const prefix = `${dependant.id}:dependant.answer.`;
+        const asked = [...reached].filter((key) => key.startsWith(prefix)).map((key) => key.slice(prefix.length));
+        const missing: DependantResult["missing"] = [];
+        const estimates: DependantResult["estimates"] = [];
+        for (const id of asked) {
+          const question = this.rules.questions.get(id)!;
+          if (id in (dependant.answers ?? {}) || question.decision) continue;
+          if (question.default === undefined) missing.push({ question: id, ask: question.ask });
+          else estimates.push({ question: id, ask: question.ask, assumed: question.default });
+        }
+        return { dependantId: dependant.id, missing, estimates, questions: asked };
+      }),
     };
   }
 
@@ -261,6 +321,42 @@ export class Evaluation {
     }
     if (path[0] === "param" || path[0] === "family") return path.join(".");
     return `${personId}:${path.join(".")}`;
+  }
+
+  /** The dependants of the year: those born by December 31 (one added while last year's return is prepared isn't one). */
+  private claimedDependants() {
+    return this.input.family.dependants.filter((each) => Number(each.birthDate.slice(0, 4)) <= this.input.year);
+  }
+
+  private selfId(): string {
+    return this.input.people.find((each) => each.role === "self")!.id;
+  }
+
+  /** A value of a dependant's: their age, an answer about them, or a line worked out for them. */
+  private computeDependant(dependant: EngineInput["family"]["dependants"][number], path: string[]): Node {
+    const [head, ...rest] = path;
+    if (head === "line") {
+      const line = this.rules.lines.get(rest.join("."))!;
+      const reads: string[] = [];
+      const notes: string[] = [];
+      const computed = this.formula(line.formula, dependant.id, reads, notes);
+      return { ...computed, label: `${dependant.name}: ${line.label}`, formula: line.text, source: line.source, reads: [...new Set(reads)], ...(notes.length > 0 ? { notes } : {}) };
+    }
+    // dependant.age, dependant.answer.<question>
+    if (rest[0] === "age") {
+      return { value: Dec.of(this.input.year - Number(dependant.birthDate.slice(0, 4))), status: "complete", label: `${dependant.name}: age on December 31`, reads: [] };
+    }
+    const question = this.rules.questions.get(rest[1]!)!;
+    return { ...this.answerNode(question, dependant.answers?.[question.id]), label: `${dependant.name}: ${question.ask}` };
+  }
+
+  /** An answer, or the question's default (an estimate), or missing. */
+  private answerNode(question: Question, answer: string | boolean | undefined): Node {
+    const given = answer ?? question.default;
+    // A decision's default is the app's choice, not a guess at what the person would say.
+    const status: Status = answer !== undefined || question.decision ? "complete" : question.default !== undefined ? "estimate" : "missing";
+    const value = given === undefined ? null : isNumberQuestion(question.type) ? Dec.from(given as string) : given;
+    return { value, status, label: question.ask, reads: [] };
   }
 
   private spouseOf(personId: string): string | undefined {
@@ -290,9 +386,26 @@ export class Evaluation {
     const colon = key.indexOf(":");
     const personId = key.slice(0, colon);
     const path = key.slice(colon + 1).split(".");
+    const dependant = this.input.family.dependants.find((each) => each.id === personId);
+    if (dependant) return this.computeDependant(dependant, path);
     const person = this.input.people.find((each) => each.id === personId)!;
     const [head, ...rest] = path;
     switch (head) {
+      case "dependants": {
+        // A dependant line's value for each dependant this person's return claims (the person preparing's when no one
+        // is named), as a list. One not worked out yet leaves the list missing.
+        const id = rest.join(".");
+        const claimed = this.dependantsOf(personId);
+        const reads = claimed.map((each) => `${each.id}:line.${id}`);
+        const nodes = reads.map((read) => this.node(read));
+        const missing = nodes.some((node) => node.value === null);
+        return {
+          value: missing ? null : nodes.map((node) => node.value as Dec),
+          status: worst(...nodes.map((node) => node.status)),
+          label: `${this.rules.lines.get(id)!.label}, for each dependant`,
+          reads,
+        };
+      }
       case "spouse":
         return { ...MISSING, label: "No spouse is in this year", reads: [] };
       case "line": {
@@ -311,12 +424,7 @@ export class Evaluation {
       }
       case "answer": {
         const question = this.rules.questions.get(rest[0]!)!;
-        const answer = this.input.answers[personId]?.[question.id];
-        const given = answer ?? question.default;
-        // A decision's default is the app's choice, not a guess at what the person would say.
-        const status: Status = answer !== undefined || question.decision ? "complete" : question.default !== undefined ? "estimate" : "missing";
-        const value = given === undefined ? null : isNumberQuestion(question.type) ? Dec.from(given as string) : given;
-        return { value, status, label: question.ask, reads: [] };
+        return this.answerNode(question, this.input.answers[personId]?.[question.id]);
       }
       case "person":
         if (rest[0] === "age") {
@@ -329,17 +437,18 @@ export class Evaluation {
         if (rest[0] === "role") return { value: person.role, status: "complete", label: "The person preparing, or their spouse", reads: [] };
         if (rest[0] === "residentAllYear") {
           const resident = person.residentAllYear === undefined ? true : person.residentAllYear;
-          return { value: resident, status: resident === null ? "missing" : "complete", label: "Lived in Canada all year", reads: [] };
+          return { value: resident, status: resident === null ? "missing" : "complete", label: this.rules.residency, reads: [] };
         }
-        return { value: person.province, status: person.province === null ? "missing" : "complete", label: "Province on December 31", reads: [] };
+        return { value: person.province, status: person.province === null ? "missing" : "complete", label: "Province or state on December 31", reads: [] };
       default: {
         const slip = this.rules.slips.get(head!)!;
         const mine = this.input.slips.filter((each) => each.person === personId && each.type === slip.id);
         if (rest[0] === "slips") return { value: Dec.of(mine.length), status: "complete", label: `${slip.id} slips`, reads: [] };
         const box = rest[0]!.slice("box".length);
+        // A code box is read only through sumWhere and countWhere, from its amount box's slips: it has no amounts.
         const items = mine
-          .filter((each) => box in each.boxes)
-          .map((each) => ({ label: `${slip.id} from ${each.issuer}`, value: Dec.from(each.boxes[box]!), issuer: each.issuer }));
+          .filter((each) => box in each.boxes && !(box in slip.codes))
+          .map((each) => ({ label: `${slip.id} from ${each.issuer}`, value: Dec.from(each.boxes[box]!), issuer: each.issuer, boxes: each.boxes }));
         return {
           value: items.map((item) => item.value),
           status: "complete",
@@ -367,6 +476,12 @@ export class Evaluation {
         };
       case "partnerInYear":
         return { value: this.input.people.length > 1, status: "complete", label: "Both returns are prepared together", reads: [] };
+      case "filingStatus": {
+        const status = family.filingStatus ?? null;
+        return { value: status, status: status === null ? "missing" : "complete", label: "Filing status of a married couple", reads: [] };
+      }
+      case "dependants":
+        return { value: Dec.of(born.length), status: "complete", label: "Dependants in the year", reads: [] };
       case "childrenUnder6":
         return { value: childrenUnder(6), status: "complete", label: "Dependants under 6 at the end of the year", reads: [] };
       case "childrenUnder7":
@@ -438,6 +553,17 @@ export class Evaluation {
           const issuers = new Set((node.items ?? []).filter((item) => !item.value.isZero()).map((item) => item.issuer!.trim().toLowerCase()));
           return { value: Dec.of(issuers.size), status: node.status };
         }
+        if (formula.name === "sumWhere" || formula.name === "countWhere") {
+          // The amount box's slips, kept when their code box holds one of the codes.
+          const amountKey = this.key(personId, (formula.args[0] as Extract<Formula, { kind: "ref" }>).path);
+          const codePath = (formula.args[1] as Extract<Formula, { kind: "ref" }>).path;
+          const codeBox = codePath[codePath.length - 1]!.slice("box".length);
+          const codes = (formula.args.slice(2) as Extract<Formula, { kind: "string" }>[]).map((arg) => arg.value);
+          reads.push(amountKey);
+          const node = this.node(amountKey);
+          const kept = (node.items ?? []).filter((item) => codes.includes(item.boxes?.[codeBox] ?? ""));
+          return { value: formula.name === "countWhere" ? Dec.of(kept.length) : Dec.sum(kept.map((item) => item.value)), status: node.status };
+        }
         if (formula.name === "if") {
           const condition = evaluate(formula.args[0]!);
           if (condition.value === null) return MISSING;
@@ -457,7 +583,11 @@ export class Evaluation {
     const nameOf = (read: string) => {
       const colon = read.indexOf(":");
       if (colon < 0) return read; // a param: the same for everyone
-      return `${read.slice(0, colon) === viewer ? "" : "spouse."}${read.slice(colon + 1)}`;
+      const owner = read.slice(0, colon);
+      // A dependant's value is named by the dependant.
+      const dependant = this.input.family.dependants.find((each) => each.id === owner);
+      if (dependant) return `${dependant.name}: ${read.slice(colon + 1)}`;
+      return `${owner === viewer ? "" : "spouse."}${read.slice(colon + 1)}`;
     };
     const inputs = node.items
       ? node.items.map((item) => ({ ref, label: item.label, value: item.value.toString(), status: "complete" as const, inputs: [] }))
@@ -545,6 +675,8 @@ function call(name: string, args: Value[]): Value {
       const [value, low, high] = args as Dec[];
       return Dec.min(Dec.max(value!, low!), high!);
     }
+    case "floor":
+      return (args[0] as Dec).floorToUnit(args[1] as Dec);
     case "bracket":
       return bracket(args[0] as BracketRow[], args[1] as Dec);
     case "step": {

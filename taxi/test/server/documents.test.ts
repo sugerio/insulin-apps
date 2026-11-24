@@ -443,7 +443,7 @@ describe("uploading a slip", () => {
     // Medical receipts count toward the medical expenses claimed.
     const result = await json<Estimate>(server.call("GET", "/api/years/2025/estimate"));
     const alex = result.input.people.find((person) => person.name === "Alex Martin")!.id;
-    expect(new Evaluation(rulesFor(2025)!, result.input).line(alex, "T1.33099").value?.toString()).toBe("50");
+    expect(new Evaluation(rulesFor("ca", 2025)!, result.input).line(alex, "T1.33099").value?.toString()).toBe("50");
   });
 
   it("keeps a slip whose boxes couldn't be read, to be entered, and a readable copy beside it, flagged, in either order", async () => {
@@ -764,6 +764,21 @@ describe("reading a file again", () => {
 });
 
 describe("deleting a file", () => {
+  it("goes with someone taken out of the year: their file and its slips are deleted, and a file still holding someone else's slip stays", async () => {
+    const { alex, sam } = await couple();
+    answers = [
+      { kind: "read", taxYear: 2025, model: "test-model", slips: [T4] },
+      { kind: "read", taxYear: 2025, model: "test-model", slips: [T4, { ...T4, person: "ALEX MARTIN", issuer: "Maple Corp" }] },
+    ];
+    await json<ReadResult>(upload(pdf("sam-only"), "Sam T4.pdf", undefined, undefined, sam.id));
+    await json<ReadResult>(upload(pdf("both"), "Both T4s.pdf", undefined, undefined, sam.id));
+    const before = await json<TaxYear>(server.call("GET", "/api/years/2025"));
+    await json<TaxYear>(server.call("PUT", "/api/years/2025/people", { body: { revision: before.revision, people: [alex.id] } }));
+    const { documents } = await json<{ documents: { name: string; personId: string | null; slips: { issuer: string }[] }[] }>(server.call("GET", "/api/years/2025/documents"));
+    expect(documents.map((each) => [each.name, each.personId, each.slips.map((slip) => slip.issuer)])).toEqual([["Both T4s.pdf", null, ["Maple Corp"]]]);
+    expect(await count("document_chunks")).toBe(1);
+  });
+
   it("deletes the file and every slip read from it, in either return, confirmed or not", async () => {
     const { alex, sam } = await couple();
     answers.push({ kind: "read", taxYear: 2025, slips: [T4, { ...T4, person: "Alex Martin", issuer: "Maple Corp" }], model: "m" });

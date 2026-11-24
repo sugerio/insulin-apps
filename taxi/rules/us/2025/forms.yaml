@@ -1,0 +1,1261 @@
+# The IRS forms a return is printed on, and what goes in each row. A row is the line number printed beside its box
+# (form-layout.yaml finds it in the label the IRS gives each box of its fill-in PDF); a named place (a name, a filing
+# status box, a column of a table) is named in scripts/form-layout.ts by its field. Each amount is a formula from the
+# return's side, like a line's. A zero or a missing amount is left blank, unless the field says `zero: true`. Rows the
+# app has nothing for (IRA distributions, Schedule 1) are left out. A field is an amount unless it says otherwise:
+#   { count: <formula> }   a whole number (a number of children or months), with no cents; with `digits: <n>`, written
+#                          with n digits, zeros included, even when it is zero (the decimals of Form 8863, line 6)
+#   { tick: <formula> }    a tick in a box, when the formula is yes from the person's answers (not from a usual answer)
+#   { text: <fact> }       the person's firstName or lastName, their spouse's spouseFirstName, spouseLastName or whole
+#                          spouseName, or the returnNames a schedule is headed with (both spouses' on a joint return)
+# A form's table of dependants (`dependants`) is filled for each dependant of the return that `which` takes, one per
+# column; its fields are worked out from the dependant's side (`dependant.`), and its `when`s are about the return.
+#
+# A form applies to the returns whose `applies` is yes; the forms print in the order of the attachment sequence number
+# printed at the top right of each, as the IRS asks them attached: Form 1040, then Schedules 1, 1-A, 2, 3, A, C, D and
+# SE (on a joint return, the spouse's copy after the preparer's), Forms 2441 and 6251, Schedule EIC, Schedule 8812, and
+# Forms 8863, 8889, 8995, 8959 and 8960. A form with `side: spouse` is the spouse's copy, worked out from their side; `layout` reuses another
+# form's places on the same PDF.
+#
+# The PDFs come from irs.gov on first use (url: the 2025 revision's own address, which doesn't change when the IRS
+# publishes the next year's) and must match the layout's SHA-256: a form the IRS changes is placed again with npm run
+# form-layout before it is filled.
+
+forms:
+  F1040:
+    title: Form 1040, U.S. Individual Income Tax Return
+    url: https://www.irs.gov/pub/irs-prior/f1040--2025.pdf
+    applies: "true"
+    fields:
+      # Page 1: the names and the filing status. The social security numbers, the address, the presidential campaign
+      # fund, the digital assets question and the home in the U.S. stay for the person to fill in.
+      firstName: { text: firstName }
+      lastName: { text: lastName }
+      spouseFirstName: { text: spouseFirstName, when: "line.US.joint == 1" }
+      spouseLastName: { text: spouseLastName, when: "line.US.joint == 1" }
+      single: { tick: "line.US.single == 1" }
+      joint: { tick: "line.US.joint == 1" }
+      separate: { tick: "line.US.separate == 1" }
+      separateSpouseName: { text: spouseName, when: "line.US.separate == 1" }
+      hoh: { tick: "line.US.hoh == 1" }
+      qss: { tick: "line.US.qss == 1" }
+      livedApart: { tick: "line.US.separate == 1 and answer.livedApartLastSixMonths" }
+      # Income
+      1a: line.F1040.1a
+      1e: line.F1040.1e
+      1z: line.F1040.1z
+      2a: line.F1040.2a
+      2b: line.F1040.2b
+      3a: line.F1040.3a
+      3b: line.F1040.3b
+      # Lines 4a and 5a only when part isn't taxable (a rollover); fully taxable, the total goes on 4b or 5b alone.
+      4a: { value: line.F1040.4a, when: "line.F1040.4a > line.F1040.4b" }
+      4b: line.F1040.4b
+      iraRollover: { tick: "line.US.iraRollover == 1" }
+      5a: { value: line.F1040.5a, when: "line.F1040.5a > line.F1040.5b" }
+      5b: line.F1040.5b
+      pensionRollover: { tick: "line.US.pensionRollover == 1" }
+      6a: line.F1040.6a
+      6b: { value: line.F1040.6b, when: "line.F1040.6a > 0", zero: true }
+      benefitsLivedApart: { tick: "line.US.separate == 1 and line.F1040.6a > 0 and answer.livedApartAllYear" }
+      7a: line.F1040.7a
+      noScheduleD: { tick: "line.US.scheduleD == 0 and line.F1040.7a > 0" }
+      "8": line.F1040.8
+      "9": line.F1040.9
+      "10": line.F1040.10
+      11a: line.F1040.11a
+      # Page 2: tax and credits
+      11b: line.F1040.11a
+      claimYou: { tick: answer.canBeClaimed }
+      claimSpouse: { tick: "line.US.joint == 1 and spouse.answer.canBeClaimed" }
+      youSenior: { tick: "person.age >= 65" }
+      youBlind: { tick: answer.isBlind }
+      spouseSenior: { tick: "line.US.joint == 1 and spouse.person.age >= 65" }
+      spouseBlind: { tick: "line.US.joint == 1 and spouse.answer.isBlind" }
+      spouseItemizes: { tick: "line.US.separate == 1 and answer.spouseItemizes" }
+      12e: line.F1040.12e
+      13a: line.F1040.13a
+      13b: line.F1040.13b
+      "14": line.F1040.14
+      # "If zero or less, enter -0-" (lines 15 and 22), and the total tax.
+      "15": { value: line.F1040.15, zero: true }
+      "16": line.F1040.16
+      "17": line.F1040.17
+      "18": line.F1040.18
+      "19": line.F1040.19
+      "20": line.F1040.20
+      "21": line.F1040.21
+      "22": { value: line.F1040.22, zero: true }
+      "23": line.F1040.23
+      "24": { value: line.F1040.24, zero: true }
+      # Payments
+      25a: line.F1040.25a
+      25b: line.F1040.25b
+      25c: line.F1040.25c
+      25d: line.F1040.25d
+      "26": line.F1040.26
+      27a: line.F1040.27a
+      "28": line.F1040.28
+      "29": line.F1040.29
+      "31": line.F1040.31
+      "32": line.F1040.32
+      "33": line.F1040.33
+      # The refund, all of it refunded (line 35a); the routing and account numbers stay for the person to fill in.
+      "34": line.F1040.34
+      35a: line.F1040.34
+      "37": line.F1040.37
+    # The dependents this return claims, four on the form; with more, the "more than four" box is ticked and the
+    # worksheet lists the others, for the statement the instructions ask for. The child tax credit's box is for a
+    # child counted on Schedule 8812 line 4, which needs your social security number (without one, the child counts
+    # on line 6); any other dependent's is the credit for other dependents'. "And in the U.S." stays for the person
+    # to tick.
+    dependants:
+      when: "line.US.claimsDependants == 1"
+      which: "line.DEP.dependent == 1"
+      columns: 4
+      more: moreDependants
+      fields:
+        firstName: { text: firstName }
+        lastName: { text: lastName }
+        relationship: { choice: relationship, labels: { child: Child, foster: Foster child } }
+        livedWithYou: { tick: "dependant.answer.monthsWithYou >= 7" }
+        student: { tick: dependant.answer.fullTimeStudent }
+        disabled: { tick: dependant.answer.disabled }
+        childTaxCredit: { tick: "line.DEP.ctcChild == 1", when: "line.US.filerSSN == 1" }
+        otherDependents: { tick: "line.DEP.ctcChild == 0" }
+        childWithoutYourSSN: { tick: "line.DEP.ctcChild == 1", when: "line.US.filerSSN == 0", place: otherDependents }
+
+  S1:
+    title: Schedule 1 (Form 1040), Additional Income and Adjustments to Income
+    url: https://www.irs.gov/pub/irs-prior/f1040s1--2025.pdf
+    applies: "line.S1.10 > 0 or line.S1.26 > 0"
+    fields:
+      names: { text: returnNames }
+      # Part I: business income only; Part II: the HSA deduction, the deductible part of self-employment tax, the IRA
+      # deduction and the student loan interest deduction.
+      "3": line.S1.3
+      "10": line.S1.10
+      "13": line.S1.13
+      "15": line.S1.15
+      "20": line.S1.20
+      "21": line.S1.21
+      "26": line.S1.26
+
+  S1A:
+    title: Schedule 1-A (Form 1040), Additional Deductions
+    url: https://www.irs.gov/pub/irs-prior/f1040s1a--2025.pdf
+    applies: "line.S1A.38 > 0"
+    fields:
+      names: { text: returnNames }
+      # Part I: modified AGI (no income from Puerto Rico or abroad)
+      "1": line.F1040.11a
+      "3": line.S1A.3
+      # Part II: qualified tips as an employee (line 4c: the total, from one employer or several; none from a business,
+      # line 5). Each part's rows are written only when it has something.
+      4c: line.S1A.4c
+      "6": line.S1A.4c
+      "7": line.S1A.7
+      "8": { value: line.S1A.3, when: &tips "line.S1A.4c > 0" }
+      "9": { value: line.S1A.9, when: *tips }
+      "10": { value: line.S1A.10, when: *tips }
+      "11": { count: "floor(line.S1A.10, 1000) / 1000", when: *tips }
+      "12": { value: line.S1A.12, when: *tips }
+      "13": line.S1A.13
+      # Part III: qualified overtime compensation on Forms W-2 (none on Form 1099, line 14b)
+      14a: line.S1A.14c
+      14c: line.S1A.14c
+      "15": line.S1A.15
+      "16": { value: line.S1A.3, when: &overtime "line.S1A.14c > 0" }
+      "17": { value: line.S1A.9, when: *overtime }
+      "18": { value: line.S1A.10, when: *overtime }
+      "19": { count: "floor(line.S1A.10, 1000) / 1000", when: *overtime }
+      "20": { value: line.S1A.12, when: *overtime }
+      "21": line.S1A.21
+      # Part IV: car loan interest, one row of line 22 for each spouse's car; the VIN is for the person to write.
+      22a: line.US.ownCarLoan
+      22b: "if(line.US.joint == 1, spouse.line.US.ownCarLoan, 0)"
+      "23": line.S1A.23
+      "24": line.S1A.24
+      "25": { value: line.S1A.3, when: &car "line.S1A.23 > 0" }
+      "26": { value: line.S1A.26, when: *car }
+      "27": { value: line.S1A.27, when: *car }
+      "28": { count: "(0 - floor(0 - line.S1A.27, 1000)) / 1000", when: *car }
+      "29": { value: line.S1A.29, when: *car }
+      "30": line.S1A.30
+      # Part V: the enhanced deduction for seniors
+      "31": { value: line.S1A.3, when: &senior "line.S1A.37 > 0" }
+      "32": { value: line.S1A.32, when: *senior }
+      "33": { value: "max(0, line.S1A.3 - line.S1A.32)", when: *senior }
+      "34": { value: "round(max(0, line.S1A.3 - line.S1A.32) * param.seniorPhaseOutRate, 2)", when: *senior }
+      "35": { value: line.S1A.35, when: *senior }
+      36a: "if(person.age >= 65, line.S1A.35, 0)"
+      36b: "if(line.US.joint == 1, if(spouse.person.age >= 65, line.S1A.35, 0), 0)"
+      "37": line.S1A.37
+      "38": line.S1A.38
+
+  S2:
+    title: Schedule 2 (Form 1040), Additional Taxes
+    url: https://www.irs.gov/pub/irs-prior/f1040s2--2025.pdf
+    applies: "line.S2.21 > 0 or line.F1040.17 > 0"
+    fields:
+      names: { text: returnNames }
+      "2": line.F1040.17
+      "3": line.F1040.17
+      "4": line.S2.4
+      "8": line.S2.8
+      line8NoForm: { tick: "line.S2.8 > 0" }
+      "11": line.F8959.18
+      "12": line.F8960.17
+      "21": line.S2.21
+
+  S3:
+    title: Schedule 3 (Form 1040), Additional Credits and Payments
+    url: https://www.irs.gov/pub/irs-prior/f1040s3--2025.pdf
+    applies: "line.S3.8 > 0 or line.S3.11 > 0"
+    fields:
+      names: { text: returnNames }
+      "1": line.S3.1
+      "2": line.S3.2
+      "3": line.S3.3
+      "8": line.S3.8
+      "11": line.S3.11
+      "15": line.S3.11
+
+  # Schedule A: when the return itemizes.
+  SA:
+    title: Schedule A (Form 1040), Itemized Deductions
+    url: https://www.irs.gov/pub/irs-prior/f1040sa--2025.pdf
+    applies: "line.US.itemizes == 1"
+    fields:
+      names: { text: returnNames }
+      "1": line.SA.1
+      "2": { value: line.F1040.11a, when: "line.SA.1 > 0" }
+      "3": { value: line.SA.3, when: "line.SA.1 > 0" }
+      "4": line.SA.4
+      5a: line.SA.5a
+      5b: line.SA.5b
+      5c: line.SA.5c
+      5d: line.SA.5d
+      5e: line.SA.5e
+      "7": line.SA.7
+      8a: line.SA.8a
+      8e: line.SA.8a
+      "10": line.SA.10
+      "11": line.SA.11
+      "12": line.SA.12
+      "14": line.SA.14
+      "17": line.SA.17
+
+  # Schedule C: each person's business, the person preparing's here and the spouse's below on a joint return. The
+  # business's name, address, code and accounting method, the vehicle information of Part IV (with car expenses) and
+  # what the other expenses are (Part V) stay for the person to fill in.
+  SC:
+    title: Schedule C (Form 1040), Profit or Loss From Business
+    url: https://www.irs.gov/pub/irs-prior/f1040sc--2025.pdf
+    applies: "line.SC.31 > 0"
+    fields: &scheduleC
+      name: { text: name }
+      "1": line.SC.1
+      "3": line.SC.1
+      "5": line.SC.1
+      "7": line.SC.7
+      "8": line.SC.8
+      "9": line.SC.9
+      "11": line.SC.11
+      "15": line.SC.15
+      "17": line.SC.17
+      "18": line.SC.18
+      20b: line.SC.20b
+      "22": line.SC.22
+      24a: line.SC.24a
+      24b: line.SC.24b
+      "25": line.SC.25
+      27b: line.SC.27b
+      "28": line.SC.28
+      "29": line.SC.31
+      "31": line.SC.31
+      otherAmount: line.SC.27b
+      "48": line.SC.27b
+  SCS:
+    title: Schedule C (Form 1040), Profit or Loss From Business (spouse)
+    url: https://www.irs.gov/pub/irs-prior/f1040sc--2025.pdf
+    applies: "line.US.joint == 1 and spouse.line.SC.31 > 0"
+    side: spouse
+    layout: SC
+    fields: *scheduleC
+
+  # Schedule D: sales on 1099-B summaries for box A and D (lines 1a and 8a), a carryover, and capital gain
+  # distributions with them. Lines 6, 14 and 21 are printed in brackets on the form, so their amounts are written as
+  # they are; lines 7, 15 and 16 can be losses, written in brackets.
+  SD:
+    title: Schedule D (Form 1040), Capital Gains and Losses
+    url: https://www.irs.gov/pub/irs-prior/f1040sd--2025.pdf
+    applies: "line.US.scheduleD == 1"
+    fields:
+      names: { text: returnNames }
+      qofNo: { tick: "line.US.scheduleD == 1" }
+      1aD: line.SD.1ad
+      1aE: line.SD.1ae
+      1aH: { value: line.SD.1ah, when: "line.SD.1ad > 0" }
+      "6": line.SD.6
+      "7": line.SD.7
+      8aD: line.SD.8ad
+      8aE: line.SD.8ae
+      8aH: { value: line.SD.8ah, when: "line.SD.8ad > 0" }
+      "13": line.SD.13
+      "14": line.SD.14
+      "15": line.SD.15
+      "16": { value: line.SD.16, zero: true }
+      line17Yes: { tick: "line.SD.15 > 0 and line.SD.16 > 0" }
+      line17No: { tick: "line.SD.15 <= 0 or line.SD.16 <= 0" }
+      line20Yes: { tick: "line.SD.15 > 0 and line.SD.16 > 0" }
+      "21": "0 - line.SD.21"
+      line22Yes: { tick: "line.SD.16 <= 0 and line.F1040.3a > 0" }
+      line22No: { tick: "line.SD.16 <= 0 and line.F1040.3a == 0" }
+
+  # Schedule SE: each person with $400 or more of net earnings from self-employment.
+  SE:
+    title: Schedule SE (Form 1040), Self-Employment Tax
+    url: https://www.irs.gov/pub/irs-prior/f1040sse--2025.pdf
+    applies: "line.SE.6 > 0"
+    fields: &scheduleSE
+      name: { text: name }
+      "2": line.SC.31
+      "3": line.SC.31
+      4a: line.SE.4a
+      4c: line.SE.4a
+      "6": line.SE.6
+      # Line 7, $176,100, is printed on the form.
+      8a: line.SE.8a
+      8d: line.SE.8a
+      "9": line.SE.9
+      "10": line.SE.10
+      "11": line.SE.11
+      "12": line.SE.12
+      "13": line.SE.13
+  SES:
+    title: Schedule SE (Form 1040), Self-Employment Tax (spouse)
+    url: https://www.irs.gov/pub/irs-prior/f1040sse--2025.pdf
+    applies: "line.US.joint == 1 and spouse.line.SE.6 > 0"
+    side: spouse
+    layout: SE
+    fields: *scheduleSE
+
+  F2441:
+    title: Form 2441, Child and Dependent Care Expenses
+    url: https://www.irs.gov/pub/irs-prior/f2441--2025.pdf
+    applies: "line.F2441.11 > 0 or line.F2441.12 > 0"
+    fields:
+      names: { text: returnNames }
+      # A and B: filing separately as unmarried, and the deemed income of a spouse who was a student or disabled.
+      livedApart: { tick: "line.US.separate == 1 and line.US.careUnmarried == 1" }
+      deemedIncome: { tick: "line.US.joint == 1 and answer.studentOrDisabledMonths + spouse.answer.studentOrDisabledMonths > 0" }
+      # Part I, the care providers (name, address, identifying number), stays for the person to fill in.
+      # Part II: the credit. Line 9b (2024 care paid in 2025) is 0: the app says so when it isn't.
+      "3": line.F2441.3
+      "4": { value: line.F2441.4, when: "line.US.paidForCare == 1" }
+      "5": { value: line.F2441.5, when: "line.US.paidForCare == 1" }
+      "6": line.F2441.6
+      "7": { value: line.F2441.7, when: "line.US.paidForCare == 1" }
+      # The rate's digits after the decimal point, printed on the form.
+      "8": { count: "line.F2441.8 * 100", when: "line.US.paidForCare == 1" }
+      9a: line.F2441.9a
+      9c: line.F2441.9a
+      "10": { value: line.F2441.10, when: "line.US.paidForCare == 1" }
+      "11": line.F2441.11
+      # Part III: dependent care benefits. Line 14 is printed in brackets on the form.
+      "12": line.F2441.12
+      "13": line.F2441.13
+      "14": line.F2441.14
+      "15": line.F2441.15
+      "16": { value: line.F2441.16, when: "line.F2441.12 > 0" }
+      "17": { value: line.F2441.17, when: "line.F2441.12 > 0" }
+      "18": { value: line.F2441.18, when: "line.F2441.12 > 0" }
+      "19": { value: line.F2441.19, when: "line.F2441.12 > 0" }
+      "20": { value: line.F2441.20, when: "line.F2441.12 > 0" }
+      "21": { value: line.F2441.21, when: "line.F2441.12 > 0" }
+      # No benefits from a sole proprietorship or partnership: line 22 is No and 0, and none are deductible (24).
+      line22No: { tick: "line.F2441.12 > 0" }
+      "22": { value: "0", when: "line.F2441.12 > 0", zero: true }
+      "23": line.F2441.15
+      "24": { value: "0", when: "line.F2441.12 > 0", zero: true }
+      "25": line.F2441.25
+      "26": line.F2441.26
+      "27": { value: line.F2441.27, when: "line.F2441.12 > 0 and line.US.paidForCare == 1" }
+      "28": { value: line.F2441.25, when: "line.US.paidForCare == 1" }
+      "29": { value: line.F2441.29, when: "line.F2441.12 > 0 and line.US.paidForCare == 1" }
+      "30": { value: line.F2441.30, when: "line.F2441.12 > 0 and line.US.paidForCare == 1" }
+      "31": { value: line.F2441.31, when: "line.F2441.12 > 0 and line.US.paidForCare == 1" }
+    # Line 2: each qualifying person with care expenses, three on the form; with more, its box is ticked and the
+    # worksheet lists the others. Their social security numbers stay for the person to fill in.
+    dependants:
+      when: "line.US.paidForCare == 1"
+      which: "line.DEP.careChildExpenses + line.DEP.careDisabledExpenses > 0"
+      columns: 3
+      more: moreQualifying
+      fields:
+        firstName: { text: firstName }
+        lastName: { text: lastName }
+        disabled: { tick: "line.DEP.careDisabled == 1" }
+        expenses: "line.DEP.careChildExpenses + line.DEP.careDisabledExpenses"
+
+  # Form 6251: when there is an AMT to pay (line 7 more than line 10, 6251 instructions, Who Must File).
+  F6251:
+    title: Form 6251, Alternative Minimum Tax—Individuals
+    url: https://www.irs.gov/pub/irs-prior/f6251--2025.pdf
+    applies: "line.F6251.11 > 0"
+    fields:
+      names: { text: returnNames }
+      1a: line.F6251.1a
+      1b: line.F6251.1b
+      2a: line.F6251.2a
+      2g: line.F6251.2g
+      "4": line.F6251.4
+      "5": line.F6251.5
+      "6": line.F6251.6
+      "7": line.F6251.7
+      "8": line.F6251.8
+      "9": line.F6251.9
+      "10": line.F6251.10
+      "11": line.F6251.11
+      # Part III, when the regular tax used the Qualified Dividends and Capital Gain Tax Worksheet.
+      "12": { value: line.F6251.6, when: "line.QDW.applies == 1" }
+      "13": { value: line.F6251.13, when: "line.QDW.applies == 1" }
+      "15": { value: line.F6251.13, when: "line.QDW.applies == 1" }
+      "16": { value: line.F6251.16, when: "line.QDW.applies == 1" }
+      "17": { value: line.F6251.17, when: "line.QDW.applies == 1" }
+      "18": { value: line.F6251.18, when: "line.QDW.applies == 1" }
+      "19": { value: line.QDW.6, when: "line.QDW.applies == 1" }
+      "20": { value: line.QDW.5, when: "line.QDW.applies == 1" }
+      "21": { value: line.F6251.21, when: "line.QDW.applies == 1" }
+      "22": { value: line.F6251.22, when: "line.QDW.applies == 1" }
+      "23": { value: line.F6251.23, when: "line.QDW.applies == 1" }
+      "24": { value: "line.F6251.22 - line.F6251.23", when: "line.QDW.applies == 1" }
+      "25": { value: line.QDW.13, when: "line.QDW.applies == 1" }
+      "26": { value: line.F6251.21, when: "line.QDW.applies == 1" }
+      "27": { value: line.QDW.5, when: "line.QDW.applies == 1" }
+      "28": { value: "line.F6251.21 + line.QDW.5", when: "line.QDW.applies == 1" }
+      "29": { value: "max(0, line.QDW.13 - (line.F6251.21 + line.QDW.5))", when: "line.QDW.applies == 1" }
+      "30": { value: line.F6251.30, when: "line.QDW.applies == 1" }
+      "31": { value: line.F6251.31, when: "line.QDW.applies == 1" }
+      "32": { value: "line.F6251.23 + line.F6251.30", when: "line.QDW.applies == 1" }
+      "33": { value: "line.F6251.22 - (line.F6251.23 + line.F6251.30)", when: "line.QDW.applies == 1" }
+      "34": { value: line.F6251.34, when: "line.QDW.applies == 1" }
+      "38": { value: "line.F6251.18 + line.F6251.31 + line.F6251.34", when: "line.QDW.applies == 1" }
+      "39": { value: line.F6251.39, when: "line.QDW.applies == 1" }
+      "40": { value: line.F6251.40, when: "line.QDW.applies == 1" }
+
+  SEIC:
+    title: Schedule EIC (Form 1040), Earned Income Credit
+    url: https://www.irs.gov/pub/irs-prior/f1040sei--2025.pdf
+    applies: "line.F1040.27a > 0 and line.US.eicChildren > 0"
+    fields:
+      names: { text: returnNames }
+    # Each qualifying child, three at most: the credit counts three. Their social security numbers stay for the
+    # person to fill in. Lines 4a and 4b are for a child 19 or older: under 24 and a student, or else disabled.
+    dependants:
+      which: "line.DEP.eicChild == 1"
+      columns: 3
+      fields:
+        name: { text: name }
+        birthYear: { text: birthYear }
+        studentYes: { tick: "dependant.age >= 19 and dependant.age < 24 and dependant.answer.fullTimeStudent" }
+        studentNo: { tick: "dependant.age >= 24 or (dependant.age >= 19 and not dependant.answer.fullTimeStudent)" }
+        disabledYes: { tick: "line.DEP.ageTest == 1 and dependant.age >= 19 and not (dependant.age < 24 and dependant.answer.fullTimeStudent)" }
+        relationship: { choice: relationship, labels: { child: Child, foster: Foster child } }
+        months: { count: dependant.answer.monthsWithYou }
+
+  S8812:
+    title: Schedule 8812 (Form 1040), Credits for Qualifying Children and Other Dependents
+    url: https://www.irs.gov/pub/irs-prior/f1040s8--2025.pdf
+    applies: "line.S8812.8 > 0"
+    fields:
+      names: { text: returnNames }
+      # Part I
+      "1": line.F1040.11a
+      "3": line.S8812.3
+      "4": { count: line.S8812.4 }
+      "5": line.S8812.5
+      "6": { count: line.S8812.6 }
+      "7": line.S8812.7
+      "8": line.S8812.8
+      "9": line.S8812.9
+      "10": line.S8812.10
+      "11": line.S8812.11
+      line12No: { tick: "line.S8812.8 <= line.S8812.11" }
+      line12Yes: { tick: "line.S8812.8 > line.S8812.11" }
+      "12": line.S8812.12
+      "13": line.S8812.13
+      "14": line.S8812.14
+      # Part II-A, when the credits are more than the tax.
+      16a: line.S8812.16a
+      16bChildren: { count: line.S8812.4, when: "line.S8812.16a > 0" }
+      16b: { value: line.S8812.16b, when: "line.S8812.16a > 0" }
+      "17": line.S8812.17
+      18a: { value: line.S8812.18a, when: "line.S8812.16a > 0" }
+      line19No: { tick: "line.S8812.16a > 0 and line.S8812.18a <= param.actcEarnedFloor" }
+      line19Yes: { tick: "line.S8812.16a > 0 and line.S8812.18a > param.actcEarnedFloor" }
+      "19": { value: line.S8812.19, when: "line.S8812.16a > 0" }
+      "20": { value: line.S8812.20, when: "line.S8812.16a > 0" }
+      line20No: { tick: "line.S8812.16a > 0 and line.S8812.16b < param.actcThreeChildren" }
+      line20Yes: { tick: "line.S8812.16a > 0 and line.S8812.16b >= param.actcThreeChildren" }
+      # Part II-B, for three or more children when line 20 is less than line 17.
+      "21": { value: line.S8812.21, when: &partIIB "line.S8812.16a > 0 and line.S8812.16b >= param.actcThreeChildren and line.S8812.20 < line.S8812.17" }
+      "22": { value: line.S8812.22, when: *partIIB }
+      "23": { value: line.S8812.23, when: *partIIB }
+      "24": { value: line.S8812.24, when: *partIIB }
+      "25": { value: line.S8812.25, when: *partIIB }
+      "26": { value: line.S8812.26, when: *partIIB }
+      # Part II-C
+      "27": line.S8812.27
+
+  # Form 8863: page 1 for the return, and page 2 (Part III) for one student: you, else your spouse filing jointly, else
+  # the first dependant with a credit. Each other student needs a copy of page 2, which the worksheet asks for. The
+  # student's social security number and each school's name, address, EIN and Form 1098-T answers (line 22) stay for
+  # the person to fill in. Lines 23 to 26 are ticked for a student who takes the American opportunity credit, as they
+  # said all of its conditions are true; for one who takes the lifetime learning credit, they stay for the person.
+  F8863:
+    title: Form 8863, Education Credits (American Opportunity and Lifetime Learning Credits)
+    url: https://www.irs.gov/pub/irs-prior/f8863--2025.pdf
+    applies: "line.F8863.7 + line.F8863.18 > 0"
+    fields:
+      names: { text: returnNames }
+      names2: { text: returnNames }
+      # Part I. Lines 6 and 17 are decimals: the digit before the point, and the three after it.
+      "1": line.F8863.1
+      "2": { value: line.F8863.2, when: &aotc "line.F8863.1 > 0" }
+      "3": { value: line.F8863.3, when: *aotc }
+      "4": { value: line.F8863.4, when: *aotc }
+      "5": { value: line.F8863.5, when: *aotc }
+      "6": { count: "floor(line.F8863.6, 1)", digits: 1, when: *aotc }
+      6digits: { count: "(line.F8863.6 - floor(line.F8863.6, 1)) * 1000", digits: 3, when: *aotc }
+      line7NoRefund: { tick: "line.US.aotcNoRefund == 1" }
+      "7": line.F8863.7
+      "8": line.F8863.8
+      "9": line.F8863.9
+      # Part II
+      "10": line.F8863.10
+      "11": line.F8863.11
+      "12": line.F8863.12
+      "13": { value: line.F8863.2, when: &llc "line.F8863.10 > 0" }
+      "14": { value: line.F8863.3, when: *llc }
+      "15": { value: line.F8863.15, when: *llc }
+      "16": { value: line.F8863.5, when: *llc }
+      "17": { count: "floor(line.F8863.17, 1)", digits: 1, when: *llc }
+      17digits: { count: "(line.F8863.17 - floor(line.F8863.17, 1)) * 1000", digits: 3, when: *llc }
+      "18": line.F8863.18
+      "19": line.F8863.19
+      # Part III for you or your spouse
+      student: { text: name, when: "line.US.page2 == 1" }
+      spouseStudent: { text: spouseName, when: "line.US.page2 == 2" }
+      line23No: { tick: &page2Aotc "if(line.US.page2 == 1, line.US.ownAotcStudent, if(line.US.page2 == 2, spouse.line.US.ownAotcStudent, 0)) == 1" }
+      line24Yes: { tick: *page2Aotc }
+      line25No: { tick: *page2Aotc }
+      line26No: { tick: *page2Aotc }
+      "27": "if(line.US.page2 == 1, line.US.ownAotc27, if(line.US.page2 == 2, spouse.line.US.ownAotc27, 0))"
+      "28": "max(0, if(line.US.page2 == 1, line.US.ownAotc27, if(line.US.page2 == 2, spouse.line.US.ownAotc27, 0)) - param.aotcFullRate)"
+      "29": "round(max(0, if(line.US.page2 == 1, line.US.ownAotc27, if(line.US.page2 == 2, spouse.line.US.ownAotc27, 0)) - param.aotcFullRate) * param.aotcPartRate, 2)"
+      "30": "if(line.US.page2 == 1, line.US.ownAotc30, if(line.US.page2 == 2, spouse.line.US.ownAotc30, 0))"
+      "31": "if(line.US.page2 == 1, line.US.ownLlc31, if(line.US.page2 == 2, spouse.line.US.ownLlc31, 0))"
+    # Part III for a dependant, when neither you nor your spouse is a student.
+    dependants:
+      when: "line.US.page2 == 0 and line.US.educationAsked == 1"
+      which: "line.DEP.student == 1"
+      columns: 1
+      fields:
+        student: { text: name }
+        line23No: { tick: "line.DEP.aotcStudent == 1" }
+        line24Yes: { tick: "line.DEP.aotcStudent == 1" }
+        line25No: { tick: "line.DEP.aotcStudent == 1" }
+        line26No: { tick: "line.DEP.aotcStudent == 1" }
+        "27": line.DEP.aotc27
+        "28": "max(0, line.DEP.aotc27 - param.aotcFullRate)"
+        "29": "round(max(0, line.DEP.aotc27 - param.aotcFullRate) * param.aotcPartRate, 2)"
+        "30": line.DEP.aotc30
+        "31": line.DEP.llc31
+
+  # Form 8889, Part I: each person's own HSA (the spouse's copy below on a joint return).
+  F8889:
+    title: Form 8889, Health Savings Accounts (HSAs)
+    url: https://www.irs.gov/pub/irs-prior/f8889--2025.pdf
+    applies: "line.F8889.13 > 0 or line.F8889.9 > 0"
+    fields: &form8889
+      names: { text: name }
+      selfOnly: { tick: 'answer.hsaCoverage == "self"' }
+      family: { tick: 'answer.hsaCoverage == "family"' }
+      "2": line.F8889.2
+      "3": { value: 'if(answer.hsaCoverage == "family", param.hsaFamily, param.hsaSelfOnly)', when: "answer.hasHsa" }
+      "5": { value: 'if(answer.hsaCoverage == "family", param.hsaFamily, param.hsaSelfOnly)', when: "answer.hasHsa" }
+      "6": { value: 'if(answer.hsaCoverage == "family", param.hsaFamily, param.hsaSelfOnly)', when: "answer.hasHsa" }
+      "7": { value: param.hsaCatchUp, when: "answer.hasHsa and person.age >= 55" }
+      "8": line.F8889.8
+      "9": line.F8889.9
+      "11": line.F8889.9
+      "12": "max(0, line.F8889.8 - line.F8889.9)"
+      "13": line.F8889.13
+  F8889S:
+    title: Form 8889, Health Savings Accounts (HSAs) (spouse)
+    url: https://www.irs.gov/pub/irs-prior/f8889--2025.pdf
+    applies: "line.US.joint == 1 and (spouse.line.F8889.13 > 0 or spouse.line.F8889.9 > 0)"
+    side: spouse
+    layout: F8889
+    fields: *form8889
+
+  F8995:
+    title: Form 8995, Qualified Business Income Deduction Simplified Computation
+    url: https://www.irs.gov/pub/irs-prior/f8995--2025.pdf
+    applies: "line.F8995.15 > 0"
+    fields:
+      names: { text: returnNames }
+      # Line 1: each spouse's business; its name and identifying number stay for the person to fill in.
+      qbi1: { value: "line.SC.31 - line.SE.13", when: "line.SC.31 > 0" }
+      qbi2: { value: "spouse.line.SC.31 - spouse.line.SE.13", when: "line.US.joint == 1 and spouse.line.SC.31 > 0" }
+      "2": line.F8995.2
+      "4": line.F8995.2
+      "5": line.F8995.5
+      "6": line.F8995.6
+      "8": line.F8995.6
+      "9": line.F8995.9
+      "10": line.F8995.10
+      "11": line.F8995.11
+      "12": line.F8995.12
+      "13": line.F8995.13
+      "14": line.F8995.14
+      "15": line.F8995.15
+
+  F8959:
+    title: Form 8959, Additional Medicare Tax
+    url: https://www.irs.gov/pub/irs-prior/f8959--2025.pdf
+    applies: "line.F8959.18 > 0 or line.F8959.24 > 0"
+    fields:
+      names: { text: returnNames }
+      # Part I (no unreported tips or Form 8919 wages), Part IV and Part V. No self-employment or railroad
+      # retirement income, so Parts II and III are blank.
+      "1": line.F8959.1
+      "4": line.F8959.1
+      "5": line.F8959.5
+      "6": "max(0, line.F8959.1 - line.F8959.5)"
+      "7": line.F8959.7
+      # Part II: self-employment income, over what the wages leave of the threshold.
+      "8": line.F8959.8
+      "9": { value: line.F8959.5, when: &seIncome "line.F8959.8 > 0" }
+      "10": { value: line.F8959.1, when: *seIncome }
+      "11": { value: line.F8959.11, when: *seIncome }
+      "12": "max(0, line.F8959.8 - line.F8959.11)"
+      "13": line.F8959.13
+      "18": line.F8959.18
+      "19": line.F8959.19
+      "20": line.F8959.1
+      "21": line.F8959.21
+      "22": line.F8959.24
+      "24": line.F8959.24
+
+  F8960:
+    title: Form 8960, Net Investment Income Tax
+    url: https://www.irs.gov/pub/irs-prior/f8960--2025.pdf
+    applies: "line.F8960.17 > 0"
+    fields:
+      names: { text: returnNames }
+      # Taxable interest, ordinary dividends and the net gain or loss of Form 1040 line 7a, with no expenses against them.
+      "1": line.F1040.2b
+      "2": line.F1040.3b
+      5a: line.F1040.7a
+      5d: line.F1040.7a
+      "8": line.F8960.8
+      "12": line.F8960.12
+      "13": line.F8960.13
+      "14": line.F8960.14
+      "15": "max(0, line.F8960.13 - line.F8960.14)"
+      "16": "min(line.F8960.12, max(0, line.F8960.13 - line.F8960.14))"
+      "17": line.F8960.17
+
+  # California (FTB): printed after the federal forms for a California return, in the order the 2025 Booklet's "Assembling
+  # Your Tax Return" gives: Form 540, Schedule CA (540), Schedule P (540), then the credit forms. FTB's forms are in
+  # whole dollars with the cents printed (wholeDollars). The SSN or ITIN, address, county, date of birth, signature and
+  # the contributions stay for the person to fill in; Schedule CA is printed when it has an adjustment or Form 540 itemizes.
+  F540:
+    title: Form 540, California Resident Income Tax Return
+    url: https://www.ftb.ca.gov/forms/2025/2025-540.pdf
+    applies: "line.CAL.files == 1"
+    wholeDollars: true
+    fields:
+      firstName: { text: firstName }
+      lastName: { text: lastName }
+      spouseFirstName: { text: spouseFirstName, when: "line.US.joint == 1" }
+      spouseLastName: { text: spouseLastName, when: "line.US.joint == 1" }
+      names2: { text: returnNames }
+      names3: { text: returnNames }
+      names4: { text: returnNames }
+      names5: { text: returnNames }
+      names6: { text: returnNames }
+      single: { tick: "line.US.single == 1" }
+      joint: { tick: "line.US.joint == 1" }
+      separate: { tick: "line.US.separate == 1" }
+      hoh: { tick: "line.US.hoh == 1" }
+      qss: { tick: "line.US.qss == 1" }
+      claimable: { tick: "line.US.claimable == 1" }
+      7box: { count: line.F540.7box }
+      8box: { count: line.F540.8box }
+      9box: { count: line.F540.9box }
+      10box: { count: line.F540.10box }
+      "7": line.F540.7
+      "8": line.F540.8
+      "9": line.F540.9
+      "10": line.F540.10
+      "11": line.F540.11
+      "12": line.F540.12
+      "13": line.F540.13
+      "14": line.F540.14
+      "15": { value: line.F540.15, zero: true }
+      "16": line.F540.16
+      "17": { value: line.F540.17, zero: true }
+      "18": line.F540.18
+      "19": { value: line.F540.19, zero: true }
+      taxTable: { tick: "line.F540.19 > 0 and line.F540.19 <= param.caTaxTableLimit" }
+      rateSchedule: { tick: "line.F540.19 > param.caTaxTableLimit" }
+      "31": { value: line.F540.31, zero: true }
+      "32": line.F540.32
+      "33": { value: line.F540.33, zero: true }
+      "35": { value: line.F540.35, zero: true }
+      "40": line.F540.40
+      "46": line.F540.46
+      "47": line.F540.47
+      "48": { value: line.F540.48, zero: true }
+      "61": line.F540.61
+      "62": line.F540.62
+      "63": line.F540.63
+      "64": { value: line.F540.64, zero: true }
+      "71": line.F540.71
+      "72": line.F540.72
+      "75": line.F540.75
+      "76": line.F540.76
+      "77": line.F540.77
+      "78": { value: line.F540.78, zero: true }
+      # "Do not leave blank": 0, with the box for no use tax owed.
+      "91": { value: line.F540.91, zero: true }
+      noUseTax: { tick: "line.F540.91 == 0" }
+      coverage: { tick: answer.caFullYearCoverage }
+      "93": line.F540.93
+      "94": line.F540.94
+      "95": line.F540.95
+      "97": line.F540.97
+      "99": line.F540.99
+      "100": line.F540.100
+      "111": line.F540.111
+      "115": line.F540.115
+    # Line 10: up to three dependents, the same as on Form 1040 (more need a statement: formsToAdd). The SSN and any
+    # relationship other than child or foster child stay for the person to write.
+    dependants:
+      when: "line.US.claimsDependants == 1"
+      which: "line.DEP.dependent == 1"
+      columns: 3
+      fields:
+        firstName: { text: firstName }
+        lastName: { text: lastName }
+        relationship: { choice: relationship, labels: { child: Child, foster: Foster child } }
+
+  SCA540:
+    title: Schedule CA (540), California Adjustments — Residents
+    url: https://www.ftb.ca.gov/forms/2025/2025-540-ca.pdf
+    applies: "line.CAL.files == 1 and (line.F540.14 > 0 or line.F540.16 > 0 or line.CAL.itemizes == 1)"
+    wholeDollars: true
+    fields:
+      names: { text: returnNames }
+      # Part I, column A: the federal amounts of Form 1040 and Schedule 1; columns B and C: what California changes.
+      1aA: "round(line.F1040.1a, 0)"
+      1eA: "round(line.F1040.1e, 0)"
+      1hC: line.SCA.1h
+      1zA: "round(line.F1040.1z, 0)"
+      1zC: line.SCA.1h
+      2a: "round(line.F1040.2a, 0)"
+      2bA: "round(line.F1040.2b, 0)"
+      2bB: line.SCA.2B
+      2bC: line.SCA.2C
+      3a: "round(line.F1040.3a, 0)"
+      3bA: "round(line.F1040.3b, 0)"
+      4a: "round(line.F1040.4a, 0)"
+      4bA: "round(line.F1040.4b, 0)"
+      5a: "round(line.F1040.5a, 0)"
+      5bA: "round(line.F1040.5b, 0)"
+      6a: "round(line.F1040.6a, 0)"
+      6bA: "round(line.F1040.6b, 0)"
+      6bB: line.SCA.6B
+      7aA: "round(line.F1040.7a, 0)"
+      3A: "round(line.S1.3, 0)"
+      10A: "round(line.F1040.9, 0)"
+      10B: line.SCA.10B
+      10C: line.SCA.10C
+      # Section C: the adjustments of Schedule 1; California doesn't allow the HSA deduction (column B).
+      13A: "round(line.S1.13, 0)"
+      13B: line.SCA.13B
+      15A: "round(line.S1.15, 0)"
+      20A: "round(line.S1.20, 0)"
+      21A: "round(line.S1.21, 0)"
+      26A: "round(line.F1040.10, 0)"
+      26B: line.SCA.13B
+      27A: "round(line.F1040.11a, 0)"
+      27B: line.SCA.27B
+      27C: line.SCA.27C
+      # Part II, when Form 540 itemizes: federal Schedule A in column A, the state and local income tax taken out
+      # (column B) and the taxes over the federal $40,000 limit put back (column C).
+      notItemizedFederal: { tick: "line.CAL.itemizes == 1 and line.US.itemizes == 0" }
+      "1": { value: "round(line.SA.1, 0)", when: "line.CAL.itemizes == 1" }
+      "2": { value: "round(line.F1040.11a, 0)", when: "line.CAL.itemizes == 1" }
+      "3": { value: "round(line.SA.3, 0)", when: "line.CAL.itemizes == 1" }
+      p5:4A: { value: line.SCA.4, when: "line.CAL.itemizes == 1" }
+      5aA: { value: "round(line.SA.5a, 0)", when: "line.CAL.itemizes == 1" }
+      5aB: { value: line.SCA.17B, when: "line.CAL.itemizes == 1" }
+      p5:5bA: { value: "round(line.SA.5b, 0)", when: "line.CAL.itemizes == 1" }
+      5cA: { value: "round(line.SA.5c, 0)", when: "line.CAL.itemizes == 1" }
+      5dA: { value: "round(line.SA.5d, 0)", when: "line.CAL.itemizes == 1" }
+      5eA: { value: "round(line.SA.5e, 0)", when: "line.CAL.itemizes == 1" }
+      5eC: { value: line.SCA.17C, when: "line.CAL.itemizes == 1" }
+      p5:7A: { value: "round(line.SA.7, 0)", when: "line.CAL.itemizes == 1" }
+      p5:7B: { value: line.SCA.17B, when: "line.CAL.itemizes == 1" }
+      7C: { value: line.SCA.17C, when: "line.CAL.itemizes == 1" }
+      p5:8aA: { value: "round(line.SA.8a, 0)", when: "line.CAL.itemizes == 1" }
+      p5:8eA: { value: "round(line.SA.8a, 0)", when: "line.CAL.itemizes == 1" }
+      p5:10A: { value: "round(line.SA.10, 0)", when: "line.CAL.itemizes == 1" }
+      p6:11A: { value: "round(line.SA.11, 0)", when: "line.CAL.itemizes == 1" }
+      p6:12A: { value: "round(line.SA.12, 0)", when: "line.CAL.itemizes == 1" }
+      p6:14A: { value: "round(line.SA.14, 0)", when: "line.CAL.itemizes == 1" }
+      p6:17A: { value: line.SCA.17A, when: "line.CAL.itemizes == 1" }
+      p6:17B: { value: line.SCA.17B, when: "line.CAL.itemizes == 1" }
+      17C: { value: line.SCA.17C, when: "line.CAL.itemizes == 1" }
+      "18": { value: line.SCA.18, when: "line.CAL.itemizes == 1" }
+      "26": { value: line.SCA.28, when: "line.CAL.itemizes == 1" }
+      "28": { value: line.SCA.28, when: "line.CAL.itemizes == 1" }
+      "29": { value: line.SCA.29, when: "line.CAL.itemizes == 1" }
+      "30": { value: line.F540.18, when: "line.CAL.itemizes == 1" }
+
+  SP540:
+    title: Schedule P (540), Alternative Minimum Tax and Credit Limitations — Residents
+    url: https://www.ftb.ca.gov/forms/2025/2025-540-p.pdf
+    applies: "line.CAL.files == 1 and (line.SP.26 > 0 or line.F3506.12 > line.F540.40)"
+    wholeDollars: true
+    fields:
+      names: { text: returnNames }
+      "1": line.SP.1
+      "2": line.SP.2
+      "3": line.SP.3
+      "14": line.SP.14
+      "15": { value: line.SP.15, zero: true }
+      "18": line.SP.18
+      "19": line.SP.21
+      "21": line.SP.21
+      "22": line.SP.22
+      "23": line.SP.23
+      "24": line.SP.24
+      "25": line.F540.31
+      "26": { value: line.SP.26, zero: true }
+      # Part III: the care credit, which can't take the tax below the tentative minimum tax.
+      p2:1: { value: line.F540.35, when: "line.F3506.12 > 0" }
+      p2:2: { value: line.SP.24, when: "line.F3506.12 > 0" }
+      3C: { value: line.SP.excess, when: "line.F3506.12 > 0", zero: true }
+      5A: line.F3506.12
+      5B: line.F540.40
+      5C: { value: "line.SP.excess - line.F540.40", when: "line.F3506.12 > 0", zero: true }
+
+  F3506:
+    title: Form FTB 3506, Child and Dependent Care Expenses Credit
+    url: https://www.ftb.ca.gov/forms/2025/2025-3506.pdf
+    applies: "line.CAL.files == 1 and line.F3506.12 > 0"
+    wholeDollars: true
+    fields:
+      names: { text: returnNames }
+      # Parts I and II and line 2 (the care providers and the qualifying persons) stay for the person to fill in.
+      "3": line.F3506.3
+      "4": line.F3506.4
+      "5": line.F3506.5
+      "6": line.F3506.6
+      "7": line.F3506.7
+      "8": line.F3506.8
+      "9": line.F3506.9
+      "10": line.F3506.10
+      "12": line.F3506.12
+
+  F3514:
+    title: Form FTB 3514, California Earned Income Tax Credit
+    url: https://www.ftb.ca.gov/forms/2025/2025-3514.pdf
+    applies: "line.CAL.files == 1 and line.F3514.20 + line.F3514.28 + line.F3514.39 > 0"
+    wholeDollars: true
+    fields:
+      names: { text: returnNames }
+      "2": line.F540.13
+      "3": "round(line.F1040.27a, 0)"
+      "4": { value: line.F3514.4, zero: true }
+      "13": line.F3514.13
+      "16": line.F3514.13
+      "18": "line.F3514.19 - line.F3514.13"
+      "19": line.F3514.19
+      "20": line.F3514.20
+      # Part VII, the Young Child Tax Credit, and Part IX, the Foster Youth Tax Credit (each to the cent where the form
+      # says "do not round").
+      "23": { value: line.F3514.19, when: "line.F3514.28 > 0" }
+      "25": { value: "line.F3514.19 - param.calYoungChildThreshold", when: "line.F3514.28 > 0 and line.F3514.19 > param.calYoungChildThreshold" }
+      "26": { value: "floor((line.F3514.19 - param.calYoungChildThreshold) / 100, 0.01)", when: "line.F3514.28 > 0 and line.F3514.19 > param.calYoungChildThreshold" }
+      "27": { value: line.CAL.youngReduction, when: "line.F3514.28 > 0" }
+      "28": line.F3514.28
+      "34": { value: line.F3514.19, when: "line.F3514.39 > 0" }
+      "35": { value: "line.CAL.fosterYouths * param.calYoungChildCredit", when: "line.F3514.39 > 0" }
+      "36": { value: "line.F3514.19 - param.calYoungChildThreshold", when: "line.F3514.39 > 0 and line.F3514.19 > param.calYoungChildThreshold" }
+      "37": { value: "floor((line.F3514.19 - param.calYoungChildThreshold) / 100, 0.01)", when: "line.F3514.39 > 0 and line.F3514.19 > param.calYoungChildThreshold" }
+      "38": { value: "line.CAL.fosterYouths * line.CAL.youngReduction", when: "line.F3514.39 > 0" }
+      "39": line.F3514.39
+    # Part III: each qualifying child's name; the SSN, date of birth, relationship, days in California and address stay
+    # for the person to fill in.
+    dependants:
+      which: "line.DEP.calEitcChild == 1"
+      columns: 3
+      fields:
+        firstName: { text: firstName }
+        lastName: { text: lastName }
+
+  # New York (the Department of Taxation and Finance): printed after the federal forms for a New York return, in the
+  # order the Instructions' "Where to file" puts them in the envelope: the signed Form IT-201, the other forms (Form
+  # IT-196 and the credit claims), then Form IT-2 (and IT-1099-R). New York's forms are in whole dollars with the cents
+  # printed (wholeDollars). The social security numbers, dates of birth, address, county and school district, the
+  # questions Taxi doesn't ask and the signature stay for the person to fill in.
+  IT201:
+    title: Form IT-201, Resident Income Tax Return (New York State)
+    url: https://www.tax.ny.gov/pdf/2025/inc/it201_2025_fill_in.pdf
+    applies: "line.NYS.files == 1"
+    wholeDollars: true
+    fields:
+      firstName: { text: firstName }
+      lastName: { text: lastName }
+      spouseFirstName: { text: spouseFirstName, when: "line.US.joint == 1" }
+      spouseLastName: { text: spouseLastName, when: "line.US.joint == 1" }
+      names3: { text: returnNames }
+      single: { tick: "line.US.single == 1" }
+      joint: { tick: "line.US.joint == 1" }
+      separate: { tick: "line.US.separate == 1" }
+      hoh: { tick: "line.US.hoh == 1" }
+      qss: { tick: "line.US.qss == 1" }
+      # Item B: whether the federal return itemizes; item C: whether someone can claim you.
+      itemizedYes: { tick: "line.US.itemizes == 1" }
+      itemizedNo: { tick: "line.US.itemizes == 0" }
+      claimableYes: { tick: "line.US.claimable == 1" }
+      claimableNo: { tick: "line.US.claimable == 0" }
+      # Items D2 and F: the months a full-year Yonkers or New York City resident lived there (item E, the days in New York
+      # City, and the other answers stay for the person).
+      yonkersYes: { tick: "line.NYS.yonkers == 1" }
+      yonkersMonths: { count: "if(line.NYS.yonkers == 1, 12, 0)" }
+      yonkersSpouseMonths: { count: "if(line.NYS.yonkers == 1 and line.US.joint == 1, 12, 0)" }
+      nycYes: { tick: "line.NYS.nyc == 1" }
+      nycMonths: { count: "if(line.NYS.nyc == 1, 12, 0)" }
+      nycSpouseMonths: { count: "if(line.NYS.nyc == 1 and line.US.joint == 1, 12, 0)" }
+      "1": line.IT201.1
+      "2": line.IT201.2
+      "3": line.IT201.3
+      "6": line.IT201.6
+      "7": line.IT201.7
+      "9": line.IT201.9
+      "10": line.IT201.10
+      "15": line.IT201.15
+      "17": line.IT201.17
+      "18": line.IT201.18
+      "19": { value: line.IT201.19, zero: true }
+      "20": line.IT201.20
+      "21": line.IT201.21
+      "24": { value: line.IT201.24, zero: true }
+      "26": line.IT201.26
+      "27": line.IT201.27
+      "28": line.IT201.28
+      "29": line.IT201.29
+      "30": line.IT201.30
+      "32": line.IT201.32
+      "33": { value: line.IT201.33, zero: true }
+      standard: { tick: "line.NYS.itemizes == 0" }
+      itemized: { tick: "line.NYS.itemizes == 1" }
+      "34": line.IT201.34
+      "35": { value: line.IT201.35, zero: true }
+      "36": line.IT201.36
+      "37": { value: line.IT201.38, zero: true }
+      "38": { value: line.IT201.38, zero: true }
+      "39": { value: line.IT201.39, zero: true }
+      "40": line.IT201.40
+      "43": line.IT201.43
+      "44": { value: line.IT201.44, zero: true }
+      "46": { value: line.IT201.46, zero: true }
+      "47": { value: line.IT201.47, when: "line.NYS.nyc == 1", zero: true }
+      "47a": { value: line.IT201.47a, when: "line.NYS.nyc == 1", zero: true }
+      "48": line.IT201.48
+      "49": { value: line.IT201.49, when: "line.NYS.nyc == 1", zero: true }
+      "52": { value: line.IT201.52, when: "line.NYS.nyc == 1", zero: true }
+      "54": { value: line.IT201.54, when: "line.NYS.nyc == 1", zero: true }
+      54a: line.IT201.54a
+      54b: line.IT201.54b
+      54c: line.IT201.54c
+      54d: line.IT201.54d
+      54e: line.IT201.54e
+      "55": line.IT201.55
+      "58": line.IT201.58
+      # "Do not leave blank."
+      "59": { value: line.IT201.59, zero: true }
+      "61": { value: line.IT201.61, zero: true }
+      "62": { value: line.IT201.62, zero: true }
+      "63": line.IT201.63
+      "64": line.IT201.64
+      "65": line.IT201.65
+      "68": line.IT201.68
+      "69": line.IT201.69
+      69a: line.IT201.69a
+      "70": line.IT201.70
+      70a: line.IT201.70a
+      "72": line.IT201.72
+      "73": line.IT201.73
+      "74": line.IT201.74
+      "75": line.IT201.75
+      "76": { value: line.IT201.76, zero: true }
+      "77": line.IT201.77
+      "78": line.IT201.78
+      "80": line.IT201.80
+    # Item H: up to seven dependents, the same as on Form 1040 (more need a statement: the box is ticked, and the worksheet
+    # lists them). The SSN and date of birth stay for the person to write.
+    dependants:
+      when: "line.US.claimsDependants == 1"
+      which: "line.DEP.dependent == 1"
+      columns: 7
+      more: moreDependants
+      fields:
+        firstName: { text: firstName }
+        lastName: { text: lastName }
+        relationship: { choice: relationship, labels: { child: Child, foster: Foster child, sibling: Sibling, descendant: Grandchild, parent: Parent, relative: Other relative, none: Other } }
+
+  IT196:
+    title: Form IT-196, New York Resident, Nonresident, and Part-Year Resident Itemized Deductions
+    url: https://www.tax.ny.gov/pdf/2025/inc/it196_2025_fill_in.pdf
+    applies: "line.NYS.files == 1 and line.NYS.itemizes == 1"
+    wholeDollars: true
+    fields:
+      names: { text: returnNames }
+      "1": line.IT196.1
+      "2": line.IT201.19
+      "3": line.IT196.3
+      "4": line.IT196.4
+      incomeTaxes: { tick: "line.IT196.5 > 0" }
+      "5": line.IT196.5
+      "6": line.IT196.6
+      "7": line.IT196.7
+      "9": line.IT196.9
+      "10": line.IT196.10
+      "15": line.IT196.15
+      "16": line.IT196.16
+      "17": line.IT196.17
+      "19": line.IT196.19
+      overLimitYes: { tick: "line.IT201.19 > line.NYS.peaseFloor" }
+      overLimitNo: { tick: "line.IT201.19 <= line.NYS.peaseFloor" }
+      "40": line.IT196.40
+      "41": line.IT196.41
+      "42": line.IT196.42
+      "45": line.IT196.45
+      "46": line.IT196.46
+      "47": line.IT196.47
+      "49": line.IT196.49
+
+  IT213:
+    title: Form IT-213, Claim for Empire State Child Credit
+    url: https://www.tax.ny.gov/pdf/2025/inc/it213_2025_fill_in.pdf
+    applies: "line.NYS.files == 1 and line.IT213.9 > 0"
+    wholeDollars: true
+    fields:
+      names: { text: returnNames }
+      # The boxes have no cents line of their own: each amount is written as a whole number at the box's end.
+      "1": { count: line.IT213.1 }
+      "2": { count: line.IT213.2 }
+      "3": { count: line.IT213.3 }
+      "4": { count: line.IT213.4 }
+      "5": { count: line.IT213.5 }
+      "6": { count: line.IT213.6 }
+      "7": { count: line.IT213.7 }
+      "8": { count: line.IT213.8 }
+      "9": { count: line.IT213.9 }
+    # Part 2: each qualifying child's name (the SSN and date of birth stay for the person to write).
+    dependants:
+      which: "line.DEP.esccChild == 1"
+      columns: 6
+      fields:
+        firstName: { text: firstName }
+        lastName: { text: lastName }
+
+  IT215:
+    title: Form IT-215, Claim for Earned Income Credit (New York State and New York City)
+    url: https://www.tax.ny.gov/pdf/2025/inc/it215_2025_fill_in.pdf
+    applies: "line.NYS.files == 1 and line.IT215.10 > 0"
+    wholeDollars: true
+    fields:
+      names: { text: returnNames }
+      claimedYes: { tick: "line.IT215.10 > 0" }
+      investmentNo: { tick: "line.IT215.10 > 0" }
+      unmarriedNo: { tick: "line.IT215.10 > 0 and line.US.separate == 0" }
+      childrenYes: { tick: "line.US.eicChildren > 0" }
+      childrenNo: { tick: "line.US.eicChildren == 0" }
+      irsFiguresNo: { tick: "line.IT215.10 > 0" }
+      "6": line.IT201.1
+      "8": line.IT201.6
+      "9": line.IT201.19
+      "10": line.IT215.10
+      "12": line.IT215.12
+      "13": { value: line.IT215.13, zero: true }
+      "14": line.IT201.40
+      "15": line.IT215.15
+      "16": line.IT215.16
+      B1: line.IT201.39
+      B5: { value: line.IT215.13, zero: true }
+      "27": line.IT201.70
+    # Line 4: up to three of the children on federal Schedule EIC (their SSN and date of birth stay for the person).
+    dependants:
+      which: "line.DEP.eicChild == 1"
+      columns: 3
+      fields:
+        firstName: { text: firstName }
+        lastName: { text: lastName }
+        relationship: { choice: relationship, labels: { child: Child, foster: Foster child, sibling: Sibling, descendant: Grandchild } }
+        months: dependant.answer.monthsWithYou
+
+  IT216:
+    title: Form IT-216, Claim for Child and Dependent Care Credit (New York State and New York City)
+    url: https://www.tax.ny.gov/pdf/2025/inc/it216_2025_fill_in.pdf
+    applies: "line.NYS.files == 1 and line.IT216.25 > 0"
+    wholeDollars: true
+    fields:
+      names: { text: returnNames }
+      "3": { count: line.F2441.2 }
+      3a: line.IT216.3a
+      3b: { value: line.IT216.3b, when: "line.F2441.12 > 0" }
+      "5": line.IT216.5
+      "6": line.IT216.6
+      "7": line.IT216.7
+      "8": line.IT216.8
+      "9": line.IT201.19
+      "10": line.IT216.10
+      "11": line.IT216.11
+      "12": line.IT216.11
+      13agi: line.IT201.33
+      "13": line.IT216.13
+      "14": line.IT216.14
+      "23": line.IT216.23
+      "24": line.IT216.24
+      "25": line.IT216.25
+    # Line 3: the qualifying persons youngest first, with what was paid for each (the care providers on line 2, the
+    # SSN and date of birth stay for the person).
+    dependants:
+      which: "line.DEP.careChildExpenses + line.DEP.careDisabledExpenses > 0"
+      columns: 3
+      fields:
+        firstName: { text: firstName }
+        lastName: { text: lastName }
+        expenses: "line.DEP.careChildExpenses + line.DEP.careDisabledExpenses"
+
+  IT270:
+    title: Form IT-270, New York City Income Tax Elimination Credit
+    url: https://www.tax.ny.gov/pdf/2025/inc/it270_2025_fill_in.pdf
+    applies: "line.NYS.files == 1 and line.IT270.11 > 0"
+    wholeDollars: true
+    fields:
+      names: { text: returnNames }
+      "1": line.IT201.19
+      "2": line.IT270.2
+      "3": { value: line.IT270.3, zero: true }
+      "4": "param.nycEliminationRange - line.IT270.3"
+      "5": line.IT270.5
+      "6": line.IT201.54
+      "7": line.IT216.24
+      "8": line.IT201.70
+      "9": "line.IT216.24 + line.IT201.70"
+      "10": line.IT270.10
+      "11": line.IT270.11
+
+  IT272:
+    title: Form IT-272, Claim for College Tuition Credit or Itemized Deduction
+    url: https://www.tax.ny.gov/pdf/2025/inc/it272_2025_fill_in.pdf
+    applies: "line.NYS.files == 1 and line.IT272.credit > 0"
+    wholeDollars: true
+    fields:
+      names: { text: name }
+      spouseNames: { text: spouseName, when: "line.US.joint == 1" }
+      notClaimed: { tick: "line.US.claimable == 0" }
+      resident: { tick: "line.NYS.files == 1" }
+      "3": line.IT272.3
+      "5": { value: line.IT272.credit, when: "line.IT272.3 < param.tuitionSmall" }
+      "6": { value: line.IT272.3, when: "line.IT272.3 >= param.tuitionSmall" }
+      "7": { value: line.IT272.credit, when: "line.IT272.3 >= param.tuitionSmall" }
+
+  # Form IT-2: a W-2 record for each W-2, the spouse's after yours filing jointly (two on a form: the others go on another
+  # copy, which the worksheet says). The SSN, the employer's EIN and address, and boxes 12 to 14 stay for the person.
+  IT2:
+    title: Form IT-2, Summary of W-2 Statements
+    url: https://www.tax.ny.gov/pdf/2025/inc/it2_2025_fill_in.pdf
+    applies: "line.NYS.files == 1 and count(W2.box1) + if(line.US.joint == 1, spouse.line.NYS.ownW2s, 0) > 0"
+    wholeDollars: true
+    fields: {}
+    slips:
+      type: W2
+      spouse: "line.US.joint == 1"
+      columns: 2
+      fields:
+        employer: { issuer: true }
+        "1": { box: "1" }
+        "8": { box: "8" }
+        "10": { box: "10" }
+        "11": { box: "11" }
+        16a: { box: "16", if: { box: "15", is: [NY] } }
+        17a: { box: "17", if: { box: "15", is: [NY] } }
+        15b: { box: "15", if: { box: "15", is: [NY], not: true } }
+        16b: { box: "16", if: { box: "15", is: [NY], not: true } }
+        17b: { box: "17", if: { box: "15", is: [NY], not: true } }
+        18a: { box: "18" }
+        19a: { box: "19" }
+        20a: { box: "20" }
+
+  # Form IT-1099-R: a record for each Form 1099-R with New York State tax withheld (three on a form). Its boxes are
+  # numbered its own way: 12a is the state tax withheld (the 1099-R's box 14), 14 the state distribution (16), 15a the
+  # local tax (17), the locality (18) and 17a the local distribution (19).
+  IT1099R:
+    title: Form IT-1099-R, Summary of Federal Form 1099-R Statements
+    url: https://www.tax.ny.gov/pdf/2025/inc/it1099r_2025_fill_in.pdf
+    applies: "line.NYS.files == 1 and line.NYS.ownRetirementSlips + if(line.US.joint == 1, spouse.line.NYS.ownRetirementSlips, 0) > 0"
+    wholeDollars: true
+    fields:
+      names: { text: returnNames }
+    slips:
+      type: [RIRA, R]
+      which: { box: "15", is: [NY] }
+      spouse: "line.US.joint == 1"
+      columns: 3
+      fields:
+        payer: { issuer: true }
+        "1": { box: "1" }
+        2a: { box: "2A" }
+        code: { box: "7" }
+        12a: { box: "14" }
+        "14": { box: "16" }
+        15a: { box: "17" }
+        locality: { box: "18" }
+        17a: { box: "19" }
+
+# Forms a return needs that aren't printed, in the order they're attached: the worksheet and Finish name them, for the
+# person to fill in and file with the forms. Each applies when its formula is yes.
+formsToAdd:
+  SB:
+    form: Schedule B (Form 1040), Interest and Ordinary Dividends
+    why: >-
+      because your taxable interest or your ordinary dividends are more than $1,500: list each payer and amount (your
+      1099-INT and 1099-DIV forms, below) in Parts I and II, and answer the questions about foreign accounts and trusts
+      in Part III
+    applies: "line.F1040.2b > 1500 or line.F1040.3b > 1500"
+  F8863P2:
+    form: Form 8863, page 2, for each other student
+    why: >-
+      because more than one student has an education credit: Taxi fills in page 2 (Part III) for the first, and each
+      other student needs a copy of it. For a student with the American opportunity credit, line 27 is their expenses up
+      to $4,000 and line 30 the credit (all of the first $2,000 and 25% of the rest); for one with the lifetime learning
+      credit, line 31 is their expenses. "How each line is worked out", below, has each student's amounts.
+    applies: "line.US.students > 1"
+  CA540DEP:
+    form: A statement of your other dependents, for Form 540, line 10
+    why: >-
+      because you claim more than three dependents: list each other dependent's name, SSN or ITIN and relationship to
+      you, and attach it to Form 540
+    applies: "line.CAL.files == 1 and line.F540.10box > 3"

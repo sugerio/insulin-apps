@@ -1,0 +1,948 @@
+# The California resident return for 2025: Form 540, with Schedule CA (540), Schedule P (540) and forms FTB 3506 and
+# FTB 3514, for a person whose state on December 31 is California (person.province "CA") and who lived there all year.
+# Each number names its source: "Booklet" is the 2025 California Form 540 Personal Income Tax Booklet, "Schedule CA
+# instructions" its instructions for Schedule CA (540), "Schedule P instructions" the 2025 Instructions for Schedule
+# P (540), "3506 instructions" the 2025 Instructions for Form FTB 3506, and "3514 Booklet" the 2025 FTB 3514 California
+# Earned Income Tax Credit Booklet; check it there before changing it.
+#
+# The return starts from the federal one: federal AGI (Form 1040, line 11b, here F1040.11a), changed by Schedule CA for
+# what California taxes differently, then California's own deductions, tax, credits and payments. Form 540 is in whole
+# dollars, so each amount carried from the federal return is rounded to the dollar. A joint return is one Form 540, the
+# person preparing's, like the federal one; married filing separately in California is a community property return
+# (federal.yaml, SCOPE.communityProperty), which this app doesn't prepare. What California needs that this app doesn't
+# work out is said on the California return only (CALSCOPE.return): the federal return stays complete.
+
+params:
+  caPersonalCredit:
+    label: California personal exemption credit
+    source: "Form 540, line 7: X $153"
+    value: 153
+  caBlindCredit:
+    label: California blind exemption credit
+    source: "Form 540, line 8: X $153"
+    value: 153
+  caSeniorCredit:
+    label: California senior exemption credit
+    source: "Form 540, line 9: X $153"
+    value: 153
+  caDependentCredit:
+    label: California dependent exemption credit
+    source: "Form 540, line 10: X $475"
+    value: 475
+  caLimitSingle:
+    label: Federal AGI over which California's exemption credits and itemized deductions are limited, Single or Married filing separately
+    source: "Booklet, line 32, AGI Limitation Worksheet, line b: $252,203; Schedule CA (540), line 29"
+    value: 252203
+  caLimitJoint:
+    label: Federal AGI over which California's exemption credits and itemized deductions are limited, Married filing jointly or Qualifying surviving spouse
+    source: "Booklet, line 32, AGI Limitation Worksheet, line b: $504,411; Schedule CA (540), line 29"
+    value: 504411
+  caLimitHead:
+    label: Federal AGI over which California's exemption credits and itemized deductions are limited, Head of household
+    source: "Booklet, line 32, AGI Limitation Worksheet, line b: $378,310; Schedule CA (540), line 29"
+    value: 378310
+  caCreditReduction:
+    label: Reduction of each exemption credit for each step
+    source: "Booklet, AGI Limitation Worksheet, line e: multiply line d by $6"
+    value: 6
+  caStandardSingle:
+    label: California standard deduction, Single or Married filing separately
+    source: "Form 540, line 18: $5,706"
+    value: 5706
+  caStandardJoint:
+    label: California standard deduction, Married filing jointly, Head of household or Qualifying surviving spouse
+    source: "Form 540, line 18: $11,412"
+    value: 11412
+  caDependentMinimum:
+    label: Smallest California standard deduction for someone who can be claimed as a dependent
+    source: "Booklet, California Standard Deduction Worksheet for Dependents, line 2: $1,350"
+    value: 1350
+  caDependentEarnedAdd:
+    label: Added to earned income for a dependent's standard deduction
+    source: "Booklet, the Worksheet for Dependents, line 1: line 2 of the federal Standard Deduction Worksheet for Dependents, earned income plus $450"
+    value: 450
+  caGiftLimit:
+    label: Share of federal AGI California lets you deduct for gifts to charity
+    source: "Schedule CA instructions, lines 11 and 12: California limits the deduction to 50% of your federal AGI"
+    value: 50%
+  caItemizedShare:
+    label: Most of the itemized deductions (other than medical) the limitation can take away
+    source: "Schedule CA instructions, Itemized Deductions Worksheet, line 4: 80% (.80)"
+    value: 80%
+  caItemizedRate:
+    label: Itemized deduction limitation rate on federal AGI over the limit
+    source: "Schedule CA instructions, Itemized Deductions Worksheet, line 8: 6% (.06)"
+    value: 6%
+  caTaxTableLimit:
+    label: Taxable income up to which the California Tax Table is used
+    source: "Booklet, line 31: the Tax Table if your taxable income on line 19 is $100,000 or less"
+    value: 100000
+  caRatesSingle:
+    label: California tax rate schedule X, Single or Married filing separately
+    source: "Booklet, 2025 California Tax Rate Schedules, Schedule X"
+    value:
+      - { upTo: 11079, rate: 1%, base: 0 }
+      - { upTo: 26264, rate: 2%, base: 110.79 }
+      - { upTo: 41452, rate: 4%, base: 414.49 }
+      - { upTo: 57542, rate: 6%, base: 1022.01 }
+      - { upTo: 72724, rate: 8%, base: 1987.41 }
+      - { upTo: 371479, rate: 9.3%, base: 3201.97 }
+      - { upTo: 445771, rate: 10.3%, base: 30986.19 }
+      - { upTo: 742953, rate: 11.3%, base: 38638.27 }
+      - { rate: 12.3%, base: 72219.84 }
+  caRatesJoint:
+    label: California tax rate schedule Y, Married filing jointly or Qualifying surviving spouse
+    source: "Booklet, 2025 California Tax Rate Schedules, Schedule Y"
+    value:
+      - { upTo: 22158, rate: 1%, base: 0 }
+      - { upTo: 52528, rate: 2%, base: 221.58 }
+      - { upTo: 82904, rate: 4%, base: 828.98 }
+      - { upTo: 115084, rate: 6%, base: 2044.02 }
+      - { upTo: 145448, rate: 8%, base: 3974.82 }
+      - { upTo: 742958, rate: 9.3%, base: 6403.94 }
+      - { upTo: 891542, rate: 10.3%, base: 61972.37 }
+      - { upTo: 1485906, rate: 11.3%, base: 77276.52 }
+      - { rate: 12.3%, base: 144439.65 }
+  caRatesHead:
+    label: California tax rate schedule Z, Head of household
+    source: "Booklet, 2025 California Tax Rate Schedules, Schedule Z"
+    value:
+      - { upTo: 22173, rate: 1%, base: 0 }
+      - { upTo: 52530, rate: 2%, base: 221.73 }
+      - { upTo: 67716, rate: 4%, base: 828.87 }
+      - { upTo: 83805, rate: 6%, base: 1436.31 }
+      - { upTo: 98990, rate: 8%, base: 2401.65 }
+      - { upTo: 505208, rate: 9.3%, base: 3616.45 }
+      - { upTo: 606251, rate: 10.3%, base: 41394.72 }
+      - { upTo: 1010417, rate: 11.3%, base: 51802.15 }
+      - { rate: 12.3%, base: 97472.91 }
+  caMentalHealthFloor:
+    label: Taxable income over which the Behavioral Health Services Tax applies
+    source: "Booklet, line 62: if your taxable income is more than $1,000,000"
+    value: 1000000
+  caMentalHealthRate:
+    label: Behavioral Health Services Tax rate
+    source: "Booklet, line 62, line 4: tax rate 1%"
+    value: 1%
+  caEarlyDistributionRate:
+    label: California additional tax on an early distribution from a retirement plan
+    source: "FTB 3805P instructions, Part I, line 4: 2½% of the amount subject to the additional tax"
+    value: 2.5%
+  caRenterLimitSingle:
+    label: California AGI up to which the renter's credit is allowed, Single or Married filing separately
+    source: "Booklet, Nonrefundable Renter's Credit Qualification Record, question 2: $53,994 or less"
+    value: 53994
+  caRenterLimitJoint:
+    label: California AGI up to which the renter's credit is allowed, Married filing jointly, Head of household or Qualifying surviving spouse
+    source: "Booklet, Nonrefundable Renter's Credit Qualification Record, question 2: $107,988 or less"
+    value: 107988
+  caRenterSingle:
+    label: Renter's credit, Single or Married filing separately
+    source: "Booklet, Renter's Credit Qualification Record, question 11: $60 single; married filing separately and living apart, half of $120"
+    value: 60
+  caRenterJoint:
+    label: Renter's credit, Married filing jointly, Head of household or Qualifying surviving spouse
+    source: "Booklet, Renter's Credit Qualification Record, question 11: $120"
+    value: 120
+  caCareAgiLimit:
+    label: Federal AGI up to which the California child and dependent care credit is allowed
+    source: "3506 instructions, line 9: over $100,000, stop, you do not qualify"
+    value: 100000
+  caCareRates:
+    label: Share of the credit California allows, by federal AGI
+    source: "3506 instructions, line 9: .50 up to $40,000; .43 over $40,000 up to $70,000; .34 over $70,000 up to $100,000"
+    value:
+      - { upTo: 40000, rate: 50% }
+      - { upTo: 70000, rate: 43% }
+      - { rate: 34% }
+  caAmtExemptionSingle:
+    label: California AMT exemption, Single or Head of household
+    source: "Schedule P (540), line 22: $92,749"
+    value: 92749
+  caAmtExemptionJoint:
+    label: California AMT exemption, Married filing jointly or Qualifying surviving spouse
+    source: "Schedule P (540), line 22: $123,667"
+    value: 123667
+  caAmtExemptionSeparate:
+    label: California AMT exemption, Married filing separately
+    source: "Schedule P (540), line 22: $61,830"
+    value: 61830
+  caAmtPhaseOutSingle:
+    label: California AMTI over which the AMT exemption goes down, Single or Head of household
+    source: "Schedule P (540), line 22: line 21 not over $347,808 (Schedule P instructions, Exemption Worksheet, line 3)"
+    value: 347808
+  caAmtPhaseOutJoint:
+    label: California AMTI over which the AMT exemption goes down, Married filing jointly or Qualifying surviving spouse
+    source: "Schedule P (540), line 22: line 21 not over $463,745"
+    value: 463745
+  caAmtPhaseOutSeparate:
+    label: California AMTI over which the AMT exemption goes down, Married filing separately
+    source: "Schedule P (540), line 22: line 21 not over $231,868"
+    value: 231868
+  caAmtPhaseOutRate:
+    label: Reduction of the California AMT exemption
+    source: "Schedule P instructions, Exemption Worksheet, line 5: multiply line 4 by 25% (.25)"
+    value: 25%
+  caAmtChildAmount:
+    label: California AMT exemption of certain children under 24, before their earned income
+    source: "Schedule P instructions, Exemption Worksheet, line 7: $9,750"
+    value: 9750
+  caAmtMedicalRate:
+    label: Share of federal AGI the medical adjustment of the California AMT is limited to
+    source: "Schedule P (540), line 2: the smaller of Schedule A, line 4, or 2½% (.025) of federal AGI"
+    value: 2.5%
+  caAmtRate:
+    label: California tentative minimum tax rate
+    source: "Schedule P (540), line 24: multiply line 23 by 7.0% (.07)"
+    value: 7%
+  calEitcLimit:
+    label: Federal AGI and earned income from which there is no California EITC
+    source: "3514 Booklet, Differences in California and Federal Law: both your earned income and federal AGI must be less than $32,901"
+    value: 32901
+  calEitcInvestmentLimit:
+    label: Most investment income someone can have and get the California EITC
+    source: "3514 Booklet, Worksheet 1, line 13: more than $4,814, you cannot take the credit"
+    value: 4814
+  calEitcAge:
+    label: Age at the end of 2025 for the California EITC without a qualifying child
+    source: "3514 Booklet, Differences: an eligible individual without a qualifying child is 18 years or older"
+    value: 18
+  calEitcRateNoChild:
+    label: California EITC rate as it rises, no qualifying child
+    source: "R&TC 17052(b)(1): 7.65%, times the 85% adjustment factor of the 2025 Budget Act; checked row by row against the 2025 EITC Table (3514 Booklet, pages 22 to 30)"
+    value: 6.5025%
+  calEitcRateOneChild:
+    label: California EITC rate as it rises, one qualifying child
+    source: "R&TC 17052(b)(1): 34%, times 85%; checked against the 2025 EITC Table"
+    value: 28.9%
+  calEitcRateTwoChildren:
+    label: California EITC rate as it rises, two qualifying children
+    source: "R&TC 17052(b)(1): 40%, times 85%; checked against the 2025 EITC Table"
+    value: 34%
+  calEitcRateThreeChildren:
+    label: California EITC rate as it rises, three or more qualifying children
+    source: "R&TC 17052(b)(1): 45%, times 85%; checked against the 2025 EITC Table"
+    value: 38.25%
+  calEitcPeakNoChild:
+    label: Earned income at which the California EITC is largest, no qualifying child
+    source: "3514 Booklet, California Earned Income Tax Credit Worksheet, line 5: $4,661 with no qualifying children"
+    value: 4661
+  calEitcPeakOneChild:
+    label: Earned income at which the California EITC is largest, one qualifying child
+    source: "3514 Booklet, the Worksheet, line 5: $6,998 with 1 qualifying child"
+    value: 6998
+  calEitcPeakMoreChildren:
+    label: Earned income at which the California EITC is largest, two or more qualifying children
+    source: "3514 Booklet, the Worksheet, line 5: $9,823 with 2 or more qualifying children"
+    value: 9823
+  calEitcTailRateNoChild:
+    label: Rate of the California EITC's second phase-out, no qualifying child
+    source: "R&TC 17052(o): a second phase-out percentage, 1.08% times the 85% adjustment factor; checked against the 2025 EITC Table"
+    value: 0.918%
+  calEitcTailRateOneChild:
+    label: Rate of the California EITC's second phase-out, one qualifying child
+    source: "R&TC 17052(o): 3.54% times 85%; checked against the 2025 EITC Table"
+    value: 3.009%
+  calEitcTailRateTwoChildren:
+    label: Rate of the California EITC's second phase-out, two qualifying children
+    source: "R&TC 17052(o): 4.94% times 85%; checked against the 2025 EITC Table"
+    value: 4.199%
+  calEitcTailRateThreeChildren:
+    label: Rate of the California EITC's second phase-out, three or more qualifying children
+    source: "R&TC 17052(o): 5.01% times 85%; checked against the 2025 EITC Table"
+    value: 4.2585%
+  calEitcTailEndNoChild:
+    label: Earned income at which the California EITC's second phase-out reaches zero, no qualifying child
+    source: >-
+      The 2025 EITC Table (3514 Booklet, pages 22 to 30): FTB prints no amount for it, so this is the one that gives
+      every row of the table, which test/engine checks in full ($32,957.64 to $32,958.61 all do)
+    value: 32958
+  calEitcTailEndOneChild:
+    label: Earned income at which the California EITC's second phase-out reaches zero, one qualifying child
+    source: "The 2025 EITC Table, every row ($32,894.27 to $32,894.52 all give it)"
+    value: 32894.40
+  calEitcTailEndTwoChildren:
+    label: Earned income at which the California EITC's second phase-out reaches zero, two qualifying children
+    source: "The 2025 EITC Table, every row ($32,894.65 to $32,894.75 all give it)"
+    value: 32894.70
+  calEitcTailEndThreeChildren:
+    label: Earned income at which the California EITC's second phase-out reaches zero, three or more qualifying children
+    source: "The 2025 EITC Table, every row ($32,886.30 to $32,886.44 all give it)"
+    value: 32886.37
+  calYoungChildCredit:
+    label: Young Child Tax Credit and Foster Youth Tax Credit, most for each
+    source: "FTB 3514, line 24 and line 35: $1,189"
+    value: 1189
+  calYoungChildThreshold:
+    label: Earned income over which the Young Child and Foster Youth Tax Credits go down
+    source: "FTB 3514, line 25 and line 36: subtract $27,425"
+    value: 27425
+  calYoungChildReduction:
+    label: Reduction of the Young Child or Foster Youth Tax Credit for each $100 over the threshold
+    source: "FTB 3514, line 27 and line 38: multiply line 26 by $21.71 ($43.42 when both spouses claim the FYTC)"
+    value: 21.71
+  calYoungChildAge:
+    label: Age under which a qualifying child gives the Young Child Tax Credit
+    source: "3514 Booklet, Young Child Tax Credit: a qualifying child younger than six years old as of the last day of the year"
+    value: 6
+
+questions:
+  livedInCaliforniaAllYear:
+    type: boolean
+    module: about
+    ask: You lived in California all of 2025
+    help: >-
+      California was your home (your domicile) for the whole year. If you moved in or out during 2025, or lived in
+      another state for part of it, you file Form 540NR, which this app doesn't prepare.
+  caFullYearCoverage:
+    type: boolean
+    module: about
+    ask: Everyone on your return had health coverage all of 2025
+    help: >-
+      You, your spouse filing jointly, and anyone you claim had health insurance that counts as minimum essential
+      coverage (from an employer, Covered California, Medi-Cal or Medicare Part A or C) in every month. Without it,
+      California may charge a penalty (Form 540, line 92, and form FTB 3853), which this app doesn't work out.
+  caBondInterest:
+    type: money
+    module: income
+    ask: Tax-exempt interest from California bonds
+    help: >-
+      Of your tax-exempt interest (box 8 of your 1099-INT and box 12 of your 1099-DIV), the part from bonds of California,
+      its cities and counties, or from a fund with at least half its assets in them (the fund's year-end statement says
+      how much). California taxes the rest (Schedule CA, line 2, column C).
+  hsaEarnings:
+    type: money
+    module: deductions
+    ask: What your HSA earned in 2025
+    help: >-
+      Interest, dividends and gains in your health savings account for 2025 (your HSA's statement shows them).
+      California doesn't treat an HSA as tax-free, so they are taxed, and the HSA deduction and your employer's
+      contributions are added back (Schedule CA, lines 1h, 2 and 13).
+  caCareInCalifornia:
+    type: boolean
+    module: credits
+    ask: All the care you paid for was given in California
+    help: The California credit for child and dependent care counts only care given in California (form FTB 3506).
+  caPaidRent:
+    type: boolean
+    module: credits
+    ask: You rented your home in California for at least half of 2025
+    help: >-
+      You paid rent for at least six months of 2025 on your main home in California. You don't qualify if it was exempt
+      from property tax (such as a dormitory or military barracks), if you or your spouse got the homeowner's property
+      tax exemption, or if you lived for more than half the year with someone who can claim you as a dependent
+      (Nonrefundable Renter's Credit Qualification Record).
+  caEstimatedPayments:
+    type: money
+    module: credits
+    ask: California estimated tax payments
+    help: California estimated tax you paid for 2025 (Form 540-ES), any 2024 California refund you applied to 2025, and a payment with an extension (Form 540, line 72).
+    default: 0
+  caUseTax:
+    type: money
+    module: credits
+    ask: California use tax
+    help: >-
+      Use tax on things you bought from sellers outside California for use in California, without California sales
+      tax (often online). Enter 0 if you owe none or paid it to the CDTFA. The Booklet's Use Tax Worksheet and table
+      help you work it out (Form 540, line 91, which can't be left blank).
+  fosterYouth:
+    type: boolean
+    module: about
+    ask: You were in California foster care at age 13 or older
+    help: >-
+      Placed through the California foster care system while 13 or older. From 18 to 25 you may get the Foster Youth Tax
+      Credit (FTB 3514, Part IX).
+    default: false
+
+lines:
+  # Whether this return has a California return: the person preparing is a resident on December 31, or, filing
+  # jointly, either spouse is (both must be: CALSCOPE.residency says so otherwise).
+  CAL.files:
+    label: A California return is filed with this one (1 for yes)
+    formula: 'if(person.province == "CA", 1, if(line.US.joint == 1, if(spouse.person.province == "CA", 1, 0), 0))'
+
+  # Exemption credits (lines 6 to 11 and 32)
+  F540.7box:
+    label: Personal exemptions
+    formula: >-
+      if(line.US.claimable == 1, if(line.US.joint == 1, if(answer.canBeClaimed and spouse.answer.canBeClaimed, 0, 1), 0),
+      if(line.US.joint == 1 or line.US.qss == 1, 2, 1))
+    source: "Form 540, line 7: 1 for box 1, 3 or 4, 2 for box 2 or 5; Booklet, line 7: 0 when the box on line 6 is checked, or 1 on a joint return where only one of you can be claimed"
+  CAL.ownBlind:
+    label: Blind and not a dependent (1 for yes)
+    formula: "if(answer.isBlind, if(answer.canBeClaimed, 0, 1), 0)"
+  CAL.ownSenior:
+    label: 65 or older and not a dependent (1 for yes)
+    formula: "if(person.age >= 65, if(answer.canBeClaimed, 0, 1), 0)"
+  F540.8box:
+    label: Blind exemptions
+    formula: "line.CAL.ownBlind + if(line.US.joint == 1, spouse.line.CAL.ownBlind, 0)"
+    source: "Form 540, line 8, and Booklet, line 8: not claimed by someone who can be claimed as a dependent"
+  F540.9box:
+    label: Senior exemptions
+    formula: "line.CAL.ownSenior + if(line.US.joint == 1, spouse.line.CAL.ownSenior, 0)"
+    source: "Form 540, line 9, and Booklet, line 9: 65 or older by December 31, 2025, and not claimed as a dependent"
+  F540.10box:
+    label: Dependent exemptions
+    formula: "if(line.US.claimsDependants == 1, sum(dependants.DEP.dependent), 0)"
+    source: "Booklet, line 10: the same persons you listed as dependents on your federal return"
+  F540.7:
+    label: Personal exemption credits
+    formula: "line.F540.7box * param.caPersonalCredit"
+  F540.8:
+    label: Blind exemption credits
+    formula: "line.F540.8box * param.caBlindCredit"
+  F540.9:
+    label: Senior exemption credits
+    formula: "line.F540.9box * param.caSeniorCredit"
+  F540.10:
+    label: Dependent exemption credits
+    formula: "line.F540.10box * param.caDependentCredit"
+  F540.11:
+    label: Exemption amount
+    formula: "line.F540.7 + line.F540.8 + line.F540.9 + line.F540.10"
+
+  # Income: federal AGI and Schedule CA (540), Part I.
+  CAL.ownStateWages:
+    label: State wages on this person's Forms W-2, box 16
+    formula: "sum(W2.box16)"
+  F540.12:
+    label: State wages from Forms W-2, box 16
+    formula: "round(line.CAL.ownStateWages + if(line.US.joint == 1, spouse.line.CAL.ownStateWages, 0), 0)"
+    source: "Booklet, line 12: state wages from all states, box 16 of each W-2"
+  F540.13:
+    label: Federal adjusted gross income
+    formula: "round(line.F1040.11a, 0)"
+    source: "Form 540, line 13: federal Form 1040, line 11b, in whole dollars"
+  CAL.ownTreasuryInterest:
+    label: This person's interest on U.S. savings bonds and Treasury obligations, Forms 1099-INT box 3
+    formula: "sum(INT.box3)"
+  CAL.ownOtherStateBondInterest:
+    label: This person's tax-exempt interest not from California bonds
+    formula: "if(line.US.ownExemptInterest == 0, 0, max(0, line.US.ownExemptInterest - answer.caBondInterest))"
+    source: >-
+      Schedule CA instructions, line 2, column C: federally tax-exempt interest and exempt-interest dividends from other
+      states' bonds or from funds under the 50% rule
+  CAL.ownHsa:
+    label: This person has a health savings account (1 for yes)
+    formula: "if(line.CAL.ownEmployerHsa > 0, 1, if(answer.hasHsa, 1, 0))"
+  CAL.ownHsaEarnings:
+    label: What this person's HSA earned in 2025
+    formula: "if(line.CAL.ownHsa == 1, answer.hsaEarnings, 0)"
+    source: "Schedule CA instructions, line 2, column C: interest or other earnings in an HSA are taxable in the year earned"
+  CAL.ownEmployerHsa:
+    label: Employer contributions to this person's HSA, Forms W-2 box 12 code W
+    formula: "sum(W2.box12W)"
+  SCA.1h:
+    label: Employer contributions to a health savings account, added
+    formula: "round(line.CAL.ownEmployerHsa + if(line.US.joint == 1, spouse.line.CAL.ownEmployerHsa, 0), 0)"
+    source: "Schedule CA instructions, line 1h: the employer HSA contribution from Form W-2, box 12, code W, in column C"
+  SCA.2B:
+    label: Interest on U.S. obligations, subtracted
+    formula: "round(line.CAL.ownTreasuryInterest + if(line.US.joint == 1, spouse.line.CAL.ownTreasuryInterest, 0), 0)"
+    source: "Schedule CA instructions, line 2, column B: interest from U.S. savings bonds and Treasury bills, notes and bonds"
+  SCA.2C:
+    label: Interest California taxes and the federal return doesn't, added
+    formula: >-
+      round(line.CAL.ownOtherStateBondInterest + line.CAL.ownHsaEarnings
+      + if(line.US.joint == 1, spouse.line.CAL.ownOtherStateBondInterest + spouse.line.CAL.ownHsaEarnings, 0), 0)
+    source: "Schedule CA instructions, line 2, column C: non-California bond interest and HSA earnings"
+  SCA.6B:
+    label: Taxable social security benefits, subtracted
+    formula: "round(line.F1040.6b, 0)"
+    source: "Schedule CA instructions, line 6: California excludes U.S. social security benefits; enter in column B the amount on line 6b"
+  SCA.10B:
+    label: Income subtractions
+    formula: "line.SCA.2B + line.SCA.6B"
+  SCA.10C:
+    label: Income additions
+    formula: "line.SCA.1h + line.SCA.2C"
+  SCA.13B:
+    label: Health savings account deduction, not allowed
+    formula: "round(line.S1.13, 0)"
+    source: "Schedule CA instructions, Section C: California doesn't conform to the HSA deduction of Schedule 1, line 13; it goes in column B"
+  SCA.27B:
+    label: Total subtractions, column B
+    formula: "line.SCA.10B - line.SCA.13B"
+    source: "Schedule CA (540), line 27: line 10 less line 26 (line 13 is the only adjustment in column B)"
+  SCA.27C:
+    label: Total additions, column C
+    formula: "line.SCA.10C"
+    source: "Schedule CA (540), line 27, column C: line 10 (no adjustment in column C, line 26)"
+  F540.14:
+    label: California adjustments, subtractions
+    formula: "max(0, line.SCA.27B) + max(0, 0 - line.SCA.27C)"
+    source: "Schedule CA instructions, line 27: column B, and column C as a positive number when it is negative"
+  F540.15:
+    label: Federal AGI less the subtractions
+    formula: "line.F540.13 - line.F540.14"
+  F540.16:
+    label: California adjustments, additions
+    formula: "max(0, line.SCA.27C) + max(0, 0 - line.SCA.27B)"
+    source: "Schedule CA instructions, line 27: column C, and column B as a positive number when it is negative"
+  F540.17:
+    label: California adjusted gross income
+    formula: "line.F540.15 + line.F540.16"
+
+  # Deductions: Schedule CA (540), Part II, and the standard deduction (line 18).
+  CAL.limit:
+    label: Federal AGI over which exemption credits and itemized deductions are limited
+    formula: "if(line.US.jointRates == 1, param.caLimitJoint, if(line.US.hoh == 1, param.caLimitHead, param.caLimitSingle))"
+  CAL.basicStandard:
+    label: California standard deduction for the filing status
+    formula: "if(line.US.jointRates == 1 or line.US.hoh == 1, param.caStandardJoint, param.caStandardSingle)"
+  CAL.standard:
+    label: California standard deduction
+    formula: >-
+      if(line.US.claimable == 1, min(line.CAL.basicStandard, max(param.caDependentMinimum, round(line.US.earnedIncome, 0) + param.caDependentEarnedAdd)),
+      line.CAL.basicStandard)
+    source: "Form 540, line 18, and Booklet, California Standard Deduction Worksheet for Dependents"
+  SCA.4:
+    label: Medical and dental expenses
+    formula: "round(line.SA.4, 0)"
+    source: "Schedule CA (540), Part II, line 4: the federal amount (California has the same 7.5% floor)"
+  SCA.5:
+    label: Real estate and personal property taxes
+    formula: "round(line.SA.5b, 0) + round(line.SA.5c, 0)"
+    source: "Schedule CA (540), Part II, lines 5b and 5c, column A (Schedule P instructions, line 3)"
+  SCA.17A:
+    label: Federal itemized deductions, column A
+    formula: "round(line.SA.17, 0)"
+    source: "Schedule CA (540), Part II, line 17, column A: federal Schedule A, line 17"
+  SCA.17B:
+    label: State and local income tax, subtracted
+    formula: "round(line.SA.5a, 0)"
+    source: "Schedule CA instructions, line 5a: California does not allow a deduction for state and local income tax; enter it in column B"
+  SCA.17C:
+    label: State and local taxes over the federal limit, added
+    formula: "round(line.SA.5d - line.SA.5e, 0)"
+    source: "Schedule CA instructions, line 5e: California doesn't conform to the $40,000 limit; the amount over it goes in column C"
+  SCA.18:
+    label: Itemized deductions after California's adjustments
+    formula: >-
+      if(line.SA.14 > round(line.F1040.11a * param.caGiftLimit, 2),
+      unsupported("Gifts to charity over 50% of federal AGI are limited and carried over in California, which this app doesn't work out"),
+      line.SCA.17A - line.SCA.17B + line.SCA.17C)
+    source: >-
+      Schedule CA (540), line 18: line 17, column A less column B plus column C. Mortgage interest is the federal amount
+      (California's $1,000,000 limit doesn't change it below the federal $750,000), and gifts are as federal while under
+      50% of federal AGI (Schedule CA instructions, lines 11 and 12)
+  SCA.28:
+    label: California itemized deductions before the limitation
+    formula: "line.SCA.18"
+    source: "Schedule CA (540), lines 26 and 28: line 18 (no miscellaneous deductions, line 25, or other adjustments, line 27)"
+  SCA.limitation:
+    label: Itemized deductions limitation
+    formula: >-
+      if(line.F540.13 <= line.CAL.limit, 0, if(line.SCA.28 - line.SCA.4 <= 0, 0,
+      min(round((line.SCA.28 - line.SCA.4) * param.caItemizedShare, 0), round((line.F540.13 - line.CAL.limit) * param.caItemizedRate, 0))))
+    source: "Schedule CA instructions, Itemized Deductions Worksheet, lines 1 to 9: the smaller of 80% of the deductions other than medical, or 6% of federal AGI over the limit"
+  SCA.29:
+    label: California itemized deductions
+    formula: "line.SCA.28 - line.SCA.limitation"
+  CAL.itemizes:
+    label: The California return itemizes (1 for yes)
+    formula: "if(line.SCA.29 > line.CAL.standard, 1, 0)"
+    source: "Form 540, line 18: the larger of the itemized deductions and the standard deduction, whatever the federal return does"
+  F540.18:
+    label: Itemized deductions or standard deduction
+    formula: "if(line.CAL.itemizes == 1, line.SCA.29, line.CAL.standard)"
+  F540.19:
+    label: California taxable income
+    formula: "max(0, line.F540.17 - line.F540.18)"
+
+  # Tax (lines 31 to 35)
+  CAL.tableMiddle:
+    label: The middle of the California Tax Table's row for line 19
+    formula: >-
+      if(line.F540.19 <= 50, 25, (floor(line.F540.19 - 51, 100) + 50 + min(floor(line.F540.19 - 51, 100) + 150, param.caTaxTableLimit)) / 2)
+    source: >-
+      2025 California Tax Table (Booklet, pages 69 to 74): a first row of $1 to $50, then rows $100 wide ($51 to $150)
+      to $100,000, the last $99,951 to $100,000; each row's tax is the tax on the middle of the row ($50 above the row's
+      start), to the nearest dollar, which test/engine checks for every row
+  CAL.rateTax:
+    label: Tax on an amount at the filing status's rates
+    formula: >-
+      if(line.US.jointRates == 1, bracket(param.caRatesJoint, if(line.F540.19 <= param.caTaxTableLimit, line.CAL.tableMiddle, line.F540.19)),
+      if(line.US.hoh == 1, bracket(param.caRatesHead, if(line.F540.19 <= param.caTaxTableLimit, line.CAL.tableMiddle, line.F540.19)),
+      bracket(param.caRatesSingle, if(line.F540.19 <= param.caTaxTableLimit, line.CAL.tableMiddle, line.F540.19))))
+  F540.31:
+    label: Tax
+    formula: "if(line.F540.19 <= 0, 0, round(line.CAL.rateTax, 0))"
+    source: "Booklet, line 31: the Tax Table for taxable income of $100,000 or less, the Tax Rate Schedules over it (X single or separately, Y jointly or surviving spouse, Z head of household)"
+  CAL.creditSteps:
+    label: Steps of $2,500 ($1,250) of federal AGI over the limit, rounded up
+    formula: >-
+      if(line.F540.13 <= line.CAL.limit, 0, if(line.US.separate == 1, (0 - floor(line.CAL.limit - line.F540.13, 1250)) / 1250,
+      (0 - floor(line.CAL.limit - line.F540.13, 2500)) / 2500))
+    source: "Booklet, AGI Limitation Worksheet, lines a to d: divide by $2,500 ($1,250 if married/RDP filing separately), rounded up to a whole number"
+  F540.32:
+    label: Exemption credits
+    formula: >-
+      max(0, line.F540.7 + line.F540.8 + line.F540.9 - line.CAL.creditSteps * param.caCreditReduction * (line.F540.7box + line.F540.8box + line.F540.9box))
+      + max(0, line.F540.10 - line.CAL.creditSteps * param.caCreditReduction * line.F540.10box)
+    source: "Booklet, AGI Limitation Worksheet, lines e to n: $6 less for each step, for each exemption, the personal ones and the dependents' each at least 0"
+  F540.33:
+    label: Tax less exemption credits
+    formula: "max(0, line.F540.31 - line.F540.32)"
+  F540.35:
+    label: California tax after exemption credits
+    formula: "line.F540.33"
+    source: "Form 540, line 35: lines 33 and 34 (no Schedule G-1 or FTB 5870A tax, line 34)"
+
+  # Schedule P (540): the alternative minimum tax, and the credits it limits.
+  SP.1:
+    label: Standard deduction
+    formula: "if(line.CAL.itemizes == 1, 0, line.F540.18)"
+    source: "Schedule P (540), line 1: if you did not itemize, the standard deduction from Form 540, line 18"
+  SP.2:
+    label: Medical and dental expenses
+    formula: "if(line.CAL.itemizes == 1, min(line.SCA.4, round(line.F540.13 * param.caAmtMedicalRate, 0)), 0)"
+  SP.3:
+    label: Personal property taxes and real property taxes
+    formula: "if(line.CAL.itemizes == 1, line.SCA.5, 0)"
+    source: "Schedule P instructions, line 3: Schedule CA (540), Part II, lines 5b and 5c"
+  SP.14:
+    label: Total adjustments and preferences
+    formula: "line.SP.1 + line.SP.2 + line.SP.3"
+    source: "Schedule P (540), line 14: lines 1 to 13 (no home equity interest, line 4, or other preferences)"
+  SP.15:
+    label: Taxable income
+    formula: "if(line.F540.19 > 0, line.F540.19, line.F540.17 - line.F540.18)"
+    source: "Schedule P instructions, line 15: Form 540, line 19; if it is zero, line 17 less line 18 as a negative amount"
+  SP.18:
+    label: Itemized deductions limitation
+    formula: "if(line.CAL.itemizes == 1, 0 - line.SCA.limitation, 0)"
+    source: "Schedule P instructions, line 18: for AMT, the limitation doesn't apply (Itemized Deductions Worksheet, line 9, taken back)"
+  SP.21:
+    label: Alternative minimum taxable income
+    formula: "line.SP.14 + line.SP.15 + line.SP.18"
+    source: "Schedule P (540), lines 19 and 21 (no NOL, lines 16, 17 and 20)"
+  CAL.amtExemptionFull:
+    label: California AMT exemption for the filing status
+    formula: "if(line.US.jointRates == 1, param.caAmtExemptionJoint, if(line.US.separate == 1, param.caAmtExemptionSeparate, param.caAmtExemptionSingle))"
+  CAL.amtPhaseOut:
+    label: AMTI over which the exemption goes down
+    formula: "if(line.US.jointRates == 1, param.caAmtPhaseOutJoint, if(line.US.separate == 1, param.caAmtPhaseOutSeparate, param.caAmtPhaseOutSingle))"
+  SP.22:
+    label: Exemption amount
+    formula: >-
+      if(line.US.joint == 0 and line.US.claimable == 1 and person.age < 24,
+      min(max(0, line.CAL.amtExemptionFull - round(max(0, line.SP.21 - line.CAL.amtPhaseOut) * param.caAmtPhaseOutRate, 0)), param.caAmtChildAmount + round(line.US.earnedIncome, 0)),
+      max(0, line.CAL.amtExemptionFull - round(max(0, line.SP.21 - line.CAL.amtPhaseOut) * param.caAmtPhaseOutRate, 0)))
+    source: >-
+      Schedule P instructions, line 22 and the Exemption Worksheet: 25% of AMTI over the threshold off the exemption; for
+      someone under 24 whom another can claim (not on a joint return), at most earned income plus $9,750
+  SP.23:
+    label: AMTI over the exemption
+    formula: "max(0, line.SP.21 - line.SP.22)"
+  SP.24:
+    label: Tentative minimum tax
+    formula: "round(line.SP.23 * param.caAmtRate, 0)"
+  SP.26:
+    label: Alternative minimum tax
+    formula: "max(0, line.SP.24 - line.F540.31)"
+    source: "Schedule P (540), lines 25 and 26: line 24 less the regular tax of Form 540, line 31"
+  SP.excess:
+    label: Tax that credits limited by the tentative minimum tax can reduce
+    formula: "max(0, line.F540.35 - line.SP.24)"
+    source: "Schedule P (540), Part III, lines 1 to 3: Form 540, line 35, less the tentative minimum tax"
+
+  # Form FTB 3506: the child and dependent care credit, from the federal Form 2441 (care.yaml).
+  F3506.3:
+    label: Qualified expenses
+    formula: "round(line.F2441.3, 0)"
+    source: "FTB 3506, line 3: as federal Form 2441, line 3, for care in California"
+  F3506.4:
+    label: Your earned income
+    formula: "round(line.F2441.4, 0)"
+  F3506.5:
+    label: Your spouse's earned income, or yours
+    formula: "round(line.F2441.5, 0)"
+  F3506.6:
+    label: The smallest of lines 3, 4 and 5
+    formula: "max(0, min(line.F3506.3, line.F3506.4, line.F3506.5))"
+  F3506.7:
+    label: Decimal amount for federal AGI
+    formula: "line.F2441.8"
+    source: "3506 instructions, line 7: the same chart as federal Form 2441, line 8 (.35 down to .20)"
+  F3506.8:
+    label: Line 6 times line 7
+    formula: "round(line.F3506.6 * line.F3506.7, 0)"
+  F3506.9:
+    label: California decimal amount
+    formula: "step(param.caCareRates, line.F540.13)"
+  F3506.10:
+    label: Line 8 times line 9
+    formula: "round(line.F3506.8 * line.F3506.9, 0)"
+  F3506.12:
+    label: Child and dependent care expenses credit
+    formula: >-
+      if(line.US.careExpenses == 0, 0, if(line.F2441.2 == 0, 0, if(line.US.careUnmarried == 0, 0, if(line.F540.13 > param.caCareAgiLimit, 0,
+      if(answer.caCareInCalifornia, line.F3506.10, unsupported("Care given outside California doesn't count for the California credit, and this app can't split it: form FTB 3506, line 2"))))))
+    source: "FTB 3506, line 12: line 10 (no 2024 expenses, line 11); federal AGI of $100,000 or less and care in California (3506 instructions, C and line 9)"
+
+  # Credits (lines 40 to 48)
+  F540.40:
+    label: Nonrefundable child and dependent care expenses credit
+    formula: "min(line.F3506.12, line.SP.excess)"
+    source: "Schedule P instructions, Part III, Section A1, line 5: the credit can't reduce the tax below the tentative minimum tax"
+  CAL.renterLimit:
+    label: California AGI up to which the renter's credit is allowed
+    formula: "if(line.US.jointRates == 1 or line.US.hoh == 1, param.caRenterLimitJoint, param.caRenterLimitSingle)"
+  CAL.renterCredit:
+    label: Renter's credit before the tax limit
+    formula: >-
+      if(line.F540.17 > line.CAL.renterLimit, 0, if(answer.caPaidRent,
+      if(line.US.jointRates == 1 or line.US.hoh == 1, param.caRenterJoint, param.caRenterSingle), 0))
+    source: "Booklet, Nonrefundable Renter's Credit Qualification Record, questions 1 to 11"
+  F540.46:
+    label: Nonrefundable renter's credit
+    formula: "min(line.CAL.renterCredit, max(0, line.F540.35 - line.F540.40))"
+    source: "Schedule P instructions, Part III, Section B1, line 15: it may reduce the tax below the tentative minimum tax, not below zero"
+  F540.47:
+    label: California credits
+    formula: "line.F540.40 + line.F540.46"
+  F540.48:
+    label: Tax after credits
+    formula: "max(0, line.F540.35 - line.F540.47)"
+
+  # Other taxes (lines 61 to 64)
+  F540.61:
+    label: Alternative minimum tax
+    formula: "line.SP.26"
+  F540.62:
+    label: Behavioral Health Services Tax
+    formula: "round(max(0, line.F540.19 - param.caMentalHealthFloor) * param.caMentalHealthRate, 0)"
+    source: "Booklet, line 62: 1% of taxable income over $1,000,000"
+  F540.63:
+    label: Other taxes and credit recapture
+    formula: "round((line.US.ownEarlyDistribution + if(line.US.joint == 1, spouse.line.US.ownEarlyDistribution, 0)) * param.caEarlyDistributionRate, 0)"
+    source: "Booklet, line 63, and FTB 3805P: 2½% of an early distribution that has the federal 10% additional tax (retirement.yaml)"
+  F540.64:
+    label: California total tax
+    formula: "line.F540.48 + line.F540.61 + line.F540.62 + line.F540.63 + line.CALSCOPE.return"
+
+  # Payments (lines 71 to 78)
+  CAL.ownWithheld:
+    label: California income tax withheld on this person's forms
+    formula: >-
+      sumWhere(W2.box17, W2.box15, "CA") + sumWhere(INT.box17, INT.box15, "CA") + sumWhere(DIV.box16, DIV.box14, "CA")
+      + sumWhere(NEC.box5, NEC.box6, "CA") + sumWhere(RIRA.box14, RIRA.box15, "CA") + sumWhere(R.box14, R.box15, "CA")
+    source: "Booklet, line 71: W-2 box 17, 1099-DIV box 16, 1099-INT box 17, 1099-NEC box 5 and 1099-R box 14, for California"
+  CAL.ownOtherStateTax:
+    label: State income tax withheld on this person's forms for another state, or for no state named
+    formula: >-
+      sum(W2.box17) + sum(INT.box17) + sum(DIV.box16) + sum(NEC.box5) + sum(RIRA.box14) + sum(R.box14) - line.CAL.ownWithheld
+  CAL.ownEstimated:
+    label: This person's California estimated tax payments
+    formula: "answer.caEstimatedPayments"
+  F540.71:
+    label: California income tax withheld
+    formula: "round(line.CAL.ownWithheld + if(line.US.joint == 1, spouse.line.CAL.ownWithheld, 0), 0)"
+  F540.72:
+    label: California estimated tax and other payments
+    formula: "round(line.CAL.ownEstimated + if(line.US.joint == 1, spouse.line.CAL.ownEstimated, 0), 0)"
+
+  # Form FTB 3514: the California EITC (Part V), the Young Child Tax Credit (Part VII) and the Foster Youth Tax Credit
+  # (Part IX). A qualifying child is as for the federal EIC, except that an ITIN is as good as an SSN (3514 Booklet,
+  # Step 3); the home is in California, as the return is a full-year resident's.
+  DEP.calEitcChild:
+    each: dependant
+    label: A qualifying child for the California EITC (1 for yes)
+    formula: >-
+      if(line.DEP.relatedChild == 1 and dependant.answer.monthsWithYou >= 7 and line.DEP.ageTest == 1
+      and not dependant.answer.filedJointReturn, 1, 0)
+    source: "3514 Booklet, Step 3, Qualifying Child Definition"
+  DEP.calYoungChild:
+    each: dependant
+    label: A qualifying child under 6 for the Young Child Tax Credit (1 for yes)
+    formula: "if(dependant.age < param.calYoungChildAge, line.DEP.calEitcChild, 0)"
+    source: "3514 Booklet, Young Child Tax Credit: younger than six years old as of the last day of the taxable year"
+  CAL.ownEarned:
+    label: This person's California earned income
+    formula: 'sumWhere(W2.box16, W2.box15, "CA") + line.SC.31 - line.SE.13'
+    source: >-
+      3514 Booklet, Step 5: wages subject to California withholding (Form W-2, box 16) and business income less the
+      deductible part of self-employment tax (Worksheet 3)
+  CAL.ownCaWages:
+    label: This person's California wages, Forms W-2 box 16 with box 15 CA
+    formula: 'sumWhere(W2.box16, W2.box15, "CA")'
+  F3514.13:
+    label: Wages subject to California withholding
+    formula: "round(line.CAL.ownCaWages + if(line.US.joint == 1, spouse.line.CAL.ownCaWages, 0), 0)"
+    source: "3514 Booklet, line 13: the California wages from federal Form W-2, box 16"
+  F3514.19:
+    label: California earned income
+    formula: "round(line.CAL.ownEarned + if(line.US.joint == 1, spouse.line.CAL.ownEarned, 0), 0)"
+  F3514.4:
+    label: Investment income
+    formula: "round(line.F1040.2a + line.F1040.2b + line.F1040.3b + max(0, line.F1040.7a), 0)"
+    source: "3514 Booklet, Worksheet 1: Form 1040, lines 2a, 2b, 3b, and 7a when a gain"
+  CAL.eitcKids:
+    label: Qualifying children counted for the EITC Table (three or more count as three)
+    formula: "if(line.US.claimable == 1, 0, min(3, sum(dependants.DEP.calEitcChild)))"
+  CAL.eitcAge:
+    label: You, or your spouse filing jointly, are 18 or older (1 for yes)
+    formula: "if(person.age >= param.calEitcAge, 1, if(line.US.joint == 1, if(spouse.person.age >= param.calEitcAge, 1, 0), 0))"
+  CAL.eitcEligible:
+    label: Can take the California EITC (1 for yes)
+    formula: >-
+      if(line.US.claimable == 1, 0, if(line.F3514.19 < 1, 0, if(line.F3514.4 > param.calEitcInvestmentLimit, 0,
+      if(line.F540.13 >= param.calEitcLimit or line.F3514.19 >= param.calEitcLimit, 0,
+      if(line.US.separate == 1, 0, if(line.CAL.eitcKids == 0, line.CAL.eitcAge, 1))))))
+    source: >-
+      3514 Booklet, Step 1 (federal AGI under $32,901, an SSN or ITIN, which a return needs anyway), Step 2 (investment
+      income), Step 4 (no qualifying child: 18 or older) and Differences (earned income under $32,901); not someone
+      else's qualifying child, which the app takes as not being someone's dependent
+  CAL.eitcRate:
+    label: California EITC rate
+    formula: "if(line.CAL.eitcKids == 0, param.calEitcRateNoChild, if(line.CAL.eitcKids == 1, param.calEitcRateOneChild, if(line.CAL.eitcKids == 2, param.calEitcRateTwoChildren, param.calEitcRateThreeChildren)))"
+  CAL.eitcPeak:
+    label: Earned income at which the California EITC is largest
+    formula: "if(line.CAL.eitcKids == 0, param.calEitcPeakNoChild, if(line.CAL.eitcKids == 1, param.calEitcPeakOneChild, param.calEitcPeakMoreChildren))"
+  CAL.eitcTailRate:
+    label: Rate of the California EITC's second phase-out
+    formula: "if(line.CAL.eitcKids == 0, param.calEitcTailRateNoChild, if(line.CAL.eitcKids == 1, param.calEitcTailRateOneChild, if(line.CAL.eitcKids == 2, param.calEitcTailRateTwoChildren, param.calEitcTailRateThreeChildren)))"
+  CAL.eitcTailEnd:
+    label: Earned income at which the California EITC's second phase-out reaches zero
+    formula: "if(line.CAL.eitcKids == 0, param.calEitcTailEndNoChild, if(line.CAL.eitcKids == 1, param.calEitcTailEndOneChild, if(line.CAL.eitcKids == 2, param.calEitcTailEndTwoChildren, param.calEitcTailEndThreeChildren)))"
+  CAL.eitcMiddleEarned:
+    label: Middle of the EITC Table's row for earned income
+    formula: "floor(line.F3514.19 - 1, 50) + 25.5"
+    source: "2025 EITC Table: rows $50 wide from $1 ($1 to $50, $51 to $100), each worked out on its middle"
+  CAL.eitcValueEarned:
+    label: California EITC on the earned income row, before rounding
+    formula: >-
+      if(line.CAL.eitcMiddleEarned <= line.CAL.eitcPeak, line.CAL.eitcRate * line.CAL.eitcMiddleEarned,
+      max(line.CAL.eitcRate * (2 * line.CAL.eitcPeak - line.CAL.eitcMiddleEarned), line.CAL.eitcTailRate * (line.CAL.eitcTailEnd - line.CAL.eitcMiddleEarned), 0))
+    source: >-
+      The 2025 EITC Table, checked row by row: up at the rate to the peak, down at the same rate, then down at the
+      second phase-out rate to zero, whichever is larger (R&TC 17052(b) and (o))
+  CAL.eitcTableEarned:
+    label: California EITC from the EITC Table for earned income
+    formula: "max(if(line.CAL.eitcValueEarned > 0, 1, 0), round(line.CAL.eitcValueEarned, 0))"
+    source: "The 2025 EITC Table: to the nearest dollar, and $1 where the credit is less than that"
+  CAL.eitcMiddleAGI:
+    label: Middle of the EITC Table's row for federal AGI
+    formula: "floor(line.F540.13 - 1, 50) + 25.5"
+  CAL.eitcValueAGI:
+    label: California EITC on the federal AGI row, before rounding
+    formula: >-
+      if(line.CAL.eitcMiddleAGI <= line.CAL.eitcPeak, line.CAL.eitcRate * line.CAL.eitcMiddleAGI,
+      max(line.CAL.eitcRate * (2 * line.CAL.eitcPeak - line.CAL.eitcMiddleAGI), line.CAL.eitcTailRate * (line.CAL.eitcTailEnd - line.CAL.eitcMiddleAGI), 0))
+  CAL.eitcTableAGI:
+    label: California EITC from the EITC Table for federal AGI
+    formula: "max(if(line.CAL.eitcValueAGI > 0, 1, 0), round(line.CAL.eitcValueAGI, 0))"
+  F3514.20:
+    label: California earned income tax credit
+    formula: >-
+      if(line.CAL.eitcEligible == 0, 0, if(line.F540.13 == line.F3514.19 or line.F540.13 < line.CAL.eitcPeak,
+      line.CAL.eitcTableEarned, min(line.CAL.eitcTableEarned, line.CAL.eitcTableAGI)))
+    source: >-
+      3514 Booklet, California Earned Income Tax Credit Worksheet: the credit on earned income; when federal AGI differs
+      and isn't under the line 5 amount ($4,661, $6,998 or $9,823), the smaller of that and the credit on AGI
+  CAL.youngChildren:
+    label: Qualifying children under 6
+    formula: "if(line.US.claimable == 1, 0, sum(dependants.DEP.calYoungChild))"
+  CAL.youngReduction:
+    label: Young Child Tax Credit reduction, for one credit
+    formula: >-
+      floor(floor(max(0, line.F3514.19 - param.calYoungChildThreshold) / 100, 0.01) * param.calYoungChildReduction, 0.01)
+    source: "FTB 3514, lines 25 to 27: the excess over $27,425 divided by 100, and times $21.71, each to two decimals, not rounded"
+  F3514.28:
+    label: Young Child Tax Credit
+    formula: >-
+      if(line.CAL.eitcEligible == 0 or line.CAL.youngChildren == 0, 0,
+      if(param.calYoungChildCredit - line.CAL.youngReduction <= 0, 0, if(param.calYoungChildCredit - line.CAL.youngReduction < 1, 1,
+      round(param.calYoungChildCredit - line.CAL.youngReduction, 0))))
+    source: "FTB 3514, line 28: $1,189 less the reduction; between $0 and $1, $1; otherwise to the nearest dollar"
+  CAL.ownFosterYouth:
+    label: This person claims the Foster Youth Tax Credit (1 for yes)
+    formula: "if(person.age >= 18 and person.age <= 25, if(answer.fosterYouth, 1, 0), 0)"
+    source: "3514 Booklet, Step 10: at least 18 and younger than 26, in California foster care at 13 or older"
+  CAL.fosterYouths:
+    label: People on the return claiming the Foster Youth Tax Credit
+    formula: "line.CAL.ownFosterYouth + if(line.US.joint == 1, spouse.line.CAL.ownFosterYouth, 0)"
+  F3514.39:
+    label: Foster Youth Tax Credit
+    formula: >-
+      if(line.CAL.eitcEligible == 0, 0, if(line.CAL.fosterYouths == 0, 0,
+      if(line.CAL.fosterYouths * (param.calYoungChildCredit - line.CAL.youngReduction) <= 0, 0,
+      if(line.CAL.fosterYouths * (param.calYoungChildCredit - line.CAL.youngReduction) < 1, 1,
+      round(line.CAL.fosterYouths * (param.calYoungChildCredit - line.CAL.youngReduction), 0)))))
+    source: "FTB 3514, lines 35 to 39: $1,189 ($2,378 for both spouses), less $21.71 ($43.42) for each $100 over $27,425"
+  F540.75:
+    label: Earned Income Tax Credit (EITC)
+    formula: "line.F3514.20"
+  F540.76:
+    label: Young Child Tax Credit (YCTC)
+    formula: "line.F3514.28"
+  F540.77:
+    label: Foster Youth Tax Credit (FYTC)
+    formula: "line.F3514.39"
+  F540.78:
+    label: California total payments
+    formula: "line.F540.71 + line.F540.72 + line.F540.75 + line.F540.76 + line.F540.77"
+    source: "Form 540, line 78: lines 71 to 77 (no Form 592-B or 593 withholding, line 73, or film credit, line 74)"
+
+  # Use tax, the health coverage penalty and the balance (lines 91 to 115)
+  F540.91:
+    label: Use tax
+    formula: "round(answer.caUseTax, 0)"
+    source: "Booklet, line 91: required; 0 with the box checked if no use tax is owed"
+  F540.93:
+    label: Payments balance
+    formula: "max(0, line.F540.78 - line.F540.91)"
+  F540.94:
+    label: Use tax balance
+    formula: "max(0, line.F540.91 - line.F540.78)"
+  F540.95:
+    label: Payments after the Individual Shared Responsibility Penalty
+    formula: "line.F540.93"
+    source: "Form 540, line 95: line 93 less line 92 (no penalty: CALSCOPE.coverage)"
+  F540.97:
+    label: Overpaid tax
+    formula: "max(0, line.F540.95 - line.F540.64)"
+  F540.99:
+    label: Overpaid tax available this year
+    formula: "line.F540.97"
+    source: "Form 540, line 99: line 97 less the amount applied to 2026 estimated tax (line 98, none)"
+  F540.100:
+    label: Tax due
+    formula: "max(0, line.F540.64 - line.F540.95)"
+  F540.111:
+    label: Amount you owe
+    formula: "if(line.F540.99 > 0, 0, line.F540.94 + line.F540.100)"
+    source: "Form 540, line 111: with no amount on line 99, lines 94, 96, 100 and 110 (no penalty or contributions)"
+  F540.115:
+    label: Refund or no amount due
+    formula: "line.F540.99"
+    source: "Form 540, line 115: line 99 less lines 110, 112 and 113 (none)"
+
+  # What the California return needs that this app doesn't work out: each one says so on the California return.
+  CALSCOPE.return:
+    label: California situations this app doesn't handle yet
+    formula: "line.CALSCOPE.residency + line.CALSCOPE.withholding + line.CALSCOPE.coverage + line.CALSCOPE.youngChild"
+  CALSCOPE.residency:
+    label: A nonresident or part-year resident of California
+    formula: >-
+      if(line.US.joint == 1, if(person.province == "CA" and spouse.person.province == "CA", 0,
+      unsupported("One of you lived in another state on December 31: a joint California return then is Form 540NR, which this app doesn't prepare")), 0)
+      + if(answer.livedInCaliforniaAllYear, 0, unsupported("You didn't live in California all year: you file Form 540NR, which this app doesn't prepare"))
+      + if(line.US.joint == 1, if(spouse.answer.livedInCaliforniaAllYear, 0, unsupported("Your spouse didn't live in California all year: you file Form 540NR, which this app doesn't prepare")), 0)
+    source: "Booklet, Which Form Should I Use?: Form 540 is for full-year residents"
+  CALSCOPE.withholding:
+    label: State tax withheld for another state
+    formula: >-
+      if(line.CAL.ownOtherStateTax + if(line.US.joint == 1, spouse.line.CAL.ownOtherStateTax, 0) > 0,
+      unsupported("A form shows state tax withheld for another state, or doesn't say for which state: check box 15 of each W-2 (and the state box of each 1099) at Confirm. Tax paid to another state may give a credit (Schedule S), which this app doesn't work out"), 0)
+  CALSCOPE.coverage:
+    label: The health coverage penalty
+    formula: 'if(answer.caFullYearCoverage, 0, unsupported("Without health coverage all year, the Individual Shared Responsibility Penalty (Form 540, line 92, and form FTB 3853) applies, which this app doesn''t work out"))'
+  CALSCOPE.youngChild:
+    label: The Young Child Tax Credit with no earned income
+    formula: >-
+      if(line.CAL.youngChildren > 0 and line.F3514.19 < 1,
+      unsupported("With a child under 6 and no earned income, you may still get the Young Child Tax Credit (FTB 3514, line 23), which this app doesn't work out"), 0)

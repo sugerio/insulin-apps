@@ -1,0 +1,117 @@
+{
+  "about": "Single, $60,000 of wages and a fund's 1099-DIV: $4,000 of dividends ($3,000 qualified), $500 of capital gain distributions without Schedule D, $300 of REIT dividends for the QBI deduction, $200 exempt-interest dividends and $45 of foreign tax taken as a credit",
+  "input": {
+    "country": "us",
+    "year": 2025,
+    "people": [
+      {
+        "id": "p1",
+        "name": "Iris Cole",
+        "role": "self",
+        "birthDate": "1980-01-01",
+        "province": "FL",
+        "residentAllYear": true
+      }
+    ],
+    "family": {
+      "maritalStatus": "single",
+      "dependants": []
+    },
+    "answers": {
+      "p1": {
+        "hasWages": true,
+        "hasInterest": false,
+        "hasTipsOrOvertime": false,
+        "canBeClaimed": false,
+        "isBlind": false,
+        "estimatedPayments": "0",
+        "hasCarLoan": false,
+        "hasSelfEmployment": false,
+        "hasStudentLoan": false,
+        "paidForEducation": false,
+        "hasDividends": true,
+        "hasBrokerSales": false,
+        "hasIraDistribution": false,
+        "hasPension": false,
+        "hasSocialSecurity": false,
+        "hasLossCarryover": false,
+        "hasHsa": false,
+        "hasIraContribution": false,
+        "hasItemized": false,
+        "hasOtherIncome": false,
+        "paidForCare": false
+      }
+    },
+    "slips": [
+      {
+        "id": "p1-w2-0",
+        "person": "p1",
+        "type": "W2",
+        "issuer": "Harbor Bank",
+        "boxes": {
+          "1": "60000",
+          "2": "6000",
+          "4": "3720",
+          "5": "60000",
+          "6": "870"
+        }
+      },
+      {
+        "id": "p1-div-0",
+        "person": "p1",
+        "type": "DIV",
+        "issuer": "Index Fund",
+        "boxes": {
+          "1A": "4000",
+          "1B": "3000",
+          "2A": "500",
+          "5": "300",
+          "7": "45",
+          "12": "200"
+        }
+      }
+    ]
+  },
+  "expected": {
+    "p1": {
+      "F1040.19": "0",
+      "F1040.27a": "0",
+      "F1040.28": "0",
+      "S8812.12": "0",
+      "F1040.1a": "60000",
+      "F1040.1e": "0",
+      "S3.2": "0",
+      "F1040.2a": "200",
+      "F1040.2b": "0",
+      "F1040.9": "64500",
+      "F1040.11a": "64500",
+      "F1040.12e": "15750",
+      "F1040.13b": "0",
+      "F1040.13a": "60",
+      "F1040.8": "0",
+      "F1040.10": "0",
+      "F1040.15": "48690",
+      "F1040.16": "5234",
+      "F8959.7": "0",
+      "F8960.17": "0",
+      "F1040.24": "5189",
+      "F1040.25c": "0",
+      "S3.11": "0",
+      "F1040.33": "6000",
+      "F1040.34": "811",
+      "F1040.37": "0",
+      "F1040.3a": "3000",
+      "F1040.3b": "4000",
+      "F1040.7a": "500",
+      "F8960.12": "4500",
+      "QDW.5": "45190",
+      "S3.1": "45",
+      "F8995.10": "60",
+      "F8995.15": "60",
+      "F6251.4": "64440",
+      "F6251.6": "0",
+      "F6251.11": "0",
+      "F1040.18": "5234"
+    }
+  }
+}

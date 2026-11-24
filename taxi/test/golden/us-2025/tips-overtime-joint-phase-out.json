@@ -1,0 +1,152 @@
+{
+  "about": "A couple filing jointly with $320,500 of AGI: $28,000 of tips capped at $25,000 and $30,000 of overtime capped at $25,000, each cut by $2,000; a car loan not for a qualifying car",
+  "input": {
+    "country": "us",
+    "year": 2025,
+    "people": [
+      {
+        "id": "p1",
+        "name": "Jo Banks",
+        "role": "self",
+        "birthDate": "1980-05-05",
+        "province": "FL",
+        "residentAllYear": true
+      },
+      {
+        "id": "p2",
+        "name": "Lu Banks",
+        "role": "spouse",
+        "birthDate": "1982-07-07",
+        "province": "FL",
+        "residentAllYear": true
+      }
+    ],
+    "family": {
+      "maritalStatus": "married",
+      "dependants": [],
+      "filingStatus": "joint"
+    },
+    "answers": {
+      "p1": {
+        "hasWages": true,
+        "hasInterest": false,
+        "hasTipsOrOvertime": true,
+        "canBeClaimed": false,
+        "isBlind": false,
+        "estimatedPayments": "0",
+        "hasCarLoan": false,
+        "hasSelfEmployment": false,
+        "hasStudentLoan": false,
+        "paidForEducation": false,
+        "hasDividends": false,
+        "hasBrokerSales": false,
+        "hasIraDistribution": false,
+        "hasPension": false,
+        "hasSocialSecurity": false,
+        "hasLossCarryover": false,
+        "hasHsa": false,
+        "hasIraContribution": false,
+        "hasItemized": false,
+        "hasOtherIncome": false,
+        "qualifiedTips": "28000",
+        "qualifiedOvertime": "0",
+        "hasValidSSN": true,
+        "paidForCare": false
+      },
+      "p2": {
+        "hasWages": true,
+        "hasInterest": false,
+        "hasTipsOrOvertime": true,
+        "canBeClaimed": false,
+        "isBlind": false,
+        "estimatedPayments": "0",
+        "hasCarLoan": true,
+        "hasSelfEmployment": false,
+        "hasStudentLoan": false,
+        "paidForEducation": false,
+        "hasDividends": false,
+        "hasBrokerSales": false,
+        "hasIraDistribution": false,
+        "hasPension": false,
+        "hasSocialSecurity": false,
+        "hasLossCarryover": false,
+        "hasHsa": false,
+        "hasIraContribution": false,
+        "hasItemized": false,
+        "hasOtherIncome": false,
+        "qualifiedTips": "0",
+        "qualifiedOvertime": "30000",
+        "hasValidSSN": true,
+        "carLoanInterest": "2500",
+        "carLoanQualifies": "no"
+      }
+    },
+    "slips": [
+      {
+        "id": "p1-w2-0",
+        "person": "p1",
+        "type": "W2",
+        "issuer": "Casino Royale",
+        "boxes": {
+          "1": "160000",
+          "2": "30000",
+          "4": "9920",
+          "5": "160000",
+          "6": "2320",
+          "7": "28000"
+        }
+      },
+      {
+        "id": "p2-w2-0",
+        "person": "p2",
+        "type": "W2",
+        "issuer": "Steel Works",
+        "boxes": {
+          "1": "160500",
+          "2": "29000",
+          "4": "9951",
+          "5": "160500",
+          "6": "2327.25"
+        }
+      }
+    ]
+  },
+  "expected": {
+    "p1": {
+      "F1040.19": "0",
+      "F1040.27a": "0",
+      "F1040.28": "0",
+      "S8812.12": "0",
+      "F1040.1a": "320500",
+      "F1040.1e": "0",
+      "S3.2": "0",
+      "F1040.2a": "0",
+      "F1040.2b": "0",
+      "F1040.9": "320500",
+      "F1040.11a": "320500",
+      "F1040.12e": "31500",
+      "F1040.13b": "46000",
+      "F1040.13a": "0",
+      "F1040.8": "0",
+      "F1040.10": "0",
+      "F1040.15": "243000",
+      "F1040.16": "44014",
+      "F8959.7": "634.5",
+      "F8960.17": "0",
+      "F1040.24": "44648.5",
+      "F1040.25c": "0",
+      "S3.11": "0",
+      "F1040.33": "59000",
+      "F1040.34": "14351.5",
+      "F1040.37": "0",
+      "F6251.4": "274500",
+      "F6251.6": "137500",
+      "F6251.11": "0",
+      "F1040.18": "44014",
+      "S1A.13": "23000",
+      "S1A.21": "23000",
+      "S1A.30": "0",
+      "S1A.38": "46000"
+    }
+  }
+}

@@ -131,8 +131,14 @@ function Uploader({ onUploading }: { onUploading: (uploading: boolean) => void }
             onDragLeave={() => setDragging(false)}
             onDrop={onDrop}
           >
-            <p className="text-sm font-medium wrap-anywhere">{person.name}'s slips and receipts for {year.year}, and last year's notice of assessment</p>
-            <p className="text-xs text-muted-foreground">PDF, PNG or JPEG, up to 10 MiB each. Drop them here, or choose:</p>
+            <p className="text-sm font-medium wrap-anywhere">
+              {year.country === "us"
+                ? `${person.name}'s Forms W-2, 1099, 1098 and SSA-1099 for ${year.year}`
+                : `${person.name}'s slips and receipts for ${year.year}, and last year's notice of assessment`}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              PDF, PNG or JPEG, up to 10 MiB each. Drop them here, or choose:
+            </p>
             <div className="flex flex-wrap justify-center gap-2">
               <Button variant="outline" onClick={() => folderInput.current?.click()} disabled={reading}>
                 <FolderUp aria-hidden="true" />
@@ -226,11 +232,12 @@ export function DocumentStatus({ document }: { document: DocumentRecord }) {
  */
 function Uploaded({ data, uploading, onNotice }: { data: DocumentList; uploading: boolean; onNotice: (notice: string | null) => void }) {
   const { year } = useYear();
-  const { person } = useReturn();
+  const { person, members } = useReturn();
   const preparing = year.returns[0]?.personId;
+  const onReturn = (personId: string | null) => members.some((member) => member.id === personId);
   const documents = data.documents.filter(
     (document) =>
-      document.personId === person.id || document.slips.some((slip) => slip.personId === person.id) || (document.personId === null && document.slips.length === 0 && person.id === preparing),
+      onReturn(document.personId) || document.slips.some((slip) => onReturn(slip.personId)) || (document.personId === null && document.slips.length === 0 && person.id === preparing),
   );
   if (documents.length === 0) return null;
   return (
@@ -343,7 +350,7 @@ function UploadedFile({ document, uploading, onNotice }: { document: DocumentRec
               <ul className="mt-1 list-disc pl-5 wrap-anywhere">
                 {document.slips.map((slip) => (
                   <li key={slip.id}>
-                    {documentName(rulesFor(year.year)!.slips.get(slip.type), slip.type)} from {slip.issuer}, on {nameOf(slip.personId)}'s return{slip.status === "confirmed" ? " (confirmed)" : ""}
+                    {documentName(rulesFor(year.country, year.year)!.slips.get(slip.type), slip.type)} from {slip.issuer}, on {nameOf(slip.personId)}'s return{slip.status === "confirmed" ? " (confirmed)" : ""}
                   </li>
                 ))}
               </ul>

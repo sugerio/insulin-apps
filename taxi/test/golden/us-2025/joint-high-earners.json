@@ -1,0 +1,174 @@
+{
+  "about": "A couple filing jointly over $250,000 of wages, each with two employers: Section B of the worksheet, Additional Medicare Tax, the net investment income tax, and excess social security for each spouse separately",
+  "input": {
+    "country": "us",
+    "year": 2025,
+    "people": [
+      {
+        "id": "p1",
+        "name": "Drew Hall",
+        "role": "self",
+        "birthDate": "1980-01-15",
+        "province": "FL",
+        "residentAllYear": true
+      },
+      {
+        "id": "p2",
+        "name": "Jesse Hall",
+        "role": "spouse",
+        "birthDate": "1982-05-20",
+        "province": "FL",
+        "residentAllYear": true
+      }
+    ],
+    "family": {
+      "maritalStatus": "married",
+      "dependants": [],
+      "filingStatus": "joint"
+    },
+    "answers": {
+      "p1": {
+        "hasWages": true,
+        "hasInterest": true,
+        "hasTipsOrOvertime": false,
+        "canBeClaimed": false,
+        "isBlind": false,
+        "estimatedPayments": "0",
+        "hasCarLoan": false,
+        "hasSelfEmployment": false,
+        "hasStudentLoan": false,
+        "paidForEducation": false,
+        "hasDividends": false,
+        "hasBrokerSales": false,
+        "hasIraDistribution": false,
+        "hasPension": false,
+        "hasSocialSecurity": false,
+        "hasLossCarryover": false,
+        "hasHsa": false,
+        "hasIraContribution": false,
+        "hasItemized": false,
+        "hasOtherIncome": false,
+        "paidForCare": false
+      },
+      "p2": {
+        "hasWages": true,
+        "hasInterest": false,
+        "hasTipsOrOvertime": false,
+        "canBeClaimed": false,
+        "isBlind": false,
+        "estimatedPayments": "0",
+        "hasCarLoan": false,
+        "hasSelfEmployment": false,
+        "hasStudentLoan": false,
+        "paidForEducation": false,
+        "hasDividends": false,
+        "hasBrokerSales": false,
+        "hasIraDistribution": false,
+        "hasPension": false,
+        "hasSocialSecurity": false,
+        "hasLossCarryover": false,
+        "hasHsa": false,
+        "hasIraContribution": false,
+        "hasItemized": false,
+        "hasOtherIncome": false
+      }
+    },
+    "slips": [
+      {
+        "id": "p1-w2-0",
+        "person": "p1",
+        "type": "W2",
+        "issuer": "Northwind",
+        "boxes": {
+          "1": "170000",
+          "2": "33000",
+          "4": "10540",
+          "5": "170000",
+          "6": "2465"
+        }
+      },
+      {
+        "id": "p1-w2-1",
+        "person": "p1",
+        "type": "W2",
+        "issuer": "Contoso",
+        "boxes": {
+          "1": "40000",
+          "2": "6000",
+          "4": "2480",
+          "5": "40000",
+          "6": "580"
+        }
+      },
+      {
+        "id": "p1-int-0",
+        "person": "p1",
+        "type": "INT",
+        "issuer": "Treasury Direct",
+        "boxes": {
+          "3": "20000"
+        }
+      },
+      {
+        "id": "p2-w2-0",
+        "person": "p2",
+        "type": "W2",
+        "issuer": "Fabrikam",
+        "boxes": {
+          "1": "120000",
+          "2": "21000",
+          "4": "7440",
+          "5": "120000",
+          "6": "1990"
+        }
+      },
+      {
+        "id": "p2-w2-1",
+        "person": "p2",
+        "type": "W2",
+        "issuer": "Tailspin",
+        "boxes": {
+          "1": "60000",
+          "2": "8000",
+          "4": "3720",
+          "5": "60000",
+          "6": "870"
+        }
+      }
+    ]
+  },
+  "expected": {
+    "p1": {
+      "F1040.19": "0",
+      "F1040.27a": "0",
+      "F1040.28": "0",
+      "S8812.12": "0",
+      "F1040.1a": "390000",
+      "F1040.1e": "0",
+      "S3.2": "0",
+      "F1040.2a": "0",
+      "F1040.2b": "20000",
+      "F1040.9": "410000",
+      "F1040.11a": "410000",
+      "F1040.12e": "31500",
+      "F1040.13b": "0",
+      "F1040.13a": "0",
+      "F1040.8": "0",
+      "F1040.10": "0",
+      "F1040.15": "378500",
+      "F1040.16": "76534",
+      "F8959.7": "1260",
+      "F8960.17": "760",
+      "F1040.24": "78554",
+      "F1040.25c": "250",
+      "S3.11": "2343.6",
+      "F1040.33": "70593.6",
+      "F1040.34": "0",
+      "F1040.37": "7960.4",
+      "F6251.4": "410000",
+      "F6251.6": "273000",
+      "F6251.11": "0",
+      "F1040.18": "76534"
+    }
+  }
+}

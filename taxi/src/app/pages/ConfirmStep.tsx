@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Link } from "react-router";
+import { Link, useNavigate } from "react-router";
 import { Plus } from "lucide-react";
 import { canPrepare, possibleDuplicates, routes, unreadBoxes, type Person, type Slip, type SlipList } from "#shared";
 import { Badge } from "@/components/ui/badge.tsx";
@@ -16,15 +16,17 @@ import { useSlips } from "../lib/useYearData.ts";
 import { documentName } from "../shared/engine/rules.ts";
 import { rulesFor } from "../shared/rules/index.ts";
 
-// Step 4, `/returns/:year/:personId/confirm`: the slips of the open return, read by AI from the uploads or typed in,
-// to check against the paper slips. The form for a slip is built from its type in the year's rules (slips.yaml): its
+// Step 6, `/returns/:year/:personId/confirm`: the person's slips, read by AI from the uploads or typed in, to check
+// against the paper slips: those still to confirm first (Save and continue on Income, Deductions and Credits confirms
+// the slips each shows, so what is left here is usually only what no step showed), then the confirmed ones. The form for a slip is built from its type in the year's rules (slips.yaml): its
 // boxes as printed. A slip that is the other adult's moves to their return. A slip that may be the same as one above
 // it (another reading of it, never merged on its own) says so, for the person to remove one or keep both.
 
 export function ConfirmStep() {
   const slips = useSlips();
   const { year, replace } = useYear();
-  const { person } = useReturn();
+  const { members } = useReturn();
+  const onReturn = (personId: string) => members.some((member) => member.id === personId);
   // Kept here, over the slips, which load again whenever the year changes (a save, an upload finishing on another step):
   // the slip open to change ("new" for one being added), what was typed in it and why its save failed, and what the page
   // has to say about it. This step is mounted once per return, so each has its own.
@@ -47,12 +49,12 @@ export function ConfirmStep() {
   // again from what is stored, dropping what was typed and why its save was refused, and says so (SlipForm).
   useEffect(() => {
     if (!fresh || editing === null || editing === "new") return;
-    if (!fresh.slips.some((each) => each.id === editing && each.personId === person.id)) {
+    if (!fresh.slips.some((each) => each.id === editing && onReturn(each.personId))) {
       forget(editing);
       setEditing(null);
       setNotice("The slip you were changing was removed or replaced.");
     }
-  }, [fresh, editing, person.id]);
+  }, [fresh, editing, members.map((member) => member.id).join(",")]);
 
   const hostOf = (key: string): SlipFormHost => ({
     async save(send) {
@@ -127,18 +129,23 @@ function ReturnSlips({
   const me = useMe();
   const { year, replace, reload } = useYear();
   const { person } = useReturn();
+  const navigate = useNavigate();
   const editable = canPrepare(me);
   const [state, setState] = useState<{ status: "idle" | "saving" } | { status: "error"; error: unknown }>({ status: "idle" });
-  const slips = data.slips.filter((slip) => slip.personId === person.id);
+  // The person's own slips, those still to confirm first.
+  const own = data.slips.filter((slip) => slip.personId === person.id);
+  const slips = [...own.filter((slip) => slip.status !== "confirmed"), ...own.filter((slip) => slip.status === "confirmed")];
   const unconfirmed = slips.filter((slip) => slip.status === "unconfirmed").length;
   // The server refuses to confirm a slip with a box AI couldn't read and no amount.
   const unread = slips.some((slip) => slip.status === "unconfirmed" && unreadBoxes(slip).length > 0);
 
-  async function confirmAll() {
+  /** Confirms the person's slips, then goes on to Finish. */
+  async function confirmAndContinue() {
     setState({ status: "saving" });
     try {
       replace(await apiRequest(routes.confirmSlips, { params: { year: year.year }, body: { revision: year.revision, personId: person.id } }));
       setState({ status: "idle" });
+      navigate(stepPath(year.year, person.id, "finish"));
     } catch (error) {
       setState({ status: "error", error });
     }
@@ -194,18 +201,15 @@ function ReturnSlips({
         ) : editable && unread ? (
           <p className="mr-auto text-xs text-muted-foreground">Before confirming, enter each box that couldn't be read, or 0 if it is blank on the slip: choose Edit on its slip.</p>
         ) : null}
-        {editable ? (
-          <Button
-            variant="outline"
-            onClick={() => void confirmAll()}
-            disabled={unconfirmed === 0 || unread || editing !== null || waiting || state.status === "saving"}
-          >
-            {unconfirmed === 0 ? "All slips confirmed" : `Confirm ${unconfirmed} ${unconfirmed === 1 ? "slip" : "slips"}`}
+        {editable && unconfirmed > 0 ? (
+          <Button onClick={() => void confirmAndContinue()} disabled={unread || editing !== null || waiting || state.status === "saving"}>
+            {state.status === "saving" ? "Confirming…" : `Confirm ${unconfirmed} ${unconfirmed === 1 ? "slip" : "slips"} and continue`}
           </Button>
-        ) : null}
-        <Button asChild>
-          <Link to={stepPath(year.year, person.id, "finish")}>Next: finish</Link>
-        </Button>
+        ) : (
+          <Button asChild>
+            <Link to={stepPath(year.year, person.id, "finish")}>Next: finish</Link>
+          </Button>
+        )}
       </div>
     </>
   );
@@ -231,8 +235,8 @@ function PersonSlips({
   hostOf: (key: string) => SlipFormHost;
 }) {
   const { year } = useYear();
-  const types = rulesFor(year.year)!.slips;
-  const duplicates = possibleDuplicates(rulesFor(year.year)!, slips);
+  const types = rulesFor(year.country, year.year)!.slips;
+  const duplicates = possibleDuplicates(rulesFor(year.country, year.year)!, slips);
   const others = year.adults.filter((adult) => adult.personId !== personId).map((adult) => year.people.find((person) => person.id === adult.personId)!);
   return (
     <Card>
@@ -252,7 +256,13 @@ function PersonSlips({
       <CardContent className="flex flex-col gap-3">
         {slips.length === 0 && editing !== "new" ? <p className="text-sm text-muted-foreground">No slips yet.</p> : null}
         <ul className="flex flex-col divide-y">
-          {slips.map((slip) =>
+          {slips.map((slip, index) => [
+            // The confirmed ones, after those still to confirm, under a heading of their own.
+            slip.status === "confirmed" && (index === 0 || slips[index - 1]!.status !== "confirmed") ? (
+              <li key={`${slip.id}-heading`} className="pt-4 pb-1 text-xs font-medium text-muted-foreground">
+                Confirmed
+              </li>
+            ) : null,
             editing === slip.id ? (
               <li key={slip.id} className="py-3">
                 {/* A new version of the slip (someone else's change) starts the form again from it. */}
@@ -306,7 +316,7 @@ function PersonSlips({
                 ) : null}
               </li>
             ),
-          )}
+          ])}
         </ul>
         {editing === "new" ? (
           <div className="rounded-lg border bg-muted/30 p-4">

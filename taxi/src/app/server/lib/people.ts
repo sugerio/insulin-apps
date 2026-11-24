@@ -1,13 +1,18 @@
 import {
+  COUNTRY_NAMES,
   SUPPORTED_PROVINCES,
+  isRegionOf,
   maritalStatusesFor,
   isAdult,
   type AdultYear,
+  type Country,
   type CreatePerson,
+  type FilingStatus,
   type Issue,
   type MaritalStatus,
   type Person,
   type Province,
+  type Region,
   type Relationship,
   type SavePersonalInfo,
   type SetYearPeople,
@@ -35,13 +40,16 @@ interface PersonRow {
 export interface YearRow {
   id: string;
   year: number;
+  country: Country;
   marital_status: MaritalStatus | null;
+  filing_status: FilingStatus | null;
   revision: number;
   updated_at: number;
 }
 interface ReturnRow {
   person_id: string;
   province: Province | null;
+  state: Region | null;
   resident_all_year: number | null;
 }
 
@@ -98,11 +106,21 @@ const PROVINCE_NAMES: Record<Province, string> = {
   YT: "Yukon",
 };
 
+const spouseStatuses = (country: Country) => (country === "ca" ? "choose married or living common-law" : "choose married");
+const UNPARTNERED = "choose single, widowed, divorced or separated";
+
 /**
  * The issues of a year: `blocking` ones stop the Personal info step, `unsupported` ones say a return can't be prepared
  * here. `adults` are the year's adults, each prepared.
  */
-export function assess(people: Person[], members: ReadonlySet<string>, maritalStatus: MaritalStatus | null, adults: AdultYear[]): Issue[] {
+export function assess(
+  country: Country,
+  people: Person[],
+  members: ReadonlySet<string>,
+  maritalStatus: MaritalStatus | null,
+  adults: AdultYear[],
+  filingStatus: FilingStatus | null = null,
+): Issue[] {
   const issues: Issue[] = [];
   const add = (code: Issue["code"], kind: Issue["kind"], personId: string | null, message: string) =>
     issues.push({ code, kind, personId, message });
@@ -111,29 +129,38 @@ export function assess(people: Person[], members: ReadonlySet<string>, maritalSt
   const partner = people.find((person) => person.relationship === "spouse");
   if (!self || !members.has(self.id)) add("no_self", "blocking", null, "Add yourself to the profile and to this year.");
   if (maritalStatus === null) add("no_marital_status", "blocking", null, "Choose your marital status on December 31.");
-  else if (!maritalStatusesFor(partner !== undefined).includes(maritalStatus)) {
+  else if (!maritalStatusesFor(country, partner !== undefined).includes(maritalStatus)) {
     // Saved before the people in the Profile changed (a spouse added or removed): ask again.
     add(
       "marital_status_mismatch",
       "blocking",
       partner?.id ?? null,
-      partner
-        ? `${partner.name} is your spouse or partner in the Profile: choose married or living common-law.`
-        : "The Profile has no spouse or partner: choose single, widowed, divorced or separated.",
+      partner ? `${partner.name} is your spouse or partner in the Profile: ${spouseStatuses(country)}.` : `The Profile has no spouse or partner: ${UNPARTNERED}.`,
     );
+  }
+  // A married couple on a US return files jointly or separately; jointly, the spouse must be in the year.
+  if (country === "us" && maritalStatus === "married") {
+    if (filingStatus === null) add("no_filing_status", "blocking", null, "Choose whether you file jointly or separately.");
+    else if (filingStatus === "joint" && adults.length < 2) {
+      add("no_filing_status", "blocking", partner?.id ?? null, `${partner?.name ?? "Your spouse"} isn't in this year: add them to file jointly, or file separately.`);
+    }
   }
   for (const adult of adults) {
     const name = people.find((person) => person.id === adult.personId)?.name ?? "This person";
-    if (adult.province === null) add("no_province", "blocking", adult.personId, `Choose ${name}'s province on December 31.`);
-    else if (!SUPPORTED_PROVINCES.includes(adult.province)) {
-      add(
-        "unsupported_province",
-        "unsupported",
-        adult.personId,
-        `This app prepares returns for Ontario, British Columbia and Alberta. ${name}'s return for ${PROVINCE_NAMES[adult.province]} needs other software.`,
-      );
+    if (country === "ca") {
+      if (adult.province === null) add("no_province", "blocking", adult.personId, `Choose ${name}'s province on December 31.`);
+      else if (!SUPPORTED_PROVINCES.includes(adult.province as Province)) {
+        add("unsupported_province", "unsupported", adult.personId, `${name}'s return for ${PROVINCE_NAMES[adult.province as Province]} needs other software.`);
+      }
+    } else if (adult.province === null) {
+      // A US year asks the state: it decides the state return, and the federal rules for a community property state.
+      // A state whose return the app doesn't prepare isn't an issue: the federal return is complete without it.
+      add("no_province", "blocking", adult.personId, `Choose ${name}'s state on December 31.`);
     }
-    if (adult.residentAllYear === null) add("no_residency", "blocking", adult.personId, `Say whether ${name} lived in Canada all year.`);
+    if (adult.residentAllYear === null) {
+      const question = country === "ca" ? `lived in Canada all year` : `was a U.S. citizen or resident alien all year`;
+      add("no_residency", "blocking", adult.personId, `Say whether ${name} ${question}.`);
+    }
   }
   return issues;
 }
@@ -144,7 +171,7 @@ export function assess(people: Person[], members: ReadonlySet<string>, maritalSt
 export async function yearRow(db: Db, orgId: string, year: number): Promise<YearRow | null> {
   return db
     .prepare(
-      `SELECT id, year, marital_status, revision, updated_at
+      `SELECT id, year, country, marital_status, filing_status, revision, updated_at
        FROM tax_years WHERE org_id = ? AND year = ?`,
     )
     .bind(orgId, year)
@@ -156,7 +183,7 @@ async function viewOf(db: Db, orgId: string, row: YearRow): Promise<TaxYear> {
     listPeople(db, orgId),
     db.prepare("SELECT person_id FROM tax_year_people WHERE org_id = ? AND tax_year_id = ?").bind(orgId, row.id).all<{ person_id: string }>(),
     db
-      .prepare("SELECT person_id, province, resident_all_year FROM returns WHERE org_id = ? AND tax_year_id = ?")
+      .prepare("SELECT person_id, province, state, resident_all_year FROM returns WHERE org_id = ? AND tax_year_id = ?")
       .bind(orgId, row.id)
       .all<ReturnRow>(),
   ]);
@@ -168,24 +195,30 @@ async function viewOf(db: Db, orgId: string, row: YearRow): Promise<TaxYear> {
       const saved = byPerson.get(person.id);
       return {
         personId: person.id,
-        province: saved?.province ?? null,
+        province: (row.country === "us" ? saved?.state : saved?.province) ?? null,
         residentAllYear: saved?.resident_all_year === null || saved?.resident_all_year === undefined ? null : saved.resident_all_year === 1,
         prepared: true,
       };
     });
-  const issues = assess(people, memberIds, row.marital_status, adults);
+  const issues = assess(row.country, people, memberIds, row.marital_status, adults, row.filing_status);
   const members = people.filter((person) => memberIds.has(person.id)).map((person) => person.id);
   const workspace = await loadWorkspace(db, orgId, row.id);
   return {
     year: row.year,
+    country: row.country,
     revision: row.revision,
     maritalStatus: row.marital_status,
+    filingStatus: row.filing_status,
     prepareTogether: people.some((person) => person.relationship === "spouse" && memberIds.has(person.id)),
     people,
     members,
     adults,
     issues,
-    returns: stepStatuses({ year: row.year, maritalStatus: row.marital_status, people, members, adults }, issues, workspace),
+    returns: stepStatuses(
+      { year: row.year, country: row.country, maritalStatus: row.marital_status, filingStatus: row.filing_status, people, members, adults },
+      issues,
+      workspace,
+    ),
     updatedAt: row.updated_at,
   };
 }
@@ -196,20 +229,21 @@ export async function getYear(db: Db, orgId: string, year: number): Promise<TaxY
   return viewOf(db, orgId, row);
 }
 
-export async function listYears(db: Db, orgId: string, supportedYears: readonly number[]): Promise<YearList> {
+export async function listYears(db: Db, orgId: string, supported: YearList["supported"]): Promise<YearList> {
   const { results } = await db
     .prepare(
-      `SELECT id, year, marital_status, revision, updated_at
+      `SELECT id, year, country, marital_status, filing_status, revision, updated_at
        FROM tax_years WHERE org_id = ? ORDER BY year DESC`,
     )
     .bind(orgId)
     .all<YearRow>();
   const years = await Promise.all(results.map((row) => viewOf(db, orgId, row)));
   return {
-    supportedYears: [...supportedYears],
+    supported,
     people: await listPeople(db, orgId),
     years: years.map((view) => ({
       year: view.year,
+      country: view.country,
       revision: view.revision,
       members: view.members,
       returns: view.returns.map((progress) => ({ ...progress, name: view.people.find((person) => person.id === progress.personId)?.name ?? "" })),
@@ -253,21 +287,26 @@ export async function startYear(
   db: Db,
   caller: Caller,
   year: number,
+  country: Country,
   memberIds: string[],
   now: number,
 ): Promise<{ view: TaxYear; created: boolean }> {
   const existing = await yearRow(db, caller.orgId, year);
-  if (existing) return { view: await viewOf(db, caller.orgId, existing), created: false };
+  if (existing) {
+    // A year is of one country: the profile can't hold Canada's and the United States' return for the same year.
+    if (existing.country !== country) throw conflict(`The ${year} tax year was started for ${COUNTRY_NAMES[existing.country]}.`);
+    return { view: await viewOf(db, caller.orgId, existing), created: false };
+  }
   checkMembers(await listPeople(db, caller.orgId), memberIds);
   const profileId = await ensureProfile(db, caller.orgId, now);
   const id = crypto.randomUUID();
   const [inserted] = await db.batch([
     db
       .prepare(
-        `INSERT INTO tax_years (id, org_id, household_id, year, revision, created_at, updated_at)
-         VALUES (?, ?, ?, ?, 1, ?, ?) ON CONFLICT(household_id, year) DO NOTHING`,
+        `INSERT INTO tax_years (id, org_id, household_id, year, country, revision, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, 1, ?, ?) ON CONFLICT(household_id, year) DO NOTHING`,
       )
-      .bind(id, caller.orgId, profileId, year, now, now),
+      .bind(id, caller.orgId, profileId, year, country, now, now),
     // Only into the year this batch made: when another start won the race, `id` names no row and nothing is added.
     ...memberIds.map((personId) =>
       db
@@ -281,6 +320,8 @@ export async function startYear(
   ]);
   const row = await yearRow(db, caller.orgId, year);
   if (!row) throw new Error("The tax year was not created");
+  // Another start won the race, for another country.
+  if (row.country !== country) throw conflict(`The ${year} tax year was started for ${COUNTRY_NAMES[row.country]}.`);
   return { view: await viewOf(db, caller.orgId, row), created: (inserted?.meta.changes ?? 0) > 0 };
 }
 
@@ -313,10 +354,19 @@ export async function runGuarded(db: Db, statements: D1PreparedStatement[]): Pro
 export async function setYearPeople(db: Db, caller: Caller, year: number, input: SetYearPeople, now: number): Promise<TaxYear> {
   const row = await yearRow(db, caller.orgId, year);
   if (!row) throw notFound(`The ${year} tax year hasn't been started`);
-  checkMembers(await listPeople(db, caller.orgId), input.people);
+  const people = await listPeople(db, caller.orgId);
+  checkMembers(people, input.people);
   const keep = JSON.stringify(input.people);
+  // A joint return needs the spouse in the year: without them, the couple files separately (the only status left).
+  const spouse = people.find((person) => person.relationship === "spouse");
+  const spouseLeaves = spouse !== undefined && !input.people.includes(spouse.id);
+  /** The files uploaded in the return of someone taken out: a file still holding a slip of someone kept stays. */
+  const leftFiles = `org_id = ? AND tax_year_id = ? AND person_id IS NOT NULL AND person_id NOT IN (SELECT value FROM json_each(?))`;
+  const stillUsed = `EXISTS (SELECT 1 FROM slips WHERE slips.document_id = documents.id)`;
   await runGuarded(db, [
-    bumpRevision(db, caller.orgId, row.id, input.revision, now),
+    spouseLeaves && row.filing_status === "joint"
+      ? bumpRevision(db, caller.orgId, row.id, input.revision, now, "filing_status = ?, ", ["separate"])
+      : bumpRevision(db, caller.orgId, row.id, input.revision, now),
     db
       .prepare("DELETE FROM tax_year_people WHERE org_id = ? AND tax_year_id = ? AND person_id NOT IN (SELECT value FROM json_each(?))")
       .bind(caller.orgId, row.id, keep),
@@ -326,6 +376,13 @@ export async function setYearPeople(db: Db, caller: Caller, year: number, input:
         .prepare(`DELETE FROM ${table} WHERE org_id = ? AND tax_year_id = ? AND person_id NOT IN (SELECT value FROM json_each(?))`)
         .bind(caller.orgId, row.id, keep),
     ),
+    // ...and the files uploaded in their return, once their slips are gone; one still holding someone else's slip goes
+    // to the person preparing's return (no person), as when someone is removed from the profile.
+    db
+      .prepare(`DELETE FROM document_chunks WHERE org_id = ? AND document_id IN (SELECT id FROM documents WHERE ${leftFiles} AND NOT ${stillUsed})`)
+      .bind(caller.orgId, caller.orgId, row.id, keep),
+    db.prepare(`DELETE FROM documents WHERE ${leftFiles} AND NOT ${stillUsed}`).bind(caller.orgId, row.id, keep),
+    db.prepare(`UPDATE documents SET person_id = NULL WHERE ${leftFiles}`).bind(caller.orgId, row.id, keep),
     ...input.people.map((personId) => insertMember(db, caller.orgId, row.id, personId, now)),
     audit(db, caller, "tax_year.people_changed", row.id, now),
   ]);
@@ -348,30 +405,46 @@ export async function savePersonalInfo(db: Db, caller: Caller, year: number, inp
     seen.add(adult.personId);
   }
   const hasSpouse = view.people.some((person) => person.relationship === "spouse");
-  if (input.maritalStatus !== null && !maritalStatusesFor(hasSpouse).includes(input.maritalStatus)) {
+  if (input.maritalStatus !== null && !maritalStatusesFor(view.country, hasSpouse).includes(input.maritalStatus)) {
     throw new ApiError("validation_failed", "The marital status doesn't match the Profile", [
       {
         path: "maritalStatus",
-        message: hasSpouse ? "With a spouse or partner in the Profile, choose married or living common-law" : "Without a spouse or partner in the Profile, choose single, widowed, divorced or separated",
+        message: hasSpouse ? `With a spouse or partner in the Profile, ${spouseStatuses(view.country)}` : `Without a spouse or partner in the Profile, ${UNPARTNERED}`,
       },
     ]);
   }
+  // Only a married couple on a US return has a filing status: it is dropped when the status isn't married.
+  if (input.filingStatus != null && (view.country !== "us" || input.maritalStatus !== "married")) {
+    throw new ApiError("validation_failed", "Only a married couple on a US return has a filing status", [
+      { path: "filingStatus", message: "Leave it empty unless married on a US return" },
+    ]);
+  }
+  const filingStatus = input.maritalStatus === "married" ? (input.filingStatus === undefined ? row.filing_status : input.filingStatus) : null;
+  // A Canadian year records a province, a US year a state (in its own column), in the same field.
+  const index = input.adults.findIndex((adult) => adult.province !== null && !isRegionOf(view.country, adult.province));
+  if (index >= 0) {
+    throw new ApiError("validation_failed", view.country === "us" ? "A US year records a state" : "A Canadian year records a province", [
+      { path: `adults.${index}.province`, message: view.country === "us" ? "Choose a US state" : "Choose a province or territory" },
+    ]);
+  }
   await runGuarded(db, [
-    bumpRevision(db, caller.orgId, row.id, input.revision, now, "marital_status = ?, ", [input.maritalStatus]),
+    bumpRevision(db, caller.orgId, row.id, input.revision, now, "marital_status = ?, filing_status = ?, ", [input.maritalStatus, filingStatus]),
     ...input.adults.map((adult) =>
       db
         .prepare(
-          `INSERT INTO returns (id, org_id, tax_year_id, person_id, province, resident_all_year, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+          `INSERT INTO returns (id, org_id, tax_year_id, person_id, province, state, resident_all_year, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
            ON CONFLICT(tax_year_id, person_id) DO UPDATE SET
-             province = excluded.province, resident_all_year = excluded.resident_all_year, updated_at = excluded.updated_at`,
+             province = excluded.province, state = excluded.state, resident_all_year = excluded.resident_all_year,
+             updated_at = excluded.updated_at`,
         )
         .bind(
           crypto.randomUUID(),
           caller.orgId,
           row.id,
           adult.personId,
-          adult.province,
+          view.country === "ca" ? adult.province : null,
+          view.country === "us" ? adult.province : null,
           adult.residentAllYear === null ? null : adult.residentAllYear ? 1 : 0,
           now,
           now,

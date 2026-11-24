@@ -141,7 +141,7 @@ export const routes = {
     method: "PUT",
     path: "/api/years/:year/people",
     summary:
-      "Change who is in a tax year. Including your spouse prepares both returns together. Send the revision you read; a stale one is refused with 409.",
+      "Change who is in a tax year. Including your spouse prepares both returns together. Someone taken out loses their facts, answers, slips and the files uploaded in their return for the year (a file still holding someone else's slip stays, in the person preparing's return); taking the spouse out of a US joint return makes it married filing separately. Send the revision you read; a stale one is refused with 409.",
     permission: "taxi.prepare",
     params: yearParams,
     body: setYearPeopleSchema,
@@ -247,7 +247,7 @@ export const routes = {
     method: "POST",
     path: "/api/years/:year/slips/confirm",
     summary:
-      "Confirm the unconfirmed slips of one adult (personId), or of every adult without it: someone checked each one against the paper slip. Refused with 400, naming each box, while a slip has a box AI couldn't read and no amount: enter it first (0 if it is blank on the slip).",
+      "Confirm the unconfirmed slips of one adult (personId), or of every adult without it: someone checked each one against the paper slip. With slipIds, only those slips (each must be in the year, and the adult's when personId is given; 400 otherwise). Refused with 400, naming each box, while a slip has a box AI couldn't read and no amount: enter it first (0 if it is blank on the slip).",
     permission: "taxi.prepare",
     params: yearParams,
     body: confirmSlipsSchema,

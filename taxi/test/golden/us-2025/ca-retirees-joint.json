@@ -1,0 +1,200 @@
+{
+  "about": "California, married filing jointly, 70 and 68: a pension, social security (not taxed by California), Treasury interest and out-of-state bond interest, two senior exemptions and use tax",
+  "input": {
+    "country": "us",
+    "year": 2025,
+    "people": [
+      {
+        "id": "p1",
+        "name": "Gus Lowe",
+        "role": "self",
+        "birthDate": "1955-02-02",
+        "province": "CA",
+        "residentAllYear": true
+      },
+      {
+        "id": "p2",
+        "name": "Fay Lowe",
+        "role": "spouse",
+        "birthDate": "1957-03-03",
+        "province": "CA",
+        "residentAllYear": true
+      }
+    ],
+    "family": {
+      "maritalStatus": "married",
+      "dependants": [],
+      "filingStatus": "joint"
+    },
+    "answers": {
+      "p1": {
+        "hasWages": false,
+        "hasInterest": true,
+        "hasTipsOrOvertime": false,
+        "canBeClaimed": false,
+        "isBlind": false,
+        "estimatedPayments": "0",
+        "hasCarLoan": false,
+        "hasSelfEmployment": false,
+        "hasStudentLoan": false,
+        "paidForEducation": false,
+        "hasDividends": false,
+        "hasBrokerSales": false,
+        "hasIraDistribution": false,
+        "hasPension": true,
+        "hasSocialSecurity": true,
+        "hasLossCarryover": false,
+        "hasHsa": false,
+        "hasIraContribution": false,
+        "hasItemized": false,
+        "hasOtherIncome": false,
+        "indirectRollover": false,
+        "paidForCare": false,
+        "livedInCaliforniaAllYear": true,
+        "caFullYearCoverage": true,
+        "caUseTax": "150",
+        "caPaidRent": false,
+        "caEstimatedPayments": "0",
+        "caBondInterest": "1000"
+      },
+      "p2": {
+        "hasWages": false,
+        "hasInterest": false,
+        "hasTipsOrOvertime": false,
+        "canBeClaimed": false,
+        "isBlind": false,
+        "estimatedPayments": "0",
+        "hasCarLoan": false,
+        "hasSelfEmployment": false,
+        "hasStudentLoan": false,
+        "paidForEducation": false,
+        "hasDividends": false,
+        "hasBrokerSales": false,
+        "hasIraDistribution": false,
+        "hasPension": false,
+        "hasSocialSecurity": true,
+        "hasLossCarryover": false,
+        "hasHsa": false,
+        "hasIraContribution": false,
+        "hasItemized": false,
+        "hasOtherIncome": false,
+        "livedInCaliforniaAllYear": true,
+        "caEstimatedPayments": "0"
+      }
+    },
+    "slips": [
+      {
+        "id": "p1-ssa-0",
+        "person": "p1",
+        "type": "SSA",
+        "issuer": "Social Security Administration",
+        "boxes": {
+          "5": "24000"
+        }
+      },
+      {
+        "id": "p1-r-0",
+        "person": "p1",
+        "type": "R",
+        "issuer": "State Pension",
+        "boxes": {
+          "1": "30000",
+          "2A": "30000",
+          "4": "3000",
+          "7": "7",
+          "14": "900",
+          "15": "CA"
+        }
+      },
+      {
+        "id": "p1-int-0",
+        "person": "p1",
+        "type": "INT",
+        "issuer": "Bank",
+        "boxes": {
+          "1": "1000",
+          "3": "2000",
+          "8": "3000"
+        }
+      },
+      {
+        "id": "p2-ssa-0",
+        "person": "p2",
+        "type": "SSA",
+        "issuer": "Social Security Administration",
+        "boxes": {
+          "5": "12000"
+        }
+      }
+    ]
+  },
+  "expected": {
+    "p1": {
+      "F1040.19": "0",
+      "F1040.27a": "0",
+      "F1040.28": "0",
+      "S8812.12": "0",
+      "F1040.1a": "0",
+      "F1040.1e": "0",
+      "S3.2": "0",
+      "F1040.2a": "3000",
+      "F1040.2b": "3000",
+      "F1040.9": "47500",
+      "F1040.11a": "47500",
+      "F1040.12e": "34700",
+      "F1040.13b": "12000",
+      "F1040.13a": "0",
+      "F1040.8": "0",
+      "F1040.10": "0",
+      "F1040.15": "800",
+      "F1040.16": "81",
+      "F8959.7": "0",
+      "F8960.17": "0",
+      "F1040.24": "81",
+      "F1040.25c": "0",
+      "S3.11": "0",
+      "F1040.33": "3000",
+      "F1040.34": "2919",
+      "F1040.37": "0",
+      "F1040.4a": "0",
+      "F1040.4b": "0",
+      "F1040.5a": "30000",
+      "F1040.5b": "30000",
+      "S2.8": "0",
+      "F1040.6a": "36000",
+      "F1040.6b": "14500",
+      "F6251.4": "47500",
+      "F6251.6": "0",
+      "F6251.11": "0",
+      "F1040.18": "81",
+      "F540.13": "47500",
+      "F540.14": "16500",
+      "F540.16": "2000",
+      "F540.17": "33000",
+      "F540.18": "11412",
+      "F540.19": "21588",
+      "F540.31": "216",
+      "F540.32": "612",
+      "F540.35": "0",
+      "F540.40": "0",
+      "F540.46": "0",
+      "F540.48": "0",
+      "F540.61": "0",
+      "F540.62": "0",
+      "F540.63": "0",
+      "F540.64": "0",
+      "F540.71": "900",
+      "F540.72": "0",
+      "F540.75": "0",
+      "F540.76": "0",
+      "F540.77": "0",
+      "F540.78": "900",
+      "F540.91": "150",
+      "F540.115": "750",
+      "F540.111": "0",
+      "SP.21": "33000",
+      "SP.24": "0",
+      "F3514.19": "0"
+    }
+  }
+}

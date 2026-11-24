@@ -1,0 +1,1 @@
+ALTER TABLE `tax_years` ADD `filing_status` text;

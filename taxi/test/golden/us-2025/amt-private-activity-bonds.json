@@ -1,0 +1,122 @@
+{
+  "about": "Single, $535,000 of wages, $30,000 of qualified dividends with $250 of foreign tax, and $400,000 of private activity bond interest: the alternative minimum tax, with Part III's 15% and 20% bands",
+  "input": {
+    "country": "us",
+    "year": 2025,
+    "people": [
+      {
+        "id": "p1",
+        "name": "Max Byrd",
+        "role": "self",
+        "birthDate": "1968-12-12",
+        "province": "FL",
+        "residentAllYear": true
+      }
+    ],
+    "family": {
+      "maritalStatus": "single",
+      "dependants": []
+    },
+    "answers": {
+      "p1": {
+        "hasWages": true,
+        "hasInterest": true,
+        "hasTipsOrOvertime": false,
+        "canBeClaimed": false,
+        "isBlind": false,
+        "estimatedPayments": "0",
+        "hasCarLoan": false,
+        "hasSelfEmployment": false,
+        "hasStudentLoan": false,
+        "paidForEducation": false,
+        "hasDividends": true,
+        "hasBrokerSales": false,
+        "hasIraDistribution": false,
+        "hasPension": false,
+        "hasSocialSecurity": false,
+        "hasLossCarryover": false,
+        "hasHsa": false,
+        "hasIraContribution": false,
+        "hasItemized": false,
+        "hasOtherIncome": false,
+        "paidForCare": false
+      }
+    },
+    "slips": [
+      {
+        "id": "p1-w2-0",
+        "person": "p1",
+        "type": "W2",
+        "issuer": "Big Corp",
+        "boxes": {
+          "1": "535000",
+          "2": "150000",
+          "4": "10918.20",
+          "5": "535000",
+          "6": "10697.50"
+        }
+      },
+      {
+        "id": "p1-div-0",
+        "person": "p1",
+        "type": "DIV",
+        "issuer": "Index Fund",
+        "boxes": {
+          "1A": "30000",
+          "1B": "30000",
+          "7": "250"
+        }
+      },
+      {
+        "id": "p1-int-0",
+        "person": "p1",
+        "type": "INT",
+        "issuer": "Muni Fund",
+        "boxes": {
+          "8": "400000",
+          "9": "400000"
+        }
+      }
+    ]
+  },
+  "expected": {
+    "p1": {
+      "F1040.19": "0",
+      "F1040.27a": "0",
+      "F1040.28": "0",
+      "S8812.12": "0",
+      "F1040.1a": "535000",
+      "F1040.1e": "0",
+      "S3.2": "0",
+      "F1040.2a": "400000",
+      "F1040.2b": "0",
+      "F1040.9": "565000",
+      "F1040.11a": "565000",
+      "F1040.12e": "15750",
+      "F1040.13b": "0",
+      "F1040.13a": "0",
+      "F1040.8": "0",
+      "F1040.10": "0",
+      "F1040.15": "549250",
+      "F1040.16": "156577.25",
+      "F8959.7": "3015",
+      "F8960.17": "1140",
+      "F1040.24": "265253",
+      "F1040.25c": "2940",
+      "S3.11": "0",
+      "F1040.33": "152940",
+      "F1040.34": "0",
+      "F1040.37": "112313",
+      "F1040.3a": "30000",
+      "F1040.3b": "30000",
+      "F1040.7a": "0",
+      "F8960.12": "30000",
+      "QDW.5": "519250",
+      "S3.1": "250",
+      "F6251.4": "965000",
+      "F6251.6": "961562.5",
+      "F6251.11": "104770.75",
+      "F1040.18": "261348"
+    }
+  }
+}

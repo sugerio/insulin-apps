@@ -1,0 +1,98 @@
+{
+  "about": "Single, $100,000 of qualified dividends and nothing else: most taxed at 0%, the rest at 15%; the AMT's own 0% band (Form 6251, Part III) leaves no AMT",
+  "input": {
+    "country": "us",
+    "year": 2025,
+    "people": [
+      {
+        "id": "p1",
+        "name": "Hal Rich",
+        "role": "self",
+        "birthDate": "1960-06-06",
+        "province": "FL",
+        "residentAllYear": true
+      }
+    ],
+    "family": {
+      "maritalStatus": "single",
+      "dependants": []
+    },
+    "answers": {
+      "p1": {
+        "hasWages": false,
+        "hasInterest": false,
+        "hasTipsOrOvertime": false,
+        "canBeClaimed": false,
+        "isBlind": false,
+        "estimatedPayments": "0",
+        "hasCarLoan": false,
+        "hasSelfEmployment": false,
+        "hasStudentLoan": false,
+        "paidForEducation": false,
+        "hasDividends": true,
+        "hasBrokerSales": false,
+        "hasIraDistribution": false,
+        "hasPension": false,
+        "hasSocialSecurity": false,
+        "hasLossCarryover": false,
+        "hasHsa": false,
+        "hasIraContribution": false,
+        "hasItemized": false,
+        "hasOtherIncome": false,
+        "paidForCare": false
+      }
+    },
+    "slips": [
+      {
+        "id": "p1-div-0",
+        "person": "p1",
+        "type": "DIV",
+        "issuer": "Index Fund",
+        "boxes": {
+          "1A": "100000",
+          "1B": "100000",
+          "4": "5000"
+        }
+      }
+    ]
+  },
+  "expected": {
+    "p1": {
+      "F1040.19": "0",
+      "F1040.27a": "0",
+      "F1040.28": "0",
+      "S8812.12": "0",
+      "F1040.1a": "0",
+      "F1040.1e": "0",
+      "S3.2": "0",
+      "F1040.2a": "0",
+      "F1040.2b": "0",
+      "F1040.9": "100000",
+      "F1040.11a": "100000",
+      "F1040.12e": "17750",
+      "F1040.13b": "4500",
+      "F1040.13a": "0",
+      "F1040.8": "0",
+      "F1040.10": "0",
+      "F1040.15": "77750",
+      "F1040.16": "4410",
+      "F8959.7": "0",
+      "F8960.17": "0",
+      "F1040.24": "4410",
+      "F1040.25c": "0",
+      "S3.11": "0",
+      "F1040.33": "5000",
+      "F1040.34": "590",
+      "F1040.37": "0",
+      "F1040.3a": "100000",
+      "F1040.3b": "100000",
+      "F1040.7a": "0",
+      "F8960.12": "100000",
+      "QDW.5": "0",
+      "F6251.4": "100000",
+      "F6251.6": "11900",
+      "F6251.11": "0",
+      "F1040.18": "4410"
+    }
+  }
+}

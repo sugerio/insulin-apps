@@ -1,0 +1,56 @@
+# Hints on a US return: see rules/ca/2025/hints.yaml for the kinds. A hint with `filingStatus` works out the year filed
+# the other way, as stored: the person changes the filing status on Personal info, so it is only something to know
+# (`info`), shown when it saves (`onlyIfSaving`). On a joint return the hints are the person preparing's, as the
+# return is.
+
+hints:
+  fileJointly:
+    kind: info
+    title: Filing jointly would cost you less
+    text: >-
+      You and your spouse file separately. Filed jointly, as one return with both your incomes, the two of you would pay
+      less, as worked out from what you entered. Filing separately keeps each of you liable only for your own return,
+      but it gives up the earned income credit, the education credits, the student loan interest deduction and the tips
+      and overtime deductions, and most of the child care credit. To file jointly, choose it on Personal info.
+    when: 'person.role == "self" and line.US.separate == 1 and spouse.line.US.separate == 1'
+    filingStatus: joint
+    onlyIfSaving: true
+    effectLabel: Filing jointly saves
+
+  fileSeparately:
+    kind: info
+    title: Filing separately would cost you less
+    text: >-
+      Filed separately, each of you with your own return, the two of you would pay less, as worked out from what you
+      entered, with both of you taking the standard deduction and every dependant on your return. Each of you is then
+      liable only for your own return. To file separately, choose it on Personal info.
+    when: 'person.role == "self" and line.US.joint == 1'
+    filingStatus: separate
+    change:
+      answer.spouseItemizes: "false"
+      spouse.answer.spouseItemizes: "false"
+    onlyIfSaving: true
+    effectLabel: Filing separately saves
+
+  interestWithoutForm:
+    kind: warning
+    title: Interest is taxable even without a 1099-INT
+    text: >-
+      A bank or credit union sends a Form 1099-INT only when it pays you $10 or more. Interest under that is still
+      income. If you earned any, enter it as a 1099-INT on Income, from your account statements.
+    when: '(person.role == "self" or line.US.joint == 0) and line.F1040.2b == 0'
+
+  estimatedTaxPenalty:
+    kind: warning
+    title: You may owe a penalty for paying too little during the year
+    text: >-
+      You owe $1,000 or more, and more than a tenth of the tax shown on your return (line 24, less the refundable
+      credits on lines 27a to 29). The IRS may then charge a penalty for not paying
+      enough tax during the year, through withholding or estimated payments, unless an exception applies (for example,
+      you paid at least your 2024 tax). This app doesn't work out the penalty (Form 2210): leave line 38 blank, and the
+      IRS works it out and sends you a bill. To avoid it next year, have more withheld on Form W-4.
+    when: '(person.role == "self" or line.US.joint == 0) and line.F1040.37 >= 1000 and line.F1040.37 > max(0, line.F1040.24 - line.F1040.27a - line.F1040.28 - line.F1040.29) / 10'
+    amount: "line.F1040.37"
+    amountLabel: Amount you owe
+    # Instructions, line 38: line 37 is at least $1,000 and more than 10% of the tax shown on the return (line 24 less
+    # lines 27a, 28, 29 and 30; line 30 and Schedule 3 lines 9 and 12 aren't on a return this app prepares).

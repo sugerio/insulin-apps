@@ -25,7 +25,23 @@ export interface FoundHint {
   change: { personId: string; question: string; value: string | boolean }[];
 }
 
-export function findHints(rules: RuleSet, input: EngineInput): FoundHint[] {
+/**
+ * The year's input filed with another filing status, for a hint that changes it. The caller that builds the input
+ * (the server, from what is stored) passes its own, so whose return claims each dependant follows the same rule as
+ * the real year. Without one, the status is set and a joint return claims every dependant.
+ */
+export type Refile = (input: EngineInput, filingStatus: "joint" | "separate") => EngineInput;
+
+const refileInput: Refile = (input, filingStatus) => ({
+  ...input,
+  family: {
+    ...input.family,
+    filingStatus,
+    dependants: filingStatus === "joint" ? input.family.dependants.map(({ claimedBy: _, ...dependant }) => dependant) : input.family.dependants,
+  },
+});
+
+export function findHints(rules: RuleSet, input: EngineInput, refile: Refile = refileInput): FoundHint[] {
   if (rules.hints.size === 0) return [];
   const base = new Evaluation(rules, input);
   const before = outcomeOf(rules, base);
@@ -38,11 +54,12 @@ export function findHints(rules: RuleSet, input: EngineInput): FoundHint[] {
       if (change === null) continue; // a change it can't work out, or for a spouse who isn't in the year
       const changed = change.filter((each) => !sameAnswer(input.answers[each.personId]?.[each.question], each.value));
       let effect: Dec | null = null;
-      if (changed.length > 0 && before !== null) {
-        const after = outcomeOf(rules, new Evaluation(rules, withAnswers(input, changed)));
+      if ((changed.length > 0 || hint.filingStatus !== undefined) && before !== null) {
+        const changedInput = withAnswers(hint.filingStatus === undefined ? input : refile(input, hint.filingStatus), changed);
+        const after = outcomeOf(rules, new Evaluation(rules, changedInput));
         effect = after === null ? null : after.sub(before);
       }
-      if (hint.kind === "saving" && (effect === null || effect.lt(SMALLEST_SAVING))) continue;
+      if ((hint.kind === "saving" || hint.onlyIfSaving) && (effect === null || effect.lt(SMALLEST_SAVING))) continue;
       const amount = hint.amount ? base.evaluate(person.id, hint.amount.formula).value : null;
       found.push({
         id: hint.id,

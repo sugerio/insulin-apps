@@ -3,8 +3,17 @@ import { z } from "zod";
 // The people and their tax years, as the browser, the server and API clients see them. The people (the profile)
 // belong to one organization and are the same every year. Each tax year names who is in it (the person preparing always; their spouse
 // when the two returns are prepared together; the dependants who lived with them) and records the facts that can
-// change from year to year: marital status on December 31, each adult's province, whether they lived in Canada all
-// year.
+// change from year to year: marital status on December 31, each adult's province (or US state), whether they lived in
+// the country all year.
+
+/**
+ * The countries the app prepares returns for: Canada (the CRA's T1, and Revenu Québec's TP-1) and the United States
+ * (federal Form 1040). A tax year is of one country.
+ */
+export const COUNTRIES = ["ca", "us"] as const;
+export const countrySchema = z.enum(COUNTRIES);
+export type Country = z.infer<typeof countrySchema>;
+export const COUNTRY_NAMES: Record<Country, string> = { ca: "Canada", us: "United States" };
 
 /** The years the app prepares returns for. A year is data for the tax engine; adding one adds its rule files. */
 export const SUPPORTED_YEARS = [2025] as const;
@@ -18,18 +27,31 @@ export type Relationship = z.infer<typeof relationshipSchema>;
 /** The two people who can file a return here: the person preparing it and their spouse or common-law partner. */
 export const isAdult = (relationship: Relationship) => relationship === "self" || relationship === "spouse";
 
-/** Marital status on December 31, as the T1 asks it (page 1, "Your marital status on December 31"). */
+/**
+ * Marital status on December 31, as the T1 asks it (page 1, "Your marital status on December 31"). A US year records
+ * it too, and its filing status follows it: `separated` there is legally separated under a decree, which files as
+ * unmarried; a couple only living apart is `married`.
+ */
 export const MARITAL_STATUSES = ["married", "common_law", "widowed", "divorced", "separated", "single"] as const;
 export const maritalStatusSchema = z.enum(MARITAL_STATUSES);
 export type MaritalStatus = z.infer<typeof maritalStatusSchema>;
 /**
- * The statuses a year may record, from the Profile: with a spouse or partner in it, married or living common-law
- * (the tax treats both the same; the T1 has a box for each); without one, the other four. A separation during the
- * year isn't handled yet, so a profile with a spouse never records one.
+ * The statuses a year may record, from the Profile: with a spouse or partner in it, married or (in Canada) living
+ * common-law (the tax treats both the same; the T1 has a box for each); without one, the other four. A separation
+ * during the year isn't handled yet, so a profile with a spouse never records one.
  */
-export function maritalStatusesFor(hasSpouse: boolean): readonly MaritalStatus[] {
-  return hasSpouse ? ["married", "common_law"] : ["single", "widowed", "divorced", "separated"];
+export function maritalStatusesFor(country: Country, hasSpouse: boolean): readonly MaritalStatus[] {
+  if (hasSpouse) return country === "ca" ? ["married", "common_law"] : ["married"];
+  return ["single", "widowed", "divorced", "separated"];
 }
+
+/**
+ * A married couple's filing status on a US return: one joint return for both, or a separate return each. Unmarried, a
+ * US return is Single. A Canadian year has none.
+ */
+export const FILING_STATUSES = ["joint", "separate"] as const;
+export const filingStatusSchema = z.enum(FILING_STATUSES);
+export type FilingStatus = z.infer<typeof filingStatusSchema>;
 
 /** Province or territory of residence on December 31, by its two-letter code. */
 export const PROVINCES = ["AB", "BC", "MB", "NB", "NL", "NS", "NT", "NU", "ON", "PE", "QC", "SK", "YT"] as const;
@@ -53,6 +75,37 @@ export const PROVINCE_NAMES: Record<Province, string> = {
 };
 /** The provinces whose tax this app works out: all of them. A Quebec resident also files Revenu Québec's TP-1. */
 export const SUPPORTED_PROVINCES: readonly Province[] = ["ON", "BC", "AB", "MB", "SK", "NB", "NL", "NS", "PE", "YT", "NT", "NU", "QC"];
+
+/** A US year's state (or the District of Columbia) on December 31, by its two-letter postal code. */
+export const US_STATES = [
+  "AL", "AK", "AZ", "AR", "CA", "CO", "CT", "DE", "DC", "FL", "GA", "HI", "ID", "IL", "IN", "IA", "KS", "KY", "LA", "ME", "MD", "MA",
+  "MI", "MN", "MS", "MO", "MT", "NE", "NV", "NH", "NJ", "NM", "NY", "NC", "ND", "OH", "OK", "OR", "PA", "RI", "SC", "SD", "TN", "TX",
+  "UT", "VT", "VA", "WA", "WV", "WI", "WY",
+] as const;
+export const usStateSchema = z.enum(US_STATES);
+export type UsState = z.infer<typeof usStateSchema>;
+export const US_STATE_NAMES: Record<UsState, string> = {
+  AL: "Alabama", AK: "Alaska", AZ: "Arizona", AR: "Arkansas", CA: "California", CO: "Colorado", CT: "Connecticut", DE: "Delaware",
+  DC: "District of Columbia", FL: "Florida", GA: "Georgia", HI: "Hawaii", ID: "Idaho", IL: "Illinois", IN: "Indiana", IA: "Iowa",
+  KS: "Kansas", KY: "Kentucky", LA: "Louisiana", ME: "Maine", MD: "Maryland", MA: "Massachusetts", MI: "Michigan", MN: "Minnesota",
+  MS: "Mississippi", MO: "Missouri", MT: "Montana", NE: "Nebraska", NV: "Nevada", NH: "New Hampshire", NJ: "New Jersey",
+  NM: "New Mexico", NY: "New York", NC: "North Carolina", ND: "North Dakota", OH: "Ohio", OK: "Oklahoma", OR: "Oregon",
+  PA: "Pennsylvania", RI: "Rhode Island", SC: "South Carolina", SD: "South Dakota", TN: "Tennessee", TX: "Texas", UT: "Utah",
+  VT: "Vermont", VA: "Virginia", WA: "Washington", WV: "West Virginia", WI: "Wisconsin", WY: "Wyoming",
+};
+/** The states whose return this app prepares with the federal one: California (Form 540) and New York (Form IT-201). */
+export const SUPPORTED_STATES: readonly UsState[] = ["CA", "NY"];
+/**
+ * The states with no income tax return for wages and interest in 2025 (New Hampshire's tax on interest and dividends
+ * ended with 2024; Washington taxes only large capital gains, on its own return).
+ */
+export const NO_INCOME_TAX_STATES: readonly UsState[] = ["AK", "FL", "NV", "NH", "SD", "TN", "TX", "WA", "WY"];
+/** Where an adult lived on December 31: a province in a Canadian year, a state in a US year. */
+export const regionSchema = z.enum([...PROVINCES, ...US_STATES]);
+export type Region = z.infer<typeof regionSchema>;
+/** Whether a code is a region of the year's country. */
+export const isRegionOf = (country: Country, region: Region): boolean =>
+  country === "ca" ? (PROVINCES as readonly string[]).includes(region) : (US_STATES as readonly string[]).includes(region);
 
 export const idSchema = z.uuid();
 const isoDateSchema = z.iso.date();
@@ -84,7 +137,8 @@ export type UpdatePerson = z.infer<typeof updatePersonSchema>;
 /** One adult's facts for the year, and whether their return is prepared here. */
 export const adultYearSchema = z.strictObject({
   personId: idSchema,
-  province: provinceSchema.nullable(),
+  /** The province on December 31 in a Canadian year, the state in a US year. */
+  province: regionSchema.nullable(),
   residentAllYear: z.boolean().nullable(),
   /** Prepared in this app: the person preparing, and their spouse when the spouse is in the year. */
   prepared: z.boolean(),
@@ -99,6 +153,7 @@ export const issueSchema = z.strictObject({
     "marital_status_mismatch",
     "no_province",
     "no_residency",
+    "no_filing_status",
     "unsupported_province",
   ]),
   /** The person it is about, if any. */
@@ -110,7 +165,7 @@ export const issueSchema = z.strictObject({
 export type Issue = z.infer<typeof issueSchema>;
 
 /** Issues about the facts every return of the year shares (the marital status, who prepares): they are each return's. */
-const SHARED_ISSUES: ReadonlySet<Issue["code"]> = new Set(["no_self", "no_marital_status", "marital_status_mismatch"]);
+const SHARED_ISSUES: ReadonlySet<Issue["code"]> = new Set(["no_self", "no_marital_status", "marital_status_mismatch", "no_filing_status"]);
 /** Whether an issue is one of an adult's return: about that adult, or about a fact the year's returns share. */
 export const isIssueOf = (issue: Issue, personId: string) => SHARED_ISSUES.has(issue.code) || issue.personId === personId;
 
@@ -121,18 +176,31 @@ export const stepStatusSchema = z.enum(["done", "todo", "not_built"]);
 export const stepStatusesSchema = z.record(stepSchema, stepStatusSchema);
 export type StepStatuses = z.infer<typeof stepStatusesSchema>;
 
-/** One adult's return in a year: whose it is and how far each of its steps is. */
+/**
+ * A return in a year: whose it is, who is on it, and how far each of its steps is. A return is one adult's, except a
+ * US joint return, which is the person preparing's with their spouse on it too (`members`: the owner first).
+ */
 export const returnProgressSchema = z.strictObject({
   personId: idSchema,
+  members: z.array(idSchema).min(1).max(2),
   steps: stepStatusesSchema,
+  /**
+   * Each member's own steps, in the order of `members`: on a joint return each spouse's personal info, income,
+   * deductions, credits and slips are their own (Finish is the return's). With one member, the return's steps.
+   */
+  memberSteps: z.array(z.strictObject({ personId: idSchema, steps: stepStatusesSchema })).min(1).max(2),
 });
 export type ReturnProgress = z.infer<typeof returnProgressSchema>;
 
 export const taxYearSchema = z.strictObject({
   year: z.number().int(),
+  /** Whose return it is: Canada's or the United States'. A year is of one country. */
+  country: countrySchema,
   /** Bumped on every change to the year's personal info; a save names the revision it started from. */
   revision: z.number().int().min(1),
   maritalStatus: maritalStatusSchema.nullable(),
+  /** A married couple's US filing status; null otherwise, and until it is chosen. */
+  filingStatus: filingStatusSchema.nullable(),
   /** Whether both adults' returns are prepared: the spouse is one of the year's people. */
   prepareTogether: z.boolean(),
   /** Everyone in the profile, in or out of this year. */
@@ -142,7 +210,7 @@ export const taxYearSchema = z.strictObject({
   /** The year's adults (you, and your spouse when in the year). */
   adults: z.array(adultYearSchema),
   issues: z.array(issueSchema),
-  /** Each adult's return, in the order of `adults`: its steps' states. */
+  /** Each return, in the order of `adults`: its members and its steps' states. A joint return is one for both. */
   returns: z.array(returnProgressSchema),
   updatedAt: z.number().int(),
 });
@@ -154,8 +222,8 @@ const memberIdsSchema = z
   .max(30)
   .refine((ids) => new Set(ids).size === ids.length, { message: "A person is listed twice" });
 
-/** Start a year with the people in it: you, and whoever else is in this year. */
-export const startYearSchema = z.strictObject({ year: yearSchema, people: memberIdsSchema });
+/** Start a year with the people in it: you, and whoever else is in this year. The country is Canada when not given. */
+export const startYearSchema = z.strictObject({ year: yearSchema, country: countrySchema.default("ca"), people: memberIdsSchema });
 
 /** Change who is in a year, from the revision you read. */
 export const setYearPeopleSchema = z.strictObject({ revision: z.number().int().min(1), people: memberIdsSchema });
@@ -164,11 +232,14 @@ export type SetYearPeople = z.infer<typeof setYearPeopleSchema>;
 export const savePersonalInfoSchema = z.strictObject({
   revision: z.number().int().min(1),
   maritalStatus: maritalStatusSchema.nullable(),
+  /** A married couple's US filing status. Left out, it isn't changed. */
+  filingStatus: filingStatusSchema.nullable().optional(),
   adults: z
     .array(
       z.strictObject({
         personId: idSchema,
-        province: provinceSchema.nullable(),
+        /** The province (a Canadian year) or state (a US year) on December 31. */
+        province: regionSchema.nullable(),
         residentAllYear: z.boolean().nullable(),
       }),
     )
@@ -178,6 +249,7 @@ export type SavePersonalInfo = z.infer<typeof savePersonalInfoSchema>;
 
 export const yearSummarySchema = z.strictObject({
   year: z.number().int(),
+  country: countrySchema,
   /** The year's revision, to change who is in it from the list of years. */
   revision: z.number().int().min(1),
   /** The ids of the year's people, in the profile's order. */
@@ -189,13 +261,40 @@ export const yearSummarySchema = z.strictObject({
 export const peopleListSchema = z.strictObject({ people: z.array(personSchema) });
 
 export const yearListSchema = z.strictObject({
-  supportedYears: z.array(z.number().int()),
+  /** The years a return can be prepared for, by country. */
+  supported: z.array(z.strictObject({ country: countrySchema, years: z.array(z.number().int()) })),
   years: z.array(yearSummarySchema),
   people: z.array(personSchema),
 });
 export type YearList = z.infer<typeof yearListSchema>;
 
-/** The tax filing deadline for most people, for a tax year (April 30 of the next year). */
-export function filingDeadline(year: number): string {
-  return `${year + 1}-04-30`;
+/**
+ * The filing deadline for most people, for a tax year: April 30 of the next year in Canada; April 15 in the United
+ * States (the next business day when it falls on a weekend or holiday; for 2025 returns, Wednesday April 15, 2026).
+ */
+export function filingDeadline(country: Country, year: number): string {
+  return country === "ca" ? `${year + 1}-04-30` : `${year + 1}-04-15`;
+}
+
+/** What decides a year's returns: its country, the couple's statuses, and its adults (you first). */
+export interface ReturnFacts {
+  country: Country;
+  maritalStatus: MaritalStatus | null;
+  filingStatus: FilingStatus | null;
+  adults: readonly { personId: string }[];
+}
+
+/** Whether the year's married couple files one joint return: a US year, married, filing jointly, both in the year. */
+export function filesJointly(year: ReturnFacts): boolean {
+  return year.country === "us" && year.maritalStatus === "married" && year.filingStatus === "joint" && year.adults.length === 2;
+}
+
+/**
+ * The year's returns, each with who is on it: one per adult, or, filing jointly, one return of the person preparing
+ * with the spouse on it too. The adults come you first, so a joint return is yours.
+ */
+export function returnsOf(year: ReturnFacts): { personId: string; members: string[] }[] {
+  const ids = year.adults.map((adult) => adult.personId);
+  if (filesJointly(year)) return [{ personId: ids[0]!, members: ids }];
+  return ids.map((id) => ({ personId: id, members: [id] }));
 }

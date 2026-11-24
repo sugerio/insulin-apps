@@ -5,7 +5,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 // The pieces the in-app Docs are written with. Each topic is static TSX: a title, a one-line summary and sections of
 // ordinary markup, with no parser and no data from the server, so the same pages serve every role.
 
-export const TOPIC_SLUGS = ["getting-started", "profile", "tax-basics", "glossary"] as const;
+export const TOPIC_SLUGS = ["getting-started", "profile", "tax-basics", "us-tax-basics", "glossary"] as const;
 export type TopicSlug = (typeof TOPIC_SLUGS)[number];
 
 export interface DocSection {
@@ -20,7 +20,7 @@ export interface DocTopic {
   title: string;
   /** One sentence under the title. */
   summary: string;
-  /** Where the topic list shows it: using the app, or Canadian personal tax in general. */
+  /** Where the topic list shows it: using the app, or personal tax in general. */
   group: "app" | "tax";
   /** Tax matters: the topic opens with the note that it is general information, not advice. */
   generalInformation?: true;

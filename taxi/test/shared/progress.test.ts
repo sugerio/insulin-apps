@@ -6,7 +6,7 @@ const slip = (id: string, type: string, issuer: string, boxes: Record<string, st
 
 describe("possible duplicates", () => {
   it("flags one person's slips of one type and issuer with no box holding different amounts, receipts aside", () => {
-    const flagged = possibleDuplicates(rulesFor(2025)!, [
+    const flagged = possibleDuplicates(rulesFor("ca", 2025)!, [
       slip("a", "T4", "Maple Corp", { 14: "60000" }),
       // The same issuer, whatever its case and spaces, and box 14's amount written another way.
       slip("b", "T4", " maple corp", { 14: "60000.00", 22: "9000" }),

@@ -13,7 +13,7 @@ if (!file) {
 }
 const json = JSON.parse(readFileSync(file, "utf8")) as { input?: unknown; year?: number };
 const input = (json.input ?? json) as { year: number; people: { id: string; name: string }[] };
-const rules = rulesFor(input.year);
+const rules = rulesFor(((input as { country?: "ca" | "us" }).country ?? "ca"), input.year);
 if (!rules) {
   console.error(`No rules for ${input.year}`);
   process.exit(1);

@@ -10,6 +10,10 @@ import type { Measured, Point } from "./form-measure.ts";
 // California's Franchise Tax Board publishes fill-in PDFs too, without an XFA part: each field's tooltip is its label
 // ("Line 13. Enter federal adjusted gross income…", "Line 2b. Column B. Subtractions."), and a field set to the right
 // holds an amount. readFtbFields reads them the same way, and ftbLineOf finds the line (and column) a label names.
+//
+// New York's Department of Taxation and Finance publishes fill-in PDFs mostly without tooltips: a field's name is then
+// its label ("Line33" on Form IT-201, "6 dollars15" on IT-215, "line 3 dollars27" on IT-272). readNyFields reads them,
+// and nyLineOf finds the line in the name.
 
 /** A field's box on the form, with its label. */
 export interface IrsField {
@@ -136,6 +140,32 @@ export function ftbLineOf(label: string): string | null {
   if (!last) return null;
   const column = /\bColumn ([A-D])\b/.exec(label)?.[1] ?? "";
   return `${last[1]}${last[2] ?? ""}${column}`;
+}
+
+/**
+ * Each field of a New York fill-in PDF, its tooltip or else its name as its label (a field with more than one box is one per box, named
+ * `<field>#<n>`, as readFtbFields names them). A box whose rectangle is drawn upside down (a negative height) is turned
+ * the right way up.
+ */
+export async function readNyFields(bytes: Uint8Array): Promise<IrsField[]> {
+  return (await readFtbFields(bytes)).map((field) => ({
+    ...field,
+    label: field.label || field.name.replace(/#\d+$/, ""),
+    ...(field.height < 0 ? { y: field.y + field.height, height: -field.height } : {}),
+  }));
+}
+
+/**
+ * The line a New York field's name names: "Line33" and "line16a" (IT-201, IT-196, IT-270), "6 dollars15" and "28a
+ * dollars" (IT-215), "5 dollars16" (IT-216), "line 3 dollars27" (IT-272), and IT-215's "Worksheet B 2 dollars15" as B2.
+ * Any other name (a tick, a name, an SSN) isn't a line.
+ */
+export function nyLineOf(label: string): string | null {
+  const name = label.trim();
+  const worksheet = /^Worksheet ([A-Z]) (\d+) dollars\d*$/.exec(name);
+  if (worksheet) return `${worksheet[1]}${worksheet[2]}`;
+  const match = /^line ?(\d{1,2}[a-e]?)$/i.exec(name) ?? /^(?:line )?(\d{1,2}[a-z]?) dollars\d*$/i.exec(name);
+  return match ? match[1]! : null;
 }
 
 /**

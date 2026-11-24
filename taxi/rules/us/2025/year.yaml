@@ -1,7 +1,8 @@
 # The 2025 United States federal rules (Form 1040): wages and interest, filing Single, Married filing jointly, Married
 # filing separately, Head of household or Qualifying surviving spouse; dependants and their credits (Schedule 8812); the earned income credit; child and dependent care (Form 2441); the education credits (Form 8863) and the student loan interest deduction; dividends, capital gains, IRA, pension and social security income; the IRA and HSA deductions; the standard or itemized deductions, the enhanced deduction for seniors, and the tax with the capital gain rates and the AMT. Each number names its source in
 # the 2025 Instructions for Form 1040 (i1040gi, February 25, 2026) or on the 2025 form; check it there before changing it.
-# A California resident's return adds California's Form 540 (california.yaml, with FTB's 2025 sources).
+# A California resident's return adds California's Form 540 (california.yaml, with FTB's 2025 sources), and a New York
+# resident's New York's Form IT-201 (new-york.yaml, with the Department of Taxation and Finance's 2025 sources).
 country: us
 year: 2025
 filingUnit: person   # one return per adult, except a joint return: the person preparing's, with the spouse's income on it
@@ -38,6 +39,14 @@ result:
   - F540.78
   - F540.115
   - F540.111
+  - IT201.33   # New York: AGI, taxable income, the taxes, payments and the balance (new-york.yaml)
+  - IT201.38
+  - IT201.46
+  - IT201.58
+  - IT201.62
+  - IT201.76
+  - IT201.78
+  - IT201.80
 
 # On a joint return the spouse has no result of their own: their income is on the person preparing's return.
 resultWhen:
@@ -71,6 +80,15 @@ resultWhen:
   F540.78: *californiaReturn
   F540.115: *californiaReturn
   F540.111: *californiaReturn
+  # A New York return goes with the return of a New York resident, the person preparing's on a joint return.
+  IT201.33: &newYorkReturn 'line.NYS.files == 1 and (person.role == "self" or line.US.joint == 0)'
+  IT201.38: *newYorkReturn
+  IT201.46: *newYorkReturn
+  IT201.58: *newYorkReturn
+  IT201.62: *newYorkReturn
+  IT201.76: *newYorkReturn
+  IT201.78: *newYorkReturn
+  IT201.80: *newYorkReturn
 
 # The line hints compare with and without their change.
 outcome: RESULT.net
@@ -79,6 +97,7 @@ outcome: RESULT.net
 balances:
   - { name: Federal, refund: F1040.34, owing: F1040.37 }
   - { name: California, refund: F540.115, owing: F540.111 }
+  - { name: New York, refund: IT201.78, owing: IT201.80 }
 
 # What person.residentAllYear means: a nonresident or dual-status alien files Form 1040-NR, not this return.
 residency: A U.S. citizen or resident alien all year
@@ -89,8 +108,8 @@ reading:
   documents: United States information returns (Forms W-2, 1099, 1098 and SSA-1099)
   notes:
     - "Box numbers with a letter are written in capitals: box 1a of a 1099-DIV is 1A, box 2a of a 1099-R is 2A, box 1d of a 1099-B is 1D."
-    - "A W-2 prints boxes 1 to 20. Box 12 holds codes with amounts: report only the amount with code W, under 12W. Boxes 13 and 14 aren't read. The 'a' to 'f' boxes hold numbers, names and addresses, never amounts: leave them out. Box 15 holds a state's two-letter code and the employer's state ID number: report only the code (CA), under 15, with that state's wages (16) and income tax (17). A W-2 with two states has a second line of boxes 15 to 17: return it as two W-2s, one per state, the federal boxes on the first."
-    - "On a 1099, the state boxes give the state's two-letter code (under 15 on a 1099-INT and a 1099-R, 14 on a 1099-DIV, 6 on a 1099-NEC; the payer's state number after it isn't read) and the state tax withheld (17 on a 1099-INT, 16 on a 1099-DIV, 14 on a 1099-R, 5 on a 1099-NEC). Leave them out when they are blank."
+    - "A W-2 prints boxes 1 to 20. Box 12 holds codes with amounts: report only the amount with code W, under 12W. Boxes 13 and 14 aren't read. The 'a' to 'f' boxes hold numbers, names and addresses, never amounts: leave them out. Box 15 holds a state's two-letter code and the employer's state ID number: report only the code (CA), under 15, with that state's wages (16) and income tax (17). Boxes 18 to 20 are a locality's wages, income tax and name: report them when box 20 names New York City (NYC, NY CITY, NEW YORK CITY: report NYC) or Yonkers (report YONKERS); for any other locality report 18 and 19 and leave 20 out. A W-2 with two states or two localities has a second line of boxes 15 to 20: return it as two W-2s, one per line, the federal boxes on the first."
+    - "On a 1099, the state boxes give the state's two-letter code (under 15 on a 1099-INT and a 1099-R, 14 on a 1099-DIV, 6 on a 1099-NEC; the payer's state number after it isn't read) and the state tax withheld (17 on a 1099-INT, 16 on a 1099-DIV, 14 on a 1099-R, 5 on a 1099-NEC). A 1099-R's boxes 16 to 19 are the state distribution, the local tax withheld, the locality's name (NYC for New York City, YONKERS for Yonkers; leave 18 out for any other place) and the local distribution. Leave them out when they are blank."
     - "On a 1099 or 1098, report the payer's, lender's or school's name as issuer. A form can print a box that is a checkbox (such as boxes 7, 8 and 9 of a 1098-T): leave checkboxes out, unless the list names one."
     - "A Form 1099-R is type RIRA when its IRA/SEP/SIMPLE box is checked, and type R when it isn't. Its box 7 holds one or two distribution codes: report the first under 7 and a second, if any, under 7B (box 7 of 7D is 7, and D under 7B)."
     - "A broker's Form 1099-B usually comes as a yearly statement that sums the sales up by part of Form 8949: 'Box A' (short-term, basis reported to the IRS), 'Box B' (short-term, not reported), 'Box D' (long-term, reported), 'Box E' (long-term, not reported). Return one 1099-B for each part that has sales, with that letter under CAT and the part's totals: proceeds (1D), cost or other basis (1E), accrued market discount (1F) and wash sale loss disallowed (1G). Federal income tax withheld (box 4) goes on the first."

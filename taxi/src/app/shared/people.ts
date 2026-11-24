@@ -93,8 +93,8 @@ export const US_STATE_NAMES: Record<UsState, string> = {
   PA: "Pennsylvania", RI: "Rhode Island", SC: "South Carolina", SD: "South Dakota", TN: "Tennessee", TX: "Texas", UT: "Utah",
   VT: "Vermont", VA: "Virginia", WA: "Washington", WV: "West Virginia", WI: "Wisconsin", WY: "Wyoming",
 };
-/** The states whose return this app prepares with the federal one: California (Form 540). */
-export const SUPPORTED_STATES: readonly UsState[] = ["CA"];
+/** The states whose return this app prepares with the federal one: California (Form 540) and New York (Form IT-201). */
+export const SUPPORTED_STATES: readonly UsState[] = ["CA", "NY"];
 /**
  * The states with no income tax return for wages and interest in 2025 (New Hampshire's tax on interest and dividends
  * ended with 2024; Washington taxes only large capital gains, on its own return).
@@ -184,6 +184,11 @@ export const returnProgressSchema = z.strictObject({
   personId: idSchema,
   members: z.array(idSchema).min(1).max(2),
   steps: stepStatusesSchema,
+  /**
+   * Each member's own steps, in the order of `members`: on a joint return each spouse's personal info, income,
+   * deductions, credits and slips are their own (Finish is the return's). With one member, the return's steps.
+   */
+  memberSteps: z.array(z.strictObject({ personId: idSchema, steps: stepStatusesSchema })).min(1).max(2),
 });
 export type ReturnProgress = z.infer<typeof returnProgressSchema>;
 

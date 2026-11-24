@@ -33,7 +33,8 @@ export const gettingStarted: DocTopic = {
             Schedule D), retirement income (1099-R, SSA-1099), IRA and HSA contributions, itemized deductions (Schedule A) and the alternative
             minimum tax are worked out too. AI reads the W-2, 1099, 1098 and SSA-1099 forms you upload. Finish shows hints, such as what filing jointly or separately would save a married couple.
             Personal info asks each person's state. For a California resident, Taxi also prepares California's Form 540 (with Schedule CA, the
-            California earned income tax credit and the renter's credit), printed after the federal forms on the FTB's own forms and mailed apart.
+            California earned income tax credit and the renter's credit), and for a New York resident New York's Form IT-201 (with the New York
+            City tax, the Empire State child credit and Form IT-2), each printed after the federal forms on the state's own forms and mailed apart.
             For another state, it prepares the federal return only. It says on the return when something it doesn't handle yet applies. See{" "}
             <DocLink to="us-tax-basics">US tax basics</DocLink>.
           </p>

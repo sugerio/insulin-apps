@@ -57,10 +57,10 @@ describe("code boxes", () => {
     expect(() => compile({ "X.bad": { label: "Bad", formula: 'sumWhere(R.box2, R.box1, "G")' } })).toThrow(/takes a slip box of amounts/);
   });
 
-  it("checks the code list: a box of the slip, codes of one or two capitals or digits, not also a count", () => {
+  it("checks the code list: a box of the slip, codes of 1 to 12 capitals or digits, not also a count", () => {
     const line = { "X.ok": { label: "Ok", formula: "sum(R.box1)" } };
     expect(() => compile(line, { codes: { 9: ["G"] } })).toThrow(/code box 9 isn't one of its boxes/);
-    expect(() => compile(line, { codes: { 7: ["gg"] } })).toThrow(/codes of one or two capital letters or digits/);
+    expect(() => compile(line, { codes: { 7: ["gg"] } })).toThrow(/codes of 1 to 12 capital letters or digits/);
     expect(() => compile(line, { codes: { 7: ["G"] }, counts: [7] })).toThrow(/can't also be a count/);
   });
 });

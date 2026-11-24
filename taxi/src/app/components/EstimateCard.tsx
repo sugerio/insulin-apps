@@ -19,9 +19,9 @@ import { useReturn, useYear } from "./YearFrame.tsx";
 
 export function EstimateSummary() {
   const resource = useEstimate();
-  const { person } = useReturn();
+  const { owner } = useReturn();
   const { year } = useYear();
-  const result = resource.status === "ready" ? headline(rulesFor(year.country, year.year)!, resource.data, person.id) : null;
+  const result = resource.status === "ready" ? headline(rulesFor(year.country, year.year)!, resource.data, owner.id) : null;
   return (
     <Sheet>
       <div className="flex items-center gap-3" role="group" aria-label="Estimate">
@@ -41,7 +41,7 @@ export function EstimateSummary() {
       <SheetContent side="right" className="w-full overflow-y-auto sm:max-w-md">
         <SheetHeader>
           <SheetTitle>Estimate</SheetTitle>
-          <SheetDescription className="wrap-anywhere">{person.name}'s return. Select a line to see why.</SheetDescription>
+          <SheetDescription className="wrap-anywhere">{owner.name}'s return. Select a line to see why.</SheetDescription>
         </SheetHeader>
         <div className="px-4 pb-6">
           <ResourceView resource={resource}>{(estimate) => <EstimateBody estimate={estimate} />}</ResourceView>
@@ -67,7 +67,7 @@ function headline(rules: RuleSet, estimate: Estimate, personId: string): { text:
 }
 
 function EstimateBody({ estimate }: { estimate: Estimate }) {
-  const { person: owner } = useReturn();
+  const { owner } = useReturn();
   const { year } = useYear();
   const rules = rulesFor(year.country, estimate.input.year)!;
   const evaluation = useMemo(() => new Evaluation(rules, estimate.input), [rules, estimate.input]);

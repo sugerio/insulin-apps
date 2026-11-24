@@ -17,12 +17,21 @@ import { useEstimate, useSlips } from "../lib/useYearData.ts";
 import { Evaluation } from "../shared/engine/evaluate.ts";
 import { rulesFor } from "../shared/rules/index.ts";
 
+/** What Finish says of each state return printed after the federal forms, by the name of its balance. */
+const STATE_RETURNS: Record<string, string> = {
+  California:
+    "After them comes California's Form 540 with its schedules and credit forms: sign it and mail it to the Franchise Tax Board apart from the federal return (the worksheet gives the address), or file it with CalFile or e-file software.",
+  "New York":
+    "After them comes New York's Form IT-201 with Form IT-2 and its credit forms: sign it and mail it to the New York State Department of Taxation and Finance apart from the federal return (the worksheet gives the address), or file it with e-file software.",
+};
+
 // Step 6, `/returns/:year/:personId/finish`: the open return's refund or balance owing, its key lines with why each is
 // what it is (worked out in the browser with the same engine), what still needs a look before filing, and the return's
 // hints: savings to apply and things to know.
 
 export function FinishStep() {
-  const { person } = useReturn();
+  // Finish is the return's: on a joint return, both spouses see the joint result.
+  const { owner: person } = useReturn();
   const estimate = useEstimate();
   const slips = useSlips();
   return (
@@ -37,7 +46,7 @@ export function FinishStep() {
 
 function Results({ estimate, slips }: { estimate: Estimate; slips: SlipList }) {
   const { year } = useYear();
-  const { person: owner, members } = useReturn();
+  const { owner, onReturn: members } = useReturn();
   const rules = rulesFor(year.country, year.year)!;
   const evaluation = useMemo(() => new Evaluation(rules, estimate.input), [rules, estimate.input]);
   const person = estimate.result.people.find((each) => each.personId === owner.id);
@@ -120,7 +129,7 @@ function Results({ estimate, slips }: { estimate: Estimate; slips: SlipList }) {
           ready={checks.length === 0}
           country={year.country}
           quebec={balances.some((balance) => balance.name === "Quebec")}
-          california={balances.some((balance) => balance.name === "California")}
+          states={balances.map((balance) => balance.name).filter((name) => name in STATE_RETURNS)}
           toAdd={formsToAdd(rules, evaluation, owner.id)}
           href={`/api/years/${year.year}/returns/${owner.id}/forms`}
           fileName={`Taxi ${year.year} return - ${owner.name}.pdf`}
@@ -152,7 +161,7 @@ function Headline({ title, refund, owing }: { title?: string; refund: string | n
 
 /**
  * The return on the CRA's forms (and, for a resident of Quebec, on Revenu Québec's TP-1 after them), or on the IRS's (and
- * for a California resident the FTB's after them), with its worksheet: only a finished return can be printed. Revenu Québec's forms print in English or in French. `toAdd` are
+ * for a resident of a state Taxi prepares a return for, the state's forms after them), with its worksheet: only a finished return can be printed. Revenu Québec's forms print in English or in French. `toAdd` are
  * the forms the return needs that aren't printed. The PDF is fetched here and saved, so the page can say it is being
  * prepared (a first print downloads each official form) and why it couldn't be.
  */
@@ -160,7 +169,7 @@ function Download({
   ready,
   country,
   quebec,
-  california,
+  states,
   toAdd,
   href,
   fileName,
@@ -168,8 +177,8 @@ function Download({
   ready: boolean;
   country: string;
   quebec: boolean;
-  /** A California resident's US return: California's Form 540 is printed after the federal forms. */
-  california: boolean;
+  /** The state returns printed after the federal forms (STATE_RETURNS), by their balance's name. */
+  states: string[];
   toAdd: { form: string; why: string }[];
   href: string;
   fileName: string;
@@ -196,9 +205,7 @@ function Download({
           Form 1040 and the schedules and forms your return uses, filled in with what Taxi knows, and a worksheet that shows how each amount was worked
           out. Add the social security numbers, your address and the other answers Taxi doesn't ask by hand. Attach Copy B of each W-2, sign Form 1040
           and mail it to the IRS; or copy the amounts into IRS e-file software.
-          {california
-            ? " After them comes California's Form 540 with its schedules and credit forms: sign it and mail it to the Franchise Tax Board apart from the federal return (the worksheet gives the address), or file it with CalFile or e-file software."
-            : ""}
+          {states.map((name) => ` ${STATE_RETURNS[name]}`).join("")}
         </p>
       ) : quebec ? (
         <p className="text-xs text-muted-foreground">

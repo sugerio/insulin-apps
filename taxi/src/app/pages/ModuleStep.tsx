@@ -1,19 +1,18 @@
-import { createContext, useContext, useId, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link, useNavigate } from "react-router";
 import { ChevronRight, FileUp, PencilLine, Plus } from "lucide-react";
-import { canPrepare, isAsked, leftInModule, type Country, type Estimate, type Person, type Slip, type SlipList, type Step, type TaxYear } from "#shared";
+import { canPrepare, isAsked, leftInModule, routes, type Country, type Estimate, type Slip, type SlipList, type Step, type TaxYear } from "#shared";
 import { Badge } from "@/components/ui/badge.tsx";
 import { Button } from "@/components/ui/button.tsx";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card.tsx";
 import { Label } from "@/components/ui/label.tsx";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select.tsx";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group.tsx";
 import { cn } from "@/lib/utils.ts";
-import { ApiError, describeError, fieldIssues } from "../api/client.ts";
+import { ApiError, apiRequest, describeError, fieldIssues } from "../api/client.ts";
 import { useMe } from "../auth/AuthProvider.tsx";
 import { AmountField, cleanAmount } from "../components/AmountField.tsx";
 import { Banner, RefusedBanner, ResourceView } from "../components/Feedback.tsx";
-import { OriginalFile, SlipBoxTable, SlipForm, type SlipFormHost, type SlipValues } from "../components/SlipForm.tsx";
+import { OriginalFile, SlipBoxTable, SlipForm, slipChange, type SlipFormHost, type SlipValues } from "../components/SlipForm.tsx";
 import { StepLayout } from "../components/StepLayout.tsx";
 import { SuggestionNote } from "../components/SuggestionNote.tsx";
 import { stepPath, useReturn, useYear } from "../components/YearFrame.tsx";
@@ -118,32 +117,31 @@ interface SlipForms {
 }
 
 /**
- * Whose items the form shows: on a joint return, the spouse chosen above the form (each spouse answers for their own
- * income and slips); otherwise the return's owner.
+ * What the page points at: a question to go to (from the banner, or a choice Save and continue found not made), and
+ * the choices marked as still to make. Kept by ModuleStep, as the form starts again once the year it saved comes back.
  */
-const MemberContext = createContext<Person | null>(null);
-function useMember(): { person: Person } {
-  const member = useContext(MemberContext);
-  const { person } = useReturn();
-  return { person: member ?? person };
+interface Pointing {
+  toChoose: ReadonlySet<string>;
+  /** Goes to a question's field (or its card, or its button to add it), marking `choose` as choices to make. */
+  point: (target: string, choose?: string[]) => void;
+  /** The question to go to, once: the form calls it after it is shown. */
+  take: () => string | null;
 }
 
 export function ModuleStep({ module }: { module: ReturnModule }) {
   const { year, replace, reload } = useYear();
-  const { person, members } = useReturn();
-  const [memberId, setMemberId] = useState(person.id);
-  const member = members.find((each) => each.id === memberId) ?? person;
-  const whose = useId();
+  const { person } = useReturn();
   const navigate = useNavigate();
   const estimate = useEstimate();
   const slips = useSlips();
   // Kept here, as the form below starts again whenever the year changes (a slip saved, or an upload finishing on another
-  // step): which slips are open, what was changed and not saved yet, the request running or how the last one ended,
-  // and what an upload in a card said. This step is mounted once per return and module, so each has its own.
-  const [open, setOpen] = useState<ReadonlySet<string>>(new Set());
-  // One draft per person on the return, so switching between spouses keeps what was typed for each.
-  const drafts = useRef<Record<string, Draft>>({});
-  const draft = { current: (drafts.current[member.id] ??= { added: {}, amounts: {} }) };
+  // step): which slips were closed (they start open), what was changed and not saved yet, the request running or how
+  // the last one ended, what an upload in a card said, and the choices to point at. This step is mounted once per
+  // return and module, so each has its own.
+  const [closed, setClosed] = useState<ReadonlySet<string>>(new Set());
+  const [toChoose, setToChoose] = useState<ReadonlySet<string>>(new Set());
+  const pointAt = useRef<string | null>(null);
+  const draft = useRef<Draft>({ added: {}, amounts: {} });
   const [note, setNote] = useState<string | null>(null);
   const [request, setRequest] = useState<RequestState>({ status: "idle" });
   const [edited, setEdited] = useState<ReadonlySet<string>>(new Set());
@@ -198,8 +196,21 @@ export function ModuleStep({ module }: { module: ReturnModule }) {
       reload();
     },
   };
+  const pointing: Pointing = {
+    toChoose,
+    point(target, choose = []) {
+      pointAt.current = target;
+      // Shown again even when nothing new is marked, so the form below goes to it.
+      setToChoose((current) => new Set([...current, ...choose]));
+    },
+    take() {
+      const target = pointAt.current;
+      pointAt.current = null;
+      return target;
+    },
+  };
   const toggle = (id: string) =>
-    setOpen((current) => {
+    setClosed((current) => {
       const next = new Set(current);
       if (!next.delete(id)) next.add(id);
       return next;
@@ -207,33 +218,18 @@ export function ModuleStep({ module }: { module: ReturnModule }) {
   return (
     <StepLayout step={module} title={MODULE_PAGES[module].title}>
       <p className="-mt-3 text-sm text-muted-foreground">{MODULE_PAGES[module].about}</p>
-      {members.length > 1 ? (
-        <fieldset className="flex flex-col gap-2">
-          <legend id={whose} className="mb-2 text-sm font-medium">
-            Whose {MODULE_PAGES[module].title.toLowerCase()}?
-          </legend>
-          <RadioGroup aria-labelledby={whose} value={member.id} onValueChange={setMemberId} className="flex flex-wrap gap-4">
-            {members.map((each) => (
-              <Label key={each.id} className="flex min-w-0 items-center gap-2 font-normal wrap-anywhere">
-                <RadioGroupItem value={each.id} />
-                {each.name}
-              </Label>
-            ))}
-          </RadioGroup>
-        </fieldset>
-      ) : null}
-      <MemberContext value={member}>
       <ResourceView resource={estimate}>
         {(answers) => (
           <ResourceView resource={slips}>
             {(slipList) => (
               <ModuleForm
-                key={`${year.revision}-${member.id}`}
+                key={year.revision}
                 module={module}
                 estimate={answers}
                 slips={slipList}
-                open={open}
+                closed={closed}
                 onToggle={toggle}
+                pointing={pointing}
                 draft={draft.current}
                 requests={requests}
                 slipForms={slipForms}
@@ -244,7 +240,6 @@ export function ModuleStep({ module }: { module: ReturnModule }) {
           </ResourceView>
         )}
       </ResourceView>
-      </MemberContext>
     </StepLayout>
   );
 }
@@ -253,8 +248,9 @@ function ModuleForm({
   module,
   estimate,
   slips,
-  open,
+  closed,
   onToggle,
+  pointing,
   draft,
   requests,
   slipForms,
@@ -264,8 +260,10 @@ function ModuleForm({
   module: ReturnModule;
   estimate: Estimate;
   slips: SlipList;
-  open: ReadonlySet<string>;
+  /** The slips closed: each starts open, to check and change. */
+  closed: ReadonlySet<string>;
   onToggle: (slipId: string) => void;
+  pointing: Pointing;
   draft: Draft;
   requests: Requests;
   slipForms: SlipForms;
@@ -275,7 +273,7 @@ function ModuleForm({
 }) {
   const me = useMe();
   const { year } = useYear();
-  const { person } = useMember();
+  const { person } = useReturn();
   const editable = canPrepare(me);
   const rules = rulesFor(year.country, year.year)!;
   const given = estimate.input.answers[person.id] ?? {};
@@ -377,16 +375,110 @@ function ModuleForm({
     ),
   });
 
+  /**
+   * Saves the module: first each slip changed in its open form and not saved yet, then the answers. With
+   * `thenContinue`, it also confirms the person's slips this page shows (each kind of income or expense's slips and
+   * receipts): going on from the page is checking them. A slip refused (a box AI couldn't read and still empty) keeps
+   * the page open to say so. A choice not made can't be saved as none: the rest is saved, and the page stays and goes
+   * to it.
+   */
   async function save(thenContinue: boolean) {
     const answers = answersToSave();
     const sent = sentOf(draft);
-    await requests.run(
+    const shown = shownSlips();
+    const changes = shown.flatMap((slip) => {
+      const key = `slip:${slip.id}`;
+      const change = slipChange(slip, slipForms.values[key]);
+      return change ? [{ slip, key, change }] : [];
+    });
+    const unchosen = thenContinue ? unchosenParts() : [];
+    const saved = await requests.run(
       async (answered) => {
-        answered(await saveAnswersFor(year, answers));
+        let latest = year;
+        for (const { slip, key, change } of changes) {
+          slipForms.fail(key, null);
+          try {
+            latest = answered(await apiRequest(routes.updateSlip, { params: { year: year.year, id: slip.id }, body: { revision: latest.revision, ...change } }));
+          } catch (error) {
+            // Someone else's change says so above the buttons; anything else shows on the slip, which stays open.
+            if (error instanceof ApiError && error.status === 409) throw error;
+            slipForms.fail(key, error);
+            throw new ApiError(400, "validation_failed", `${slipName(year.country, year.year, slip.type)} from ${slip.issuer} wasn't saved. See why on it.`);
+          }
+          slipForms.keep(key, undefined);
+        }
+        latest = answered(await saveAnswersFor(latest, answers));
         clearSent(draft, sent);
+        // A slip changed here is unconfirmed again: going on confirms it with the others.
+        const toConfirm = shown.filter((slip) => slip.status === "unconfirmed" || changes.some((each) => each.slip.id === slip.id));
+        if (thenContinue && toConfirm.length > 0) {
+          answered(
+            await apiRequest(routes.confirmSlips, {
+              params: { year: year.year },
+              body: { revision: latest.revision, personId: person.id, slipIds: toConfirm.map((slip) => slip.id) },
+            }),
+          );
+        }
       },
-      { thenNext: thenContinue },
+      { thenNext: thenContinue && unchosen.length === 0 },
     );
+    if (saved && unchosen.length > 0) pointing.point(unchosen[0]!, unchosen);
+  }
+
+  /** The person's slips shown on this page: the slips of its kinds on the return, and their receipts. */
+  const shownSlips = () => onReturn.flatMap(({ question, kind }) => itemSlips(question, kind)).filter((slip, index, all) => all.indexOf(slip) === index);
+
+  /** The choices of the groups on the return not made yet. */
+  const unchosenParts = () =>
+    onReturn.filter((item) => item.kind === "group").flatMap(({ question }) => shownPartsOf(question).filter((part) => part.type === "choice" && !amounts[part.id]).map((part) => part.id));
+
+  /** Goes to a question: its field, else its card or its button to add it, else its group's. */
+  function goTo(id: string) {
+    const parent = rules.questions.get(id)?.parent;
+    const target = document.getElementById(fieldId(id)) ?? (parent ? document.getElementById(fieldId(parent)) : null);
+    if (!target) return;
+    target.scrollIntoView?.({ behavior: "smooth", block: "center" });
+    target.focus({ preventScroll: true });
+  }
+  useEffect(() => {
+    const target = pointing.take();
+    if (target) goTo(target);
+  });
+
+  /**
+   * Removes a slip or receipt (its file stays, on Upload), after saving the module so far. The last slip of a kind of
+   * income leaves it on the return, waiting for a slip, until it is removed too.
+   */
+  async function removeSlip(slip: Slip) {
+    const answers = answersToSave();
+    const last = items.find(({ question, kind }) => kind === "slip" && question.slip === slip.type && slipsOf(slip.type).length === 1);
+    if (last) answers[person.id]![last.question.id] = true;
+    const sent = sentOf(draft);
+    await requests.run(async (answered) => {
+      const without = answered(await apiRequest(routes.removeSlip, { params: { year: year.year, id: slip.id }, body: { revision: year.revision } }));
+      slipForms.keep(`slip:${slip.id}`, undefined);
+      answered(await saveAnswersFor(without, answers));
+      clearSent(draft, sent);
+    });
+  }
+
+  /** Takes an item off the return with the slips and receipts showing it (their files stay, on Upload). */
+  async function removeItem(question: Question, kind: ItemKind, its: Slip[]) {
+    setAddedOf(question.id, false);
+    const answers = answersToSave();
+    const mine = answers[person.id]!;
+    mine[question.id] = kind === "amount" ? "0" : false;
+    for (const part of partsOf(question)) delete mine[part.id];
+    const sent = sentOf(draft);
+    await requests.run(async (answered) => {
+      let latest = year;
+      for (const slip of its) {
+        latest = answered(await apiRequest(routes.removeSlip, { params: { year: year.year, id: slip.id }, body: { revision: latest.revision } }));
+        slipForms.keep(`slip:${slip.id}`, undefined);
+      }
+      answered(await saveAnswersFor(latest, answers));
+      clearSent(draft, sent);
+    });
   }
 
   /** Uploads a slip into this return after saving the module so far, so nothing chosen here is lost. */
@@ -435,6 +527,11 @@ function ModuleForm({
   }
 
   const onReturn = items.filter((item) => added[item.question.id]);
+  /** The slips and receipts showing an item: removing it removes them. */
+  const itemSlips = (question: Question, kind: ItemKind) => [
+    ...(kind === "slip" ? slipsOf(question.slip!) : receiptsOf(question)),
+    ...(kind === "group" ? partsOf(question).flatMap(receiptsOf) : []),
+  ];
   const toAdd = items.filter((item) => !added[item.question.id]);
   const missing = onReturn.filter((item) => item.kind === "slip" && slipsOf(item.question.slip!).length === 0).map((item) => item.question.slip!);
   const error = requests.state.status === "error" ? requests.state.error : null;
@@ -455,6 +552,7 @@ function ModuleForm({
   // What keeps this step from done, as saved (the step's state in the row of steps says the same).
   const left = leftInModule(rules, module, given, slips.slips.filter((slip) => slip.personId === person.id), result?.questions ?? []);
   const unanswered = left.filter((item) => item.reason === "unanswered");
+  const isChoice = (id: string) => rules.questions.get(id)?.type === "choice";
   const waiting = left.filter((item) => item.reason === "slip");
 
   return (
@@ -464,12 +562,20 @@ function ModuleForm({
           <span className="flex flex-col gap-1">
             {unanswered.length > 0 ? (
               <span>
-                Not answered yet: {unanswered.map((item) => item.ask).join(", ")}.{" "}
-                {editable ? "Add what applies below, then choose Save and continue: what you don't add is saved as none." : null}
+                Not answered yet:{" "}
+                <GoToList items={unanswered.map((item) => ({ id: item.question, text: item.ask }))} onGo={(id) => pointing.point(id, isChoice(id) ? [id] : [])} />.{" "}
+                {editable ? "Add what applies below, then choose Save and continue: what you don't add is saved as none, but a choice must be made." : null}
               </span>
             ) : null}
             {waiting.length > 0 ? (
-              <span>Waiting for a slip: {waiting.map((item) => `the ${slipName(year.country, year.year, item.slip!)} (${item.ask})`).join(", ")}. Upload or enter it below, or remove the item.</span>
+              <span>
+                Waiting for a slip:{" "}
+                <GoToList
+                  items={waiting.map((item) => ({ id: item.question, text: `the ${slipName(year.country, year.year, item.slip!)} (${item.ask})` }))}
+                  onGo={(id) => pointing.point(id)}
+                />
+                . Upload or enter it below, or remove the item.
+              </span>
             ) : null}
           </span>
         </Banner>
@@ -484,17 +590,17 @@ function ModuleForm({
             kind={kind}
             editable={editable}
             busy={busy}
-            onRemove={
-              (kind === "slip" && slipsOf(question.slip!).length > 0) || receiptsOf(question).length > 0 ? undefined : () => setAddedOf(question.id, false)
-            }
+            slips={itemSlips(question, kind)}
+            onRemove={(its) => (its.length > 0 ? void removeItem(question, kind, its) : setAddedOf(question.id, false))}
           >
             {kind === "slip" ? (
               <SlipItem
                 type={question.slip!}
                 slips={slipsOf(question.slip!)}
                 question={question}
-                open={open}
+                closed={closed}
                 onToggle={onToggle}
+                onRemoveSlip={(slip) => void removeSlip(slip)}
                 editable={editable}
                 busy={busy}
                 onFile={(file) => void upload(file)}
@@ -512,8 +618,9 @@ function ModuleForm({
                 busy={busy}
                 issue={issueFor(`answers.${question.id}`)}
                 onChange={(value) => setAmountOf(question.id, value)}
-                open={open}
+                closed={closed}
                 onToggle={onToggle}
+                onRemoveSlip={(slip) => void removeSlip(slip)}
                 onFile={(file) => void upload(file)}
                 hostOf={hostOf}
                 entering={slipForms.entering.has(question.id)}
@@ -528,11 +635,11 @@ function ModuleForm({
                       question={part}
                       value={amounts[part.id] ?? ""}
                       disabled={!editable || busy}
-                      issue={issueFor(`answers.${part.id}`)}
+                      issue={issueFor(`answers.${part.id}`) ?? (pointing.toChoose.has(part.id) && !amounts[part.id] ? "Choose one to finish this step." : undefined)}
                       onChange={(value) => setAmountOf(part.id, value)}
                     />
                   ) : part.receipts ? (
-                    <div key={part.id} className="flex flex-col gap-1">
+                    <div key={part.id} id={fieldId(part.id)} tabIndex={-1} className="flex flex-col gap-1 outline-none">
                       <p className="text-sm font-medium">{part.ask}</p>
                       {part.help ? <p className="text-xs text-muted-foreground">{part.help}</p> : null}
                       <AmountItem
@@ -544,8 +651,9 @@ function ModuleForm({
                         busy={busy}
                         issue={issueFor(`answers.${part.id}`)}
                         onChange={(value) => setAmountOf(part.id, value)}
-                        open={open}
+                        closed={closed}
                         onToggle={onToggle}
+                        onRemoveSlip={(slip) => void removeSlip(slip)}
                         onFile={(file) => void upload(file)}
                         hostOf={hostOf}
                         entering={slipForms.entering.has(part.id)}
@@ -553,7 +661,7 @@ function ModuleForm({
                       />
                     </div>
                   ) : (
-                    <div key={part.id} className="flex flex-col gap-1">
+                    <div key={part.id} id={fieldId(part.id)} tabIndex={-1} className="flex flex-col gap-1 outline-none">
                       <AmountField
                         label={part.ask}
                         help={part.help}
@@ -590,6 +698,7 @@ function ModuleForm({
               <li key={question.id}>
                 <button
                   type="button"
+                  id={fieldId(question.id)}
                   className="flex h-full w-full items-start gap-3 rounded-lg border bg-card p-3 text-left hover:bg-muted/50 disabled:opacity-50"
                   onClick={() => setAddedOf(question.id, true)}
                   disabled={busy}
@@ -640,12 +749,16 @@ function ModuleForm({
   );
 }
 
-/** One thing on the return: its name, what it is, and what it holds. */
+/**
+ * One thing on the return: its name, what it is, and what it holds. Removing it removes the slips and receipts showing
+ * it too, once said and agreed (their files stay, on Upload).
+ */
 function ItemCard({
   question,
   kind,
   editable,
   busy,
+  slips,
   onRemove,
   children,
 }: {
@@ -653,12 +766,16 @@ function ItemCard({
   kind: ItemKind;
   editable: boolean;
   busy: boolean;
-  onRemove?: () => void;
+  slips: Slip[];
+  /** Takes it off the return, with these slips. */
+  onRemove: (slips: Slip[]) => void;
   children: ReactNode;
 }) {
   const { year } = useYear();
+  const [asking, setAsking] = useState(false);
+  const count = slips.length === 1 ? "its slip" : `its ${slips.length} slips`;
   return (
-    <Card size="sm">
+    <Card size="sm" id={fieldId(question.id)} tabIndex={-1} className="outline-none">
       <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-2">
         <div className="flex min-w-0 flex-col gap-0.5">
           <CardTitle>
@@ -669,10 +786,29 @@ function ItemCard({
           </CardTitle>
           {question.help ? <p className="text-xs text-muted-foreground">{question.help}</p> : null}
         </div>
-        {editable && onRemove ? (
-          <Button variant="ghost" size="sm" onClick={onRemove} disabled={busy} aria-label={`Remove ${question.ask}`}>
+        {editable && !asking ? (
+          <Button variant="ghost" size="sm" onClick={() => (slips.length > 0 ? setAsking(true) : onRemove([]))} disabled={busy} aria-label={`Remove ${question.ask}`}>
             Remove
           </Button>
+        ) : null}
+        {editable && asking ? (
+          <div role="group" aria-label={`Remove ${question.ask}?`} className="flex basis-full flex-wrap items-center justify-end gap-2 text-xs">
+            <span className="text-muted-foreground">This also removes {count}. Your files stay on Upload.</span>
+            <Button
+              variant="destructive"
+              size="sm"
+              disabled={busy}
+              onClick={() => {
+                setAsking(false);
+                onRemove(slips);
+              }}
+            >
+              Remove with {count}
+            </Button>
+            <Button variant="ghost" size="sm" disabled={busy} onClick={() => setAsking(false)}>
+              Keep
+            </Button>
+          </div>
         ) : null}
       </CardHeader>
       <CardContent>{children}</CardContent>
@@ -685,8 +821,9 @@ function SlipItem({
   type,
   slips,
   question,
-  open,
+  closed,
   onToggle,
+  onRemoveSlip,
   editable,
   busy,
   onFile,
@@ -697,8 +834,9 @@ function SlipItem({
   type: string;
   slips: Slip[];
   question: Question;
-  open: ReadonlySet<string>;
+  closed: ReadonlySet<string>;
   onToggle: (slipId: string) => void;
+  onRemoveSlip: (slip: Slip) => void;
   editable: boolean;
   busy: boolean;
   onFile: (file: File) => void;
@@ -707,7 +845,7 @@ function SlipItem({
   entering: boolean;
   onEntering: (open: boolean) => void;
 }) {
-  const { person } = useMember();
+  const { person } = useReturn();
   const { year } = useYear();
   const name = slipName(year.country, year.year, type);
   return (
@@ -715,7 +853,16 @@ function SlipItem({
       {slips.length > 0 ? (
         <ul className="flex flex-col divide-y" aria-label={`${question.ask} slips`}>
           {slips.map((slip) => (
-            <FoundSlip key={slip.id} slip={slip} open={open.has(slip.id)} onToggle={() => onToggle(slip.id)} editable={editable} hostOf={hostOf} />
+            <FoundSlip
+              key={slip.id}
+              slip={slip}
+              open={!closed.has(slip.id)}
+              onToggle={() => onToggle(slip.id)}
+              onRemove={() => onRemoveSlip(slip)}
+              editable={editable}
+              busy={busy}
+              hostOf={hostOf}
+            />
           ))}
         </ul>
       ) : (
@@ -740,21 +887,45 @@ function SlipItem({
   );
 }
 
-/** A slip found: who issued it and its state; opened, its boxes, to check and change (a changed slip goes back to unconfirmed). */
-function FoundSlip({ slip, open, onToggle, editable, hostOf }: { slip: Slip; open: boolean; onToggle: () => void; editable: boolean; hostOf: HostOf }) {
+/**
+ * A slip found: who issued it, open to its boxes, to check and change, or closed. Save and continue confirms it, and a
+ * changed slip goes back to unconfirmed until then. It can be removed: its file stays, on Upload.
+ */
+function FoundSlip({
+  slip,
+  open,
+  onToggle,
+  onRemove,
+  editable,
+  busy,
+  hostOf,
+}: {
+  slip: Slip;
+  open: boolean;
+  onToggle: () => void;
+  onRemove: () => void;
+  editable: boolean;
+  busy: boolean;
+  hostOf: HostOf;
+}) {
   const { year } = useYear();
   const panel = useId();
   const slipType = rulesFor(year.country, year.year)!.slips.get(slip.type)!;
   const confirmed = slip.status === "confirmed";
+  const name = `${documentName(slipType, slip.type)} from ${slip.issuer}`;
   return (
     <li className="py-1 text-sm">
-      <button type="button" className="flex w-full items-center gap-2 rounded-md py-1.5 text-left hover:bg-muted/50" aria-expanded={open} aria-controls={panel} onClick={onToggle}>
-        <ChevronRight className={cn("size-4 shrink-0 text-muted-foreground transition-transform", open && "rotate-90")} aria-hidden="true" />
-        <span className="min-w-0 flex-1 wrap-anywhere">
-          {documentName(slipType, slip.type)} from {slip.issuer}
-        </span>
-        <Badge variant={confirmed ? "secondary" : "outline"}>{confirmed ? "Confirmed" : "To confirm"}</Badge>
-      </button>
+      <div className="flex items-center gap-2">
+        <button type="button" className="flex min-w-0 flex-1 items-center gap-2 rounded-md py-1.5 text-left hover:bg-muted/50" aria-expanded={open} aria-controls={panel} onClick={onToggle}>
+          <ChevronRight className={cn("size-4 shrink-0 text-muted-foreground transition-transform", open && "rotate-90")} aria-hidden="true" />
+          <span className="min-w-0 flex-1 wrap-anywhere">{name}</span>
+        </button>
+        {editable ? (
+          <Button variant="ghost" size="sm" onClick={onRemove} disabled={busy} aria-label={`Remove ${name}`}>
+            Remove
+          </Button>
+        ) : null}
+      </div>
       {open ? (
         <div id={panel} className="flex flex-col gap-3 pt-2 pb-3 pl-6">
           {editable ? <SlipForm personId={slip.personId} slip={slip} host={hostOf(`slip:${slip.id}`)} inline /> : <SlipBoxTable slipType={slipType} boxes={slip.boxes} unsure={confirmed ? [] : slip.unsure} />}
@@ -779,8 +950,9 @@ function AmountItem({
   busy,
   issue,
   onChange,
-  open,
+  closed,
   onToggle,
+  onRemoveSlip,
   onFile,
   hostOf,
   entering,
@@ -794,8 +966,9 @@ function AmountItem({
   busy: boolean;
   issue?: string;
   onChange: (value: string) => void;
-  open: ReadonlySet<string>;
+  closed: ReadonlySet<string>;
   onToggle: (slipId: string) => void;
+  onRemoveSlip: (slip: Slip) => void;
   onFile: (file: File) => void;
   hostOf: HostOf;
   /** Its form to add a receipt is open (kept by ModuleStep, like the form's values). */
@@ -803,7 +976,7 @@ function AmountItem({
   onEntering: (open: boolean) => void;
 }) {
   const { year } = useYear();
-  const { person } = useMember();
+  const { person } = useReturn();
   const type = question.receipts ? rulesFor(year.country, year.year)!.slips.get(question.receipts)! : null;
   const added = type !== null && question.suggest === undefined;
   // A receipt by its title in lower case ("medical expense receipt"), keeping acronyms (RRSP); a slip by its code (T4FHSA).
@@ -813,7 +986,16 @@ function AmountItem({
       {receipts.length > 0 ? (
         <ul className="flex flex-col divide-y" aria-label={`${question.ask} receipts`}>
           {receipts.map((slip) => (
-            <FoundSlip key={slip.id} slip={slip} open={open.has(slip.id)} onToggle={() => onToggle(slip.id)} editable={editable} hostOf={hostOf} />
+            <FoundSlip
+              key={slip.id}
+              slip={slip}
+              open={!closed.has(slip.id)}
+              onToggle={() => onToggle(slip.id)}
+              onRemove={() => onRemoveSlip(slip)}
+              editable={editable}
+              busy={busy}
+              hostOf={hostOf}
+            />
           ))}
         </ul>
       ) : null}
@@ -872,7 +1054,7 @@ function UploadSlip({ label, busy, onFile }: { label: string; busy: boolean; onF
 
 /** The module's amounts the slips already claim (rule lines with this `module`), when not zero. */
 function FromYourSlips({ module, estimate }: { module: ReturnModule; estimate: Estimate }) {
-  const { person } = useMember();
+  const { person } = useReturn();
   const { year } = useYear();
   const rules = rulesFor(year.country, estimate.input.year)!;
   const evaluation = useMemo(() => new Evaluation(rules, estimate.input), [rules, estimate.input]);
@@ -901,9 +1083,24 @@ function FromYourSlips({ module, estimate }: { module: ReturnModule; estimate: E
   );
 }
 
+/** The element id of a question's field, card or button to add it: the banner goes to it. */
+const fieldId = (question: string) => `question-${question}`;
+
+/** Questions named in the banner, each a link that goes to it on the page. */
+function GoToList({ items, onGo }: { items: { id: string; text: string }[]; onGo: (id: string) => void }) {
+  return items.map((item, index) => (
+    <span key={item.id}>
+      {index > 0 ? ", " : null}
+      <button type="button" className="font-medium underline underline-offset-2 hover:no-underline" onClick={() => onGo(item.id)}>
+        {item.text}
+      </button>
+    </span>
+  ));
+}
+
 /** A choice among a question's options, by their words on screen. */
 function ChoiceField({ question, value, disabled, issue, onChange }: { question: Question; value: string; disabled: boolean; issue?: string; onChange: (value: string) => void }) {
-  const id = useId();
+  const id = fieldId(question.id);
   return (
     <div className="flex flex-col gap-1">
       <Label htmlFor={id}>{question.ask}</Label>

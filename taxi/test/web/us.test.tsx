@@ -54,12 +54,13 @@ describe("a United States year", () => {
     expect(await screen.findByRole("heading", { name: "Personal info" })).toBeTruthy();
     expect(screen.queryByLabelText("Province on December 31")).toBeNull();
     expect(screen.getByRole("radiogroup", { name: "A U.S. citizen or resident alien all year?" })).toBeTruthy();
-    // The state: California's return is prepared too; another state's says where to file it, or that it has none.
+    // The state: California's and New York's returns are prepared too; another state's says where to file it, or that
+    // it has none.
     const state = screen.getByLabelText("State on December 31") as HTMLSelectElement;
-    expect(within(state).getByRole("group", { name: "State return prepared here too" }).textContent).toBe("California");
+    expect(within(state).getByRole("group", { name: "State return prepared here too" }).textContent).toBe("CaliforniaNew York");
     expect(within(state).getAllByRole("option")).toHaveLength(52);
-    fireEvent.change(state, { target: { value: "NY" } });
-    expect(screen.getByText("Taxi prepares your federal return only. File your New York return with other software.")).toBeTruthy();
+    fireEvent.change(state, { target: { value: "NJ" } });
+    expect(screen.getByText("Taxi prepares your federal return only. File your New Jersey return with other software.")).toBeTruthy();
     fireEvent.change(state, { target: { value: "TX" } });
     expect(screen.getByText("Texas has no state income tax return for wages and interest. Taxi prepares your federal return.")).toBeTruthy();
     fireEvent.change(state, { target: { value: "CA" } });
@@ -106,8 +107,9 @@ async function seedCouple(server: TestServer, joint: boolean) {
 }
 
 describe("a joint return in the browser", () => {
-  it("is chosen on Personal info, and then asks about both spouses", async () => {
-    const { server } = await renderApp("/returns/2025", { seed: async (s) => void (await seedCouple(s, false)) });
+  it("is chosen on Personal info; then each spouse's page asks about them alone", async () => {
+    let couple: { alex: Person; sam: Person } | undefined;
+    const { router, server } = await renderApp("/returns/2025", { seed: async (s) => void (couple = await seedCouple(s, false)) });
     await screen.findByRole("heading", { name: "Personal info" });
     fireEvent.click(within(screen.getByRole("radiogroup", { name: "Marital status on December 31, 2025" })).getByRole("radio", { name: "Married" }));
     const filing = screen.getByRole("radiogroup", { name: "Filing status" });
@@ -115,25 +117,29 @@ describe("a joint return in the browser", () => {
     fireEvent.click(within(screen.getByRole("radiogroup", { name: "A U.S. citizen or resident alien all year?" })).getByRole("radio", { name: "Yes" }));
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(async () => expect(((await (await server.call("GET", "/api/years/2025")).json()) as TaxYear).filingStatus).toBe("joint"));
-    // The spouse's card: their residency, and the questions about them, in their name.
-    const theirs = (await screen.findByRole("heading", { name: "Where you lived: Sam Rivera" })).closest<HTMLElement>("[data-slot=card]")!;
-    expect(within(theirs).getByRole("radiogroup", { name: "A U.S. citizen or resident alien all year?" })).toBeTruthy();
-    expect(await within(theirs).findByText("Sam Rivera is blind")).toBeTruthy();
-    expect(within(theirs).getByText("Someone can claim Sam Rivera as a dependent")).toBeTruthy();
     const year = (await (await server.call("GET", "/api/years/2025")).json()) as TaxYear;
     expect(year.returns).toHaveLength(1);
+    expect(year.returns[0]!.memberSteps.map((each) => each.personId)).toEqual([couple!.alex.id, couple!.sam.id]);
+    // The person preparing's page has no card for the spouse: the spouse has their own page, from the switcher.
+    expect(screen.queryByRole("heading", { name: "Where you lived: Sam Rivera" })).toBeNull();
+    fireEvent.pointerDown(screen.getByRole("button", { name: "Return of Alex Rivera: switch return" }), { button: 0, ctrlKey: false });
+    fireEvent.click(await screen.findByRole("menuitem", { name: /Sam Rivera/ }));
+    await waitFor(() => expect(router.state.location.pathname).toBe(`/returns/2025/${couple!.sam.id}/personal`));
+    expect(await screen.findByRole("button", { name: "Return of Sam Rivera: switch return" })).toBeTruthy();
+    expect(screen.getByRole("radiogroup", { name: "A U.S. citizen or resident alien all year?" })).toBeTruthy();
+    expect(await screen.findByText("You are blind")).toBeTruthy();
   });
 
-  it("asks whose income, and keeps each spouse's W-2 as theirs", async () => {
+  it("shows each spouse's own income on their own page, with no choice of whose, and keeps each spouse's W-2 as theirs", async () => {
     let couple: { alex: Person; sam: Person } | undefined;
     const { router, server } = await renderApp("/returns", { seed: async (s) => void (couple = await seedCouple(s, true)) });
     await screen.findByText("United States. File by April 15, 2026.");
     expect(screen.getByRole("list", { name: "2025 returns" }).querySelectorAll(":scope > li")).toHaveLength(1);
-    // Sam's own address opens the joint return, at the same step.
+    // Sam's own address opens Sam's part of the joint return.
     await router.navigate(`/returns/2025/${couple!.sam.id}/income`);
-    await waitFor(() => expect(router.state.location.pathname).toBe(`/returns/2025/${couple!.alex.id}/income`));
-    const whose = await screen.findByRole("radiogroup", { name: "Whose income?" });
-    fireEvent.click(within(whose).getByRole("radio", { name: "Sam Rivera" }));
+    await screen.findByRole("heading", { name: "Income" });
+    expect(router.state.location.pathname).toBe(`/returns/2025/${couple!.sam.id}/income`);
+    expect(screen.queryByRole("radiogroup", { name: "Whose income?" })).toBeNull();
     fireEvent.click(await screen.findByRole("button", { name: "Add Wages from an employer" }));
     fireEvent.click(screen.getByRole("button", { name: "Enter the W-2" }));
     fireEvent.change(screen.getByRole("textbox", { name: "Issued by" }), { target: { value: "Initech" } });

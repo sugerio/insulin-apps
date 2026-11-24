@@ -911,6 +911,330 @@ forms:
         firstName: { text: firstName }
         lastName: { text: lastName }
 
+  # New York (the Department of Taxation and Finance): printed after the federal forms for a New York return, in the
+  # order the Instructions' "Where to file" puts them in the envelope: the signed Form IT-201, the other forms (Form
+  # IT-196 and the credit claims), then Form IT-2 (and IT-1099-R). New York's forms are in whole dollars with the cents
+  # printed (wholeDollars). The social security numbers, dates of birth, address, county and school district, the
+  # questions Taxi doesn't ask and the signature stay for the person to fill in.
+  IT201:
+    title: Form IT-201, Resident Income Tax Return (New York State)
+    url: https://www.tax.ny.gov/pdf/2025/inc/it201_2025_fill_in.pdf
+    applies: "line.NYS.files == 1"
+    wholeDollars: true
+    fields:
+      firstName: { text: firstName }
+      lastName: { text: lastName }
+      spouseFirstName: { text: spouseFirstName, when: "line.US.joint == 1" }
+      spouseLastName: { text: spouseLastName, when: "line.US.joint == 1" }
+      names3: { text: returnNames }
+      single: { tick: "line.US.single == 1" }
+      joint: { tick: "line.US.joint == 1" }
+      separate: { tick: "line.US.separate == 1" }
+      hoh: { tick: "line.US.hoh == 1" }
+      qss: { tick: "line.US.qss == 1" }
+      # Item B: whether the federal return itemizes; item C: whether someone can claim you.
+      itemizedYes: { tick: "line.US.itemizes == 1" }
+      itemizedNo: { tick: "line.US.itemizes == 0" }
+      claimableYes: { tick: "line.US.claimable == 1" }
+      claimableNo: { tick: "line.US.claimable == 0" }
+      # Items D2 and F: the months a full-year Yonkers or New York City resident lived there (item E, the days in New York
+      # City, and the other answers stay for the person).
+      yonkersYes: { tick: "line.NYS.yonkers == 1" }
+      yonkersMonths: { count: "if(line.NYS.yonkers == 1, 12, 0)" }
+      yonkersSpouseMonths: { count: "if(line.NYS.yonkers == 1 and line.US.joint == 1, 12, 0)" }
+      nycYes: { tick: "line.NYS.nyc == 1" }
+      nycMonths: { count: "if(line.NYS.nyc == 1, 12, 0)" }
+      nycSpouseMonths: { count: "if(line.NYS.nyc == 1 and line.US.joint == 1, 12, 0)" }
+      "1": line.IT201.1
+      "2": line.IT201.2
+      "3": line.IT201.3
+      "6": line.IT201.6
+      "7": line.IT201.7
+      "9": line.IT201.9
+      "10": line.IT201.10
+      "15": line.IT201.15
+      "17": line.IT201.17
+      "18": line.IT201.18
+      "19": { value: line.IT201.19, zero: true }
+      "20": line.IT201.20
+      "21": line.IT201.21
+      "24": { value: line.IT201.24, zero: true }
+      "26": line.IT201.26
+      "27": line.IT201.27
+      "28": line.IT201.28
+      "29": line.IT201.29
+      "30": line.IT201.30
+      "32": line.IT201.32
+      "33": { value: line.IT201.33, zero: true }
+      standard: { tick: "line.NYS.itemizes == 0" }
+      itemized: { tick: "line.NYS.itemizes == 1" }
+      "34": line.IT201.34
+      "35": { value: line.IT201.35, zero: true }
+      "36": line.IT201.36
+      "37": { value: line.IT201.38, zero: true }
+      "38": { value: line.IT201.38, zero: true }
+      "39": { value: line.IT201.39, zero: true }
+      "40": line.IT201.40
+      "43": line.IT201.43
+      "44": { value: line.IT201.44, zero: true }
+      "46": { value: line.IT201.46, zero: true }
+      "47": { value: line.IT201.47, when: "line.NYS.nyc == 1", zero: true }
+      "47a": { value: line.IT201.47a, when: "line.NYS.nyc == 1", zero: true }
+      "48": line.IT201.48
+      "49": { value: line.IT201.49, when: "line.NYS.nyc == 1", zero: true }
+      "52": { value: line.IT201.52, when: "line.NYS.nyc == 1", zero: true }
+      "54": { value: line.IT201.54, when: "line.NYS.nyc == 1", zero: true }
+      54a: line.IT201.54a
+      54b: line.IT201.54b
+      54c: line.IT201.54c
+      54d: line.IT201.54d
+      54e: line.IT201.54e
+      "55": line.IT201.55
+      "58": line.IT201.58
+      # "Do not leave blank."
+      "59": { value: line.IT201.59, zero: true }
+      "61": { value: line.IT201.61, zero: true }
+      "62": { value: line.IT201.62, zero: true }
+      "63": line.IT201.63
+      "64": line.IT201.64
+      "65": line.IT201.65
+      "68": line.IT201.68
+      "69": line.IT201.69
+      69a: line.IT201.69a
+      "70": line.IT201.70
+      70a: line.IT201.70a
+      "72": line.IT201.72
+      "73": line.IT201.73
+      "74": line.IT201.74
+      "75": line.IT201.75
+      "76": { value: line.IT201.76, zero: true }
+      "77": line.IT201.77
+      "78": line.IT201.78
+      "80": line.IT201.80
+    # Item H: up to seven dependents, the same as on Form 1040 (more need a statement: the box is ticked, and the worksheet
+    # lists them). The SSN and date of birth stay for the person to write.
+    dependants:
+      when: "line.US.claimsDependants == 1"
+      which: "line.DEP.dependent == 1"
+      columns: 7
+      more: moreDependants
+      fields:
+        firstName: { text: firstName }
+        lastName: { text: lastName }
+        relationship: { choice: relationship, labels: { child: Child, foster: Foster child, sibling: Sibling, descendant: Grandchild, parent: Parent, relative: Other relative, none: Other } }
+
+  IT196:
+    title: Form IT-196, New York Resident, Nonresident, and Part-Year Resident Itemized Deductions
+    url: https://www.tax.ny.gov/pdf/2025/inc/it196_2025_fill_in.pdf
+    applies: "line.NYS.files == 1 and line.NYS.itemizes == 1"
+    wholeDollars: true
+    fields:
+      names: { text: returnNames }
+      "1": line.IT196.1
+      "2": line.IT201.19
+      "3": line.IT196.3
+      "4": line.IT196.4
+      incomeTaxes: { tick: "line.IT196.5 > 0" }
+      "5": line.IT196.5
+      "6": line.IT196.6
+      "7": line.IT196.7
+      "9": line.IT196.9
+      "10": line.IT196.10
+      "15": line.IT196.15
+      "16": line.IT196.16
+      "17": line.IT196.17
+      "19": line.IT196.19
+      overLimitYes: { tick: "line.IT201.19 > line.NYS.peaseFloor" }
+      overLimitNo: { tick: "line.IT201.19 <= line.NYS.peaseFloor" }
+      "40": line.IT196.40
+      "41": line.IT196.41
+      "42": line.IT196.42
+      "45": line.IT196.45
+      "46": line.IT196.46
+      "47": line.IT196.47
+      "49": line.IT196.49
+
+  IT213:
+    title: Form IT-213, Claim for Empire State Child Credit
+    url: https://www.tax.ny.gov/pdf/2025/inc/it213_2025_fill_in.pdf
+    applies: "line.NYS.files == 1 and line.IT213.9 > 0"
+    wholeDollars: true
+    fields:
+      names: { text: returnNames }
+      # The boxes have no cents line of their own: each amount is written as a whole number at the box's end.
+      "1": { count: line.IT213.1 }
+      "2": { count: line.IT213.2 }
+      "3": { count: line.IT213.3 }
+      "4": { count: line.IT213.4 }
+      "5": { count: line.IT213.5 }
+      "6": { count: line.IT213.6 }
+      "7": { count: line.IT213.7 }
+      "8": { count: line.IT213.8 }
+      "9": { count: line.IT213.9 }
+    # Part 2: each qualifying child's name (the SSN and date of birth stay for the person to write).
+    dependants:
+      which: "line.DEP.esccChild == 1"
+      columns: 6
+      fields:
+        firstName: { text: firstName }
+        lastName: { text: lastName }
+
+  IT215:
+    title: Form IT-215, Claim for Earned Income Credit (New York State and New York City)
+    url: https://www.tax.ny.gov/pdf/2025/inc/it215_2025_fill_in.pdf
+    applies: "line.NYS.files == 1 and line.IT215.10 > 0"
+    wholeDollars: true
+    fields:
+      names: { text: returnNames }
+      claimedYes: { tick: "line.IT215.10 > 0" }
+      investmentNo: { tick: "line.IT215.10 > 0" }
+      unmarriedNo: { tick: "line.IT215.10 > 0 and line.US.separate == 0" }
+      childrenYes: { tick: "line.US.eicChildren > 0" }
+      childrenNo: { tick: "line.US.eicChildren == 0" }
+      irsFiguresNo: { tick: "line.IT215.10 > 0" }
+      "6": line.IT201.1
+      "8": line.IT201.6
+      "9": line.IT201.19
+      "10": line.IT215.10
+      "12": line.IT215.12
+      "13": { value: line.IT215.13, zero: true }
+      "14": line.IT201.40
+      "15": line.IT215.15
+      "16": line.IT215.16
+      B1: line.IT201.39
+      B5: { value: line.IT215.13, zero: true }
+      "27": line.IT201.70
+    # Line 4: up to three of the children on federal Schedule EIC (their SSN and date of birth stay for the person).
+    dependants:
+      which: "line.DEP.eicChild == 1"
+      columns: 3
+      fields:
+        firstName: { text: firstName }
+        lastName: { text: lastName }
+        relationship: { choice: relationship, labels: { child: Child, foster: Foster child, sibling: Sibling, descendant: Grandchild } }
+        months: dependant.answer.monthsWithYou
+
+  IT216:
+    title: Form IT-216, Claim for Child and Dependent Care Credit (New York State and New York City)
+    url: https://www.tax.ny.gov/pdf/2025/inc/it216_2025_fill_in.pdf
+    applies: "line.NYS.files == 1 and line.IT216.25 > 0"
+    wholeDollars: true
+    fields:
+      names: { text: returnNames }
+      "3": { count: line.F2441.2 }
+      3a: line.IT216.3a
+      3b: { value: line.IT216.3b, when: "line.F2441.12 > 0" }
+      "5": line.IT216.5
+      "6": line.IT216.6
+      "7": line.IT216.7
+      "8": line.IT216.8
+      "9": line.IT201.19
+      "10": line.IT216.10
+      "11": line.IT216.11
+      "12": line.IT216.11
+      13agi: line.IT201.33
+      "13": line.IT216.13
+      "14": line.IT216.14
+      "23": line.IT216.23
+      "24": line.IT216.24
+      "25": line.IT216.25
+    # Line 3: the qualifying persons youngest first, with what was paid for each (the care providers on line 2, the
+    # SSN and date of birth stay for the person).
+    dependants:
+      which: "line.DEP.careChildExpenses + line.DEP.careDisabledExpenses > 0"
+      columns: 3
+      fields:
+        firstName: { text: firstName }
+        lastName: { text: lastName }
+        expenses: "line.DEP.careChildExpenses + line.DEP.careDisabledExpenses"
+
+  IT270:
+    title: Form IT-270, New York City Income Tax Elimination Credit
+    url: https://www.tax.ny.gov/pdf/2025/inc/it270_2025_fill_in.pdf
+    applies: "line.NYS.files == 1 and line.IT270.11 > 0"
+    wholeDollars: true
+    fields:
+      names: { text: returnNames }
+      "1": line.IT201.19
+      "2": line.IT270.2
+      "3": { value: line.IT270.3, zero: true }
+      "4": "param.nycEliminationRange - line.IT270.3"
+      "5": line.IT270.5
+      "6": line.IT201.54
+      "7": line.IT216.24
+      "8": line.IT201.70
+      "9": "line.IT216.24 + line.IT201.70"
+      "10": line.IT270.10
+      "11": line.IT270.11
+
+  IT272:
+    title: Form IT-272, Claim for College Tuition Credit or Itemized Deduction
+    url: https://www.tax.ny.gov/pdf/2025/inc/it272_2025_fill_in.pdf
+    applies: "line.NYS.files == 1 and line.IT272.credit > 0"
+    wholeDollars: true
+    fields:
+      names: { text: name }
+      spouseNames: { text: spouseName, when: "line.US.joint == 1" }
+      notClaimed: { tick: "line.US.claimable == 0" }
+      resident: { tick: "line.NYS.files == 1" }
+      "3": line.IT272.3
+      "5": { value: line.IT272.credit, when: "line.IT272.3 < param.tuitionSmall" }
+      "6": { value: line.IT272.3, when: "line.IT272.3 >= param.tuitionSmall" }
+      "7": { value: line.IT272.credit, when: "line.IT272.3 >= param.tuitionSmall" }
+
+  # Form IT-2: a W-2 record for each W-2, the spouse's after yours filing jointly (two on a form: the others go on another
+  # copy, which the worksheet says). The SSN, the employer's EIN and address, and boxes 12 to 14 stay for the person.
+  IT2:
+    title: Form IT-2, Summary of W-2 Statements
+    url: https://www.tax.ny.gov/pdf/2025/inc/it2_2025_fill_in.pdf
+    applies: "line.NYS.files == 1 and count(W2.box1) + if(line.US.joint == 1, spouse.line.NYS.ownW2s, 0) > 0"
+    wholeDollars: true
+    fields: {}
+    slips:
+      type: W2
+      spouse: "line.US.joint == 1"
+      columns: 2
+      fields:
+        employer: { issuer: true }
+        "1": { box: "1" }
+        "8": { box: "8" }
+        "10": { box: "10" }
+        "11": { box: "11" }
+        16a: { box: "16", if: { box: "15", is: [NY] } }
+        17a: { box: "17", if: { box: "15", is: [NY] } }
+        15b: { box: "15", if: { box: "15", is: [NY], not: true } }
+        16b: { box: "16", if: { box: "15", is: [NY], not: true } }
+        17b: { box: "17", if: { box: "15", is: [NY], not: true } }
+        18a: { box: "18" }
+        19a: { box: "19" }
+        20a: { box: "20" }
+
+  # Form IT-1099-R: a record for each Form 1099-R with New York State tax withheld (three on a form). Its boxes are
+  # numbered its own way: 12a is the state tax withheld (the 1099-R's box 14), 14 the state distribution (16), 15a the
+  # local tax (17), the locality (18) and 17a the local distribution (19).
+  IT1099R:
+    title: Form IT-1099-R, Summary of Federal Form 1099-R Statements
+    url: https://www.tax.ny.gov/pdf/2025/inc/it1099r_2025_fill_in.pdf
+    applies: "line.NYS.files == 1 and line.NYS.ownRetirementSlips + if(line.US.joint == 1, spouse.line.NYS.ownRetirementSlips, 0) > 0"
+    wholeDollars: true
+    fields:
+      names: { text: returnNames }
+    slips:
+      type: [RIRA, R]
+      which: { box: "15", is: [NY] }
+      spouse: "line.US.joint == 1"
+      columns: 3
+      fields:
+        payer: { issuer: true }
+        "1": { box: "1" }
+        2a: { box: "2A" }
+        code: { box: "7" }
+        12a: { box: "14" }
+        "14": { box: "16" }
+        15a: { box: "17" }
+        locality: { box: "18" }
+        17a: { box: "19" }
+
 # Forms a return needs that aren't printed, in the order they're attached: the worksheet and Finish name them, for the
 # person to fill in and file with the forms. Each applies when its formula is yes.
 formsToAdd:

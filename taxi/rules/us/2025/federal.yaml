@@ -479,9 +479,10 @@ lines:
     label: Refund, less the amount owed
     formula: >-
       if(person.role == "self" or line.US.joint == 0, line.F1040.34 - line.F1040.37
-      + if(line.CAL.files == 1, line.F540.115 - line.F540.111, 0), 0)
+      + if(line.CAL.files == 1, line.F540.115 - line.F540.111, 0) + if(line.NYS.files == 1, line.IT201.78 - line.IT201.80, 0), 0)
     source: >-
-      The federal refund less the amount owed, and California's for a California return (california.yaml). On a joint
+      The federal refund less the amount owed, and California's for a California return (california.yaml) and New
+      York's for a New York return (new-york.yaml). On a joint
       return the spouse has no refund or amount owed of their own: hints add this line over both returns
 
   # What this part of the app doesn't prepare: each one says so on the return instead of giving a wrong amount.

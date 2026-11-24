@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { lineOf, measureIrsForm, xfaLabels, type IrsField } from "../../scripts/form-irs.ts";
+import { lineOf, measureIrsForm, nyLineOf, xfaLabels, type IrsField } from "../../scripts/form-irs.ts";
 
 // The layout script's IRS mode (scripts/form-irs.ts): an IRS fill-in form is placed by its fields' boxes and the labels
 // its XFA part gives them, not measured from the drawing. The real forms are placed by npm run form-layout; these pin
@@ -83,5 +83,11 @@ describe("an IRS form's layout", () => {
     expect(measureIrsForm(twice, { "26": { field: "f2_17[0]", label: "Estimated tax" } }).rows).toEqual({ "26": [1, 575.5, 332.8] });
     expect(() => measureIrsForm(twice, { "26": { field: "f2_18[0]", label: "Estimated tax" } })).toThrow('26: f2_18[0] is "26. Amount.", not "Estimated tax"');
     expect(() => measureIrsForm(twice, { x: { field: "f9_99[0]", label: "x" } })).toThrow("x: the form has no field f9_99[0]");
+  });
+
+  it("finds the line a New York field's name names", () => {
+    expect(["Line33", "Line47a", "line16a", "Line 1"].map(nyLineOf)).toEqual(["33", "47a", "16a", "1"]);
+    expect(["6 dollars15", "28a dollars", "5 dollars16", "line 3 dollars27", "Worksheet B 5 dollars15"].map(nyLineOf)).toEqual(["6", "28a", "5", "3", "B5"]);
+    expect(["Line 9_box", "34Deduction", "TP_first_name", "13 IT201 filers dollars16", "17 federal adjusted gross income dollars15"].map(nyLineOf)).toEqual([null, null, null, null, null]);
   });
 });

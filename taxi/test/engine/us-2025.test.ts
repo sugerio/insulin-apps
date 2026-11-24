@@ -356,12 +356,17 @@ describe("the 2025 US rules", () => {
     expect(credit("2455", 1, false)).toBe("842");
   });
 
-  it("show the federal refund or amount owed and California's, and print on the IRS and FTB forms in their attachment order", () => {
+  it("show the federal refund or amount owed and each state's, and print on the IRS's, FTB's and New York's forms in their attachment order", () => {
     expect(rules.balances).toEqual([
       { name: "Federal", refund: "F1040.34", owing: "F1040.37" },
       { name: "California", refund: "F540.115", owing: "F540.111" },
+      { name: "New York", refund: "IT201.78", owing: "IT201.80" },
     ]);
-    expect([...rules.forms.keys()]).toEqual(["F1040", "S1", "S1A", "S2", "S3", "SA", "SC", "SCS", "SD", "SE", "SES", "F2441", "F6251", "SEIC", "S8812", "F8863", "F8889", "F8889S", "F8995", "F8959", "F8960", "F540", "SCA540", "SP540", "F3506", "F3514"]);
+    expect([...rules.forms.keys()]).toEqual([
+      ...["F1040", "S1", "S1A", "S2", "S3", "SA", "SC", "SCS", "SD", "SE", "SES", "F2441", "F6251", "SEIC", "S8812", "F8863", "F8889", "F8889S", "F8995", "F8959", "F8960"],
+      ...["F540", "SCA540", "SP540", "F3506", "F3514"],
+      ...["IT201", "IT196", "IT213", "IT215", "IT216", "IT270", "IT272", "IT2", "IT1099R"],
+    ]);
   });
 });
 

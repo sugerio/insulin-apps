@@ -12,6 +12,7 @@ import { useMe } from "../auth/AuthProvider.tsx";
 import { Banner, ResourceView } from "../components/Feedback.tsx";
 import { Page, PageHead } from "../components/Page.tsx";
 import { MemberPicker } from "../components/PeopleEditor.tsx";
+import { YearPeople } from "../components/YearPeople.tsx";
 import { STEP_LABELS, nextStep, stepPath } from "../components/YearFrame.tsx";
 import { RELATIONSHIP_LABELS, formatDate } from "../lib/format.ts";
 import { useResource } from "../lib/useResource.ts";
@@ -52,7 +53,7 @@ function Years({ data, reload }: { data: YearList; reload: () => void }) {
               </CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col gap-5">
-              <YearPeople year={year} people={data.people} onChanged={reload} />
+              <YearPeople year={year.year} revision={year.revision} members={year.members} people={data.people} onSaved={reload} back="/returns" />
               <ul className="flex flex-col divide-y" aria-label={`${year.year} returns`}>
                 {year.returns.map((progress) => (
                   <ReturnRow key={progress.personId} year={year.year} progress={progress} />
@@ -110,91 +111,6 @@ function Years({ data, reload }: { data: YearList; reload: () => void }) {
         </Card>
       </aside>
     </div>
-  );
-}
-
-/**
- * Who is in a started year, and the choice to change it: you always; your spouse or partner to prepare their return
- * too; the dependants who lived with you. Someone taken out loses their facts, answers and slips for that year.
- */
-function YearPeople({ year, people, onChanged }: { year: YearList["years"][number]; people: Person[]; onChanged: () => void }) {
-  const me = useMe();
-  const [changing, setChanging] = useState(false);
-  const [selected, setSelected] = useState<Set<string>>(() => new Set(year.members));
-  const [state, setState] = useState<{ status: "idle" | "saving" } | { status: "error"; error: unknown }>({ status: "idle" });
-  const members = people.filter((person) => year.members.includes(person.id));
-  const leaving = members.filter((person) => person.relationship !== "self" && !selected.has(person.id));
-  const addPerson = `/profile?back=${encodeURIComponent("/returns")}`;
-
-  async function save() {
-    setState({ status: "saving" });
-    try {
-      const ids = people.filter((person) => person.relationship === "self" || selected.has(person.id)).map((person) => person.id);
-      await apiRequest(routes.setYearPeople, { params: { year: year.year }, body: { revision: year.revision, people: ids } });
-      setChanging(false);
-      setState({ status: "idle" });
-      onChanged();
-    } catch (error) {
-      setState({ status: "error", error });
-    }
-  }
-
-  return (
-    <section aria-label={`People in ${year.year}`} className="flex flex-col gap-2">
-      <div className="flex items-center justify-between gap-3">
-        <h3 className="text-sm font-medium">People in {year.year}</h3>
-        {canPrepare(me) && !changing ? (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => {
-              setSelected(new Set(year.members));
-              setChanging(true);
-            }}
-          >
-            Change
-          </Button>
-        ) : null}
-      </div>
-      {changing ? (
-        <>
-          <MemberPicker
-            people={people}
-            selected={selected}
-            onChange={setSelected}
-            disabled={state.status === "saving"}
-            footer={
-              <Link to={addPerson} className="flex items-center gap-2 rounded-lg border border-dashed px-3 py-2.5 text-sm font-medium hover:bg-muted">
-                <Plus className="size-4" aria-hidden="true" />
-                Add a new person
-              </Link>
-            }
-          />
-          {leaving.length > 0 ? (
-            <Banner kind="warning" title={`Taking ${leaving.map((person) => person.name).join(" and ")} out of ${year.year}`}>
-              Their facts, answers and slips for {year.year} are deleted when you save.
-            </Banner>
-          ) : null}
-          {state.status === "error" ? <Banner kind="error" title="Who is in the year wasn't changed">{describeError(state.error)}</Banner> : null}
-          <div className="flex gap-2">
-            <Button size="sm" onClick={() => void save()} disabled={state.status === "saving"}>
-              {state.status === "saving" ? "Saving…" : "Save people"}
-            </Button>
-            <Button size="sm" variant="ghost" onClick={() => setChanging(false)} disabled={state.status === "saving"}>
-              Cancel
-            </Button>
-          </div>
-        </>
-      ) : (
-        <ul className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
-          {members.map((person) => (
-            <li key={person.id} className="min-w-0 wrap-anywhere">
-              <span className="font-medium">{person.name}</span> <span className="text-muted-foreground">· {RELATIONSHIP_LABELS[person.relationship]}</span>
-            </li>
-          ))}
-        </ul>
-      )}
-    </section>
   );
 }
 

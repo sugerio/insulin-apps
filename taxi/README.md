@@ -3,7 +3,8 @@
 Taxi prepares Canadian personal income tax returns (the T1): yours, and your spouse's or common-law
 partner's if you prepare them together. It never files with the CRA. When a return is done, you get the CRA's own
 forms, filled in, to sign and mail, or numbers to copy into certified software. It also prepares the United States
-federal return (Form 1040), with California's Form 540 for a California resident: a year is started for one country.
+federal return (Form 1040), with California's Form 540 for a California resident and New York's Form IT-201 for a New
+York resident: a year is started for one country.
 
 It is an Insulin app: you start from it in the Insulin console, change it with the AppBuilder if you want to, preview it
 and publish it. It brings its own database.
@@ -13,12 +14,13 @@ uploaded slips read by AI (or typed in), income, deductions, credits, the result
 
 ## What it does today
 
-- **Tax years.** Start a year (2025). You and your spouse or partner each have a return; the app shows one return at a
-  time, with a switcher to the other. Each return has seven steps: personal info, upload documents, income,
+- **Tax years.** Start a year (2025). You and your spouse or partner each have a return; the app shows one person at a
+  time, with a switcher to the other (on a US joint return too: each spouse's steps show their own content, and the
+  result is the joint return's). Each return has seven steps: personal info, upload documents, income,
   deductions, credits, confirm, finish. The steps run in a row above each page, with the return's estimate above them.
 - **The profile.** Add yourself, your spouse or common-law partner, and your children and other dependants, with
   their birth dates, on the Profile page. Starting a year asks who is in it (only you, to begin with; change it later on
-  the Tax years page): your spouse in it means both returns are
+  the Tax years page or on Personal info): your spouse in it means both returns are
   prepared together. Each year then records your marital status on December 31, and each adult's province and whether
   they lived in Canada all year (for someone who moved, the days in Canada). The app says what is still missing.
 - **The tax engine.** All tax rules are YAML files under `rules/`, one folder per year, each number with its source.
@@ -35,8 +37,10 @@ uploaded slips read by AI (or typed in), income, deductions, credits, the result
   unconfirmed. A file can be deleted with the slips read from it, and one
   that couldn't be read can be read again.
 - **Steps 3 to 7.** Income, Deductions and Credits, each a part of the return: what is on it (the slips found, each
-  opening into its boxes to change; amounts; groups such as self-employment or working from home, whose parts are
-  asked in their card), what can be added, and what the slips already claim. A case the app doesn't handle (property treated as sold
+  open to its boxes to change, with its own Save; amounts; groups such as self-employment or working from home, whose
+  parts are asked in their card), what can be added, and what the slips already claim. The step's Save saves the slips
+  changed there too. A slip, or an item with its slips, can be removed; its file stays on Upload. Save and continue
+  stops at a choice not made, marks it and goes to it; each item the banner names goes to it. A case the app doesn't handle (property treated as sold
   when you leave Canada, a T4 with both CPP and QPP) is named, never ignored. Then Confirm (each slip entered box
   by box, then confirmed, or moved to the other return) and Finish (the refund or balance owing, the key lines with why,
   what to check before filing, hints, and the forms).
@@ -58,8 +62,10 @@ uploaded slips read by AI (or typed in), income, deductions, credits, the result
   uses. The IRS publishes fill-in PDFs, so nothing is measured from the drawing: `npm run form-layout` reads each
   field's box and the label the IRS gives it (`scripts/form-irs.ts`), and finds a row by the line number the label
   starts with (`rules/us/2025/form-layout.yaml`). A form's table of dependants (`dependants` in `forms.yaml`) fills
-  one column for each dependant. California's forms (ftb.ca.gov) are placed the same way, from each field's tooltip
-  ("Line 13.", "Line 2b. Column B."); they are in whole dollars with the cents printed (`wholeDollars`).
+  one column for each dependant, and a table of slips (`slips`) one for each slip (New York's Form IT-2 has a record for
+  each W-2). California's forms (ftb.ca.gov) are placed the same way, from each field's tooltip ("Line 13.", "Line 2b.
+  Column B."), and New York's (tax.ny.gov) from each field's name ("Line33"); both are in whole dollars with the cents
+  printed (`wholeDollars`).
 - **Roles.** Owners, admins and editors prepare returns; viewers see everything and change nothing. Custom roles pick
   from two permissions: Prepare returns and View returns.
 - **Built-in Docs.** **Docs**, in everyone's navigation, explains the app and covers Canadian and US tax basics in plain
@@ -93,9 +99,12 @@ alternative minimum tax (Form 6251). AI reads Forms W-2, 1099, 1098 and SSA-1099
 jointly or separately, the estimated tax penalty). Each person's state on December 31 is asked; for a California
 resident the return adds Form 540 (`rules/us/2025/california.yaml`): Schedule CA, the California Tax Table and rates,
 exemption credits, Schedule P, the renter's credit, FTB 3506 and FTB 3514 (the CalEITC, Young Child and Foster Youth
-tax credits), with its own refund or amount owed. Another state's return isn't prepared. Allocated tips, a household
-employee, Form 8949 adjustments, other income, married filing separately in a community property state and a
-part-year California resident say so when they apply.
+tax credits), with its own refund or amount owed; for a New York resident it adds Form IT-201
+(`rules/us/2025/new-york.yaml`): New York's additions and subtractions, the standard deduction or Form IT-196, the Tax
+Table, rates and tax computation worksheets, the household credits, IT-213, IT-215, IT-216, IT-270 and IT-272, the
+New York City tax and credits, the Yonkers surcharge and the MCTMT, printed with Form IT-2. Another state's return isn't
+prepared. Allocated tips, a household employee, Form 8949 adjustments, other income, married filing separately in a
+community property state, and a part-year California or New York resident say so when they apply.
 
 ## Good to know
 

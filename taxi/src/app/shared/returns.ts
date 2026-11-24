@@ -15,8 +15,9 @@ export const slipAmountSchema = z.string().regex(/^\d{1,9}(\.\d{1,2})?$/, "Enter
  */
 export const slipBoxesSchema = z.record(
   z.string().regex(/^[0-9A-Z]{1,3}(_[0-9A-Z]{1,3})?$/, "A box such as 14, 16A, A or B_A"),
-  // An amount, or a code (one or two capitals or digits, such as a 1099-R's G): the server checks which the box holds.
-  z.string().regex(/^(\d{1,9}(\.\d{1,2})?|[0-9A-Z]{1,2})$/, "Enter an amount like 1234.56"),
+  // An amount, or a code (capitals or digits, such as a 1099-R's G or a W-2's locality YONKERS): the server checks
+  // which the box holds.
+  z.string().regex(/^(\d{1,9}(\.\d{1,2})?|[0-9A-Z]{1,12})$/, "Enter an amount like 1234.56"),
 );
 
 export const SLIP_STATUSES = ["unconfirmed", "confirmed"] as const;
@@ -68,8 +69,15 @@ export type UpdateSlip = z.infer<typeof updateSlipSchema>;
 /** A change that needs nothing but the revision it is based on: removing a slip. */
 export const revisionBodySchema = z.strictObject({ revision: revisionSchema });
 
-/** Confirming slips: one adult's, or with no `personId` every adult's. */
-export const confirmSlipsSchema = z.strictObject({ revision: revisionSchema, personId: idSchema.optional() });
+/**
+ * Confirming slips: one adult's, or with no `personId` every adult's; with `slipIds`, only those of them (the slips a
+ * step showed when its Save and continue was chosen).
+ */
+export const confirmSlipsSchema = z.strictObject({
+  revision: revisionSchema,
+  personId: idSchema.optional(),
+  slipIds: z.array(idSchema).min(1).max(200).optional(),
+});
 export type ConfirmSlips = z.infer<typeof confirmSlipsSchema>;
 
 /** An answer: money as decimal text, yes or no, a choice's option; null clears it. */

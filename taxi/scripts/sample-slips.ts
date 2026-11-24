@@ -3,14 +3,16 @@ import { join, resolve } from "node:path";
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from "pdf-lib";
 import { rulesFor } from "../src/app/shared/rules/index.ts";
 
-// npm run sample-slips -- [--country ca|us] [--out <dir>] [--self <name>] [--spouse <name>] [--child <name>]
+// npm run sample-slips -- [--country ca|us] [--state CA|NY] [--out <dir>] [--self <name>] [--spouse <name>] [--child <name>]
 //
 // Writes sample 2025 slips as PDFs, for trying the app and for testing AI reading. Canada (the default): a T4 for each adult, two T5s (two banks) for the
 // person preparing, a T4E and a T2202 for the spouse, and receipts and notices: a donation receipt, a dental receipt for the
 // spouse, an RRSP receipt for early 2026, and each adult's 2024 notice of assessment. The United States: a W-2 for each
 // adult, two 1099-INTs and a 1098-E for the person preparing, a 1099-NEC and a 1098-T for the spouse, a 1098-T for a
 // child (a dependant's, which isn't added to a return), a fund's 1099-DIV, a broker's 1099-B summaries for parts A and
-// D of Form 8949, a 1099-R from an IRA and one from a pension, an SSA-1099, and a mortgage's Form 1098. Every page says it is a synthetic sample. The repository keeps no
+// D of Form 8949, a 1099-R from an IRA and one from a pension, an SSA-1099, and a mortgage's Form 1098. The US forms are
+// for a California household (--state CA, the default) or a New York City one (--state NY: the person preparing's W-2
+// also has New York City's local boxes 18 to 20). Every page says it is a synthetic sample. The repository keeps no
 // binary files, so the PDFs are made here and never committed; the default folder is ignored by git and by the app
 // checks. Box labels come from the year's rules (slips.yaml), so a sample shows the boxes the app reads.
 
@@ -25,6 +27,10 @@ const out = resolve(option("out", join(import.meta.dirname, country === "us" ? "
 const self = option("self", "Alex Martin");
 const spouse = option("spouse", "Sam Martin");
 const child = option("child", "Riley Martin");
+const state = option("state", "CA");
+if (state !== "CA" && state !== "NY") throw new Error("--state is CA or NY");
+/** The city line of a sample address in the household's state. */
+const cityLine = (n: number) => (state === "NY" ? `New York NY  1000${n}` : `Sacramento CA  9580${n}`);
 
 const YEAR = 2025;
 const rules = rulesFor(country, YEAR)!;
@@ -130,29 +136,29 @@ interface Receipt {
   rows: [string, string][];
 }
 
-const usHome = ["123 Sample Street", "Sacramento CA  95801"];
+const usHome = ["123 Sample Street", cityLine(1)];
 const usSamples: Sample[] = [
   {
     file: `W-2-${slug(self)}-Maple-Corp.pdf`,
     type: "W2",
     title: "Wage and Tax Statement",
-    issuer: { name: "Maple Corp", lines: ["100 Main Street", "Sacramento CA  95801"] },
+    issuer: { name: "Maple Corp", lines: ["100 Main Street", cityLine(1)] },
     recipient: { name: self, lines: usHome },
-    boxes: { 1: "60000.00", 2: "6500.00", 3: "60000.00", 4: "3720.00", 5: "60000.00", 6: "870.00", 15: "CA", 16: "60000.00", 17: "2970.00" },
+    boxes: { 1: "60000.00", 2: "6500.00", 3: "60000.00", 4: "3720.00", 5: "60000.00", 6: "870.00", 15: state, 16: "60000.00", 17: "2970.00", ...(state === "NY" ? { 18: "60000.00", 19: "2210.00", 20: "NYC" } : {}) },
   },
   {
     file: `W-2-${slug(spouse)}-Island-Grocers.pdf`,
     type: "W2",
     title: "Wage and Tax Statement",
-    issuer: { name: "Island Grocers Inc.", lines: ["55 Harbor Road", "Sacramento CA  95802"] },
+    issuer: { name: "Island Grocers Inc.", lines: ["55 Harbor Road", cityLine(2)] },
     recipient: { name: spouse, lines: usHome },
-    boxes: { 1: "31000.00", 2: "1800.00", 3: "31000.00", 4: "1922.00", 5: "31000.00", 6: "449.50", 15: "CA", 16: "31000.00", 17: "1534.50" },
+    boxes: { 1: "31000.00", 2: "1800.00", 3: "31000.00", 4: "1922.00", 5: "31000.00", 6: "449.50", 15: state, 16: "31000.00", 17: "1534.50" },
   },
   {
     file: `1099-INT-${slug(self)}-Lakeview-Credit-Union.pdf`,
     type: "INT",
     title: "Interest Income",
-    issuer: { name: "Lakeview Credit Union", lines: ["8 Lakeshore Boulevard", "Sacramento CA  95803"] },
+    issuer: { name: "Lakeview Credit Union", lines: ["8 Lakeshore Boulevard", cityLine(3)] },
     recipient: { name: self, lines: usHome },
     boxes: { 1: "1250.00" },
   },
@@ -161,7 +167,7 @@ const usSamples: Sample[] = [
     file: `1099-INT-${slug(self)}-Northwind-Bank.pdf`,
     type: "INT",
     title: "Interest Income",
-    issuer: { name: "Northwind Bank", lines: ["250 Bay Street", "Sacramento CA  95804"] },
+    issuer: { name: "Northwind Bank", lines: ["250 Bay Street", cityLine(4)] },
     recipient: { name: self, lines: usHome },
     boxes: { 1: "380.00" },
   },
@@ -169,15 +175,15 @@ const usSamples: Sample[] = [
     file: `1099-NEC-${slug(spouse)}-Harbor-Design.pdf`,
     type: "NEC",
     title: "Nonemployee Compensation",
-    issuer: { name: "Harbor Design Studio LLC", lines: ["12 Dock Street", "Sacramento CA  95805"] },
+    issuer: { name: "Harbor Design Studio LLC", lines: ["12 Dock Street", cityLine(5)] },
     recipient: { name: spouse, lines: usHome },
-    boxes: { 1: "8400.00", 5: "250.00", 6: "CA" },
+    boxes: { 1: "8400.00", 5: "250.00", 6: state },
   },
   {
     file: `1098-T-${slug(spouse)}-Lakeview-University.pdf`,
     type: "F1098T",
     title: "Tuition Statement",
-    issuer: { name: "Lakeview University", lines: ["1 University Avenue", "Sacramento CA  95806"] },
+    issuer: { name: "Lakeview University", lines: ["1 University Avenue", cityLine(6)] },
     recipient: { name: spouse, lines: usHome },
     boxes: { 1: "6000.00", 5: "1500.00" },
   },
@@ -185,7 +191,7 @@ const usSamples: Sample[] = [
     file: `1098-T-${slug(child)}-Prairie-Community-College.pdf`,
     type: "F1098T",
     title: "Tuition Statement",
-    issuer: { name: "Prairie Community College", lines: ["400 College Drive", "Sacramento CA  95807"] },
+    issuer: { name: "Prairie Community College", lines: ["400 College Drive", cityLine(7)] },
     recipient: { name: child, lines: usHome },
     boxes: { 1: "3800.00" },
   },
@@ -225,7 +231,7 @@ const usSamples: Sample[] = [
     file: `1099-R-${slug(spouse)}-Fund-IRA.pdf`,
     type: "RIRA",
     title: "Distributions From Pensions, Annuities, Retirement or Profit-Sharing Plans, IRAs (IRA/SEP/SIMPLE: X)",
-    issuer: { name: "Lakeview IRA Custodian", lines: ["8 Lakeshore Boulevard", "Sacramento CA  95803"] },
+    issuer: { name: "Lakeview IRA Custodian", lines: ["8 Lakeshore Boulevard", cityLine(3)] },
     recipient: { name: spouse, lines: usHome },
     boxes: { 1: "6000.00", "2A": "6000.00", 4: "600.00", 7: "7" },
   },
@@ -233,9 +239,9 @@ const usSamples: Sample[] = [
     file: `1099-R-${slug(self)}-State-Pension.pdf`,
     type: "R",
     title: "Distributions From Pensions, Annuities, Retirement or Profit-Sharing Plans, IRAs",
-    issuer: { name: "State Employees Pension", lines: ["200 Capitol Avenue", "Sacramento CA  95806"] },
+    issuer: { name: "State Employees Pension", lines: ["200 Capitol Avenue", cityLine(6)] },
     recipient: { name: self, lines: usHome },
-    boxes: { 1: "18000.00", "2A": "18000.00", 4: "1800.00", 7: "7", 14: "540.00", 15: "CA" },
+    boxes: { 1: "18000.00", "2A": "18000.00", 4: "1800.00", 7: "7", 14: "540.00", 15: state },
   },
   {
     file: `SSA-1099-${slug(spouse)}.pdf`,

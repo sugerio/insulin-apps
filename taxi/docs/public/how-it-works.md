@@ -55,7 +55,9 @@ assessment, say) is best uploaded one document at a time. Each slip goes to the 
 naming someone else in the year, such as a child's T4, isn't added, since they have no return here, and the message
 says whose it is; a receipt for them, such as a child's medical receipt, stays in the return it was uploaded in. A
 slip whose name matches no one in the year stays there too, marked to check whose it is. Every slip read this way
-starts unconfirmed: someone checks it against the paper slip at Confirm, where **Download the original file** saves the
+starts unconfirmed: someone checks it against the paper slip, on the Income, Deductions or Credits step that shows it
+(each slip shows open there; Save and continue saves any changes and confirms the slips the step shows; a slip
+removed there leaves its file on Upload) or at Confirm, where **Download the original file** saves the
 file it was read from (on Upload documents, a file's name downloads it). A box AI wasn't sure of is marked; one it
 couldn't read at all shows as couldn't be read, and the slip can't be confirmed until that box is entered (0 when it
 is blank on the paper slip). Saving the slip's other boxes leaves it marked.
@@ -173,6 +175,15 @@ left under Before you file, and the download is refused.
   way. FTB's fill-in fields carry their line in a tooltip, which places each row; FTB's forms are in whole dollars, with
   the cents printed. Form 540 gets the names, the filing status, the exemption boxes and up to three dependents. The
   worksheet says where to mail Form 540 (apart from the federal return) and what is left to fill in.
+- A New York return prints after the federal forms on the Department of Taxation and Finance's own forms: Form IT-201,
+  then Form IT-196 when the New York return itemizes, Forms IT-213, IT-215, IT-216, IT-270 and IT-272 when their credit
+  applies, and Form IT-2 (and Form IT-1099-R for a 1099-R with New York tax withheld) last. Taxi downloads them from
+  tax.ny.gov and checks each file the same way. New York's fill-in fields are named for their line (`Line33`, `6
+  dollars15`), which places each row; the forms are in whole dollars, with the cents printed. Form IT-201 gets the names,
+  the filing status, items B and C, the months in New York City or Yonkers, and up to seven dependents. Form IT-2 gets a
+  record for each W-2, two to a form: the employer, boxes 1, 8, 10 and 11, and the state and local boxes. The worksheet
+  asks for another copy when there are more, says where to mail Form IT-201 (apart from the federal return), and what is
+  left to fill in.
 - A form the return needs that Taxi doesn't print is named under "Forms to fill in yourself", on Finish and on the
   worksheet: for a US return, Schedule B when the taxable interest is more than $1,500; Revenu Québec's Schedule D (the solidarity tax credit) for a resident of Quebec; Schedule 6 for residents
   of Quebec, Alberta or Nunavut (5005-S6, 5009-S6, 5014-S6) when the return gets the Canada workers benefit or reports

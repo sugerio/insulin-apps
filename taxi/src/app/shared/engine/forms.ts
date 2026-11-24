@@ -1,10 +1,10 @@
 import { Dec } from "./decimal.ts";
 import type { EngineInput, Evaluation } from "./evaluate.ts";
-import { formIn, type DependantFact, type DependantTable, type FormLanguage, type FormSpec, type PersonalFact, type RuleSet } from "./rules.ts";
+import { formIn, type DependantFact, type DependantTable, type FormLanguage, type FormSpec, type PersonalFact, type RuleSet, type SlipTable } from "./rules.ts";
 
 // What a return puts on each official form (forms.yaml), and where: the amounts and counts worked out by the same engine
 // as the return's lines, ticks from yes/no formulas, the name, birth date and province from the person's facts, and a
-// form's table of dependants, placed by the measured layout. Zero and missing amounts are left out (the form's box
+// form's table of dependants or of slips, placed by the measured layout. Zero and missing amounts are left out (the form's box
 // stays blank), unless the form asks for the zero.
 
 export interface PlacedAmount {
@@ -39,6 +39,8 @@ export interface FilledForm {
   marks: PlacedMark[];
   /** The dependants its table of dependants has no room for, by name: they are listed on the worksheet. */
   left: string[];
+  /** The slips its table of slips has no room for, as "W-2 from <issuer>": they go on another copy of the form. */
+  slipsLeft: string[];
 }
 
 /** The facts a form's text boxes can hold; null when the app doesn't know one (the box stays blank). */
@@ -152,7 +154,8 @@ export function fillForms(rules: RuleSet, evaluation: Evaluation, personId: stri
       }
     }
     const left = form.dependants ? fillDependants(form.dependants, evaluation, personId, amounts, marks) : [];
-    filled.push({ form, language: form.french && language === "fr" ? "fr" : "en", amounts, marks, left });
+    const slipsLeft = form.slips ? fillSlips(rules, form.slips, evaluation, personId, amounts, marks) : [];
+    filled.push({ form, language: form.french && language === "fr" ? "fr" : "en", amounts, marks, left, slipsLeft });
   }
   return filled;
 }
@@ -201,6 +204,36 @@ function fillDependants(table: DependantTable, evaluation: Evaluation, personId:
   if (listed.length <= table.columns || !table.more) return [];
   marks.push({ kind: "tick", key: "more", ...table.more });
   return listed.slice(table.columns).map((dependant) => dependant.name);
+}
+
+/**
+ * A form's table of slips: the return's slips of the table's type (the spouse's after the person's when `spouse` is yes),
+ * one per column, each field a box of the slip or its issuer. Returns the slips left out, as "<slip> from <issuer>".
+ */
+function fillSlips(rules: RuleSet, table: SlipTable, evaluation: Evaluation, personId: string, amounts: PlacedAmount[], marks: PlacedMark[]): string[] {
+  const spouse = table.spouse && evaluation.evaluate(personId, table.spouse).value === true ? evaluation.spouse(personId) : undefined;
+  const people = [personId, ...(spouse ? [spouse] : [])];
+  const held = (slip: { boxes: Record<string, string> }, condition: { box: string; is: string[]; not: boolean }) =>
+    condition.is.includes(slip.boxes[condition.box] ?? "") !== condition.not;
+  const listed = people.flatMap((person) =>
+    evaluation.input.slips.filter((slip) => slip.person === person && table.types.includes(slip.type) && (!table.which || held(slip, table.which))),
+  );
+  listed.slice(0, table.columns).forEach((slip, index) => {
+    for (const field of table.fields) {
+      if (field.column !== index + 1) continue;
+      if (field.if && !held(slip, field.if)) continue;
+      const { key, page, x, y } = field;
+      const written = field.issuer ? slip.issuer : slip.boxes[field.box!];
+      if (written === undefined || written === "") continue;
+      if (field.kind === "text") {
+        marks.push({ kind: "text", key, page, x, y, text: written, ...(field.width === undefined ? {} : { width: field.width }) });
+        continue;
+      }
+      const amount = Dec.from(written);
+      if (!amount.isZero()) amounts.push({ key, page, x, y, value: amount.roundTo(2, "HALF_UP"), ...(field.plain ? { plain: true as const } : {}) });
+    }
+  });
+  return listed.slice(table.columns).map((slip) => `${rules.slips.get(slip.type)?.name ?? slip.type} from ${slip.issuer}`);
 }
 
 /**

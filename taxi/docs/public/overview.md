@@ -4,7 +4,8 @@ description: What Taxi does, who it is for, what it doesn't do yet, and how it r
 order: 1
 ---
 
-Taxi prepares Canadian personal income tax returns, and United States federal returns with the California return. This
+Taxi prepares Canadian personal income tax returns, and United States federal returns with the California or New York
+return. This
 page explains what it does today, who it is for, and what it leaves out. Read it first if you are deciding whether Taxi suits you, or if you are an AI agent that
 needs the big picture before calling its API.
 
@@ -21,13 +22,14 @@ Each return has seven steps:
 
 1. **Personal info.** The facts no document shows.
 2. **Upload documents.** Slips and receipts, read by AI. A slip with the other person's name goes to their return.
-3. **Income.** Employment, investments and the rest: the slips found, box by box to check and change, and what else
-   to add.
+3. **Income.** Employment, investments and the rest: the slips found, open box by box to check, change or remove, and
+   what else to add.
 4. **Deductions.** RRSP and FHSA contributions, working from home, child care and moving expenses, and what your
    slips already deduct.
 5. **Credits.** Tuition, medical expenses, donations, a single parent's child's net income (for the eligible dependant
    amount), and what your slips already claim.
-6. **Confirm.** Every number AI read, to check against the papers.
+6. **Confirm.** Every number AI read, to check against the papers. Save and continue on Income, Deductions and Credits
+   confirms the forms that step showed, so Confirm lists first what is still to check.
 7. **Finish.** The refund or balance owing, what to check before filing, and hints: ways to pay less, such as claiming
    both spouses' donations on one return, each with what it saves. Apply one to change your answers; you can undo it.
    When the return is finished, download its forms: the CRA's T1 and provincial form with your amounts filled in, and
@@ -68,7 +70,8 @@ investment tax credits. The app says so when a case it doesn't handle applies.
 
 When you start a year, you choose Canada or the United States. A year is of one country. A US year prepares the
 federal Form 1040 of a U.S. citizen or resident alien for the whole year, and Personal info asks each person's state on
-December 31. For a California resident, Taxi also prepares the California return (Form 540). For another state, Taxi
+December 31. For a California resident, Taxi also prepares the California return (Form 540), and for a New York
+resident the New York return (Form IT-201). For another state, Taxi
 prepares the federal return only, and says to file the state return with other software. A state with no income tax
 return (such as Texas or Florida) needs none.
 
@@ -169,6 +172,39 @@ Taxi doesn't prepare: the federal return says so. On the California return, Taxi
 amount for: a part-year resident or a spouse in another state (Form 540NR), tax withheld for another state, a year
 without health coverage (form FTB 3853), and the Young Child Tax Credit with no earned income. The California forms are
 printed after the federal ones, from ftb.ca.gov: Form 540, Schedule CA (540), Schedule P (540), FTB 3506 and FTB 3514.
+
+### New York
+
+For a person who lived in New York State all year, Taxi also prepares Form IT-201, from the federal return. It includes
+the New York City tax for a New York City resident and the Yonkers surcharge for a Yonkers resident. Personal info asks
+where in New York you lived.
+
+- Additions and subtractions: interest from other states' bonds is added (you say how much is from New York bonds), and
+  414(h) retirement contributions of a public employee. Social security benefits, interest on U.S. obligations, a New
+  York State, local or federal government pension, and New York 529 contributions (up to $5,000 for each owner) are
+  subtracted. Someone who was 59½ or older can exclude up to $20,000 of other pension and IRA income.
+- The New York standard deduction ($8,000, $16,050 jointly, $11,200 as head of household, $3,100 for someone another
+  person can claim), or Form IT-196 itemized deductions when they are larger, whatever the federal return does. Form
+  IT-196 has no limit on property taxes, leaves out income taxes, uses a 10% floor for medical expenses, and is limited
+  at a high income. Each dependent gives a $1,000 exemption.
+- The New York State tax from the Tax Table, the tax rate schedule, or the tax computation worksheets over $107,650 of
+  New York AGI. The New York City tax from its own table and rate schedule.
+- Credits: the household credits; the Empire State child credit ($1,000 for each child under 4, $330 for each child of 4
+  to 16, Form IT-213); the earned income credits (30% of the federal credit for New York State, 10% to 30% for New York
+  City, Form IT-215); the child and dependent care credits (Form IT-216); the college tuition credit (Form IT-272); the
+  New York City school tax credits; and the New York City income tax elimination credit (Form IT-270).
+- The MCTMT for net earnings from self-employment over $50,000 in New York City or the seven counties near it.
+- Payments: New York State tax withheld on each W-2 and 1099 whose state box says NY, New York City and Yonkers tax
+  withheld (box 19 of a W-2 with box 20 NYC or YONKERS), and New York estimated payments. The sales or use tax is asked,
+  as Form IT-201 can't leave it blank.
+
+On the New York return, Taxi says so instead of giving a wrong amount for: a part-year resident or a spouse in another
+state (Form IT-203), a part-year New York City or Yonkers resident (Form IT-360.1), spouses who lived in different
+places, tax withheld for another state (Form IT-112-R), Yonkers earnings of a nonresident (Form Y-203), a business both
+inside and outside the MCTMT zones, other additions and subtractions (Form IT-225), and the real property tax credit
+(Form IT-214). The New York forms are printed after the federal ones, from tax.ny.gov: Form IT-201, Forms IT-196, IT-213,
+IT-215, IT-216, IT-270 and IT-272 when they apply, and Form IT-2 with a record for each W-2 (and Form IT-1099-R for each
+1099-R with New York tax withheld).
 
 AI reads the US forms you upload: Forms W-2, 1099-INT, 1099-DIV, 1099-B (a broker's summary, one for each part of Form
 8949), 1099-R, 1099-NEC, SSA-1099, 1098, 1098-T and 1098-E, with their state boxes. Each one goes to the return of the person named on it. A 1098-E is added to the student loan interest. A 1098-T is not added to the

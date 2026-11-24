@@ -146,6 +146,29 @@ describe("starting a year", () => {
     expect(year.prepareTogether).toBe(false);
   });
 
+  it("changes who is in the year on Personal info too", async () => {
+    const { server } = await renderApp("/returns/2025/personal", { seed: seedCouple });
+    const people = await screen.findByRole("region", { name: "People in 2025" });
+    expect(within(people).getByText("Sam Martin")).toBeTruthy();
+    fireEvent.click(within(people).getByRole("button", { name: "Change" }));
+    expect(within(people).getByRole("link", { name: "Add a new person" }).getAttribute("href")).toMatch(/^\/profile\?back=%2Freturns%2F2025%2F.+%2Fpersonal$/);
+    fireEvent.click(checkbox("Jamie Martin"));
+    fireEvent.click(within(people).getByRole("button", { name: "Save people" }));
+    await waitFor(async () => {
+      const year = (await (await server.call("GET", "/api/years/2025")).json()) as TaxYear;
+      expect(year.members.map((id) => year.people.find((person) => person.id === id)?.name)).toEqual(["Alex Martin", "Sam Martin", "Jamie Martin"]);
+    });
+    expect(await within(people).findByText("Jamie Martin")).toBeTruthy();
+    fireEvent.click(within(people).getByRole("button", { name: "Change" }));
+    fireEvent.click(checkbox("Jamie Martin"));
+    expect(within(people).getByText("Taking Jamie Martin out of 2025")).toBeTruthy();
+    fireEvent.click(within(people).getByRole("button", { name: "Save people" }));
+    await waitFor(async () => {
+      const year = (await (await server.call("GET", "/api/years/2025")).json()) as TaxYear;
+      expect(year.members.map((id) => year.people.find((person) => person.id === id)?.name)).toEqual(["Alex Martin", "Sam Martin"]);
+    });
+  });
+
   it("opens the choice straight away on the way back from the Profile", async () => {
     await renderApp("/returns?start=2025", { seed: async (s) => void (await seedPeople(s)) });
     expect(await screen.findByRole("heading", { name: "Start 2025: who is in this year?" })).toBeTruthy();

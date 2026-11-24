@@ -59,13 +59,17 @@ export function useYear(): YearValue {
 }
 
 /**
- * The return open: whose it is, their facts for the year, who is on it (`members`: the owner, and the spouse on a joint
- * return) and how far each step is.
+ * The return open, as the person in the path sees it: whose content the steps show (`person`, with their facts for the
+ * year), whose return it is (`owner`: the person preparing on a joint return, else the person), and how far each step
+ * is for the person. Each step shows the person's own content only (`members` is them alone); `onReturn` is everyone
+ * on the return, for what the return shares: its result, Finish, and the dependants it claims.
  */
 export interface ReturnValue {
   person: Person;
   adult: AdultYear;
+  owner: Person;
   members: Person[];
+  onReturn: Person[];
   steps: StepStatuses;
 }
 const ReturnContext = createContext<ReturnValue | null>(null);
@@ -135,30 +139,31 @@ export function YearIndex() {
 }
 
 /**
- * `/returns/:year/:personId`: one adult's return. A link from before returns were per person (`/returns/2025/upload`)
- * opens that step of the person preparing's return; a person who no longer has a return this year opens the year.
+ * `/returns/:year/:personId`: one adult's return. On a joint return each spouse has their own path: the steps show
+ * their own content, and the result is the joint return's. A link from before returns were per person
+ * (`/returns/2025/upload`) opens that step of the person preparing's return; a person who no longer has a return this
+ * year opens the year.
  */
 export function ReturnFrame() {
   const { year } = useYear();
   const param = useParams().person ?? "";
-  const progress = year.returns.find((each) => each.personId === param);
+  const progress = year.returns.find((each) => each.members.includes(param));
   const adult = year.adults.find((each) => each.personId === param);
   const person = year.people.find((each) => each.id === param);
-  // The spouse on a joint return has no return of their own: theirs is the joint one, at the same step.
-  const joint = progress ? undefined : year.returns.find((each) => each.members.includes(param));
-  const here = useCurrentStep();
-  if (joint) return <Navigate to={stepPath(year.year, joint.personId, here ?? nextStep(joint.steps))} replace />;
-  if (!progress || !adult || !person) {
+  const owner = year.people.find((each) => each.id === progress?.personId);
+  if (!progress || !adult || !person || !owner) {
     const first = year.returns[0];
     if (!first) return <NotFoundPage />;
     const step = stepFrom(param);
     if (step) return <Navigate to={stepPath(year.year, first.personId, step)} replace />;
     return <Navigate to={`/returns/${year.year}`} replace />;
   }
+  const onReturn = progress.members.map((id) => year.people.find((each) => each.id === id)!).filter(Boolean);
+  const steps = progress.memberSteps.find((each) => each.personId === person.id)?.steps ?? progress.steps;
   // The switcher keeps the step: a new key starts its form again from the other person's stored facts, so a draft of
-  // one return is never shown, or saved, as the other's.
+  // one person's is never shown, or saved, as the other's.
   return (
-    <ReturnContext value={{ person, adult, members: progress.members.map((id) => year.people.find((each) => each.id === id)!).filter(Boolean), steps: progress.steps }}>
+    <ReturnContext value={{ person, adult, owner, members: [person], onReturn, steps }}>
       <Outlet key={person.id} />
     </ReturnContext>
   );
@@ -189,12 +194,17 @@ export function resultOf(rules: RuleSet, estimate: Resource<Estimate>, personId:
   return Number(owing) ? `Owing ${formatMoney(owing)}` : `Refund ${formatMoney(refund)}`;
 }
 
-/** Whose return is open, and the others of the year to switch to, at the same step. */
+/**
+ * Whose return is open, and the year's other adults to switch to, at the same step: on a joint return each spouse is
+ * listed, with the joint return's result.
+ */
 export function ReturnSwitcher() {
   const { year, estimate } = useYear();
   const { person } = useReturn();
   const step = useCurrentStep() ?? "personal";
-  const returns = year.returns.map((progress) => year.people.find((each) => each.id === progress.personId)!).filter(Boolean);
+  const returns = year.returns.flatMap((progress) =>
+    progress.members.map((id) => ({ person: year.people.find((each) => each.id === id)!, owner: progress.personId })).filter((each) => each.person),
+  );
   const trigger = (
     <span className="flex min-w-0 flex-col items-start text-left">
       <span className="text-xs font-normal text-muted-foreground">Return of</span>
@@ -213,14 +223,14 @@ export function ReturnSwitcher() {
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="w-(--radix-dropdown-menu-trigger-width) min-w-56">
         <DropdownMenuLabel>{year.year} returns</DropdownMenuLabel>
-        {returns.map((each) => {
-          const other = resultOf(rulesFor(year.country, year.year)!, estimate, each.id);
+        {returns.map(({ person: each, owner }) => {
+          const other = resultOf(rulesFor(year.country, year.year)!, estimate, owner);
           return (
             <DropdownMenuItem key={each.id} asChild>
               <Link to={stepPath(year.year, each.id, step)} aria-current={each.id === person.id ? "page" : undefined} className="flex items-center gap-2">
                 <span className="flex min-w-0 flex-1 flex-col">
                   <span className="truncate font-medium">{each.name}</span>
-                  {other ? <span className="text-xs text-muted-foreground tabular-nums">{other}</span> : null}
+                  {other ? <span className="text-xs text-muted-foreground tabular-nums">{owner === each.id ? other : `Joint: ${other}`}</span> : null}
                 </span>
                 {each.id === person.id ? <Check className="size-4" aria-hidden="true" /> : null}
               </Link>

@@ -141,6 +141,16 @@ function filled(boxes: Record<string, string>): Record<string, string> {
   );
 }
 
+/**
+ * What a slip form's kept values change in the slip they were typed on: its issuer and boxes as a save sends them, or
+ * null when they change nothing (or were typed on another version of it). The page's own Save sends these (Income).
+ */
+export function slipChange(slip: Slip, values: SlipValues | undefined): { issuer: string; boxes: Record<string, string> } | null {
+  if (!values || values.basis !== slip.updatedAt) return null;
+  if (values.issuer === slip.issuer && sameBoxes(values.boxes, slip.boxes)) return null;
+  return { issuer: values.issuer, boxes: filled(values.boxes) };
+}
+
 function sameBoxes(a: Record<string, string>, b: Record<string, string>): boolean {
   const left = Object.entries(filled(a));
   const right = filled(b);
@@ -182,7 +192,8 @@ export interface SlipFormHost {
 
 /**
  * Add a slip (no `slip`; of `type` when given, else chosen) or change one: its issuer and its boxes. `inline` is the
- * form shown open under a slip: its buttons appear once something changed, and Cancel puts the slip's values back.
+ * form shown open under a slip: its Save is always there, to use once something changed (the page's own Save and
+ * continue saves it too), and Cancel, once something changed, puts the slip's values back.
  * With a `host`, the page around runs the save (Income saves what was added with it) and keeps the form's values and
  * error; without one, the form saves the slip itself.
  */
@@ -281,7 +292,7 @@ export function SlipForm({
     (path) => path === "issuer" || (path.startsWith("boxes.") && path.slice("boxes.".length) in slipType.boxes),
     edited,
   );
-  const showActions = !inline || changed || error !== null;
+  const showCancel = !inline || changed || error !== null;
 
   return (
     <form className="flex flex-col gap-4" onSubmit={(event) => void submit(event)} aria-label={slip ? `Edit ${slip.type} from ${slip.issuer}` : "Add a slip"}>
@@ -337,11 +348,11 @@ export function SlipForm({
       />
       {replaced ? <Banner kind="warning" title="Someone else changed this slip while you were changing it. It shows what is stored now: make your change again." /> : null}
       {inBanner ? <RefusedBanner title="The slip wasn't saved" error={error} unshown={unshown} /> : null}
-      {showActions ? (
-        <div className="flex gap-2">
-          <Button type="submit" size="sm" disabled={disabled || !changed || host?.waiting === true}>
-            {state.status === "saving" ? "Saving…" : slip ? "Save" : "Add"}
-          </Button>
+      <div className="flex gap-2">
+        <Button type="submit" size="sm" variant={inline ? "outline" : "default"} disabled={disabled || !changed || host?.waiting === true}>
+          {state.status === "saving" ? "Saving…" : slip ? "Save" : "Add"}
+        </Button>
+        {showCancel ? (
           <Button
             type="button"
             variant="ghost"
@@ -355,8 +366,8 @@ export function SlipForm({
           >
             Cancel
           </Button>
-        </div>
-      ) : null}
+        ) : null}
+      </div>
     </form>
   );
 }

@@ -1,10 +1,10 @@
 import "./setup.ts";
 import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import type { Estimate, Person, TaxYear } from "#shared";
+import type { Estimate, Person, SlipList, TaxYear } from "#shared";
 import type { SlipReader } from "../../src/app/server/lib/reader.ts";
 import { OWNER, type TestServer } from "../support/server.ts";
-import { clickWhenEnabled, holdRequests, renderApp } from "./support.tsx";
+import { clickWhenEnabled, holdRequests, pageSave, renderApp } from "./support.tsx";
 
 // The requests of Income, Deductions and Credits: a save, an upload in a card, a slip saved in its card. The form starts
 // again whenever the year changes, so what a request does to the page mustn't depend on the form that sent it.
@@ -36,7 +36,6 @@ describe("a step's requests", () => {
     fireEvent.click(within(await screen.findByRole("region", { name: "Add to your return" })).getByRole("button", { name: "Add Rental income" }));
     fireEvent.change(rents(), { target: { value: "1000" } });
     const onReturn = screen.getByRole("region", { name: "On your return" });
-    fireEvent.click(within(onReturn).getByRole("button", { name: /T4 from Maple Corp/ }));
     fireEvent.change(within(onReturn).getByLabelText(/^Box 22/), { target: { value: "9500" } });
     const held = holdRequests((method, path) => method !== "GET" && path.startsWith("/api/years/2025/"));
     fireEvent.click(within(onReturn).getByRole("button", { name: "Save" }));
@@ -96,7 +95,7 @@ describe("a step's requests", () => {
     fireEvent.change(await screen.findByLabelText("Choose files"), { target: { files: [new File(["%PDF-1.4 late"], "T5.pdf", { type: "application/pdf" })] } });
     await act(() => router.navigate(router.state.location.pathname.replace(/upload$/, "income")));
     const box22 = () => within(screen.getByRole("region", { name: "On your return" })).getByLabelText(/^Box 22/) as HTMLInputElement;
-    fireEvent.click(within(await screen.findByRole("region", { name: "On your return" })).getByRole("button", { name: /T4 from Maple Corp/ }));
+    await screen.findByRole("region", { name: "On your return" });
     fireEvent.change(box22(), { target: { value: "9500" } });
     const held = holdRequests((method, path) => method === "PATCH" && path.startsWith("/api/years/2025/slips/"));
     fireEvent.click(within(screen.getByRole("form", { name: "Edit T4 from Maple Corp" })).getByRole("button", { name: "Save" }));
@@ -139,7 +138,7 @@ describe("a step's requests", () => {
     await waitFor(() => expect(rents()).not.toBe(before));
     expect(screen.queryByText("Someone else changed this year")).toBeNull();
     expect(rents().value).toBe("1000");
-    await clickWhenEnabled(() => screen.getByRole("button", { name: "Save" }));
+    await clickWhenEnabled(pageSave);
     await waitFor(async () => expect(await answersOf(server)).toMatchObject({ hasRentalIncome: true, rentalGross: "1000" }));
   });
 
@@ -162,12 +161,11 @@ describe("a step's requests", () => {
   describe("a slip's box refused in its card", () => {
     const onReturn = () => screen.getByRole("region", { name: "On your return" });
     const box = (number: number) => within(onReturn()).getByLabelText(new RegExp(`^Box ${number} `)) as HTMLInputElement;
-    const openT4 = () => fireEvent.click(within(onReturn()).getByRole("button", { name: /T4 from Maple Corp/ }));
+    const toggleT4 = () => fireEvent.click(within(onReturn()).getByRole("button", { name: "T4 from Maple Corp" }));
     const saveSlip = () => fireEvent.click(within(onReturn()).getByRole("button", { name: "Save" }));
     async function refused(boxes: Record<number, string>) {
       const rendered = await renderApp("/returns/2025/income", { seed: (s) => seed(s, { slip: true }) });
       await screen.findByRole("region", { name: "On your return" });
-      openT4();
       for (const [number, amount] of Object.entries(boxes)) fireEvent.change(box(Number(number)), { target: { value: amount } });
       saveSlip();
       for (const number of Object.keys(boxes)) await waitFor(() => expect(box(Number(number)).getAttribute("aria-invalid")).toBe("true"));
@@ -191,8 +189,8 @@ describe("a step's requests", () => {
     it("stays corrected when the slip is closed and opened again, and the other box still says why", async () => {
       await refused({ 14: "2.345", 22: "1.234" });
       fireEvent.change(box(22), { target: { value: "9500" } });
-      openT4();
-      openT4();
+      toggleT4();
+      toggleT4();
       expect(box(22).value).toBe("9500");
       expect(box(22).getAttribute("aria-invalid")).toBeNull();
       expect(box(14).getAttribute("aria-invalid")).toBe("true");
@@ -200,8 +198,8 @@ describe("a step's requests", () => {
 
     it("still says why when the slip is closed and opened again without a change", async () => {
       await refused({ 14: "2.345", 22: "1.234" });
-      openT4();
-      openT4();
+      toggleT4();
+      toggleT4();
       for (const number of [14, 22]) {
         expect(box(number).getAttribute("aria-invalid")).toBe("true");
         expect(within(box(number).closest("tr")!).getByText("Enter an amount like 1234.56")).toBeTruthy();
@@ -231,7 +229,8 @@ describe("a step's requests", () => {
       const year = (await (await server.call("GET", "/api/years/2025")).json()) as TaxYear;
       const elsewhere = await server.call("PATCH", `/api/years/2025/slips/${slips[0]!.id}`, { as: OWNER, body: { revision: year.revision, boxes: { ...slips[0]!.boxes, 14: "70000" } } });
       expect(elsewhere.status).toBe(200);
-      // This page learns of it from a 409 and Reload.
+      // This page learns of it from a 409 and Reload: the step's Save sends the slip's corrected boxes first.
+      fireEvent.change(box(14), { target: { value: "2345" } });
       fireEvent.click(screen.getAllByRole("button", { name: "Save" }).find((button) => !onReturn().contains(button))!);
       const banner = (await screen.findByText("Someone else changed this year")).closest<HTMLElement>("[role=alert]")!;
       fireEvent.click(within(banner).getByRole("button", { name: "Reload" }));
@@ -251,6 +250,62 @@ describe("a step's requests", () => {
       await waitFor(() => expect(box(14).getAttribute("aria-invalid")).toBe("true"));
       expect(within(box(14).closest("tr")!).getByText("Enter an amount like 1234.56")).toBeTruthy();
     });
+  });
+
+  it("saves a slip changed in its open form with the step, and confirms it on Save and continue", async () => {
+    const { server, router } = await renderApp("/returns/2025/income", { seed: (s) => seed(s, { slip: true }) });
+    const onReturn = await screen.findByRole("region", { name: "On your return" });
+    fireEvent.change(within(onReturn).getByLabelText(/^Box 22/), { target: { value: "9500" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save and continue" }));
+    await waitFor(() => expect(router.state.location.pathname).toMatch(/\/deductions$/));
+    const { slips } = (await (await server.call("GET", "/api/years/2025/slips")).json()) as SlipList;
+    expect(slips.map((slip) => [slip.boxes[22], slip.status])).toEqual([["9500", "confirmed"]]);
+  });
+
+  it("stays on the step when a choice isn't made, marks it and goes to it; the banner goes there too", async () => {
+    const { server, router } = await renderApp("/returns/2025/income", { seed: (s) => seed(s) });
+    fireEvent.click(within(await screen.findByRole("region", { name: "Add to your return" })).getByRole("button", { name: "Add Self-employment or business income" }));
+    fireEvent.change(screen.getByLabelText("Gross income"), { target: { value: "5000" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save and continue" }));
+    const kind = () => screen.getByLabelText("Kind of income") as HTMLSelectElement;
+    await waitFor(() => expect(kind().getAttribute("aria-invalid")).toBe("true"));
+    expect(within(kind().parentElement!.parentElement!).getByText("Choose one to finish this step.")).toBeTruthy();
+    expect(document.activeElement).toBe(kind());
+    expect(router.state.location.pathname).toMatch(/\/income$/);
+    // What was entered is saved all the same.
+    expect(await answersOf(server)).toMatchObject({ hasSelfEmployment: true, selfEmploymentGross: "5000" });
+    // The banner names it, and goes to it.
+    (document.activeElement as HTMLElement).blur();
+    const banner = screen.getByText("To finish this step").closest<HTMLElement>("[role=status]")!;
+    fireEvent.click(within(banner).getByRole("button", { name: "Kind of income" }));
+    expect(document.activeElement).toBe(kind());
+    // Chosen, it is no longer marked.
+    fireEvent.change(kind(), { target: { value: "business" } });
+    expect(kind().getAttribute("aria-invalid")).toBeNull();
+  });
+
+  it("removes one slip, its file kept, and a kind of income with its slips once agreed", async () => {
+    const { server } = await renderApp("/returns/2025/income", { seed: (s) => seed(s, { slip: true }) });
+    const onReturn = () => screen.getByRole("region", { name: "On your return" });
+    await screen.findByRole("region", { name: "On your return" });
+    // The card asks first: it removes the slip too.
+    fireEvent.click(within(onReturn()).getByRole("button", { name: "Remove Employment income" }));
+    const ask = within(onReturn()).getByRole("group", { name: "Remove Employment income?" });
+    expect(ask.textContent).toMatch(/This also removes its slip\. Your files stay on Upload\./);
+    fireEvent.click(within(ask).getByRole("button", { name: "Keep" }));
+    expect(within(onReturn()).getByRole("button", { name: "T4 from Maple Corp" })).toBeTruthy();
+    fireEvent.click(within(onReturn()).getByRole("button", { name: "Remove Employment income" }));
+    fireEvent.click(within(onReturn()).getByRole("button", { name: "Remove with its slip" }));
+    await waitFor(() => expect(within(screen.getByRole("region", { name: "Add to your return" })).getByRole("button", { name: "Add Employment income" })).toBeTruthy());
+    expect(((await (await server.call("GET", "/api/years/2025/slips")).json()) as SlipList).slips).toEqual([]);
+    expect(await answersOf(server)).toMatchObject({ hasEmploymentIncome: false });
+  });
+
+  it("removes a slip from its card, and the card then waits for one", async () => {
+    const { server } = await renderApp("/returns/2025/income", { seed: (s) => seed(s, { slip: true }) });
+    fireEvent.click(within(await screen.findByRole("region", { name: "On your return" })).getByRole("button", { name: "Remove T4 from Maple Corp" }));
+    expect(await screen.findByText("No T4 yet. Upload it, or enter its boxes.")).toBeTruthy();
+    expect(((await (await server.call("GET", "/api/years/2025/slips")).json()) as SlipList).slips).toEqual([]);
   });
 
   it("says why an upload in a card was refused", async () => {

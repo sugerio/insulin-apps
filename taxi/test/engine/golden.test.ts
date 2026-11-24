@@ -41,6 +41,15 @@ const ALWAYS_ZERO: Record<string, string> = {
   "CALSCOPE.withholding": "state tax withheld for another state: zero, or says so",
   "CALSCOPE.coverage": "the health coverage penalty (FTB 3853): zero, or says so",
   "CALSCOPE.youngChild": "the Young Child Tax Credit with no earned income: zero, or says so",
+  // New York: each NYSCOPE line is zero, or says what the New York return doesn't handle (test/engine/new-york.test.ts).
+  "NYSCOPE.return": "situations the New York return doesn't handle yet: zero, or says so",
+  "NYSCOPE.residency": "a nonresident or part-year resident of New York (Form IT-203): zero, or says so",
+  "NYSCOPE.locality": "a part-year New York City or Yonkers resident, or spouses in different places: zero, or says so",
+  "NYSCOPE.adjustments": "other New York additions and subtractions (Form IT-225): zero, or says so",
+  "NYSCOPE.withholding": "state or local tax withheld for another state or place: zero, or says so",
+  "NYSCOPE.mctmt": "self-employment earnings inside and outside the MCTMT zones (Form IT-203-A): zero, or says so",
+  "NYSCOPE.realProperty": "the real property tax credit (Form IT-214): zero, or says so",
+  "NYS.ownOtherLocalTax": "local tax withheld for a place other than New York City or Yonkers: zero, or NYSCOPE.withholding says so",
 };
 
 for (const folder of readdirSync(ROOT, { withFileTypes: true }).filter((entry) => entry.isDirectory()).map((entry) => entry.name)) {

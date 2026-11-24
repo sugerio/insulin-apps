@@ -21,6 +21,7 @@ import {
 } from "#shared";
 import { Button } from "@/components/ui/button.tsx";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card.tsx";
+import { YearPeople } from "../components/YearPeople.tsx";
 import { Label } from "@/components/ui/label.tsx";
 import { NativeSelect, NativeSelectOptGroup, NativeSelectOption } from "@/components/ui/native-select.tsx";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group.tsx";
@@ -40,8 +41,9 @@ import { rulesFor } from "../shared/rules/index.ts";
 // Step 1, `/returns/:year/:personId/personal`: the facts of the open return that no document tells the app: the
 // adult's province and residency, the marital status on December 31, which the year's returns share, and the questions
 // about the person the return reads (`module: about`, such as a spouse's net income when their return isn't here). Who is in the
-// year is chosen on the Tax years page, and how each person is related on the Profile page. The facts are saved
-// together, under the year's revision.
+// year is chosen at the top (as on the Tax years page), and how each person is related on the Profile page. On a joint
+// return each spouse's page asks about them alone; the person preparing's also about the dependants. The facts are
+// saved together, under the year's revision.
 
 export function PersonalInfoStep() {
   const { year, replace, reload } = useYear();
@@ -82,6 +84,19 @@ export function PersonalInfoStep() {
   };
   return (
     <StepLayout step="personal" title="Personal info" aside={year.country === "us" ? <UsTaxNotes /> : <TaxNotes year={year.year} />}>
+      {/* Who is in the year, the same as on the Tax years page: added or taken out here too. */}
+      <Card>
+        <CardContent>
+          <YearPeople
+            year={year.year}
+            revision={year.revision}
+            members={year.members}
+            people={year.people}
+            onSaved={replace}
+            back={stepPath(year.year, person.id, "personal")}
+          />
+        </CardContent>
+      </Card>
       {/* A new revision (a save, or someone else's) starts the form again from what is stored. */}
       <YearFacts key={year.revision} draft={draft} onDraft={setDraft} requests={requests} showMissing={showMissing} />
     </StepLayout>

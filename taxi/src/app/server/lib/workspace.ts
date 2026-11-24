@@ -150,49 +150,62 @@ export function evaluateYear(facts: YearFacts, workspace: Workspace): { input: E
  * this adult, and the questions about the person that the result reads are answered. Upload: a file was uploaded in
  * this return and read into slips, or a slip of this adult was read from a file (slips can also be typed in step 6).
  * Income, deductions and credits: each yes/no question of the module is answered, or answered by a slip found, no slip
- * said to exist is missing, and every amount the result reads is entered. Confirm: the adult has slips and all are
- * confirmed. Finish: the return is finished, so its CRA forms can be printed (shared/print.ts).
+ * said to exist is missing, and every amount the result reads is entered. Confirm: the return has slips and all are
+ * confirmed. Finish: the return is finished, so its CRA forms can be printed (shared/print.ts). The same steps are worked
+ * out for each member alone (`memberSteps`): on a joint return each spouse's step page shows their own.
  */
 export function stepStatuses(facts: YearFacts, issues: Issue[], workspace: Workspace): ReturnProgress[] {
   const rules = rulesFor(facts.country, facts.year);
   const evaluation = evaluateYear(facts, workspace);
   // Each return's steps cover everyone on it: on a joint return, both spouses' facts, answers and slips.
   return returnsOf(facts).map(({ personId, members }) => {
-    const slips = workspace.slips.filter((slip) => members.includes(slip.personId));
+    const returnSlips = workspace.slips.filter((slip) => members.includes(slip.personId));
     const result = evaluation?.result.people.find((person) => person.personId === personId);
     // Without an evaluation (the engine refused what is stored) nothing says which questions the return reads, so no
     // step that depends on them is done.
-    const answered = (module: Module) =>
+    const answered = (module: Module, people: string[]) =>
       evaluation !== null &&
       rules !== undefined &&
-      members.every((member) => {
+      people.every((member) => {
         const reached = evaluation.result.people.find((person) => person.personId === member)?.questions ?? [];
         const theirs = workspace.slips.filter((slip) => slip.personId === member);
         return leftInModule(rules, module, workspace.answers[member] ?? {}, theirs, reached).length === 0;
       }) &&
-      // Personal info also asks about the dependants this return claims.
+      // Personal info also asks about the dependants these people claim.
       (module !== "about" ||
-        dependantsOf(evaluation, members).every((dependant) => leftInModule(rules, "about", workspace.answers[dependant.dependantId] ?? {}, [], dependant.questions).length === 0));
+        dependantsOf(evaluation, people).every((dependant) => leftInModule(rules, "about", workspace.answers[dependant.dependantId] ?? {}, [], dependant.questions).length === 0));
     const state = (done: boolean) => (done ? "done" : "todo");
-    const status: StepStatuses = {
-      personal: state(!issues.some((issue) => issue.kind === "blocking" && members.some((member) => isIssueOf(issue, member))) && answered("about")),
-      upload: state(members.some((member) => workspace.uploadedIn.has(member)) || slips.some((slip) => slip.documentId !== null)),
-      income: state(answered("income")),
-      deductions: state(answered("deductions")),
-      credits: state(answered("credits")),
-      confirm: state(slips.length > 0 && slips.every((slip) => slip.status === "confirmed")),
-      finish: state(
-        rules !== undefined &&
-          result !== undefined &&
-          printBlockers(
-            printYear(rules, issues, workspace),
-            result,
-            spouseResult(facts, evaluation?.result.people ?? [], personId),
-            evaluation ? dependantsOf(evaluation, members).map((dependant) => ({ name: nameOf(facts, dependant.dependantId), result: dependant })) : [],
-          ).length === 0,
-      ),
+    const finish = state(
+      rules !== undefined &&
+        result !== undefined &&
+        printBlockers(
+          printYear(rules, issues, workspace),
+          result,
+          spouseResult(facts, evaluation?.result.people ?? [], personId),
+          evaluation ? dependantsOf(evaluation, members).map((dependant) => ({ name: nameOf(facts, dependant.dependantId), result: dependant })) : [],
+        ).length === 0,
+    );
+    /** The steps of some of the return's people: all of them for the return, one for a member's own. Finish is the return's. */
+    const stepsOf = (people: string[]): StepStatuses => {
+      const slips = workspace.slips.filter((slip) => people.includes(slip.personId));
+      const status: StepStatuses = {
+        personal: state(!issues.some((issue) => issue.kind === "blocking" && people.some((member) => isIssueOf(issue, member))) && answered("about", people)),
+        upload: state(people.some((member) => workspace.uploadedIn.has(member)) || slips.some((slip) => slip.documentId !== null)),
+        income: state(answered("income", people)),
+        deductions: state(answered("deductions", people)),
+        credits: state(answered("credits", people)),
+        // A member with no slips of their own is done once the return has slips and theirs are all confirmed.
+        confirm: state(returnSlips.length > 0 && slips.every((slip) => slip.status === "confirmed")),
+        finish,
+      };
+      return Object.fromEntries(STEPS.map((step) => [step, status[step]])) as StepStatuses;
     };
-    return { personId, members, steps: Object.fromEntries(STEPS.map((step) => [step, status[step]])) as StepStatuses };
+    return {
+      personId,
+      members,
+      steps: stepsOf(members),
+      memberSteps: members.map((member) => ({ personId: member, steps: members.length === 1 ? stepsOf(members) : stepsOf([member]) })),
+    };
   });
 }
 

@@ -173,15 +173,26 @@ export async function removeSlip(db: Db, caller: Caller, year: number, id: strin
 }
 
 /**
- * Confirms the unconfirmed slips of one adult (or, with no person, of every adult), recording who did and when. A box
+ * Confirms the unconfirmed slips of one adult (or, with no person, of every adult; with slip ids, only those of them),
+ * recording who did and when. A box
  * AI couldn't read and has no amount is refused: confirmed, the slip would put nothing on that line.
  */
 export async function confirmSlips(db: Db, caller: Caller, year: number, input: ConfirmSlips, now: number): Promise<TaxYear> {
   const { row, view } = await openYear(db, caller.orgId, year);
   if (input.personId !== undefined) checkAdult(view, input.personId, "personId");
   const rules = rulesFor(view.country, year)!;
-  const unread = (await loadWorkspace(db, caller.orgId, row.id)).slips
-    .filter((slip) => slip.status === "unconfirmed" && (input.personId === undefined || slip.personId === input.personId))
+  const slips = (await loadWorkspace(db, caller.orgId, row.id)).slips;
+  const chosen = input.slipIds === undefined ? null : new Set(input.slipIds);
+  const strangers = (input.slipIds ?? []).filter((id) => !slips.some((slip) => slip.id === id && (input.personId === undefined || slip.personId === input.personId)));
+  if (strangers.length > 0) {
+    throw new ApiError(
+      "validation_failed",
+      input.personId === undefined ? `No such slip in ${year}` : "Each slip must be the adult's",
+      strangers.map((id) => ({ path: "slipIds", message: `No slip ${id}${input.personId === undefined ? "" : " of this adult"}` })),
+    );
+  }
+  const unread = slips
+    .filter((slip) => slip.status === "unconfirmed" && (input.personId === undefined || slip.personId === input.personId) && (chosen === null || chosen.has(slip.id)))
     .map((slip) => ({ slip, boxes: unreadBoxes(slip) }))
     .filter((each) => each.boxes.length > 0);
   if (unread.length > 0) {
@@ -202,9 +213,10 @@ export async function confirmSlips(db: Db, caller: Caller, year: number, input: 
     db
       .prepare(
         `UPDATE slips SET status = 'confirmed', confirmed_at = ?, confirmed_by = ?, updated_at = ?
-         WHERE org_id = ? AND tax_year_id = ? AND status = 'unconfirmed' AND (? IS NULL OR person_id = ?)`,
+         WHERE org_id = ? AND tax_year_id = ? AND status = 'unconfirmed' AND (? IS NULL OR person_id = ?)
+           AND (? IS NULL OR id IN (SELECT value FROM json_each(?)))`,
       )
-      .bind(now, caller.userId, now, caller.orgId, row.id, input.personId ?? null, input.personId ?? null),
+      .bind(now, caller.userId, now, caller.orgId, row.id, input.personId ?? null, input.personId ?? null, chosen === null ? null : 1, chosen === null ? "[]" : JSON.stringify([...chosen])),
     audit(db, caller, "slips.confirmed", row.id, now),
   ]);
   return getYear(db, caller.orgId, year);

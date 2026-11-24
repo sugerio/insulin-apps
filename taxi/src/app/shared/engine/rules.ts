@@ -252,6 +252,35 @@ export interface DependantTable {
   fields: DependantField[];
 }
 /**
+ * A field of a form's table of slips, in the column of the table it is in: a box of the slip written there (its amount,
+ * or its code as text) or the slip's issuer, when the slip's box `if.box` holds one of `if.is` (with `not`, none).
+ */
+export interface SlipTableField extends FieldPlace {
+  column: number;
+  kind: "amount" | "text";
+  box?: string;
+  issuer?: true;
+  width?: number;
+  plain: boolean;
+  if?: { box: string; is: string[]; not: boolean };
+}
+
+/**
+ * A form's table of slips (Form IT-2's W-2 records): the return's slips of `types` whose box `which.box` holds one of
+ * `which.is` (with `not`, none of them), the person's and, when `spouse` is yes for the return, the spouse's after
+ * them, in the year's order, one per column, as many as the form has columns. The others are named on the worksheet,
+ * for another copy of the form.
+ */
+export interface SlipTable {
+  types: string[];
+  which?: { box: string; is: string[]; not: boolean };
+  spouse?: Formula;
+  spouseText?: string;
+  columns: number;
+  fields: SlipTableField[];
+}
+
+/**
  * A bracket table printed on a form (one column per bracket, in one or more parts): the column of the bracket the amount
  * falls in gets the amount, the amount over the bracket's floor, that times the rate, and that plus the printed base.
  */
@@ -284,6 +313,8 @@ export interface FormSpec extends FormVersion {
   french?: FormVersion;
   /** The form's table of dependants. */
   dependants?: DependantTable;
+  /** The form's table of slips. */
+  slips?: SlipTable;
   /**
    * Whose form it is on a joint return: the spouse's copy of a form each spouse files (Schedule C, Schedule SE) works
    * its rows out from the spouse's side, and writes the spouse's name where the form asks for the person's.
@@ -400,6 +431,21 @@ const compiledFieldSchema = z.strictObject({
   labels: z.record(z.string(), z.string()).optional(),
 });
 
+const compiledSlipConditionSchema = z.strictObject({ box: z.string(), is: z.array(z.string()).min(1), not: z.literal(true).optional() });
+const compiledSlipFieldSchema = z.strictObject({
+  key: z.string(),
+  column: z.number().int().min(1),
+  kind: z.enum(["amount", "text"]),
+  page: z.number().int().min(1),
+  x: z.number(),
+  y: z.number(),
+  width: z.number().optional(),
+  plain: z.boolean().optional(),
+  box: z.string().optional(),
+  issuer: z.literal(true).optional(),
+  if: compiledSlipConditionSchema.optional(),
+});
+
 export const compiledRulesSchema = z.strictObject({
   country: z.string().regex(/^[a-z]{2}$/),
   year: z.number().int(),
@@ -476,6 +522,15 @@ export const compiledRulesSchema = z.strictObject({
           columns: z.number().int().min(1),
           more: z.tuple([z.number().int().min(1), z.number(), z.number()]).optional(),
           fields: z.array(compiledFieldSchema),
+        })
+        .optional(),
+      slips: z
+        .strictObject({
+          types: z.array(z.string()).min(1),
+          which: compiledSlipConditionSchema.optional(),
+          spouse: z.string().optional(),
+          columns: z.number().int().min(1),
+          fields: z.array(compiledSlipFieldSchema),
         })
         .optional(),
       /** The French version: its file, and each field's place on it (in the fields' order), and each table's parts. */
@@ -607,7 +662,8 @@ export function loadRuleSet(json: unknown, where: (entry: string) => string = ()
     for (const box of slip.counts) if (!(box in slip.boxes)) fail(`slips.${slip.id}`, `count box ${box} isn't one of its boxes`);
     for (const [box, codes] of Object.entries(slip.codes)) {
       if (!(box in slip.boxes)) fail(`slips.${slip.id}`, `code box ${box} isn't one of its boxes`);
-      if (codes.length === 0 || codes.some((code) => !/^[0-9A-Z]{1,2}$/.test(code))) fail(`slips.${slip.id}`, `code box ${box} needs codes of one or two capital letters or digits`);
+      // A code is a distribution code or a state's (1A, CA) or a locality's name (YONKERS): capital letters or digits.
+      if (codes.length === 0 || codes.some((code) => !/^[0-9A-Z]{1,12}$/.test(code))) fail(`slips.${slip.id}`, `code box ${box} needs codes of 1 to 12 capital letters or digits`);
       if (slip.counts.includes(box) || slip.informational.includes(box)) fail(`slips.${slip.id}`, `code box ${box} can't also be a count or informational`);
     }
     usedBoxes.set(slip.id, new Set(slip.informational));
@@ -686,6 +742,31 @@ export function loadRuleSet(json: unknown, where: (entry: string) => string = ()
                   }),
                 },
               }),
+          ...(form.slips === undefined
+            ? {}
+            : {
+                slips: {
+                  types: form.slips.types,
+                  ...(form.slips.which === undefined ? {} : { which: { box: form.slips.which.box, is: form.slips.which.is, not: form.slips.which.not ?? false } }),
+                  ...(form.slips.spouse === undefined ? {} : { spouse: parse(`${entry}.slips`, form.slips.spouse), spouseText: form.slips.spouse }),
+                  columns: form.slips.columns,
+                  fields: form.slips.fields.map(
+                    (field): SlipTableField => ({
+                      key: field.key,
+                      page: field.page,
+                      x: field.x,
+                      y: field.y,
+                      column: field.column,
+                      kind: field.kind,
+                      plain: field.plain ?? false,
+                      ...(field.width === undefined ? {} : { width: field.width }),
+                      ...(field.box === undefined ? {} : { box: field.box }),
+                      ...(field.issuer ? { issuer: true as const } : {}),
+                      ...(field.if === undefined ? {} : { if: { box: field.if.box, is: field.if.is, not: field.if.not ?? false } }),
+                    }),
+                  ),
+                },
+              }),
           tables: form.tables.map((table) => ({ brackets: table.brackets, amount: parse(entry, table.amount), amountText: table.amount, parts: table.parts })),
         };
         if (form.french) {
@@ -729,14 +810,20 @@ function checkBrackets(rows: BracketRow[], fail: (message: string) => never) {
     const previous = rows[index - 1]?.upTo ?? null;
     if (row.upTo && previous && !row.upTo.gt(previous)) fail("Brackets must go up");
     if (row.rate.isNegative()) fail("A rate can't be negative");
-    // A printed base is the exact tax below the bracket, rounded to the cent, or (as California's schedules print it)
-    // the printed base below it plus that bracket's tax, rounded to the cent: anything else is a typo.
+    // A printed base is the exact tax below the bracket, rounded to the cent or (as New York's schedules print it) to
+    // the dollar, or (as California's print it) the printed base below it plus that bracket's tax, rounded to the cent:
+    // anything else is a typo.
     const below = rows[index - 1];
     const chained =
       below?.base !== undefined && below.upTo !== null
         ? below.base.add(below.upTo.sub(rows[index - 2]?.upTo ?? Dec.ZERO).mul(below.rate)).roundTo(2, "HALF_UP")
         : null;
-    if (row.base !== undefined && !row.base.eq(exact.roundTo(2, "HALF_UP")) && !(chained !== null && row.base.eq(chained))) {
+    if (
+      row.base !== undefined &&
+      !row.base.eq(exact.roundTo(2, "HALF_UP")) &&
+      !row.base.eq(exact.roundTo(0, "HALF_UP")) &&
+      !(chained !== null && row.base.eq(chained))
+    ) {
       fail(`The base of bracket ${index + 1} is ${row.base.toString()}; the brackets below it give ${exact.roundTo(2, "HALF_UP").toString()}`);
     }
     if (row.upTo) exact = exact.add(row.upTo.sub(previous ?? Dec.ZERO).mul(row.rate));
@@ -950,6 +1037,36 @@ function checkRuleSet(ruleSet: RuleSet, fail: (entry: string, message: string, c
           for (const option of Object.keys(field.labels)) if (!question!.options?.includes(option)) fail(where, `${field.question} has no answer ${option}`);
         }
         if (field.when && formulaType(ruleSet, field.when.formula, at2(where), new Set()) !== "boolean") fail(where, "when must be a yes/no value");
+      }
+    }
+    if (form.slips) {
+      const table = form.slips;
+      const where = `${entry}.slips`;
+      if (form.french) fail(entry, "A form with a table of slips has no French version");
+      const types = table.types.map((type) => ruleSet.slips.get(type) ?? fail(where, `No slip type ${type}`));
+      if (table.spouse && formulaType(ruleSet, table.spouse, (message, column) => fail(where, message, column), new Set()) !== "boolean") fail(where, "spouse must be a yes/no value");
+      const checkCondition = (at: string, condition: { box: string; is: string[] }) => {
+        for (const slip of types) {
+          const codes = slip.codes[condition.box] ?? fail(at, `Box ${condition.box} of ${slip.id} doesn't hold a code`);
+          for (const each of condition.is) if (!codes.includes(each)) fail(at, `Box ${condition.box} of ${slip.id} has no code ${each}`);
+        }
+      };
+      if (table.which) checkCondition(where, table.which);
+      for (const field of table.fields) {
+        const at3 = `${where}.${field.key}`;
+        if (field.page > form.pages) fail(at3, `The form has ${form.pages} pages`);
+        if (field.column > table.columns) fail(at3, `The table has ${table.columns} columns`);
+        for (const slip of types) {
+          if (field.box !== undefined) {
+            if (!(field.box in slip.boxes)) fail(at3, `${slip.id} has no box ${field.box}`);
+            const code = field.box in slip.codes;
+            if (field.kind === "text" && !code) fail(at3, `Box ${field.box} holds an amount: write it in an amount row`);
+            if (field.kind === "amount" && code) fail(at3, `Box ${field.box} holds a code: write it in a text box`);
+          } else if (field.kind !== "text") {
+            fail(at3, "The issuer's name goes in a text box");
+          }
+        }
+        if (field.if) checkCondition(at3, field.if);
       }
     }
     for (const table of form.tables) {

@@ -117,6 +117,16 @@ const sourceDependantField = z.union([
   z.strictObject({ text: z.enum(DEPENDANT_FACTS) }),
   z.strictObject({ choice: z.string().min(1), labels: z.record(z.string(), z.string().min(1)) }),
 ]);
+/**
+ * A field of a form's table of slips (Form IT-2's W-2 records), by its place's name (each column's place is
+ * `<name>@<column>`): one of the slip's boxes (`box`: its amount, or its code written as text) or its issuer's name
+ * (`issuer`), written when the slip's box `if.box` holds one of `if.is` (with `not`, none of them).
+ */
+const sourceSlipCondition = z.strictObject({ box: z.string().min(1), is: z.array(z.string().min(1)).min(1), not: z.literal(true).optional() });
+const sourceSlipField = z.union([
+  z.strictObject({ box: z.string().min(1), if: sourceSlipCondition.optional() }),
+  z.strictObject({ issuer: z.literal(true), if: sourceSlipCondition.optional() }),
+]);
 const sourceForm = z.strictObject({
   title: z.string().min(1),
   url: z.url(),
@@ -138,6 +148,20 @@ const sourceForm = z.strictObject({
       columns: z.number().int().min(1),
       more: z.string().optional(),
       fields: z.record(z.string(), sourceDependantField),
+    })
+    .optional(),
+  /**
+   * The form's table of slips: the return's slips of one type or of several (the person's, and the spouse's too when
+   * `spouse` is yes), those whose box `which.box` holds one of `which.is` when it says so, one per column, as many as
+   * the form has columns; the others are named on the worksheet.
+   */
+  slips: z
+    .strictObject({
+      type: z.union([z.string().min(1), z.array(z.string().min(1)).min(1)]),
+      which: sourceSlipCondition.optional(),
+      spouse: z.string().min(1).optional(),
+      columns: z.number().int().min(1),
+      fields: z.record(z.string(), sourceSlipField),
     })
     .optional(),
   tables: z
@@ -357,6 +381,7 @@ function placeForm(form: z.infer<typeof sourceForm>, layout: z.infer<typeof sour
       return { key, kind: "amount", page, x, y, value: spec.value, ...(spec.when === undefined ? {} : { when: spec.when }), ...(spec.zero ? { zero: true } : {}), ...(plain ? { plain } : {}) };
     }),
     ...(form.dependants === undefined ? {} : { dependants: placeDependants(form.dependants, layout!, fail) }),
+    ...(form.slips === undefined ? {} : { slips: placeSlips(form.slips, layout!, fail) }),
     tables: (form.tables ?? []).map((table) => ({
       brackets: table.brackets,
       amount: table.amount,
@@ -409,6 +434,38 @@ function placeDependants(
   }
   const more = table.more === undefined ? undefined : (layout.ticks?.[table.more] ?? fail(`The form has no tick box ${table.more} (form-layout.yaml)`));
   return { ...(table.when === undefined ? {} : { when: table.when }), which: table.which, columns: table.columns, ...(more ? { more } : {}), fields };
+}
+
+/** A table of slips placed: each field once per column, at `<name>@<column>`, in a text box or as an amount row. */
+function placeSlips(
+  table: NonNullable<z.infer<typeof sourceForm>["slips"]>,
+  layout: z.infer<typeof sourceLayout>,
+  fail: (message: string) => never,
+): NonNullable<CompiledRules["forms"][string]["slips"]> {
+  const fields: NonNullable<CompiledRules["forms"][string]["slips"]>["fields"] = [];
+  for (let column = 1; column <= table.columns; column += 1) {
+    for (const [name, spec] of Object.entries(table.fields)) {
+      const key = `${name}@${column}`;
+      const source = "box" in spec ? { box: spec.box } : { issuer: true as const };
+      const condition = spec.if === undefined ? {} : { if: { box: spec.if.box, is: spec.if.is, ...(spec.if.not ? { not: true as const } : {}) } };
+      const text = layout.text?.[key];
+      if (text) {
+        const [page, x, y, width] = text;
+        fields.push({ key, column, kind: "text", page, x, y, width, ...source, ...condition });
+        continue;
+      }
+      const [page, x, y] = layout.rows[key] ?? fail(`The form has no row or text box ${key} (form-layout.yaml)`);
+      const plain = (layout.plain ?? []).includes(key);
+      fields.push({ key, column, kind: "amount", page, x, y, ...source, ...condition, ...(plain ? { plain } : {}) });
+    }
+  }
+  return {
+    types: typeof table.type === "string" ? [table.type] : table.type,
+    ...(table.which === undefined ? {} : { which: { box: table.which.box, is: table.which.is, ...(table.which.not ? { not: true as const } : {}) } }),
+    ...(table.spouse === undefined ? {} : { spouse: table.spouse }),
+    columns: table.columns,
+    fields,
+  };
 }
 
 function parse<T>(schema: z.ZodType<T>, file: SourceFile): T {

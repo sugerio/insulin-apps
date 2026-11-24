@@ -348,7 +348,7 @@ describe("Upload documents", () => {
     const notes = await screen.findAllByText(/^May be the same slip as/);
     expect(notes.map((note) => note.textContent)).toEqual(["May be the same slip as the T4 from Maple Corp above: if so, remove one; if they're different slips, keep both."]);
     expect(within(notes[0]!.closest("li")!).getByText(/Box 22/)).toBeTruthy();
-    expect((screen.getByRole("button", { name: "Confirm 5 slips" }) as HTMLButtonElement).disabled).toBe(false);
+    expect((screen.getByRole("button", { name: "Confirm 5 slips and continue" }) as HTMLButtonElement).disabled).toBe(false);
   });
 
   it("shows a slip read from a file at Confirm, with the box to check and its file", async () => {

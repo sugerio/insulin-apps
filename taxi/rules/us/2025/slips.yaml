@@ -25,14 +25,21 @@ slips:
       15: State
       16: State wages, tips, etc.
       17: State income tax
-    # Box 15 holds the state's two-letter code (the employer's state ID number after it isn't read).
+      18: Local wages, tips, etc.
+      19: Local income tax
+      20: Locality name
+    # Box 15 holds the state's two-letter code (the employer's state ID number after it isn't read); box 20 the locality
+    # when it is New York City or Yonkers, the two whose tax this app works out (new-york.yaml).
     codes:
+      20: [NYC, YONKERS]
       15: &states [AL, AK, AZ, AR, CA, CO, CT, DE, DC, FL, GA, HI, ID, IL, IN, IA, KS, KY, LA, ME, MD, MA, MI, MN, MS, MO, MT, NE, NV, NH, NJ, NM, NY, NC, ND, OH, OK, OR, PA, RI, SC, SD, TN, TX, UT, VT, VA, WA, WV, WI, WY]
     # Box 3 caps box 4, which is read; box 11 is already in box 1. Box 7, the tips reported to the employer (already in
     # box 1), starts the qualified tips (schedule1a.yaml); box 17, the state income tax withheld, is a tax itemized on
-    # Schedule A (itemized.yaml) and, with box 15, California's withholding; box 16 with box 15 is California earned
-    # income (california.yaml); box 12 code W limits the HSA deduction (adjustments.yaml).
-    informational: [3, 11]
+    # Schedule A (itemized.yaml) and, with box 15, California's or New York's withholding; box 16 with box 15 is
+    # California earned income (california.yaml); box 19 with box 20 is New York City's or Yonkers' withholding, box 18
+    # only says which wages it was withheld from (new-york.yaml); box 12 code W limits the HSA deduction
+    # (adjustments.yaml).
+    informational: [3, 11, 18]
 
   INT:
     title: Form 1099-INT Interest Income

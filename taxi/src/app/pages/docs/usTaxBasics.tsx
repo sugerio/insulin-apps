@@ -1,12 +1,12 @@
 import { DocLink, InApp, type DocTopic } from "./parts.tsx";
 
-// Docs › US tax basics: the background a person needs to prepare a US federal return, and California's. General
-// information.
+// Docs › US tax basics: the background a person needs to prepare a US federal return, and California's and New York's.
+// General information.
 
 export const usTaxBasics: DocTopic = {
   slug: "us-tax-basics",
   title: "US tax basics",
-  summary: "Form 1040, the deadline, filing status, the forms you get, the standard deduction, capital gains and California's Form 540, in plain words.",
+  summary: "Form 1040, the deadline, filing status, the forms you get, the standard deduction, capital gains, California's Form 540 and New York's Form IT-201, in plain words.",
   group: "tax",
   generalInformation: true,
   sections: [
@@ -20,8 +20,9 @@ export const usTaxBasics: DocTopic = {
             deductions and credits, and works out the federal tax. Each state has its own return.
           </p>
           <InApp>
-            a US year prepares the federal Form 1040, and California's Form 540 for a California resident, and prints them on the IRS's and the
-            Franchise Tax Board's own forms to sign and mail. For another state, file the state return with other software.
+            a US year prepares the federal Form 1040, with California's Form 540 for a California resident or New York's Form IT-201 for a New York
+            resident, and prints them on the IRS's and the state's own forms to sign and mail. For another state, file the state return with other
+            software.
           </InApp>
         </>
       ),
@@ -147,6 +148,30 @@ export const usTaxBasics: DocTopic = {
           <p>
             Married couples in California, a community property state, usually file jointly: filing separately splits the income you earned
             together between you (Form 8958).
+          </p>
+        </>
+      ),
+    },
+    {
+      id: "new-york",
+      title: "New York's Form IT-201",
+      body: (
+        <>
+          <p>
+            A full-year resident of New York State files Form IT-201 with the Department of Taxation and Finance, by the same April 15 deadline. It
+            starts from the federal AGI. New York adds interest on other states' bonds, and subtracts what it doesn't tax, such as social security
+            benefits, interest on U.S. bonds and government pensions. Someone 59½ or older can exclude up to $20,000 of other pension and IRA
+            income.
+          </p>
+          <p>
+            New York has its own standard deduction ($8,000, or $16,050 jointly) and its own tax rates, from 4% to 10.9%. A resident of New York
+            City also pays the New York City income tax on the same return, and a resident of Yonkers a surcharge. A family with children can get
+            the Empire State child credit, and a worker with a low income the New York State and New York City earned income credits; they are paid
+            even with no tax to pay.
+          </p>
+          <p>
+            Each W-2 goes on Form IT-2 with the return, instead of the W-2 itself. A self-employed person with more than $50,000 of earnings in
+            New York City or the counties near it also pays the MCTMT, a tax for the region's public transit.
           </p>
         </>
       ),

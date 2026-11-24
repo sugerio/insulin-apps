@@ -3,7 +3,7 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { OPS, getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { Document, parse, visit } from "yaml";
-import { ftbLineOf, measureIrsForm, readFtbFields, readIrsFields, type IrsPlace } from "./form-irs.ts";
+import { ftbLineOf, measureIrsForm, nyLineOf, readFtbFields, readIrsFields, readNyFields, type IrsPlace } from "./form-irs.ts";
 import { measureForm, measureRqForm, type LabelPlace, type PlaceSpec, type Shape, type TextItem } from "./form-measure.ts";
 import { RULES_ROOT } from "./rules-source.ts";
 
@@ -16,7 +16,8 @@ import { RULES_ROOT } from "./rules-source.ts";
 // draws); scripts/form-measure.ts says how a place is found from them. The two publishers draw their boxes differently,
 // so a form whose url in forms.yaml is on revenuquebec.ca is measured Revenu Québec's way. An IRS form isn't measured
 // from its drawing: its fields' boxes and labels place it (scripts/form-irs.ts), with the places in IRS_PLACES. A
-// California form (its url on ftb.ca.gov) is placed the same way, from its fields' tooltips.
+// California form (its url on ftb.ca.gov) is placed the same way, from its fields' tooltips, and a New York form (its
+// url on tax.ny.gov) from its fields' names.
 //
 // The layout records the SHA-256 of the PDF it measured: the app refuses to fill a different file. The PDFs themselves
 // are never committed (the CRA's are Crown copyright; the repository holds no binary files).
@@ -299,6 +300,136 @@ const IRS_PLACES: Record<string, Record<string, IrsPlace>> = {
     ...columns("firstName", "First name", ["3514_Form_1008", "3514_Form_1016", "3514_Form_1024"]),
     ...columns("lastName", "Last Name", ["3514_Form_1009", "3514_Form_1017", "3514_Form_1025"]),
   },
+  // New York's forms (tax.ny.gov): a field's name is its label. Form IT-201's filing status is one box with five
+  // choices, in the order of their circled numbers (1 Single to 5 Qualifying surviving spouse); each Yes/No question is
+  // a box with two choices, Yes first.
+  IT201: {
+    firstName: { field: "TP_first_name", label: "TP_first_name" },
+    lastName: { field: "TP_last_name", label: "TP_last_name" },
+    spouseFirstName: { field: "Spouse_first_name", label: "Spouse_first_name" },
+    spouseLastName: { field: "Spouse_last_name", label: "Spouse_last_name" },
+    names3: { field: "Name_as_page1", label: "Name_as_page1" },
+    single: { field: "Filing_status#1", label: "Filing_status" },
+    joint: { field: "Filing_status#2", label: "Filing_status" },
+    separate: { field: "Filing_status#3", label: "Filing_status" },
+    hoh: { field: "Filing_status#4", label: "Filing_status" },
+    qss: { field: "Filing_status#5", label: "Filing_status" },
+    itemizedYes: { field: "Itemized#1", label: "Itemized" },
+    itemizedNo: { field: "Itemized#2", label: "Itemized" },
+    claimableYes: { field: "Dependent#1", label: "Dependent" },
+    claimableNo: { field: "Dependent#2", label: "Dependent" },
+    yonkersYes: { field: "yonkers_freeze_credit#1", label: "yonkers_freeze_credit" },
+    yonkersNo: { field: "yonkers_freeze_credit#2", label: "yonkers_freeze_credit" },
+    yonkersMonths: { field: "D1_Yonkers", label: "D1_Yonkers", count: true },
+    yonkersSpouseMonths: { field: "D3_Yonkers", label: "D3_Yonkers", count: true },
+    nycYes: { field: "E1#1", label: "E1" },
+    nycNo: { field: "E1#2", label: "E1" },
+    nycMonths: { field: "F1_NYC", label: "F1_NYC", count: true },
+    nycSpouseMonths: { field: "F2_NYC", label: "F2_NYC", count: true },
+    ...columns("firstName", "H_first", [1, 2, 3, 4, 5, 6, 7].map((row) => `H_first${row}`)),
+    ...columns("lastName", "H_last", [1, 2, 3, 4, 5, 6, 7].map((row) => `H_last${row}`)),
+    ...columns("relationship", "H_relationship", [1, 2, 3, 4, 5, 6, 7].map((row) => `H_relationship${row}`)),
+    moreDependants: { field: "H_additional_dependents", label: "H_additional_dependents" },
+    standard: { field: "34Deduction#1", label: "34Deduction" },
+    itemized: { field: "34Deduction#2", label: "34Deduction" },
+  },
+  // Form IT-2: two W-2 records, the second's fields named with "2_" before them.
+  IT2: Object.fromEntries(
+    ["", "2_"].flatMap((prefix, index) =>
+      [
+        ["employer", "Box_c1"],
+        ["1", "Box_1"],
+        ["8", "Box_8"],
+        ["10", "Box_10"],
+        ["11", "Box_11"],
+        ["16a", "Box_16a"],
+        ["17a", "Box_17a"],
+        ["15b", "Box_15b"],
+        ["16b", "Box_16b"],
+        ["17b", "Box_17b"],
+        ["18a", "Box_18a"],
+        ["19a", "Box_19a"],
+        ["20a", "Box_20a"],
+      ].map(([key, field]) => [`${key}@${index + 1}`, { field: `${prefix}${field}`, label: `${prefix}${field}` }]),
+    ),
+  ),
+  // Form IT-1099-R: three records, the second's fields named with "2" after them and the third's (on page 2) with "3".
+  IT1099R: {
+    names: { field: "Recipent's Name", label: "Recipent's Name" },
+    ...Object.fromEntries(
+      ["", "2", "3"].flatMap((suffix, index) =>
+        [
+          ["payer", "Payer's Name & Addr-1"],
+          ["1", "Box 1 Dollar"],
+          ["2a", "Box 2a Dollar"],
+          ["code", "Dist-Code"],
+          ["12a", "Box 12a Dollar"],
+          ["14", "Box 14 Dollar"],
+          ["15a", "Box 15a Dollar"],
+          ["locality", "Locality Name A"],
+          ["17a", "Box 17a Dollar"],
+        ].map(([key, field]) => [`${key}@${index + 1}`, { field: `${field}${suffix}`, label: `${field}${suffix}` }]),
+      ),
+    ),
+  },
+  IT196: {
+    names: { field: "Name", label: "Name" },
+    incomeTaxes: { field: "Line5ab#1", label: "Line5ab" },
+    overLimitYes: { field: "Over_line19#1", label: "Over_line19" },
+    overLimitNo: { field: "Over_line19#2", label: "Over_line19" },
+  },
+  // Form IT-213's fields are named by zone, with tooltips: lines 1 to 9 down the right, and the table of children
+  // (first name, last name) below.
+  IT213: {
+    names: { field: "Page 1 Zone 6", label: "Name(s) as shown on return" },
+    ...Object.fromEntries(
+      [
+        ["1", 12, "1 Number of qualifying children"],
+        ["2", 15, "2 Multiply line 1"],
+        ["3", 19, "3 Number of qualifying children"],
+        ["4", 22, "4 Multiply line 3"],
+        ["5", 26, "5 Add lines 2 and 4"],
+        ["6", 30, "6 Enter your federal adjusted gross income"],
+        ["7", 39, "7 Is the amount on line 6"],
+        ["8", 43, "8 Multiply line 7"],
+        ["9", 47, "9 Subtract line 8"],
+      ].map(([line, zone, label]) => [line, { field: `Page 1 Zone ${zone}`, label: String(label), count: true as const }]),
+    ),
+    ...columns("firstName", "First Name, Row", [51, 52, 53, 54, 55, 56].map((zone) => `Page 1 Zone ${zone}`)),
+    ...columns("lastName", "Last name", [63, 64, 65, 66, 67, 68].map((zone) => `Page 1 Zone ${zone}`)),
+  },
+  IT215: {
+    names: { field: "Your last name", label: "Your last name" },
+    // Lines 1 to 5's Yes/No boxes are named Line 1, 1a, 2, 3 and 5: each is the line below the one its name says.
+    claimedYes: { field: "Line 1#1", label: "Line 1" },
+    investmentNo: { field: "Line 1a#2", label: "Line 1a" },
+    unmarriedNo: { field: "Line 2#2", label: "Line 2" },
+    childrenYes: { field: "Line 3#1", label: "Line 3" },
+    childrenNo: { field: "Line 3#2", label: "Line 3" },
+    irsFiguresNo: { field: "Line 5#2", label: "Line 5" },
+    ...columns("firstName", "ln34fn", [1, 2, 3].map((row) => `ln34fn${row}`)),
+    ...columns("lastName", "ln34ln", [1, 2, 3].map((row) => `ln34ln${row}`)),
+    ...columns("relationship", "ln34real", [1, 2, 3].map((row) => `ln34real${row}`)),
+    ...Object.fromEntries([1, 2, 3].map((row) => [`months@${row}`, { field: `month${row}`, label: "month", count: true as const }])),
+  },
+  IT216: {
+    names: { field: "Your last name", label: "Your last name" },
+    "3": { field: "3 total qualifying persons", label: "3 total qualifying persons", count: true },
+    "13": { field: "13 first number16", label: "13 first number16" },
+    "13agi": { field: "13 IT201 filers dollars16", label: "13 IT201 filers dollars16" },
+    ...columns("firstName", "3 first name", [1, 2, 3].map((row) => `3 first name ${row}16`)),
+    ...columns("lastName", "3 last name", [1, 2, 3].map((row) => `3 last name ${row}16`)),
+    ...columns("expenses", "3 qualified expenses", [1, 2, 3].map((row) => `3 qualified expenses ${row}16`)),
+  },
+  IT270: {
+    names: { field: "NameReturn", label: "NameReturn" },
+  },
+  IT272: {
+    names: { field: "name as shown on return", label: "name as shown on return" },
+    spouseNames: { field: "spouses as shown on return", label: "spouses as shown on return" },
+    notClaimed: { field: "Line 1#2", label: "Line 1" },
+    resident: { field: "Line 2#1", label: "Line 2" },
+  },
 };
 
 /**
@@ -359,7 +490,9 @@ for (const spec of specs) {
     ? measureIrsForm(await readIrsFields(new Uint8Array(bytes)), IRS_PLACES[form])
     : publishedOn(form, "ftb.ca.gov")
       ? measureIrsForm(await readFtbFields(new Uint8Array(bytes)), IRS_PLACES[form], { lineOf: ftbLineOf, pagePrefix: true, skipAmbiguous: true })
-      : (publishedOn(form, "revenuquebec.ca") ? measureRqForm : measureForm)(items, shapes, placesOf(form));
+      : publishedOn(form, "tax.ny.gov")
+        ? measureIrsForm(await readNyFields(new Uint8Array(bytes)), IRS_PLACES[form], { lineOf: nyLineOf })
+        : (publishedOn(form, "revenuquebec.ca") ? measureRqForm : measureForm)(items, shapes, placesOf(form));
   current[form] = { sha256: createHash("sha256").update(bytes).digest("hex"), pages: doc.numPages, ...measured };
   console.log(`form-layout: ${form}: ${doc.numPages} pages, ${Object.keys(measured.rows).length} rows, ${Object.keys(measured.columns ?? {}).length} rows with columns`);
 }

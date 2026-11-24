@@ -354,10 +354,19 @@ export async function runGuarded(db: Db, statements: D1PreparedStatement[]): Pro
 export async function setYearPeople(db: Db, caller: Caller, year: number, input: SetYearPeople, now: number): Promise<TaxYear> {
   const row = await yearRow(db, caller.orgId, year);
   if (!row) throw notFound(`The ${year} tax year hasn't been started`);
-  checkMembers(await listPeople(db, caller.orgId), input.people);
+  const people = await listPeople(db, caller.orgId);
+  checkMembers(people, input.people);
   const keep = JSON.stringify(input.people);
+  // A joint return needs the spouse in the year: without them, the couple files separately (the only status left).
+  const spouse = people.find((person) => person.relationship === "spouse");
+  const spouseLeaves = spouse !== undefined && !input.people.includes(spouse.id);
+  /** The files uploaded in the return of someone taken out: a file still holding a slip of someone kept stays. */
+  const leftFiles = `org_id = ? AND tax_year_id = ? AND person_id IS NOT NULL AND person_id NOT IN (SELECT value FROM json_each(?))`;
+  const stillUsed = `EXISTS (SELECT 1 FROM slips WHERE slips.document_id = documents.id)`;
   await runGuarded(db, [
-    bumpRevision(db, caller.orgId, row.id, input.revision, now),
+    spouseLeaves && row.filing_status === "joint"
+      ? bumpRevision(db, caller.orgId, row.id, input.revision, now, "filing_status = ?, ", ["separate"])
+      : bumpRevision(db, caller.orgId, row.id, input.revision, now),
     db
       .prepare("DELETE FROM tax_year_people WHERE org_id = ? AND tax_year_id = ? AND person_id NOT IN (SELECT value FROM json_each(?))")
       .bind(caller.orgId, row.id, keep),
@@ -367,6 +376,13 @@ export async function setYearPeople(db: Db, caller: Caller, year: number, input:
         .prepare(`DELETE FROM ${table} WHERE org_id = ? AND tax_year_id = ? AND person_id NOT IN (SELECT value FROM json_each(?))`)
         .bind(caller.orgId, row.id, keep),
     ),
+    // ...and the files uploaded in their return, once their slips are gone; one still holding someone else's slip goes
+    // to the person preparing's return (no person), as when someone is removed from the profile.
+    db
+      .prepare(`DELETE FROM document_chunks WHERE org_id = ? AND document_id IN (SELECT id FROM documents WHERE ${leftFiles} AND NOT ${stillUsed})`)
+      .bind(caller.orgId, caller.orgId, row.id, keep),
+    db.prepare(`DELETE FROM documents WHERE ${leftFiles} AND NOT ${stillUsed}`).bind(caller.orgId, row.id, keep),
+    db.prepare(`UPDATE documents SET person_id = NULL WHERE ${leftFiles}`).bind(caller.orgId, row.id, keep),
     ...input.people.map((personId) => insertMember(db, caller.orgId, row.id, personId, now)),
     audit(db, caller, "tax_year.people_changed", row.id, now),
   ]);

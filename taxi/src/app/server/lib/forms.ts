@@ -1,4 +1,4 @@
-import { NO_INCOME_TAX_STATES, PROVINCE_NAMES, US_STATE_NAMES, filesJointly, formsToAdd, isAdult, printBlockers, returnsOf, type Province, type Slip, type TaxYear, type UsState } from "#shared";
+import { NO_INCOME_TAX_STATES, PROVINCE_NAMES, SUPPORTED_STATES, US_STATE_NAMES, filesJointly, formsToAdd, isAdult, printBlockers, returnsOf, type Province, type Slip, type TaxYear, type UsState } from "#shared";
 import { Dec } from "../../shared/engine/decimal.ts";
 import { Evaluation } from "../../shared/engine/evaluate.ts";
 import { fillForms, personalFacts } from "../../shared/engine/forms.ts";
@@ -28,13 +28,14 @@ const MAX_FORM_BYTES = 4 * 1024 * 1024;
 
 /**
  * Who publishes a form, for the messages: the CRA on canada.ca, Revenu Québec on revenuquebec.ca, the IRS on irs.gov,
- * California's Franchise Tax Board on ftb.ca.gov.
+ * California's Franchise Tax Board on ftb.ca.gov, New York's Department of Taxation and Finance on tax.ny.gov.
  */
 function publisherOf(url: string): { name: string; site: string } {
   const host = new URL(url).hostname;
   if (host.endsWith("revenuquebec.ca")) return { name: "Revenu Québec", site: "revenuquebec.ca" };
   if (host.endsWith("irs.gov")) return { name: "the IRS", site: "irs.gov" };
   if (host.endsWith("ftb.ca.gov")) return { name: "the Franchise Tax Board", site: "ftb.ca.gov" };
+  if (host.endsWith("tax.ny.gov")) return { name: "the New York State Department of Taxation and Finance", site: "tax.ny.gov" };
   return { name: "the CRA", site: "canada.ca" };
 }
 const capital = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
@@ -43,7 +44,8 @@ const capital = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
 // none of its own. canada.ca also drops a bot's User-Agent that has no contact URL (measured 2026-11-23: "Mozilla/5.0
 // (compatible; Insulin Apps Taxi)" and "Taxi/1.0" are dropped, the same with "+https://…" added are answered), so keep
 // the URL. ftb.ca.gov is the other way round: it refuses (403) a User-Agent with "https://" in it, and answers the same
-// one naming the site without its scheme (measured 2026-11-24), so it gets that.
+// one naming the site without its scheme (measured 2026-11-24), so it gets that. tax.ny.gov answers the usual one
+// (measured 2026-11-24).
 const USER_AGENT = "Mozilla/5.0 (compatible; InsulinAppsTaxi/1.0; +https://taxi.insulinapps.com)";
 const FTB_USER_AGENT = "Mozilla/5.0 (compatible; InsulinAppsTaxi/1.0; +taxi.insulinapps.com)";
 /** The User-Agent a publisher's site answers. */
@@ -151,6 +153,7 @@ export async function printReturn(
     hints: applied.map(({ hint, effect }) => ({ hint, effect })),
     forms: filled.map((each) => each.form),
     left: filled.flatMap((each) => (each.left.length > 0 ? [{ form: each.form, names: each.left }] : [])),
+    slipsLeft: filled.flatMap((each) => (each.slipsLeft.length > 0 ? [{ form: each.form, names: each.slipsLeft }] : [])),
     now,
   });
   return { bytes: new Uint8Array(await buildReturnPdf(forms, worksheet)), name: `Taxi ${year} return - ${person.name}.pdf` };
@@ -193,6 +196,8 @@ interface WorksheetInput {
   forms: FormSpec[];
   /** The dependants a form's table had no room for, by form. */
   left: { form: FormSpec; names: string[] }[];
+  /** A table of slips with no room for some (Form IT-2 has two W-2 records): they go on another copy of the form. */
+  slipsLeft: { form: FormSpec; names: string[] }[];
   now: number;
 }
 
@@ -206,7 +211,11 @@ function worksheetOf(rules: RuleSet, evaluation: Evaluation, view: TaxYear, inpu
     text: `A statement with your other ${form.id === "F2441" ? "qualifying persons" : "dependents"}, attached to ${form.title.split(",")[0]}`,
     notes: [`${form.title.split(",")[0]} has room for ${form.dependants!.columns}: list ${names.join(", ")} with the same details, as its instructions say`],
   }));
-  const toAdd: WorksheetRow[] = [...statements, ...formsToAdd(rules, evaluation, input.personId).map(({ form, why }) => ({ text: form, notes: [why] }))];
+  const copies: WorksheetRow[] = input.slipsLeft.map(({ form, names }) => ({
+    text: `Another ${form.title.split(",")[0]} for your other forms`,
+    notes: [`${form.title.split(",")[0]} has room for ${form.slips!.columns}: fill in another copy, the same way, for ${names.join(", ")}`],
+  }));
+  const toAdd: WorksheetRow[] = [...statements, ...copies, ...formsToAdd(rules, evaluation, input.personId).map(({ form, why }) => ({ text: form, notes: [why] }))];
   const otherForms = toAdd.length > 0 ? 'the forms under "Forms to fill in yourself", below, and any other form not listed above' : "any form not listed above";
   const { intro, result } =
     rules.country === "us"
@@ -335,10 +344,50 @@ function canadaWorksheet(
 }
 
 /**
+ * A state return Taxi prepares with the federal one, as the worksheet sums it up: the rules' line that says the return
+ * has it (`files`), its form, the lines of its result, what is left to fill in by hand and where to send it.
+ */
+interface StateWorksheet {
+  name: string;
+  files: string;
+  form: string;
+  refund: string;
+  owing: string;
+  lines: string[];
+  todo: (joint: boolean) => string;
+  mail: string;
+}
+
+const STATE_WORKSHEETS: StateWorksheet[] = [
+  {
+    name: "California",
+    files: "CAL.files",
+    form: "Form 540",
+    refund: "F540.115",
+    owing: "F540.111",
+    lines: ["F540.17", "F540.19", "F540.31", "F540.64", "F540.78"],
+    todo: (joint) =>
+      `California: Form 540 and its schedules come after the federal forms, filled in the same way. Still to do by hand: the SSNs or ITINs (${joint ? "yours, your spouse's" : "yours"} and each dependent's), your address and county, ${joint ? "your dates of birth" : "your date of birth"}, any contributions, the care providers on FTB 3506 and each child's details on FTB 3514 if you have them; then sign Form 540${joint ? " (both of you)" : ""} and attach Copy B of each W-2 that shows California wages.`,
+    mail: "Mail Form 540 to the Franchise Tax Board, separately from the federal return: with a payment, to PO Box 942867, Sacramento CA 94267-0001; otherwise to PO Box 942840, Sacramento CA 94240-0001. Or file it free online with CalFile or other e-file software (ftb.ca.gov/file).",
+  },
+  {
+    name: "New York",
+    files: "NYS.files",
+    form: "Form IT-201",
+    refund: "IT201.78",
+    owing: "IT201.80",
+    lines: ["IT201.33", "IT201.38", "IT201.46", "IT201.58", "IT201.62", "IT201.76"],
+    todo: (joint) =>
+      `New York: Form IT-201 and its forms come after the federal forms, filled in the same way, with Form IT-2 for your W-2s. Still to do by hand: the social security numbers (${joint ? "yours, your spouse's" : "yours"} and each dependent's), ${joint ? "your dates of birth" : "your date of birth"}, your mailing and home address, your county, school district name and code, the answers at items G and I, each dependent's details at item H, the care providers on Form IT-216, each child's details on Forms IT-213 and IT-215, each student's details and school on Form IT-272, the employers' and payers' addresses and identification numbers on Forms IT-2 and IT-1099-R, and any voluntary contributions (Form IT-227); then sign Form IT-201${joint ? " (both of you)" : ""}. Don't send Forms W-2.`,
+    mail: "Mail Form IT-201 to the New York State Department of Taxation and Finance, separately from the federal return: with a payment (and Form IT-201-V), to State Processing Center, PO Box 15555, Albany NY 12212-5555; otherwise to State Processing Center, PO Box 61000, Albany NY 12261-0001. Or file it online with e-file software (tax.ny.gov, search: e-file).",
+  },
+];
+
+/**
  * A US return's worksheet text: what Taxi filled in, what is left to fill in by hand, and how to file (by mail to the
- * IRS, at the address irs.gov gives for the state, or by e-file); for a California return, the same for Form 540, filed
- * apart with the Franchise Tax Board; for another state, that its return is filed elsewhere; and the result, from the
- * rules' result lines.
+ * IRS, at the address irs.gov gives for the state, or by e-file); for a state return Taxi prepares (STATE_WORKSHEETS),
+ * the same for it, filed apart with the state; for another state, that its return is filed elsewhere; and the result,
+ * from the rules' result lines.
  */
 function usWorksheet(
   rules: RuleSet,
@@ -354,17 +403,19 @@ function usWorksheet(
     owing && !owing.isZero() ? { text: named("F1040.37"), amount: money(owing) } : { text: named("F1040.34"), amount: money(line("F1040.34") ?? Dec.ZERO) },
     ...["F1040.9", "F1040.11a", "F1040.12e", "F1040.15", "F1040.16", "F1040.24", "F1040.33"].map((id) => ({ text: named(id), amount: money(line(id) ?? Dec.ZERO) })),
   ];
-  const california = line("CAL.files")?.eq(Dec.ONE) ?? false;
-  if (california) {
-    const caOwing = line("F540.111");
-    const caNamed = (id: string) => `California: ${rules.lines.get(id)!.label} (Form 540, line ${id.split(".")[1]})`;
+  const states = STATE_WORKSHEETS.filter((each) => rules.lines.has(each.files) && (line(each.files)?.eq(Dec.ONE) ?? false));
+  for (const each of states) {
+    const stateNamed = (id: string) => `${each.name}: ${rules.lines.get(id)!.label} (${each.form}, line ${id.split(".")[1]})`;
+    const stateOwing = line(each.owing);
     result.push(
-      caOwing && !caOwing.isZero() ? { text: caNamed("F540.111"), amount: money(caOwing) } : { text: caNamed("F540.115"), amount: money(line("F540.115") ?? Dec.ZERO) },
-      ...["F540.17", "F540.19", "F540.31", "F540.64", "F540.78"].map((id) => ({ text: caNamed(id), amount: money(line(id) ?? Dec.ZERO) })),
+      stateOwing && !stateOwing.isZero()
+        ? { text: stateNamed(each.owing), amount: money(stateOwing) }
+        : { text: stateNamed(each.refund), amount: money(line(each.refund) ?? Dec.ZERO) },
+      ...each.lines.map((id) => ({ text: stateNamed(id), amount: money(line(id) ?? Dec.ZERO) })),
     );
   }
   const otherState =
-    state === null || state === "CA" || !(state in US_STATE_NAMES)
+    state === null || states.length > 0 || !(state in US_STATE_NAMES) || SUPPORTED_STATES.includes(state as UsState)
       ? []
       : [
           NO_INCOME_TAX_STATES.includes(state as UsState)
@@ -378,12 +429,8 @@ function usWorksheet(
       `Still to do by hand before you file on paper: the social security numbers (${joint ? "yours, your spouse's" : "yours"} and each dependent's or child's) on Form 1040 and at the top of each schedule and form; your address; the questions Taxi doesn't ask (the presidential election campaign fund, digital assets, whether your main home was in the U.S., and "And in the U.S." for each dependent); your bank details if you want the refund deposited; on Form 2441, each care provider's name, address and identifying number (Part I);${carLoan ? " on Schedule 1-A, line 22, the vehicle identification number (VIN) of each car whose loan interest you deduct;" : ""}${business ? " on Schedule C, the business's description, code, name, address and accounting method, the questions at the top, Part IV about your vehicle if you deduct car expenses, and what your other expenses are in Part V; on Form 8995, each business's name;" : ""}${education ? " on page 2 of Form 8863, the student's social security number, each school's name, address and EIN with the Form 1098-T questions (line 22), and lines 23 to 26 for a student with the lifetime learning credit;" : ""} and ${otherForms}. Then sign and date Form 1040${joint ? " (both of you)" : ""}, and attach Copy B of each Form W-2. Keep your forms and records; the IRS may ask for them.`,
       "Mail the return to the IRS address for your state on irs.gov/WhereToFile: it is different when you send a payment with it.",
       "To file online: copy the amounts into IRS e-file software (irs.gov/efile) and file there.",
-      ...(california
-        ? [
-            `California: Form 540 and its schedules come after the federal forms, filled in the same way. Still to do by hand: the SSNs or ITINs (${joint ? "yours, your spouse's" : "yours"} and each dependent's), your address and county, ${joint ? "your dates of birth" : "your date of birth"}, any contributions, the care providers on FTB 3506 and each child's details on FTB 3514 if you have them; then sign Form 540${joint ? " (both of you)" : ""} and attach Copy B of each W-2 that shows California wages.`,
-            "Mail Form 540 to the Franchise Tax Board, separately from the federal return: with a payment, to PO Box 942867, Sacramento CA 94267-0001; otherwise to PO Box 942840, Sacramento CA 94240-0001. Or file it free online with CalFile or other e-file software (ftb.ca.gov/file).",
-          ]
-        : otherState),
+      ...states.flatMap((each) => [each.todo(joint), each.mail]),
+      ...otherState,
       "Every line Taxi works out is listed below with how it was worked out.",
     ],
     result,

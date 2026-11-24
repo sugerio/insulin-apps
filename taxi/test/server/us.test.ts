@@ -160,10 +160,28 @@ describe("printing a US return", () => {
     );
     for (const [index, each] of adults.entries()) {
       const w2 = W2(each.id, index ? "Initech" : "Acme Tools", index ? "30000" : "40000");
-      const boxes = state === "CA" ? { ...w2.boxes, 15: "CA", 16: w2.boxes[1], 17: "1500" } : w2.boxes;
+      const boxes =
+        state === "CA"
+          ? { ...w2.boxes, 15: "CA", 16: w2.boxes[1], 17: "1500" }
+          : state === "NY"
+            ? { ...w2.boxes, 15: "NY", 16: w2.boxes[1], 17: "1500", 18: w2.boxes[1], 19: "600", 20: "NYC" }
+            : w2.boxes;
       year = await json<TaxYear>(server.call("POST", "/api/years/2025/slips", { body: { revision: year.revision, ...w2, boxes } }), 201);
       const california = state === "CA" ? { livedInCaliforniaAllYear: true, ...(index === 0 ? { caFullYearCoverage: true, caUseTax: "0", caPaidRent: false } : {}), caEstimatedPayments: "0" } : {};
-      year = await json<TaxYear>(server.call("PUT", "/api/years/2025/answers", { body: { revision: year.revision, personId: each.id, answers: { ...ANSWERS, ...california } } }));
+      const newYork =
+        state === "NY"
+          ? {
+              livedInNewYorkAllYear: true,
+              nyLocality: "nyc",
+              nyPublicRetirement: "0",
+              nyOtherAdditions: false,
+              nyOtherSubtractions: false,
+              ny529: "0",
+              nyEstimatedPayments: "0",
+              ...(index === 0 ? { nySalesTax: "0" } : {}),
+            }
+          : {};
+      year = await json<TaxYear>(server.call("PUT", "/api/years/2025/answers", { body: { revision: year.revision, personId: each.id, answers: { ...ANSWERS, ...california, ...newYork } } }));
     }
     year = await json<TaxYear>(server.call("POST", "/api/years/2025/slips/confirm", { body: { revision: year.revision } }));
     expect(year.returns[0]!.steps.finish).toBe("done");
@@ -228,12 +246,49 @@ describe("printing a US return", () => {
     expect(userAgentFor(rules.forms.get("F1040")!.url)).toContain("+https://");
   });
 
-  it("says a state other than California is filed elsewhere", async () => {
+  it("prints a New York City resident's Form IT-201 and Form IT-2 after Form 1040, from tax.ny.gov, in whole dollars, with where to mail it", async () => {
+    server.close();
+    const source = standIn();
+    server = await startServer({ now: () => 1_767_225_600_000, forms: source });
     const { alex } = await finished(false, "NY");
+    const response = await server.call("GET", `/api/years/2025/returns/${alex.id}/forms`);
+    expect(response.status, await response.clone().text()).toBe(200);
+    expect(source.fetched).toEqual([
+      "https://www.irs.gov/pub/irs-prior/f1040--2025.pdf",
+      "https://www.tax.ny.gov/pdf/2025/inc/it201_2025_fill_in.pdf",
+      "https://www.tax.ny.gov/pdf/2025/inc/it2_2025_fill_in.pdf",
+    ]);
+    const pages = await pagesOf(await response.arrayBuffer());
+    const it201 = rules.forms.get("IT201")!;
+    const it2 = rules.forms.get("IT2")!;
+    const start = rules.forms.get("F1040")!.pages;
+    const near = (pageOffset: number, place: { page: number; y: number }) =>
+      pages[pageOffset + place.page - 1]!.filter((item) => Math.abs(item.y - place.y) < 4).map((item) => item.text);
+    const field = (key: string) => it201.fields.find((each) => each.key === key)!;
+    // Whole dollars: New York prints the cents. New York City's resident tax, and its withholding from box 19.
+    expect(near(start, field("33"))).toContain("40,000");
+    expect(near(start, field("33"))).not.toContain("40,000.00");
+    expect(near(start, field("72"))).toContain("1,500");
+    expect(near(start, field("73"))).toContain("600");
+    expect(near(start, field("nycMonths"))).toContain("12");
+    // Form IT-2: the W-2 record, from the slip's own boxes.
+    const record = (key: string) => it2.slips!.fields.find((each) => each.key === key)!;
+    expect(near(start + it201.pages, record("employer@1"))).toContain("Acme Tools");
+    expect(near(start + it201.pages, record("16a@1"))).toContain("40,000");
+    expect(near(start + it201.pages, record("20a@1"))).toContain("NYC");
+    const worksheet = pages.slice(start + it201.pages + it2.pages).flat().map((item) => item.text).join(" ");
+    // $1,500 and $600 withheld don't cover New York State's and New York City's tax on $40,000: an amount owed.
+    expect(worksheet).toContain("New York: Amount you owe (Form IT-201, line 80)");
+    expect(worksheet).toContain("PO Box 15555");
+    expect(userAgentFor(it201.url)).toContain("+https://");
+  });
+
+  it("says a state other than California and New York is filed elsewhere", async () => {
+    const { alex } = await finished(false, "NJ");
     const year = await json<TaxYear>(server.call("GET", "/api/years/2025"));
     expect(year.issues).toEqual([]);
     const estimate = await json<{ result: { people: { lines: { id: string }[] }[] } }>(server.call("GET", "/api/years/2025/estimate"));
-    expect(estimate.result.people[0]!.lines.some((line) => line.id.startsWith("F540"))).toBe(false);
+    expect(estimate.result.people[0]!.lines.some((line) => line.id.startsWith("F540") || line.id.startsWith("IT201"))).toBe(false);
     void alex;
   });
 
@@ -329,6 +384,14 @@ describe("a joint return", () => {
     expect(separate.returns.map((each) => each.members)).toEqual([[alex.id], [sam.id]]);
   });
 
+  it("becomes married filing separately when the spouse is taken out of the year", async () => {
+    const { alex, sam, year } = await couple();
+    const joint = await json<TaxYear>(personal(year.revision, "joint", [{ personId: alex.id }, { personId: sam.id }]));
+    const alone = await json<TaxYear>(server.call("PUT", "/api/years/2025/people", { body: { revision: joint.revision, people: [alex.id] } }));
+    expect([alone.filingStatus, alone.issues]).toEqual(["separate", []]);
+    expect(alone.returns.map((each) => each.members)).toEqual([[alex.id]]);
+  });
+
   it("is chosen only by a married couple on a US return, and needs the spouse in the year", async () => {
     const { alex, year } = await couple();
     // Without the spouse in the year, a joint return can't be prepared: the year says so.
@@ -369,11 +432,17 @@ describe("a joint return", () => {
         body: { revision: current.revision, personId, answers: { hasWages: true, hasInterest: false, hasTipsOrOvertime: false, hasCarLoan: false, hasSelfEmployment: false, hasStudentLoan: false, paidForEducation: false, hasDividends: false, hasBrokerSales: false, hasLossCarryover: false, hasIraDistribution: false, hasPension: false, hasSocialSecurity: false, hasOtherIncome: false, hasHsa: false, hasIraContribution: false, hasItemized: false, canBeClaimed: false, isBlind: false, estimatedPayments: "0" } },
       });
     current = await json<TaxYear>(answers(alex.id));
-    // Sam's answers are still missing: the joint return isn't done.
+    // Sam's answers are still missing: the joint return isn't done, but Alex's own income step is.
     expect(current.returns[0]!.steps.income).toBe("todo");
+    const own = (year: TaxYear, personId: string) => year.returns[0]!.memberSteps.find((each) => each.personId === personId)!.steps;
+    expect([own(current, alex.id).income, own(current, sam.id).income]).toEqual(["done", "todo"]);
     current = await json<TaxYear>(answers(sam.id));
+    // Confirming Alex's slips is Alex's step done; Sam's waits for Sam's W-2.
+    current = await json<TaxYear>(server.call("POST", "/api/years/2025/slips/confirm", { body: { revision: current.revision, personId: alex.id } }));
+    expect([own(current, alex.id).confirm, own(current, sam.id).confirm, current.returns[0]!.steps.confirm]).toEqual(["done", "todo", "todo"]);
     current = await json<TaxYear>(server.call("POST", "/api/years/2025/slips/confirm", { body: { revision: current.revision } }));
     expect(current.returns[0]!.steps).toMatchObject({ personal: "done", income: "done", confirm: "done", finish: "done" });
+    expect(own(current, sam.id)).toMatchObject({ income: "done", confirm: "done", finish: "done" });
     const estimate = await json<Estimate>(server.call("GET", "/api/years/2025/estimate"));
     expect(estimate.input.family.filingStatus).toBe("joint");
     const [mine, theirs] = estimate.result.people;

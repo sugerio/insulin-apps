@@ -59,3 +59,13 @@ balances:
 
 # What person.residentAllYear means: a nonresident or dual-status alien files Form 1040-NR, not this return.
 residency: A U.S. citizen or resident alien all year
+
+# What AI reading is told about US documents (server/lib/reader.ts adds the slip types of slips.yaml). {year} is the
+# tax year.
+reading:
+  documents: United States information returns (Forms W-2, 1099 and 1098)
+  notes:
+    - "A W-2 prints boxes 1 to 20; box 12 holds codes, and boxes 13 and 14 are not amounts this app reads: leave them out. The 'a' to 'f' boxes hold numbers, names and addresses, never amounts: leave them out too."
+    - "On a 1099 or 1098, report the payer's or lender's or school's name as issuer. A form can print a box that is a checkbox (such as boxes 7, 8 and 9 of a 1098-T): leave checkboxes out."
+    - "For a Form 1098-T, person is the student, and issuer the school. For a Form 1098-E, person is the borrower, and issuer the lender."
+    - "A corrected form (marked CORRECTED) replaces the first one: read it like any other."

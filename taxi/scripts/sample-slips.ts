@@ -3,11 +3,13 @@ import { join, resolve } from "node:path";
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from "pdf-lib";
 import { rulesFor } from "../src/app/shared/rules/index.ts";
 
-// npm run sample-slips -- [--out <dir>] [--self <name>] [--spouse <name>]
+// npm run sample-slips -- [--country ca|us] [--out <dir>] [--self <name>] [--spouse <name>] [--child <name>]
 //
-// Writes sample 2025 slips as PDFs, for trying the app and for testing AI reading: a T4 for each adult, two T5s (two banks) for the
+// Writes sample 2025 slips as PDFs, for trying the app and for testing AI reading. Canada (the default): a T4 for each adult, two T5s (two banks) for the
 // person preparing, a T4E and a T2202 for the spouse, and receipts and notices: a donation receipt, a dental receipt for the
-// spouse, an RRSP receipt for early 2026, and each adult's 2024 notice of assessment. Every page says it is a synthetic sample. The repository keeps no
+// spouse, an RRSP receipt for early 2026, and each adult's 2024 notice of assessment. The United States: a W-2 for each
+// adult, two 1099-INTs and a 1098-E for the person preparing, a 1099-NEC and a 1098-T for the spouse, and a 1098-T for a
+// child (a dependant's, which isn't added to a return). Every page says it is a synthetic sample. The repository keeps no
 // binary files, so the PDFs are made here and never committed; the default folder is ignored by git and by the app
 // checks. Box labels come from the year's rules (slips.yaml), so a sample shows the boxes the app reads.
 
@@ -16,16 +18,20 @@ const option = (name: string, fallback: string) => {
   const index = args.indexOf(`--${name}`);
   return index >= 0 && args[index + 1] ? args[index + 1]! : fallback;
 };
-const out = resolve(option("out", join(import.meta.dirname, "../.suger/data/sample-slips")));
+const country = option("country", "ca");
+if (country !== "ca" && country !== "us") throw new Error("--country is ca or us");
+const out = resolve(option("out", join(import.meta.dirname, country === "us" ? "../.suger/data/sample-slips-us" : "../.suger/data/sample-slips")));
 const self = option("self", "Alex Martin");
 const spouse = option("spouse", "Sam Martin");
+const child = option("child", "Riley Martin");
 
 const YEAR = 2025;
-const rules = rulesFor("ca", YEAR)!;
+const rules = rulesFor(country, YEAR)!;
 
 interface Sample {
   file: string;
-  type: "T4" | "T5" | "T2202" | "T4E";
+  /** The slip type, as slips.yaml names it. */
+  type: string;
   title: string;
   issuer: { name: string; lines: string[] };
   recipient: { name: string; lines: string[] };
@@ -123,6 +129,75 @@ interface Receipt {
   rows: [string, string][];
 }
 
+const usHome = ["123 Sample Street", "Springfield IL  62701"];
+const usSamples: Sample[] = [
+  {
+    file: `W-2-${slug(self)}-Maple-Corp.pdf`,
+    type: "W2",
+    title: "Wage and Tax Statement",
+    issuer: { name: "Maple Corp", lines: ["100 Main Street", "Springfield IL  62701"] },
+    recipient: { name: self, lines: usHome },
+    boxes: { 1: "60000.00", 2: "6500.00", 3: "60000.00", 4: "3720.00", 5: "60000.00", 6: "870.00", 16: "60000.00", 17: "2970.00" },
+  },
+  {
+    file: `W-2-${slug(spouse)}-Island-Grocers.pdf`,
+    type: "W2",
+    title: "Wage and Tax Statement",
+    issuer: { name: "Island Grocers Inc.", lines: ["55 Harbor Road", "Springfield IL  62702"] },
+    recipient: { name: spouse, lines: usHome },
+    boxes: { 1: "31000.00", 2: "1800.00", 3: "31000.00", 4: "1922.00", 5: "31000.00", 6: "449.50", 16: "31000.00", 17: "1534.50" },
+  },
+  {
+    file: `1099-INT-${slug(self)}-Lakeview-Credit-Union.pdf`,
+    type: "INT",
+    title: "Interest Income",
+    issuer: { name: "Lakeview Credit Union", lines: ["8 Lakeshore Boulevard", "Springfield IL  62703"] },
+    recipient: { name: self, lines: usHome },
+    boxes: { 1: "1250.00" },
+  },
+  {
+    // A second bank: interest from each payer comes on its own 1099-INT, and they add up.
+    file: `1099-INT-${slug(self)}-Northwind-Bank.pdf`,
+    type: "INT",
+    title: "Interest Income",
+    issuer: { name: "Northwind Bank", lines: ["250 Bay Street", "Springfield IL  62704"] },
+    recipient: { name: self, lines: usHome },
+    boxes: { 1: "380.00" },
+  },
+  {
+    file: `1099-NEC-${slug(spouse)}-Harbor-Design.pdf`,
+    type: "NEC",
+    title: "Nonemployee Compensation",
+    issuer: { name: "Harbor Design Studio LLC", lines: ["12 Dock Street", "Springfield IL  62705"] },
+    recipient: { name: spouse, lines: usHome },
+    boxes: { 1: "8400.00" },
+  },
+  {
+    file: `1098-T-${slug(spouse)}-Lakeview-University.pdf`,
+    type: "F1098T",
+    title: "Tuition Statement",
+    issuer: { name: "Lakeview University", lines: ["1 University Avenue", "Springfield IL  62706"] },
+    recipient: { name: spouse, lines: usHome },
+    boxes: { 1: "6000.00", 5: "1500.00" },
+  },
+  {
+    file: `1098-T-${slug(child)}-Prairie-Community-College.pdf`,
+    type: "F1098T",
+    title: "Tuition Statement",
+    issuer: { name: "Prairie Community College", lines: ["400 College Drive", "Springfield IL  62707"] },
+    recipient: { name: child, lines: usHome },
+    boxes: { 1: "3800.00" },
+  },
+  {
+    file: `1098-E-${slug(self)}-Great-Lakes-Loans.pdf`,
+    type: "F1098E",
+    title: "Student Loan Interest Statement",
+    issuer: { name: "Great Lakes Student Loans", lines: ["900 Lender Way", "Madison WI  53703"] },
+    recipient: { name: self, lines: usHome },
+    boxes: { 1: "1800.00" },
+  },
+];
+
 const receipts: Receipt[] = [
   {
     file: `Donation-${slug(self)}-Lakeview-Food-Bank.pdf`,
@@ -203,7 +278,7 @@ function slug(name: string): string {
 
 async function render(sample: Sample): Promise<Uint8Array> {
   const pdf = await PDFDocument.create();
-  pdf.setTitle(`${sample.type} ${YEAR} ${sample.title} (sample)`);
+  pdf.setTitle(`${rules.slips.get(sample.type)!.name ?? sample.type} ${YEAR} ${sample.title} (sample)`);
   pdf.setSubject("Synthetic sample slip for testing Taxi. Not a real tax document.");
   const page = pdf.addPage([612, 792]);
   const font = await pdf.embedFont(StandardFonts.Helvetica);
@@ -213,16 +288,17 @@ async function render(sample: Sample): Promise<Uint8Array> {
   const red = rgb(0.75, 0.1, 0.1);
   const text = (value: string, x: number, y: number, size: number, f: PDFFont = font, color = ink) => page.drawText(value, { x, y, size, font: f, color });
 
-  // Header
-  text(`${sample.type}`, 40, 740, 28, bold);
-  text(`${YEAR}`, 40 + bold.widthOfTextAtSize(sample.type, 28) + 10, 740, 28, font, muted);
+  // Header: the form's printed name (W-2, 1098-T), else its type (T4)
+  const name = rules.slips.get(sample.type)!.name ?? sample.type;
+  text(name, 40, 740, 28, bold);
+  text(`${YEAR}`, 40 + bold.widthOfTextAtSize(name, 28) + 10, 740, 28, font, muted);
   text(sample.title, 40, 718, 13, bold);
   text("SAMPLE - synthetic test data, not issued by any employer or institution", 40, 700, 9, bold, red);
 
   // Issuer and recipient
   block(page, "Issued by", sample.issuer, 40, 670, font, bold);
-  block(page, sample.type === "T2202" ? "Student" : "Recipient", sample.recipient, 320, 670, font, bold);
-  text("Social insurance number: not shown on samples", 320, 604, 8, font, muted);
+  block(page, sample.type === "T2202" || sample.type === "F1098T" ? "Student" : sample.type === "F1098E" ? "Borrower" : "Recipient", sample.recipient, 320, 670, font, bold);
+  text(country === "us" ? "Social security number: not shown on samples" : "Social insurance number: not shown on samples", 320, 604, 8, font, muted);
 
   // Boxes, in printed order, three per row
   const labels = rules.slips.get(sample.type)!.boxes;
@@ -252,7 +328,7 @@ async function render(sample: Sample): Promise<Uint8Array> {
     }
   }
 
-  text("This page was made by Taxi's sample-slips script for testing. It is not a CRA form and has no value for filing.", 40, 40, 8, font, muted);
+  text(`This page was made by Taxi's sample-slips script for testing. It is not ${country === "us" ? "an IRS" : "a CRA"} form and has no value for filing.`, 40, 40, 8, font, muted);
   return pdf.save();
 }
 
@@ -269,11 +345,11 @@ function fit(value: string, font: PDFFont, size: number, width: number): string 
 }
 
 mkdirSync(out, { recursive: true });
-for (const sample of samples) {
+for (const sample of country === "us" ? usSamples : samples) {
   writeFileSync(join(out, sample.file), await render(sample));
   console.log(`sample-slips: wrote ${join(out, sample.file)}`);
 }
-for (const receipt of receipts) {
+for (const receipt of country === "us" ? [] : receipts) {
   writeFileSync(join(out, receipt.file), await renderReceipt(receipt));
   console.log(`sample-slips: wrote ${join(out, receipt.file)}`);
 }

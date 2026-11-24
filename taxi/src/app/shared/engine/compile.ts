@@ -83,6 +83,8 @@ const sourceHint = z.strictObject({
   amount: z.string().min(1).optional(),
   amountLabel: z.string().min(1).optional(),
   effectLabel: z.string().min(1).optional(),
+  filingStatus: z.enum(["joint", "separate"]).optional(),
+  onlyIfSaving: z.boolean().optional(),
 });
 
 const sourceFormula = z.string().min(1);
@@ -172,6 +174,8 @@ const manifestSchema = z.strictObject({
   balances: z.array(z.strictObject({ name: z.string().min(1), refund: z.string(), owing: z.string() })).min(1).optional(),
   /** What person.residentAllYear means, as an explanation names it: "Lived in Canada all year". */
   residency: z.string().min(1).optional(),
+  /** What AI reading is told about the documents of this country: what they are, and how to read the ones that need it. */
+  reading: z.strictObject({ documents: z.string().min(1), notes: z.array(z.string().min(1)) }).optional(),
 });
 const entriesSchema = z.strictObject({
   params: z.record(z.string(), sourceParam.nullable()).optional(),
@@ -195,6 +199,7 @@ export function compileRules(chain: SourceYear[], hash: (text: string) => string
   let outcome: string | undefined;
   let balances: z.infer<typeof manifestSchema>["balances"];
   let residency: string | undefined;
+  let reading: z.infer<typeof manifestSchema>["reading"];
 
   chain.forEach((year, index) => {
     const manifestFile = year.files.find((file) => file.path.endsWith(`/${MANIFEST}`));
@@ -211,6 +216,7 @@ export function compileRules(chain: SourceYear[], hash: (text: string) => string
     outcome = parsedManifest.outcome ?? outcome;
     balances = parsedManifest.balances ?? balances;
     residency = parsedManifest.residency ?? residency;
+    reading = parsedManifest.reading ?? reading;
 
     const seen = new Map<string, string>();
     for (const file of year.files) {
@@ -296,6 +302,7 @@ export function compileRules(chain: SourceYear[], hash: (text: string) => string
     ...(outcome === undefined ? {} : { outcome }),
     balances: balances ?? [],
     ...(residency === undefined ? {} : { residency }),
+    ...(reading === undefined ? {} : { reading }),
   };
   const compiled: CompiledRules = { ...content, version: hash(JSON.stringify(content)) };
   // Loading runs every check the engine relies on: formulas parse, names exist, types agree, no cycles.

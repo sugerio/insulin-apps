@@ -161,6 +161,13 @@ export interface Hint {
   amount?: { formula: Formula; text: string; label: string };
   /** For an info hint with a change: what the difference the change makes is called. */
   effectLabel?: string;
+  /**
+   * The what-if files the year this way instead (a married couple's US return). Only an info hint can: the person
+   * changes the filing status on Personal info, as it changes who is on each return.
+   */
+  filingStatus?: "joint" | "separate";
+  /** An info hint shown only when its what-if raises the year's outcome by $1 or more, as a saving is. */
+  onlyIfSaving?: boolean;
 }
 
 /**
@@ -335,6 +342,11 @@ export interface RuleSet {
   balances: Balance[];
   /** What person.residentAllYear means, as an explanation names it. */
   residency: string;
+  /**
+   * What AI reading is told about this country's documents: what they are ("Canadian personal tax slips, receipts and
+   * notices"), and notes on reading the ones that need it. `{year}`, `{nextYear}` and `{lastYear}` in a note are years.
+   */
+  reading: { documents: string; notes: string[] };
 }
 
 export interface Balance {
@@ -431,11 +443,14 @@ export const compiledRulesSchema = z.strictObject({
       amount: z.string().optional(),
       amountLabel: z.string().optional(),
       effectLabel: z.string().optional(),
+      filingStatus: z.enum(["joint", "separate"]).optional(),
+      onlyIfSaving: z.boolean().optional(),
     }),
   ),
   outcome: z.string().optional(),
   balances: z.array(z.strictObject({ name: z.string(), refund: z.string(), owing: z.string() })),
   residency: z.string().optional(),
+  reading: z.strictObject({ documents: z.string(), notes: z.array(z.string()) }).optional(),
   forms: z.record(
     z.string(),
     z.strictObject({
@@ -572,6 +587,8 @@ export function loadRuleSet(json: unknown, where: (entry: string) => string = ()
       change,
       ...(hint.amount === undefined ? {} : { amount: { formula: parse(entry, hint.amount), text: hint.amount, label: hint.amountLabel! } }),
       ...(hint.effectLabel === undefined ? {} : { effectLabel: hint.effectLabel }),
+      ...(hint.filingStatus === undefined ? {} : { filingStatus: hint.filingStatus }),
+      ...(hint.onlyIfSaving === undefined ? {} : { onlyIfSaving: hint.onlyIfSaving }),
     });
   }
 
@@ -681,6 +698,7 @@ export function loadRuleSet(json: unknown, where: (entry: string) => string = ()
     ...(compiled.outcome === undefined ? {} : { outcome: compiled.outcome }),
     balances: compiled.balances,
     residency: compiled.residency ?? "Lived in the country all year",
+    reading: compiled.reading ?? { documents: "personal tax documents", notes: [] },
   };
   checkRuleSet(ruleSet, fail);
   return ruleSet;
@@ -849,10 +867,13 @@ function checkRuleSet(ruleSet: RuleSet, fail: (entry: string, message: string, c
     }
     if (hint.kind === "saving" && hint.change.length === 0) fail(entry, "A saving hint changes at least one answer");
     if (hint.kind === "saving" && hint.effectLabel !== undefined) fail(entry, "A saving hint shows what it saves; effectLabel is for info hints");
-    if (hint.kind !== "saving" && (hint.change.length > 0) !== (hint.effectLabel !== undefined)) {
+    const whatIf = hint.change.length > 0 || hint.filingStatus !== undefined;
+    if (hint.kind !== "saving" && whatIf !== (hint.effectLabel !== undefined)) {
       fail(entry, "An info hint with a change names its effect (effectLabel), and only then");
     }
-    if (hint.change.length > 0 && ruleSet.outcome === undefined) fail(entry, "A hint with a change needs the year's outcome line (outcome in year.yaml)");
+    if (whatIf && ruleSet.outcome === undefined) fail(entry, "A hint with a change needs the year's outcome line (outcome in year.yaml)");
+    if (hint.filingStatus !== undefined && hint.kind !== "info") fail(entry, "Only an info hint changes the filing status: the person changes it on Personal info");
+    if (hint.onlyIfSaving && (hint.kind !== "info" || !whatIf)) fail(entry, "onlyIfSaving is for an info hint with a change");
   }
 
   // A form's formulas: which returns get it (yes/no), each amount and count a number, each tick and condition yes/no. A bracket table

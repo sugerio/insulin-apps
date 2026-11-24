@@ -133,12 +133,11 @@ function Uploader({ onUploading }: { onUploading: (uploading: boolean) => void }
           >
             <p className="text-sm font-medium wrap-anywhere">
               {year.country === "us"
-                ? `${person.name}'s Forms W-2 and 1099-INT for ${year.year}`
+                ? `${person.name}'s Forms W-2, 1099-INT, 1099-NEC, 1098-T and 1098-E for ${year.year}`
                 : `${person.name}'s slips and receipts for ${year.year}, and last year's notice of assessment`}
             </p>
             <p className="text-xs text-muted-foreground">
-              {year.country === "us" ? "They are kept with the return but can't be read yet: enter each one on Income. " : ""}PDF, PNG or JPEG, up to
-              10 MiB each. Drop them here, or choose:
+              PDF, PNG or JPEG, up to 10 MiB each. Drop them here, or choose:
             </p>
             <div className="flex flex-wrap justify-center gap-2">
               <Button variant="outline" onClick={() => folderInput.current?.click()} disabled={reading}>

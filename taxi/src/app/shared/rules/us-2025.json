@@ -945,6 +945,11 @@
       "formula": "if(line.US.educationAllowed == 0, 0, if(answer.paidForEducation, answer.educationExpenses, 0))",
       "source": "8863 instructions, Adjusted Qualified Education Expenses Worksheet: expenses paid in 2025, less tax-free educational assistance"
     },
+    "US.tuitionStatements": {
+      "label": "Payments on this person's Forms 1098-T, less scholarships and refunds",
+      "formula": "max(0, sum(F1098T.box1) - sum(F1098T.box5) - sum(F1098T.box10))",
+      "source": "8863 instructions, Qualified Education Expenses: you may get a Form 1098-T; reduce the expenses by tax-free educational assistance and refunds"
+    },
     "US.ownAotcStudent": {
       "label": "This person takes the American opportunity credit (1 for yes)",
       "formula": "if(line.US.ownStudentExpenses == 0, 0, if(answer.educationCredit == \"aotc\", 1, 0))",
@@ -1087,7 +1092,7 @@
     "F1040.29": {"label":"American opportunity credit","formula":"line.F8863.8","source":"Form 1040, line 29: Form 8863, line 8"},
     "US.ownStudentLoan": {
       "label": "Student loan interest this person paid",
-      "formula": "if(answer.hasStudentLoan, answer.studentLoanInterest, 0)"
+      "formula": "if(answer.hasStudentLoan, answer.studentLoanInterest + sum(F1098E.box1), if(count(F1098E.box1) > 0, unsupported(\"A Form 1098-E is added, but no student loan interest: say you paid it on Deductions, or remove the 1098-E\"), 0))"
     },
     "SLW.1": {
       "label": "Student loan interest, up to $2,500",
@@ -1470,7 +1475,11 @@
       "source": "Form 1040, line 34: the amount you overpaid"
     },
     "F1040.37": {"label":"Amount you owe","formula":"max(0, line.F1040.24 - line.F1040.33)"},
-    "RESULT.net": {"label":"Refund, less the amount owed","formula":"line.F1040.34 - line.F1040.37"},
+    "RESULT.net": {
+      "label": "Refund, less the amount owed",
+      "formula": "if(person.role == \"self\" or line.US.joint == 0, line.F1040.34 - line.F1040.37, 0)",
+      "source": "On a joint return the spouse has no refund or amount owed of their own: hints add this line over both returns"
+    },
     "SCOPE.return": {
       "label": "Situations this app doesn't handle yet",
       "formula": "line.SCOPE.residency + line.SCOPE.widowed + line.SCOPE.kiddie + line.SCOPE.care"
@@ -1853,7 +1862,8 @@
       "type": "money",
       "ask": "Your own qualified education expenses in 2025",
       "module": "about",
-      "help": "Tuition and the fees and course materials the school requires, that you paid in 2025 for your own courses, less tax-free scholarships, grants and employer education aid. Start from box 1 of your Form 1098-T, less box 5. Not room and board, insurance, medical expenses or transportation. Enter 0 if you weren't a student."
+      "help": "Tuition and the fees and course materials the school requires, that you paid in 2025 for your own courses, less tax-free scholarships, grants and employer education aid. Start from box 1 of your Form 1098-T, less box 5. Not room and board, insurance, medical expenses or transportation. Enter 0 if you weren't a student.",
+      "suggest": "US.tuitionStatements"
     },
     "educationCredit": {
       "type": "choice",
@@ -1901,9 +1911,10 @@
     },
     "studentLoanInterest": {
       "type": "money",
-      "ask": "Student loan interest you paid in 2025",
+      "ask": "Student loan interest not on a Form 1098-E",
       "module": "deductions",
-      "help": "Box 1 of each Form 1098-E. The interest only, not the payments of the loan itself.",
+      "help": "Uploaded Forms 1098-E are added. Enter interest you paid in 2025 that isn't on one (a lender sends it only for $600 or more): the interest only, not the payments of the loan itself.",
+      "receipts": "F1098E",
       "parent": "hasStudentLoan"
     },
     "livedApartLastSixMonths": {
@@ -2096,6 +2107,32 @@
     }
   },
   "slips": {
+    "F1098T": {
+      "title": "Form 1098-T Tuition Statement",
+      "about": "From a college, university or other eligible school: the tuition and required fees it was paid for the student in 2025, and the scholarships or grants it handled",
+      "boxes": {
+        "1": "Payments received for qualified tuition and related expenses",
+        "4": "Adjustments made for a prior year",
+        "5": "Scholarships or grants",
+        "6": "Adjustments to scholarships or grants for a prior year",
+        "10": "Ins. contract reimb./refund"
+      },
+      "name": "1098-T",
+      "informational": [],
+      "counts": [],
+      "receipt": false,
+      "printedYears": [0]
+    },
+    "F1098E": {
+      "title": "Form 1098-E Student Loan Interest Statement",
+      "about": "From a lender, the interest it received in 2025 on a student loan",
+      "boxes": {"1":"Student loan interest received by lender"},
+      "name": "1098-E",
+      "informational": [],
+      "counts": [],
+      "receipt": false,
+      "printedYears": [0]
+    },
     "NEC": {
       "title": "Form 1099-NEC Nonemployee Compensation",
       "about": "What a business paid you for work as a contractor or freelancer, not as its employee, and any federal income tax it withheld",
@@ -2156,7 +2193,41 @@
       "printedYears": [0]
     }
   },
-  "hints": {},
+  "hints": {
+    "fileJointly": {
+      "kind": "info",
+      "title": "Filing jointly would cost you less",
+      "text": "You and your spouse file separately. Filed jointly, as one return with both your incomes, the two of you would pay less, as worked out from what you entered. Filing separately keeps each of you liable only for your own return, but it gives up the earned income credit, the education credits, the student loan interest deduction and the tips and overtime deductions, and most of the child care credit. To file jointly, choose it on Personal info.",
+      "when": "person.role == \"self\" and line.US.separate == 1 and spouse.line.US.separate == 1",
+      "effectLabel": "Filing jointly saves",
+      "filingStatus": "joint",
+      "onlyIfSaving": true
+    },
+    "fileSeparately": {
+      "kind": "info",
+      "title": "Filing separately would cost you less",
+      "text": "Filed separately, each of you with your own return, the two of you would pay less, as worked out from what you entered, with both of you taking the standard deduction and every dependant on your return. Each of you is then liable only for your own return. To file separately, choose it on Personal info.",
+      "when": "person.role == \"self\" and line.US.joint == 1",
+      "change": {"answer.spouseItemizes":"false","spouse.answer.spouseItemizes":"false"},
+      "effectLabel": "Filing separately saves",
+      "filingStatus": "separate",
+      "onlyIfSaving": true
+    },
+    "interestWithoutForm": {
+      "kind": "warning",
+      "title": "Interest is taxable even without a 1099-INT",
+      "text": "A bank or credit union sends a Form 1099-INT only when it pays you $10 or more. Interest under that is still income. If you earned any, enter it as a 1099-INT on Income, from your account statements.",
+      "when": "(person.role == \"self\" or line.US.joint == 0) and line.F1040.2b == 0"
+    },
+    "estimatedTaxPenalty": {
+      "kind": "warning",
+      "title": "You may owe a penalty for paying too little during the year",
+      "text": "You owe $1,000 or more, and more than a tenth of the tax shown on your return (line 24, less the refundable credits on lines 27a to 29). The IRS may then charge a penalty for not paying enough tax during the year, through withholding or estimated payments, unless an exception applies (for example, you paid at least your 2024 tax). This app doesn't work out the penalty (Form 2210): leave line 38 blank, and the IRS works it out and sends you a bill. To avoid it next year, have more withheld on Form W-4.",
+      "when": "(person.role == \"self\" or line.US.joint == 0) and line.F1040.37 >= 1000 and line.F1040.37 > max(0, line.F1040.24 - line.F1040.27a - line.F1040.28 - line.F1040.29) / 10",
+      "amount": "line.F1040.37",
+      "amountLabel": "Amount you owe"
+    }
+  },
   "forms": {
     "F1040": {
       "title": "Form 1040, U.S. Individual Income Tax Return",
@@ -3976,5 +4047,14 @@
   "outcome": "RESULT.net",
   "balances": [{"name":"Federal","refund":"F1040.34","owing":"F1040.37"}],
   "residency": "A U.S. citizen or resident alien all year",
-  "version": "8cc1d6254806f8f4"
+  "reading": {
+    "documents": "United States information returns (Forms W-2, 1099 and 1098)",
+    "notes": [
+      "A W-2 prints boxes 1 to 20; box 12 holds codes, and boxes 13 and 14 are not amounts this app reads: leave them out. The 'a' to 'f' boxes hold numbers, names and addresses, never amounts: leave them out too.",
+      "On a 1099 or 1098, report the payer's or lender's or school's name as issuer. A form can print a box that is a checkbox (such as boxes 7, 8 and 9 of a 1098-T): leave checkboxes out.",
+      "For a Form 1098-T, person is the student, and issuer the school. For a Form 1098-E, person is the borrower, and issuer the lender.",
+      "A corrected form (marked CORRECTED) replaces the first one: read it like any other."
+    ]
+  },
+  "version": "456137ea168f2c32"
 }

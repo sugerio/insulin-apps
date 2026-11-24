@@ -1,4 +1,4 @@
-import { useEffect, useId, useState, type ReactNode } from "react";
+import { useEffect, useId, useMemo, useState, type ReactNode } from "react";
 import { Link, useNavigate } from "react-router";
 import {
   PROVINCES,
@@ -23,10 +23,12 @@ import { useMe } from "../auth/AuthProvider.tsx";
 import { AmountField, cleanAmount } from "../components/AmountField.tsx";
 import { Banner, RefusedBanner } from "../components/Feedback.tsx";
 import { StepLayout } from "../components/StepLayout.tsx";
+import { SuggestionNote } from "../components/SuggestionNote.tsx";
 import { stepPath, stepsOf, useReturn, useYear } from "../components/YearFrame.tsx";
 import { MARITAL_STATUS_LABELS, PROVINCE_LABELS } from "../lib/format.ts";
 import { saveAnswersFor } from "../lib/saveAnswers.ts";
 import { useEstimate } from "../lib/useYearData.ts";
+import { Evaluation } from "../shared/engine/evaluate.ts";
 import { rulesFor } from "../shared/rules/index.ts";
 
 // Step 1, `/returns/:year/:personId/personal`: the facts of the open return that no document tells the app: the
@@ -256,6 +258,13 @@ function YearFacts({
   const dependantsShown = choosesClaimer ? yearDependants : dependantsHere;
   const claimedByQuestion = rules.questions.get("claimedBy");
   const about = aboutOf(owner.id);
+  // An adult's amount can start from their documents (a 1098-T's payments for their own education expenses).
+  const evaluation = useMemo(() => (estimate.status === "ready" ? new Evaluation(rules, estimate.data.input) : null), [rules, estimate.status === "ready" ? estimate.data.input : null]);
+  const suggestionOf = (question: (typeof about)[number], personId: string): string | null => {
+    if (!question.suggest || !evaluation || !year.adults.some((adult) => adult.personId === personId)) return null;
+    const { value } = evaluation.line(personId, question.suggest);
+    return value && !value.isZero() ? value.toString() : null;
+  };
   const storedAmount = (id: string, personId = owner.id) => (typeof givenOf(personId)[id] === "string" ? (givenOf(personId)[id] as string) : "");
   const amountOf = (id: string, personId = owner.id) => valueOf(keyOf(personId, `answers.${id}`), storedAmount(id, personId));
   // A yes/no question (spouseSameDays) is null until answered.
@@ -346,17 +355,25 @@ function YearFacts({
         onChange={(value) => type(key, storedChoice(question.id, personId), value)}
       />
     ) : (
-      <AmountField
-        key={key}
-        label={question.ask}
-        help={question.help}
-        unit={question.type === "count" ? "" : "$"}
-        max={question.max}
-        value={amountOf(question.id, personId)}
-        disabled={locked}
-        issue={issueFor(key)}
-        onChange={(value) => type(key, storedAmount(question.id, personId), value)}
-      />
+      <div key={key} className="grid gap-1">
+        <AmountField
+          label={question.ask}
+          help={question.help}
+          unit={question.type === "count" ? "" : "$"}
+          max={question.max}
+          value={amountOf(question.id, personId)}
+          disabled={locked}
+          issue={issueFor(key)}
+          onChange={(value) => type(key, storedAmount(question.id, personId), value)}
+        />
+        <SuggestionNote
+          suggestion={suggestionOf(question, personId)}
+          value={amountOf(question.id, personId)}
+          editable={!locked}
+          busy={false}
+          onChange={(value) => type(key, storedAmount(question.id, personId), value)}
+        />
+      </div>
     );
   };
 

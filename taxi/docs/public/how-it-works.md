@@ -34,9 +34,11 @@ own Anthropic credential: an admin stores it on the app's **Integrations** page 
 `https://api.anthropic.com`, sent as the named header `x-api-key`). Insulin Apps adds the key to each request, so Taxi
 never holds it. Without that credential, files are stored but not read, and slips can be typed in by hand.
 
-With the file, Claude gets the year, the names of the people in the year, and the slip types the app reads with their
-boxes. It answers in a fixed shape: each slip's type, the name on it, the issuer, its boxes and the boxes it couldn't
-read clearly. It is told never to return a social insurance number. Taxi then checks the answer itself: only known
+With the file, Claude gets the year, the names of the people in the year, the slip types the app reads with their
+boxes, and notes on reading the documents of the year's country (`reading` in `year.yaml`). On a US year these are
+Forms W-2, 1099-INT, 1099-NEC, 1098-T and 1098-E. It answers in a fixed shape: each slip's type, the name on it, the
+issuer, its boxes and the boxes it couldn't read clearly. It is told never to return an identification number (a
+social insurance, social security or employer identification number), and no field of the answer can hold one. Taxi then checks the answer itself: only known
 slip types and boxes are kept, amounts must be numbers, a slip for another year is left out (the message says which),
 and a slip already in the year, or printed twice in the file, isn't added again. Slips are never merged: a reading is
 left out when it adds nothing to a slip already here (or to a fuller copy in the same file) of the same type, person
@@ -94,7 +96,7 @@ boxes. Money is computed exactly, without rounding errors, and rounded to the ce
 
 ## Hints
 
-Hints are checks on each return, in `rules/ca/2025/hints.yaml` next to the other rules. A hint shows when its condition
+Hints are checks on each return, in `rules/<country>/2025/hints.yaml` next to the other rules. A hint shows when its condition
 holds for the return. It is one of:
 
 - **A saving:** a change of answers, such as claiming both spouses' donations on one return. The engine computes both
@@ -111,6 +113,16 @@ The 2025 hints: claim both spouses' donations on one return; claim the family's 
 the lower income); transfer this year's tuition the student doesn't need to their spouse; deduct RRSP contributions in a
 later year when this year's income is in the lowest bracket; RRSP contributions over the limit; and interest without a
 T5. Moving claims between the returns works only when both spouses' returns are prepared here.
+
+The 2025 US hints are something to know, on the return of the person preparing when it is a joint return:
+
+- **Filing jointly or separately would cost less.** For a married couple, the engine works out the year again with the
+  other filing status, from what is stored, and the hint shows only when the two of you would pay $1 or more less.
+  Filed separately, it has both of you take the standard deduction and puts every dependant on your return. You change
+  the filing status on Personal info: it changes who is on each return, so the hint can't be applied for you.
+- **A penalty for paying too little during the year** (Form 2210), when the amount owed is $1,000 or more and more
+  than a tenth of the tax on the return. The app doesn't work out the penalty.
+- **Interest without a 1099-INT**, which is taxable even when no form was sent.
 
 ## The CRA's forms
 

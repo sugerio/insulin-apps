@@ -3,8 +3,8 @@ import { z } from "zod";
 import type { RuleSet } from "../../shared/engine/rules.ts";
 
 // Reading a tax slip with Claude: one Messages API call per uploaded file, answering in one JSON shape (structured
-// output), so there is no free text to parse. The prompt is built from the year's slip types (slips.yaml), so it
-// follows the rule files. The server checks the answer again before anything is saved (documents.ts).
+// output), so there is no free text to parse. The prompt is built from the year's slip types (slips.yaml) and its
+// country's reading notes (year.yaml), so it follows the rule files. The server checks the answer again before anything is saved (documents.ts).
 
 export const READER_MODEL = "claude-opus-5-5";
 
@@ -85,8 +85,14 @@ const answerSchema = z.object({
   ),
 });
 
-/** The instructions for one file: the year, the names in the profile, and each slip type with its boxes. */
+/**
+ * The instructions for one file: the year, the names in the profile, each slip type with its boxes, and the country's
+ * notes on reading its documents (year.yaml, `reading`).
+ */
 export function promptFor(context: ReadContext): string {
+  const { reading } = context.rules;
+  const years: Record<string, number> = { year: context.year, nextYear: context.year + 1, lastYear: context.year - 1 };
+  const withYears = (note: string) => note.replace(/\{(year|nextYear|lastYear)\}/g, (_, name: string) => String(years[name]));
   const types = [...context.rules.slips.values()].map(
     (slip) =>
       `- ${slip.id}, ${slip.title}: ${slip.about}. Boxes: ${Object.entries(slip.boxes)
@@ -94,7 +100,7 @@ export function promptFor(context: ReadContext): string {
         .join(", ")}.`,
   );
   return [
-    `You read Canadian personal tax slips, receipts and notices for the ${context.year} tax year.`,
+    `You read ${reading.documents} for the ${context.year} tax year.`,
     `The people: ${context.people.map((person) => `${person.name} (${person.relationship})`).join(", ")}.`,
     "Document types this app reads:",
     ...types,
@@ -104,13 +110,11 @@ export function promptFor(context: ReadContext): string {
     "- type: one of the slip types above.",
     "- person: the recipient's or student's name as printed on the slip.",
     "- issuer: who issued the slip (the employer, payer, trust, broker or institution).",
-    "- boxes: each box from that type's list that shows an amount, with the amount exactly as printed but without $ signs, spaces or thousands separators, and a point as the decimal mark (for example 60000.00; a Quebec slip's 45 000,00 is 45000.00). Leave out empty boxes and boxes not in the list. Copy amounts; never add them up.",
+    "- boxes: each box from that type's list that shows an amount, with the amount exactly as printed but without $ signs, spaces or thousands separators, and a point as the decimal mark (for example 60000.00). Leave out empty boxes and boxes not in the list. Copy amounts; never add them up.",
     "- unsure: the numbers of any boxes you could not read clearly.",
-    "Quebec RL slips (RL-1, RL-2 …) print boxes as letters: report each under its key in the list, a point or dash as an underscore (box B.A of an RL-1 is B_A). On an RL-2, box C goes under C_QPP when its source of income is RRQ, and under C otherwise.",
-    "Receipts and notices (RRSP, DONATION, MEDICAL, NOA) have no box numbers printed: the numbers in their list are this app's. Put each amount under the number of the matching description. For a medical receipt, person is the patient; for a notice of assessment, the taxpayer, and issuer is Canada Revenue Agency.",
-    `An RRSP receipt shows contributions for one period: report those from March 4 to December 31, ${context.year} as box 1, and those from January 1 to March 2, ${context.year + 1} as box 2. Contributions from January 1 to March 3, ${context.year} belong to the year before: leave them out.`,
-    `taxYear: the tax year printed on the document (for a notice of assessment, the year it assesses, such as ${context.year - 1}; for an RRSP receipt, the year of the contributions), or null if none is printed.`,
-    "Never return a social insurance number. If the file holds none of these types (a letter, another form), return no slips.",
+    ...reading.notes.map(withYears),
+    "taxYear: the tax year printed on the document, or null if none is printed.",
+    "Never return an identification number: no social insurance, social security, taxpayer or employer identification number. If the file holds none of these types (a letter, another form), return no slips.",
   ].join("\n");
 }
 

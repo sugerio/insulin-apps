@@ -61,8 +61,8 @@ uploaded slips read by AI (or typed in), income, deductions, credits, the result
   one column for each dependant.
 - **Roles.** Owners, admins and editors prepare returns; viewers see everything and change nothing. Custom roles pick
   from two permissions: Prepare returns and View returns.
-- **Built-in Docs.** **Docs**, in everyone's navigation, explains the app and covers Canadian tax basics in plain words,
-  with a glossary.
+- **Built-in Docs.** **Docs**, in everyone's navigation, explains the app and covers Canadian and US tax basics in plain
+  words, with a glossary.
 
 ## Who it's for
 
@@ -85,8 +85,10 @@ care benefits (Form 2441); wages (W-2), interest (1099-INT) and one business for
 and SE, Schedule 1, Form 8995), the standard deduction (with the 2025 deduction
 for seniors), the Tax Table and Tax Computation Worksheet, the Additional Medicare Tax, the net investment income tax
 and excess social security tax; the 2025 deductions for qualified tips, overtime pay and car loan interest
-(Schedule 1-A); printed on the IRS's forms. No state return and no AI reading yet; itemized deductions, allocated
-tips and a household employee say so when they apply.
+(Schedule 1-A); the education credits (Form 8863) and the student loan interest deduction; printed on the IRS's
+forms. AI reads Forms W-2, 1099-INT, 1099-NEC, 1098-T and 1098-E, and Finish shows US hints (filing jointly or
+separately, the estimated tax penalty). No state return; itemized deductions, allocated tips and a household employee
+say so when they apply.
 
 ## Good to know
 

@@ -1,8 +1,9 @@
 import { PDFArray, PDFDocument, PDFName, type PDFPage } from "pdf-lib";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import type { Estimate, Person, TaxYear, YearList } from "#shared";
+import type { Estimate, Person, SlipList, TaxYear, YearList } from "#shared";
 import type { FormSource } from "../../src/app/server/lib/forms.ts";
+import type { ReadSlip } from "../../src/app/server/lib/reader.ts";
 import { rulesFor } from "../../src/app/shared/rules/index.ts";
 import { startServer, type TestServer } from "../support/server.ts";
 
@@ -204,19 +205,42 @@ describe("printing a US return", () => {
 });
 
 describe("an upload in a United States year", () => {
-  it("keeps the file unread, and says to enter the forms by hand", async () => {
+  it("reads the US forms into the returns of the people named on them; a dependant's 1098-T isn't added", async () => {
     server.close();
-    // A reader that would read anything: a US year doesn't ask it.
-    server = await startServer({ now: () => 1_767_225_600_000, reader: () => ({ read: async () => ({ kind: "read", taxYear: 2025, slips: [], model: "test" }) }) });
-    const alex = await addPerson("Alex Rivera", "self");
-    await json<TaxYear>(server.call("POST", "/api/years", { body: { year: 2025, country: "us", people: [alex.id] } }), 201);
-    const response = await server.call("POST", "/api/years/2025/documents", {
-      raw: new TextEncoder().encode("%PDF-1.4\n% W-2\n%%EOF\n") as Uint8Array<ArrayBuffer>,
-      headers: { "Content-Type": "application/pdf", "X-File-Name": "w2.pdf", "X-Person-Id": alex.id },
+    const asked: string[] = [];
+    server = await startServer({
+      now: () => 1_767_225_600_000,
+      reader: () => ({
+        read: async (_, context) => {
+          asked.push(context.rules.reading.documents);
+          const slips: ReadSlip[] = [
+            { type: "W2", person: "Alex Rivera", issuer: "Maple Corp", boxes: { 1: "60000.00", 2: "6500.00", a: "123-45-6789" }, unsure: [] },
+            { type: "F1098E", person: "Alex Rivera", issuer: "Great Lakes Student Loans", boxes: { 1: "1800.00" }, unsure: [] },
+            { type: "F1098T", person: "Riley Rivera", issuer: "Prairie Community College", boxes: { 1: "3800.00" }, unsure: [] },
+          ];
+          return { kind: "read", taxYear: 2025, model: "test", slips };
+        },
+      }),
     });
-    const body = await response.text();
-    expect(response.status, body).toBeLessThan(300);
-    expect(body).toContain("Reading U.S. forms isn't available yet");
+    const alex = await addPerson("Alex Rivera", "self");
+    const riley = await addPerson("Riley Rivera", "child", "2006-04-04");
+    await json<TaxYear>(server.call("POST", "/api/years", { body: { year: 2025, country: "us", people: [alex.id, riley.id] } }), 201);
+    const response = await server.call("POST", "/api/years/2025/documents", {
+      raw: new TextEncoder().encode("%PDF-1.4\n% forms\n%%EOF\n") as Uint8Array<ArrayBuffer>,
+      headers: { "Content-Type": "application/pdf", "X-File-Name": "forms.pdf", "X-Person-Id": alex.id },
+    });
+    const body = await json<{ status: string; message: string }>(response);
+    expect(asked).toEqual(["United States information returns (Forms W-2, 1099 and 1098)"]);
+    expect(body.status).toBe("read");
+    expect(body.message).toBe(
+      "W-2 from Maple Corp; 1098-E from Great Lakes Student Loans; 1098-T from Prairie Community College is Riley Rivera's, who has no return here: not added",
+    );
+    const { slips } = await json<SlipList>(server.call("GET", "/api/years/2025/slips"));
+    // Only the boxes of the form's type are kept: box "a" (the employee's SSN) isn't one.
+    expect(slips.map((slip) => [slip.type, slip.personId, slip.boxes]).sort(([a], [b]) => String(b).localeCompare(String(a)))).toEqual([
+      ["W2", alex.id, { 1: "60000", 2: "6500" }],
+      ["F1098E", alex.id, { 1: "1800" }],
+    ]);
   });
 });
 
@@ -416,5 +440,44 @@ describe("the earned income credit", () => {
       }),
     );
     expect(await questions()).toContain("livedApartLastSixMonths");
+  });
+});
+
+describe("hints on a US year", () => {
+  it("tells a couple filing separately what filing jointly saves, as the year filed jointly works out", async () => {
+    const alex = await addPerson("Alex Rivera", "self", "1985-02-02");
+    const sam = await addPerson("Sam Rivera", "spouse", "1986-06-06");
+    let year = await json<TaxYear>(server.call("POST", "/api/years", { body: { year: 2025, country: "us", people: [alex.id, sam.id] } }), 201);
+    const facts = (filingStatus: "joint" | "separate") => ({
+      revision: year.revision,
+      maritalStatus: "married",
+      filingStatus,
+      adults: [alex, sam].map((each) => ({ personId: each.id, province: null, residentAllYear: true })),
+    });
+    year = await json<TaxYear>(server.call("PUT", "/api/years/2025/personal-info", { body: facts("separate") }));
+    const none = { hasWages: true, hasInterest: false, hasTipsOrOvertime: false, hasCarLoan: false, hasSelfEmployment: false, hasStudentLoan: false, paidForEducation: false, canBeClaimed: false, isBlind: false, estimatedPayments: "0", spouseItemizes: false };
+    for (const [person, wages, withheld] of [[alex, "140000", "24000"], [sam, "20000", "1500"]] as const) {
+      year = await json<TaxYear>(server.call("POST", "/api/years/2025/slips", { body: { revision: year.revision, personId: person.id, type: "W2", issuer: "Acme", boxes: { 1: wages, 2: withheld } } }), 201);
+      year = await json<TaxYear>(server.call("PUT", "/api/years/2025/answers", { body: { revision: year.revision, personId: person.id, answers: none } }));
+    }
+    const net = async () => {
+      const estimate = await json<Estimate>(server.call("GET", "/api/years/2025/estimate"));
+      return estimate.result.people.reduce((total, person) => {
+        const value = (id: string) => Number(person.lines.find((line) => line.id === id)?.value ?? 0);
+        return total + value("F1040.34") - value("F1040.37");
+      }, 0);
+    };
+    const separately = await net();
+    const { hints } = await json<{ hints: { id: string; personId: string; kind: string; effect: string | null; state: string }[] }>(server.call("GET", "/api/years/2025/hints"));
+    const joint = hints.filter((hint) => hint.id === "fileJointly");
+    expect(joint).toHaveLength(1);
+    expect(joint[0]).toMatchObject({ personId: alex.id, kind: "info", state: "open" });
+    // It is only something to know: the filing status is changed on Personal info.
+    const refused = await json<{ error: { message: string } }>(server.call("POST", "/api/years/2025/hints/fileJointly", { body: { revision: year.revision, personId: alex.id, decision: "accept" } }), 400);
+    expect(refused.error.message).toBe("Only a saving can be accepted");
+    // Filed jointly for real, the two of them get what the hint said.
+    year = await json<TaxYear>(server.call("GET", "/api/years/2025"));
+    await json<TaxYear>(server.call("PUT", "/api/years/2025/personal-info", { body: facts("joint") }));
+    expect((await net()) - separately).toBe(Number(joint[0]!.effect));
   });
 });

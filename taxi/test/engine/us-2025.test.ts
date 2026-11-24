@@ -593,4 +593,26 @@ describe("education: Form 8863 and the student loan interest deduction", () => {
     family.family.dependants[0]!.answers = { ...family.family.dependants[0]!.answers, fullTimeStudent: true };
     expect(dependantQuestions(family)).toContain("studentExpenses");
   });
+  it("adds each Form 1098-E to the student loan interest, and says so when one is added without the interest", () => {
+    const withForm = (answers: Record<string, string | boolean>, boxes: Record<string, string>) => {
+      const input = oneW2({ wages: "50000", answers });
+      return { ...input, slips: [...input.slips, { id: "e", person: "p1", type: "F1098E", issuer: "Great Lakes", boxes }] };
+    };
+    expect(lines(withForm(loan("300"), { 1: "1200" }), ["US.ownStudentLoan", "SLW.1", "S1.21"])).toEqual(["1500", "1500", "1500"]);
+    const result = evaluation(withForm({ hasStudentLoan: false }, { 1: "1200" })).result().people[0]!;
+    expect(result.unhandled.join(" ")).toMatch(/A Form 1098-E is added, but no student loan interest/);
+  });
+
+  it("starts a student's expenses from their Forms 1098-T: box 1 less boxes 5 and 10, never below 0", () => {
+    const withForms = (...forms: Record<string, string>[]) => {
+      const input = oneW2({ wages: "50000" });
+      return { ...input, slips: [...input.slips, ...forms.map((boxes, index) => ({ id: `t${index}`, person: "p1", type: "F1098T", issuer: "Valley College", boxes }))] };
+    };
+    expect(line(withForms({ 1: "6000", 5: "1500" }, { 1: "800", 10: "300" }), "US.tuitionStatements")).toBe("5000");
+    expect(line(withForms({ 1: "2000", 5: "2500" }), "US.tuitionStatements")).toBe("0");
+    // Only a start: the credit counts the expenses entered, not the 1098-T.
+    expect(line(withForms({ 1: "6000" }), "F8863.1")).toBe("0");
+    // A prior year's adjustments change an earlier credit, which isn't worked out: the return says so.
+    expect(evaluation(withForms({ 1: "6000", 4: "500" })).result().people[0]!.unhandled.join(" ")).toMatch(/1098-T/);
+  });
 });

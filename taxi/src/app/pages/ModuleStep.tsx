@@ -15,6 +15,7 @@ import { AmountField, cleanAmount } from "../components/AmountField.tsx";
 import { Banner, RefusedBanner, ResourceView } from "../components/Feedback.tsx";
 import { OriginalFile, SlipBoxTable, SlipForm, type SlipFormHost, type SlipValues } from "../components/SlipForm.tsx";
 import { StepLayout } from "../components/StepLayout.tsx";
+import { SuggestionNote } from "../components/SuggestionNote.tsx";
 import { stepPath, useReturn, useYear } from "../components/YearFrame.tsx";
 import { formatMoney } from "../lib/format.ts";
 import { saveAnswersFor } from "../lib/saveAnswers.ts";
@@ -845,32 +846,6 @@ function AmountItem({
 }
 
 /** The amount the documents show, under an amount, with a button to use it when the amount is something else. */
-function SuggestionNote({
-  suggestion,
-  value,
-  editable,
-  busy,
-  onChange,
-}: {
-  suggestion: string | null;
-  value: string;
-  editable: boolean;
-  busy: boolean;
-  onChange: (value: string) => void;
-}) {
-  if (suggestion === null) return null;
-  return (
-    <p className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-      From your documents: {formatMoney(suggestion)}.
-      {editable && cleanAmount(value) !== suggestion ? (
-        <Button variant="link" size="sm" className="h-auto p-0 text-xs" onClick={() => onChange(suggestion)} disabled={busy}>
-          Use {formatMoney(suggestion)}
-        </Button>
-      ) : null}
-    </p>
-  );
-}
-
 function UploadSlip({ label, busy, onFile }: { label: string; busy: boolean; onFile: (file: File) => void }) {
   const input = useRef<HTMLInputElement>(null);
   return (

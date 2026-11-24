@@ -29,9 +29,10 @@ export const gettingStarted: DocTopic = {
             seniors, tips, overtime pay and car loan interest, dependants with the child tax credit and the credit for other dependents, the
             earned income credit, the credit for child and dependent care, the education credits and the student loan interest deduction. A
             finished return downloads on the IRS's own forms: Form 1040 and the schedules it uses, filled in. Add
-            the social security numbers and your address by hand, attach Copy B of each W-2, sign and mail it to the IRS. It prepares no state
-            return, doesn't read US forms by AI yet, and says on the return when something it doesn't handle yet applies, such as itemized
-            deductions.
+            the social security numbers and your address by hand, attach Copy B of each W-2, sign and mail it to the IRS. AI reads the W-2, 1099-INT,
+            1099-NEC, 1098-T and 1098-E forms you upload. Finish shows hints, such as what filing jointly or separately would save a married couple.
+            It prepares no state return, and says on the return when something it doesn't handle yet applies, such as itemized deductions. See{" "}
+            <DocLink to="us-tax-basics">US tax basics</DocLink>.
           </p>
           <p>
             <b>Who it is for:</b> residents of every province and territory, also in the year they moved to or from Canada (except in Quebec),

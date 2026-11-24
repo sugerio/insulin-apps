@@ -379,10 +379,7 @@ const membersOf = (view: TaxYear) => view.people.filter((person) => view.members
 
 /** AI's reading of a file, told the names and relationships of the year's people so it can say whose each slip is. */
 function readFile(year: number, view: TaxYear, file: FileToRead, reader: SlipReader): Promise<ReadOutcome> {
-  // The reader knows Canada's slips: a US form is kept, unread, until reading them is added.
-  if (view.country !== "ca") {
-    return Promise.resolve({ kind: "not_available", message: "Reading U.S. forms isn't available yet. Enter each W-2 and 1099-INT by hand on Income." });
-  }
+  // The year's rules say which documents of its country are read (slips.yaml) and how (year.yaml, reading).
   return reader.read(file, { year, rules: rulesFor(view.country, year)!, people: membersOf(view).map((person) => ({ name: person.name, relationship: person.relationship })) });
 }
 

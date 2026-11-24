@@ -6,6 +6,32 @@
 # asked already adjusted: paid in 2025, less tax-free scholarships and grants. Not worked out: a refund or a
 # scholarship that reduces expenses claimed in an earlier year (recapture), and a scholarship you choose to include in
 # income so that the credit counts more expenses.
+#
+# A Form 1098-T only starts a student's expenses (box 1 less boxes 5 and 10): it shows what the school was paid, not
+# what the credit counts. A Form 1098-E is added to the student loan interest. A 1098-T of a dependant isn't added to
+# a return (a dependant has none): its amounts are entered on the dependant's card.
+
+slips:
+  F1098T:
+    title: Form 1098-T Tuition Statement
+    name: 1098-T
+    about: >-
+      From a college, university or other eligible school: the tuition and required fees it was paid for the student in
+      2025, and the scholarships or grants it handled
+    boxes:
+      1: Payments received for qualified tuition and related expenses
+      4: Adjustments made for a prior year
+      5: Scholarships or grants
+      6: Adjustments to scholarships or grants for a prior year
+      10: Ins. contract reimb./refund
+    # Boxes 4 and 6 change an earlier year's credit, which this app doesn't work out: an amount in them says so.
+
+  F1098E:
+    title: Form 1098-E Student Loan Interest Statement
+    name: 1098-E
+    about: From a lender, the interest it received in 2025 on a student loan
+    boxes:
+      1: Student loan interest received by lender
 
 params:
   aotcFullRate:
@@ -89,6 +115,7 @@ questions:
       Tuition and the fees and course materials the school requires, that you paid in 2025 for your own courses, less
       tax-free scholarships, grants and employer education aid. Start from box 1 of your Form 1098-T, less box 5. Not
       room and board, insurance, medical expenses or transportation. Enter 0 if you weren't a student.
+    suggest: US.tuitionStatements
   educationCredit:
     type: choice
     module: about
@@ -157,8 +184,11 @@ questions:
     type: money
     module: deductions
     parent: hasStudentLoan
-    ask: Student loan interest you paid in 2025
-    help: Box 1 of each Form 1098-E. The interest only, not the payments of the loan itself.
+    receipts: F1098E
+    ask: Student loan interest not on a Form 1098-E
+    help: >-
+      Uploaded Forms 1098-E are added. Enter interest you paid in 2025 that isn't on one (a lender sends it only for $600
+      or more): the interest only, not the payments of the loan itself.
 
 lines:
   # Who can take the credits: not filing separately, and not someone who can be claimed as a dependent.
@@ -177,6 +207,10 @@ lines:
     label: This person's own adjusted qualified education expenses
     formula: "if(line.US.educationAllowed == 0, 0, if(answer.paidForEducation, answer.educationExpenses, 0))"
     source: "8863 instructions, Adjusted Qualified Education Expenses Worksheet: expenses paid in 2025, less tax-free educational assistance"
+  US.tuitionStatements:
+    label: Payments on this person's Forms 1098-T, less scholarships and refunds
+    formula: "max(0, sum(F1098T.box1) - sum(F1098T.box5) - sum(F1098T.box10))"
+    source: "8863 instructions, Qualified Education Expenses: you may get a Form 1098-T; reduce the expenses by tax-free educational assistance and refunds"
   US.ownAotcStudent:
     label: This person takes the American opportunity credit (1 for yes)
     formula: 'if(line.US.ownStudentExpenses == 0, 0, if(answer.educationCredit == "aotc", 1, 0))'
@@ -327,7 +361,9 @@ lines:
   # Schedule 1, line 21: the Student Loan Interest Deduction Worksheet in the Instructions
   US.ownStudentLoan:
     label: Student loan interest this person paid
-    formula: "if(answer.hasStudentLoan, answer.studentLoanInterest, 0)"
+    formula: >-
+      if(answer.hasStudentLoan, answer.studentLoanInterest + sum(F1098E.box1),
+      if(count(F1098E.box1) > 0, unsupported("A Form 1098-E is added, but no student loan interest: say you paid it on Deductions, or remove the 1098-E"), 0))
   SLW.1:
     label: Student loan interest, up to $2,500
     formula: "min(line.US.ownStudentLoan + if(line.US.joint == 1, spouse.line.US.ownStudentLoan, 0), param.studentLoanMax)"

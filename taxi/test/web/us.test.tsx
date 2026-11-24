@@ -211,3 +211,35 @@ describe("dependants in the browser", () => {
     expect(within(keyLines).getByText("Credit for child and dependent care expenses").closest("li")?.textContent).toMatch(/\$600\.00/);
   });
 });
+
+describe("US forms that start an amount", () => {
+  it("offers a 1098-T's payments, less grants, as the start of your own education expenses on Personal info", async () => {
+    let alexId = "";
+    const { router, server } = await renderApp("/returns", {
+      seed: async (s) => {
+        const alex = await seedFinishedUs(s);
+        alexId = alex.id;
+        const call = async (method: string, path: string, body: object) => (await (await s.call(method, path, { body })).json()) as TaxYear;
+        let year = (await (await s.call("GET", "/api/years/2025")).json()) as TaxYear;
+        year = await call("POST", "/api/years/2025/slips", { revision: year.revision, personId: alex.id, type: "F1098T", issuer: "Valley College", boxes: { 1: "6000", 5: "1500" } });
+        await call("PUT", "/api/years/2025/answers", { revision: year.revision, personId: alex.id, answers: { paidForEducation: true } });
+      },
+    });
+    await screen.findByText("United States. File by April 15, 2026.");
+    await router.navigate(`/returns/2025/${alexId}/personal`);
+    const expenses = (await screen.findByRole("textbox", { name: "Your own qualified education expenses in 2025" })) as HTMLInputElement;
+    expect(expenses.value).toBe("");
+    expect(screen.getByText(/From your documents: \$4,500\.00/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Use $4,500.00" }));
+    expect(expenses.value).toBe("4500");
+    expect(screen.queryByRole("button", { name: "Use $4,500.00" })).toBeNull();
+    // The credit is asked once there are expenses.
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    fireEvent.change(await screen.findByRole("combobox", { name: "The credit for your expenses" }), { target: { value: "llc" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(async () => {
+      const estimate = (await (await server.call("GET", "/api/years/2025/estimate")).json()) as { input: { answers: Record<string, Record<string, unknown>> } };
+      expect(estimate.input.answers[alexId]).toMatchObject({ educationExpenses: "4500", educationCredit: "llc" });
+    });
+  });
+});

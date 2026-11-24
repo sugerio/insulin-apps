@@ -1,5 +1,5 @@
 {
-  "about": "Head of household, $32,000 of wages, day care for a child of 4 and $12,000 of her own courses: the care credit first, the lifetime learning credit limited to the tax left, the child tax credit all refundable",
+  "about": "Head of household, $32,000 of wages, day care for a child of 4 and $12,000 of her own courses (a Form 1098-T of $13,500 less $1,500 of grants): the care credit first, the lifetime learning credit limited to the tax left, the child tax credit all refundable",
   "input": {
     "country": "us",
     "year": 2025,
@@ -66,6 +66,16 @@
           "5": "32000",
           "6": "464"
         }
+      },
+      {
+        "id": "p1-t1098-0",
+        "person": "p1",
+        "type": "F1098T",
+        "issuer": "Valley College",
+        "boxes": {
+          "1": "13500",
+          "5": "1500"
+        }
       }
     ]
   },
@@ -97,6 +107,7 @@
       "F1040.33": "5542",
       "F1040.34": "5542",
       "F1040.37": "0",
+      "US.tuitionStatements": "12000",
       "F8863.1": "0",
       "F8863.6": "1",
       "F8863.7": "0",

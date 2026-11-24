@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { compileRules } from "../../src/app/shared/engine/compile.ts";
 import { Evaluation, type EngineInput } from "../../src/app/shared/engine/evaluate.ts";
@@ -169,5 +171,62 @@ describe("hint rules", () => {
     expect(() => compile({ bad: { ...base, kind: "info" } })).toThrow(/effectLabel/);
     expect(() => compile({ bad: { ...base, amount: "1" } })).toThrow(/amount and amountLabel together/);
     expect(() => compile({ ok: base }, { outcome: undefined })).toThrow(RuleError);
+  });
+
+  it("lets only an info hint, with its effect named, file the year the other way", () => {
+    const refile = { kind: "info", title: "T", text: "T", when: "line.R.net > 0", filingStatus: "joint", effectLabel: "Saves", onlyIfSaving: true };
+    expect(compile({ ok: refile }).hints.ok).toMatchObject({ filingStatus: "joint", onlyIfSaving: true });
+    expect(() => compile({ bad: { ...base, filingStatus: "joint" } })).toThrow(/Only an info hint changes the filing status/);
+    expect(() => compile({ bad: { ...refile, effectLabel: undefined } })).toThrow(/effectLabel/);
+    expect(() => compile({ bad: { ...refile, filingStatus: "both" } })).toThrow(RuleError);
+    expect(() => compile({ bad: { kind: "warning", title: "T", text: "T", when: "line.R.net > 0", onlyIfSaving: true } })).toThrow(/onlyIfSaving is for an info hint with a change/);
+  });
+});
+
+describe("2025 US hints", () => {
+  // The golden couples (test/golden/us-2025), whose returns the independent oracle checks.
+  const us = rulesFor("us", 2025)!;
+  const golden = (name: string) => (JSON.parse(readFileSync(resolve(import.meta.dirname, `../golden/us-2025/${name}.json`), "utf8")) as { input: EngineInput }).input;
+  const net = (input: EngineInput) => {
+    const evaluation = new Evaluation(us, input);
+    return input.people.reduce((total, person) => total + Number(evaluation.line(person.id, "RESULT.net").value), 0);
+  };
+
+  it("counts a joint return's outcome once: the spouse has none of their own", () => {
+    const input = golden("joint-same-couple");
+    const evaluation = new Evaluation(us, input);
+    expect(evaluation.line("p1", "RESULT.net").value!.toString()).toBe("5112");
+    expect(evaluation.line("p2", "RESULT.net").value!.toString()).toBe("0");
+  });
+
+  it("tells a couple filing separately what filing jointly saves, worked out as the year filed jointly", () => {
+    const input = golden("married-filing-separately");
+    const joint = { ...input, family: { ...input.family, filingStatus: "joint" } };
+    // $5,112 jointly, against $3,198 and $135 separately (the golden cases).
+    expect(net(joint) - net(input)).toBe(1779);
+    const found = findHints(us, input).filter((hint) => hint.id === "fileJointly");
+    expect(found).toEqual([expect.objectContaining({ personId: "p1", kind: "info", effect: "1779", effectLabel: "Filing jointly saves", change: [] })]);
+  });
+
+  it("works the other filing status out with the caller's input, and says nothing when it costs more", () => {
+    const input = golden("joint-same-couple");
+    const asked: string[] = [];
+    const hints = findHints(us, input, (given, filingStatus) => {
+      asked.push(filingStatus);
+      return { ...given, family: { ...given.family, filingStatus } };
+    });
+    expect(asked).toEqual(["separate"]);
+    expect(hints.map((hint) => hint.id)).not.toContain("fileSeparately");
+  });
+
+  it("warns of the estimated tax penalty from $1,000 owed and over a tenth of the tax, on the return of the person preparing", () => {
+    const owing = findHints(us, golden("joint-high-earners")).filter((hint) => hint.id === "estimatedTaxPenalty");
+    expect(owing).toEqual([expect.objectContaining({ personId: "p1", kind: "warning", amount: { label: "Amount you owe", value: "7960.4" } })]);
+    expect(findHints(us, golden("joint-same-couple")).map((hint) => hint.id)).not.toContain("estimatedTaxPenalty");
+  });
+
+  it("reminds about interest without a 1099-INT once on a joint return, and not with interest on one", () => {
+    expect(findHints(us, golden("joint-two-children-and-a-teen")).filter((hint) => hint.id === "interestWithoutForm").map((hint) => hint.personId)).toEqual(["p1"]);
+    expect(findHints(us, golden("joint-high-earners")).map((hint) => hint.id)).not.toContain("interestWithoutForm");
   });
 });

@@ -468,7 +468,8 @@ lines:
     formula: "max(0, line.F1040.24 - line.F1040.33)"
   RESULT.net:
     label: Refund, less the amount owed
-    formula: "line.F1040.34 - line.F1040.37"
+    formula: 'if(person.role == "self" or line.US.joint == 0, line.F1040.34 - line.F1040.37, 0)'
+    source: "On a joint return the spouse has no refund or amount owed of their own: hints add this line over both returns"
 
   # What this part of the app doesn't prepare: each one says so on the return instead of giving a wrong amount.
   SCOPE.return:

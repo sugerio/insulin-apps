@@ -35,3 +35,13 @@ balances:
 
 # What person.residentAllYear means.
 residency: Lived in Canada all year
+
+# What AI reading is told about Canada's documents (server/lib/reader.ts adds the slip types of slips.yaml). {year},
+# {nextYear} and {lastYear} are years.
+reading:
+  documents: Canadian personal tax slips, receipts and notices
+  notes:
+    - "Quebec RL slips (RL-1, RL-2 …) print boxes as letters: report each under its key in the list, a point or dash as an underscore (box B.A of an RL-1 is B_A). On an RL-2, box C goes under C_QPP when its source of income is RRQ, and under C otherwise. Their amounts print with a space and a comma: 45 000,00 is 45000.00."
+    - "Receipts and notices (RRSP, DONATION, MEDICAL, NOA) have no box numbers printed: the numbers in their list are this app's. Put each amount under the number of the matching description. For a medical receipt, person is the patient; for a notice of assessment, the taxpayer, and issuer is Canada Revenue Agency."
+    - "An RRSP receipt shows contributions for one period: report those from March 4 to December 31, {year} as box 1, and those from January 1 to March 2, {nextYear} as box 2. Contributions from January 1 to March 3, {year} belong to the year before: leave them out."
+    - "For a notice of assessment, taxYear is the year it assesses, such as {lastYear}; for an RRSP receipt, the year of the contributions."

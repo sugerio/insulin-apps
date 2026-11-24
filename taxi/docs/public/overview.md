@@ -118,7 +118,17 @@ unreported tips (Form 4137), a business loss, a household employee (Schedule H),
 versions. The app says so when one of them applies,
 instead of giving a wrong amount. A finished US return downloads as one PDF: the IRS's Form 1040 and the schedules and
 forms it uses (Schedules 1, 1-A, 2, 3, C, SE, 8812 and EIC, and Forms 2441, 8863, 8995, 8959 and 8960), filled in,
-then a worksheet. Taxi doesn't read US forms by AI yet: enter each W-2, 1099-INT and 1099-NEC on Income.
+then a worksheet.
+
+AI reads the US forms you upload: Form W-2, Form 1099-INT, Form 1099-NEC, Form 1098-T and Form 1098-E. Each one goes
+to the return of the person named on it. A 1098-E is added to the student loan interest. A 1098-T is not added to the
+credit as it is: its box 1, less boxes 5 and 10, is offered as the start of that person's education expenses on
+Personal info. A 1098-T for a dependant is not added, because a dependant has no return here: enter its amounts on the
+dependant's card. You can also type each form in on Income or Confirm.
+
+Hints on Finish for a US year: what filing jointly or separately would save a married couple, worked out from what you
+entered (you change the filing status on Personal info); a possible penalty for paying too little tax during the year;
+and interest that is taxable without a 1099-INT.
 
 ## What it stores
 

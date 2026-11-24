@@ -173,7 +173,8 @@ export function hintsOf(view: TaxYear, workspace: Workspace): FoundHint[] {
   const rules = rulesFor(view.country, view.year);
   if (!rules || view.adults.length === 0) return [];
   try {
-    return findHints(rules, engineInputOf(view, workspace));
+    // A hint that files the year the other way works out from what is stored, as the year would be filed.
+    return findHints(rules, engineInputOf(view, workspace), (_, filingStatus) => engineInputOf({ ...view, filingStatus }, workspace));
   } catch (error) {
     logError("hints_failed", error, { year: view.year });
     return [];

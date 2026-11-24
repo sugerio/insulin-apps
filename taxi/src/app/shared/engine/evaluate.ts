@@ -270,7 +270,7 @@ export class Evaluation {
           const used = this.rules.usedBoxes.get(slip.type) ?? new Set();
           for (const [box, amount] of Object.entries(slip.boxes)) {
             // A box blank on the paper slip is entered as 0: it adds nothing, so it needs no handling.
-            if (!used.has(box) && !Dec.from(amount).isZero()) unhandled.push(`${slip.type} from ${slip.issuer}: box ${box} isn't handled by this app`);
+            if (!used.has(box) && !Dec.from(amount).isZero()) unhandled.push(`${this.rules.slips.get(slip.type)?.name ?? slip.type} from ${slip.issuer}: box ${box} isn't handled by this app`);
           }
         }
         for (const id of Object.keys(answered)) {

@@ -1,5 +1,5 @@
 {
-  "about": "Single, $92,000 of wages and $2,800 of student loan interest: $2,500 counts, cut by 0.467 for the $7,000 over $85,000",
+  "about": "Single, $92,000 of wages and $2,800 of student loan interest ($2,200 on a Form 1098-E and $600 entered): $2,500 counts, cut by 0.467 for the $7,000 over $85,000",
   "input": {
     "country": "us",
     "year": 2025,
@@ -29,7 +29,7 @@
         "hasSelfEmployment": false,
         "hasStudentLoan": true,
         "paidForEducation": false,
-        "studentLoanInterest": "2800",
+        "studentLoanInterest": "600",
         "paidForCare": false
       }
     },
@@ -45,6 +45,15 @@
           "4": "5704",
           "5": "92000",
           "6": "1334"
+        }
+      },
+      {
+        "id": "p1-e1098-0",
+        "person": "p1",
+        "type": "F1098E",
+        "issuer": "Great Lakes Student Loans",
+        "boxes": {
+          "1": "2200"
         }
       }
     ]

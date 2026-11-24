@@ -65,8 +65,23 @@ describe("reading a slip with Claude", () => {
     expect(prompt).toContain("Alex Martin (self)");
     expect(prompt).toContain("- T2202, T2202 Tuition and Enrolment Certificate");
     expect(prompt).toContain("16A (Employee's second CPP contributions)");
-    expect(prompt).toContain("Never return a social insurance number.");
+    expect(prompt).toContain("Never return an identification number: no social insurance, social security, taxpayer or employer identification number.");
     expect(prompt).toContain("- RL1, RL-1 slip, Employment and Other Income (Revenu Québec)");
     expect(prompt).toContain("B_A (QPP contribution (box B.A))");
+    // The country's notes (year.yaml, reading), with their years filled in.
+    expect(prompt).toContain("You read Canadian personal tax slips, receipts and notices for the 2025 tax year.");
+    expect(prompt).toContain("those from January 1 to March 2, 2026 as box 2");
+    expect(prompt).toContain("For a notice of assessment, taxYear is the year it assesses, such as 2024");
+  });
+
+  it("builds a US year's prompt from the US forms and notes, with nothing of Canada's", () => {
+    const prompt = promptFor({ ...context, rules: rulesFor("us", 2025)! });
+    expect(prompt).toContain("You read United States information returns (Forms W-2, 1099 and 1098) for the 2025 tax year.");
+    expect(prompt).toContain("- W2, Form W-2 Wage and Tax Statement");
+    expect(prompt).toContain("- F1098T, Form 1098-T Tuition Statement");
+    expect(prompt).toContain("- F1098E, Form 1098-E Student Loan Interest Statement");
+    expect(prompt).toContain("For a Form 1098-T, person is the student");
+    expect(prompt).toContain("Never return an identification number");
+    expect(prompt).not.toMatch(/Quebec|RRSP|Canada|\{year\}/);
   });
 });

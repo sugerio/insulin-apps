@@ -53,15 +53,16 @@ export function StepLayout({ step, title, estimate = true, aside, children }: { 
         <>
           <div className="flex min-w-0 flex-col gap-3">
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <ReturnSwitcher />
-              <div className="flex items-center gap-2">
-                {estimate ? <EstimateSummary /> : null}
+              {/* The collapsed column opens again from where it was: the left, before whose return it is. */}
+              <div className="flex min-w-0 items-center gap-1">
                 {wide ? (
-                  <Button variant="ghost" size="icon-sm" onClick={() => setCollapsed(false)} aria-label="Show the estimate beside the step" title="Show the estimate beside the step">
+                  <Button variant="outline" size="icon-sm" onClick={() => setCollapsed(false)} aria-label="Show the estimate beside the step" title="Show the estimate beside the step">
                     <ChevronDown aria-hidden="true" />
                   </Button>
                 ) : null}
+                <ReturnSwitcher />
               </div>
+              {estimate ? <EstimateSummary /> : null}
             </div>
             <StepNav />
           </div>

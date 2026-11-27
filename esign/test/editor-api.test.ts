@@ -84,7 +84,12 @@ test('editor sessions enforce scope and persist immutable template versions with
   const sameRoleForm=new FormData();sameRoleForm.set('file',new File([bytes],'synthetic.pdf'));sameRoleForm.set('roles','["Partner","Seller"]');sameRoleForm.set('fields',JSON.stringify([field,{...field,id:'field-2',rect:{...field.rect,x:.15}}]));
   assert.equal((await req('/api/public/editor/save',{method:'POST',headers:{'x-esign-session':rotateToken,origin:'https://esign.example.com'},body:sameRoleForm})).status,422,'overlapping same-role fields cannot be saved');
   const overlappingForm=new FormData();overlappingForm.set('file',new File([bytes],'synthetic.pdf'));overlappingForm.set('roles','["Partner","Seller"]');overlappingForm.set('fields',JSON.stringify([field,{...field,id:'field-2',role:'Seller',rect:{...field.rect,x:.15}}]));
-  assert.equal((await req('/api/public/editor/save',{method:'POST',headers:{'x-esign-session':rotateToken,origin:'https://esign.example.com'},body:overlappingForm})).status,422,'overlapping cross-role fields cannot be saved');
+  // A refused placement names the fields, by the ids the editor gave them, so the editor can show which.
+  const overlapping=await req('/api/public/editor/save',{method:'POST',headers:{'x-esign-session':rotateToken,origin:'https://esign.example.com'},body:overlappingForm});
+  assert.deepEqual([overlapping.status,await overlapping.json()],[422,{error:'invalid_pdf_or_fields',reason:'fields_overlap',fields:['field-1','field-2']}],'overlapping cross-role fields cannot be saved');
+  const offPageForm=new FormData();offPageForm.set('file',new File([bytes],'synthetic.pdf'));offPageForm.set('roles','["Partner","Seller"]');offPageForm.set('fields',JSON.stringify([field,{...field,id:'field-2',role:'Seller',rect:{...field.rect,x:.9}}]));
+  const offPage=await req('/api/public/editor/save',{method:'POST',headers:{'x-esign-session':rotateToken,origin:'https://esign.example.com'},body:offPageForm});
+  assert.deepEqual([offPage.status,await offPage.json()],[422,{error:'invalid_pdf_or_fields',reason:'field_off_page',fields:['field-2']}],'a field past its page\'s edge cannot be saved');
   // Refused for the page's rotation, with the role's Signature placed: the save is otherwise valid.
   const rotateForm=new FormData();rotateForm.set('file',new File([await rotated.save()],'rotated.pdf'));rotateForm.set('roles','["Partner"]');rotateForm.set('fields',JSON.stringify([field]));
   const warn=console.warn;console.warn=()=>{};let rotatedSave:Response;try{rotatedSave=await req('/api/public/editor/save',{method:'POST',headers:{'x-esign-session':rotateToken,origin:'https://esign.example.com'},body:rotateForm});}finally{console.warn=warn;}

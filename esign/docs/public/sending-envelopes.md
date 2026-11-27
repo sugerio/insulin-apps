@@ -26,7 +26,8 @@ work and contacts. It is for people who send and for AI agents acting for them.
    [default signer](/docs/esign/templates#default-signers) has them filled in. As you type two or more characters in either, matching
    [contacts](#contacts) are suggested; choose one (or use the arrow keys and Enter) to fill in the signer.
 4. Under **Document**, add what signers should see about the document, and a sign-by day if there is one. All optional.
-5. Choose **Send for signature**.
+5. Choose **Send for signature**. If something is missing (a signer's email, say, or a required pre-filled field), the
+   page says what beside the button and takes you to the field.
 
 The envelope's page opens. It is **Out for signature**, and the first signer is **Asked to sign**.
 

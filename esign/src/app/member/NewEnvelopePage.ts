@@ -40,6 +40,8 @@ export function NewEnvelopePage({ me }: { me: Me }) {
   // The template's pre-filled fields' values, by name: as typed, else their defaults.
   const [prefill, setPrefill] = useState<Record<string, string>>({})
   const [message, setMessage] = useState({ text: '', error: false })
+  // What stopped the last send, said beside the send button.
+  const [stopped, setStopped] = useState('')
   const [busy, setBusy] = useState(false)
   const attempt = useRef<{ body: string; key: string } | null>(null)
   // The draft this form is (`?draft=<id>`, or once Save draft has saved it), and its request until the form has it.
@@ -127,25 +129,37 @@ export function NewEnvelopePage({ me }: { me: Me }) {
       setSchedule({})
     }).catch((error) => setMessage({ text: describeError(error), error: true })).finally(() => setBusy(false))
   }
-  /** What stops the form from being sent, said as the member can fix it; '' when nothing does. */
-  function sendProblem(): string {
-    if (!template) return 'Choose a template.'
+  /** What stops the form from being sent, said as the member can fix it, and the field to fix; null when nothing does. */
+  function sendProblem(): { text: string; field: string } | null {
+    if (!template) return { text: 'Choose a template.', field: 'envelope-template' }
     const missing = (template.prefill ?? []).find((d) => d.required && !(prefill[d.name] ?? '').trim())
-    if (missing) return `Fill in ${missing.label}.`
+    if (missing) return { text: `Fill in ${missing.label}.`, field: `prefill-${missing.name}` }
     const undrawable = (template.prefill ?? []).find((d) => !/^[\x20-\x7e]{0,128}$/.test((prefill[d.name] ?? '').trim()))
-    if (undrawable) return `${undrawable.label}: use plain English letters, digits and punctuation, at most 128 characters.`
-    if (signers.some((s) => !s.name.trim() || !EMAIL.test(s.email.trim()))) return 'Enter a name and an email address for each signer.'
-    if ([note.subject, ...signers.map((s) => s.subject ?? '')].some((subject) => subject.trim().length > 100)) return 'Use at most 100 characters for an email subject.'
+    if (undrawable) return { text: `${undrawable.label}: use plain English letters, digits and punctuation, at most 128 characters.`, field: `prefill-${undrawable.name}` }
+    const signer = signers.findIndex((s) => !s.name.trim() || !EMAIL.test(s.email.trim()))
+    if (signer >= 0) return { text: 'Enter a name and an email address for each signer.', field: `signer-${signer}-${signers[signer]!.name.trim() ? 'email' : 'name'}` }
+    const subject = [note.subject, ...signers.map((s) => s.subject ?? '')].findIndex((subject) => subject.trim().length > 100)
+    if (subject >= 0) return { text: 'Use at most 100 characters for an email subject.', field: subject ? `signer-${subject - 1}-subject` : 'message-subject' }
     if (signBy.trim()) {
       const at = Date.parse(signByTime(signBy))
-      if (!(at > Date.now() && at <= Date.now() + 400 * 86_400_000)) return 'Choose a sign-by day from today up to 400 days ahead.'
+      if (!(at > Date.now() && at <= Date.now() + 400 * 86_400_000)) return { text: 'Choose a sign-by day from today up to 400 days ahead.', field: 'sign-by' }
     }
-    return ''
+    return null
+  }
+  /** Whether the form can be sent: if not, says why beside the send button and takes the member to the field to fix. */
+  function sendable(): boolean {
+    const problem = sendProblem()
+    setStopped(problem?.text ?? '')
+    if (!problem) return true
+    setMessage({ text: '', error: false })
+    const field = typeof document === 'undefined' ? null : document.getElementById(problem.field)
+    field?.scrollIntoView?.({ block: 'center' })
+    field?.focus?.({ preventScroll: true })
+    return false
   }
   /** Send later: checked as a send, kept a draft that Esign sends at `sendAt`; this page is then its address. */
   function sendLater() {
-    const problem = sendProblem()
-    if (problem) { setMessage({ text: problem, error: true }); return }
+    if (!sendable()) return
     setMessage({ text: '', error: false })
     setPicking(true)
   }
@@ -165,8 +179,7 @@ export function NewEnvelopePage({ me }: { me: Me }) {
     }).catch((error) => { setPicking(false); setMessage({ text: describeError(error), error: true }) }).finally(() => setBusy(false))
   }
   function send() {
-    const problem = sendProblem()
-    if (problem) { setMessage({ text: problem, error: true }); return }
+    if (!sendable()) return
     setBusy(true)
     setMessage({ text: '', error: false })
     const body = JSON.stringify(request())
@@ -237,6 +250,7 @@ export function NewEnvelopePage({ me }: { me: Me }) {
       h(CardFooter, { className: 'flex flex-wrap gap-2' },
         h(Button, { variant: 'outline', disabled: busy, onClick: saveDraft }, h(Save, { 'aria-hidden': true }), 'Save draft'),
         h(SendButton, { busy, label: schedule.sendAt ? 'Send now' : 'Send for signature', onSend: send, onLater: sendLater }),
+        stopped ? h('p', { role: 'alert', className: 'w-full text-sm text-destructive' }, stopped) : null,
         schedule.sendAt ? h('p', { className: 'w-full text-xs text-muted-foreground' }, 'Saving as a draft cancels the scheduled send.') : null)) : null,
     h(SendLaterDialog, { open: picking, initial: schedule.sendAt, signBy, busy, onClose: () => setPicking(false), onSchedule: schedule_ }))
 }

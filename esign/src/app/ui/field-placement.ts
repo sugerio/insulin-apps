@@ -34,3 +34,11 @@ export function newFieldPlacement(page:Rect,pointer:Point,pdf:Size):Rect {
  const size=editorFieldSize(pdf);
  return moveField(page,pointer,size,{x:size.width/2,y:size.height/2});
 }
+
+/** The page most in view (its index), by how much of its height `view` shows: the first on a tie, the first page when
+ * none shows. A field added with a button goes there (FieldEditor.ts). */
+export function mostVisiblePage(view:{top:number;bottom:number},pages:{top:number;bottom:number}[]):number {
+ let best=0,shown=0;
+ pages.forEach((page,index)=>{const visible=Math.min(view.bottom,page.bottom)-Math.max(view.top,page.top);if(visible>shown){best=index;shown=visible;}});
+ return best;
+}

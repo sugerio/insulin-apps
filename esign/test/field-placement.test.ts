@@ -40,3 +40,15 @@ test('new-field preview and drop share a centered grab point at each page scale 
  const other=newFieldPlacement({x:0,y:0,width:600,height:900},{x:300,y:450},{width:300,height:450});
  assert.equal(other.width,.5);assert.equal(other.height,34/450);assert.equal(other.x,.25);
 });
+
+test('a field added with a button goes on the page most in view: the most of it shown, the first on a tie, else page 1', () => {
+  assert.equal(typeof placement.mostVisiblePage, 'function', 'the page most in view is not implemented');
+  const pages = [{top: -900, bottom: -100}, {top: -100, bottom: 700}, {top: 724, bottom: 1524}];
+  // Scrolled to page 2: page 1 is above the view, page 3 mostly below it.
+  assert.equal(placement.mostVisiblePage!({top: 0, bottom: 800}, pages), 1);
+  assert.equal(placement.mostVisiblePage!({top: -100, bottom: 1200}, pages), 1, 'page 2 is shown whole and page 3 less of it');
+  assert.equal(placement.mostVisiblePage!({top: 300, bottom: 1500}, pages), 2);
+  assert.equal(placement.mostVisiblePage!({top: 0, bottom: 800}, [{top: 0, bottom: 400}, {top: 400, bottom: 800}]), 0, 'a tie: the first');
+  assert.equal(placement.mostVisiblePage!({top: 2000, bottom: 2800}, pages), 0, 'none in view: page 1');
+  assert.equal(placement.mostVisiblePage!({top: 0, bottom: 800}, []), 0);
+});

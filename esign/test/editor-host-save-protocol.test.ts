@@ -20,6 +20,16 @@ test('save messages require exact parent/source origin, request ID and matching 
  assert.equal(protocol.readSaveResult!({origin:'https://editor.example.com',source:iframe,data:{...reply,extra:true}},'https://editor.example.com',iframe,'req-123'),null);
 });
 
+test('a save-error may say the editor showed it (shown: true); only true, and nothing else extra', async () => {
+ const {readSaveResult}=await import('../src/app/ui/editor-save-protocol.ts');
+ const iframe={},at=(data:unknown)=>readSaveResult({origin:'https://editor.example.com',source:iframe,data},'https://editor.example.com',iframe,'req-1');
+ const error={type:'esign.editor.save-error',requestId:'req-1',message:'Fields overlap.'};
+ assert.deepEqual(at(error),{type:'esign.editor.save-error',message:'Fields overlap.',shown:false});
+ assert.deepEqual(at({...error,shown:true}),{type:'esign.editor.save-error',message:'Fields overlap.',shown:true});
+ for(const shown of [false,'true',1])assert.equal(at({...error,shown}),null,String(shown));
+ assert.equal(at({...error,shown:true,extra:1}),null);
+});
+
 test('a save request may ask for a draft; without it, it is the save hosts have always sent', async () => {
  const {readSaveCall}=await import('../src/app/ui/editor-save-protocol.ts');
  const parent={},at=(data:unknown)=>readSaveCall({origin:'https://host.example.com',source:parent,data},'https://host.example.com',parent);

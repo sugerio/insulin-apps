@@ -37,6 +37,12 @@ export function parsePrefillCatalog(value:unknown):PrefillCatalogEntry[]|null|'i
   }
   return out;
 }
+/** A field placed where it can't be: two that overlap, or one past its page's edge. `fields` are their ids, as the
+ * editor gave them, so that it can say which (editor-routes.ts). */
+export class FieldPlacementError extends Error {
+  readonly reason:'fields_overlap'|'field_off_page';readonly fields:string[];
+  constructor(message:string,reason:'fields_overlap'|'field_off_page',fields:string[]){super(message);this.reason=reason;this.fields=fields;}
+}
 /** Normalized coordinates use the displayed page's top-left as origin. */
 export function validateTemplateFields(value:unknown,roles:string[],pageCount:number):TemplateField[] {
   if(!Array.isArray(value)||value.length>200||!Number.isSafeInteger(pageCount)||pageCount<1)throw new Error('Invalid fields');
@@ -48,7 +54,7 @@ export function validateTemplateFields(value:unknown,roles:string[],pageCount:nu
     if(typeof f.id!=='string'||!/^[A-Za-z0-9_-]{1,64}$/.test(f.id)||ids.has(f.id)||typeof f.type!=='string'||!FIELD_TYPES.includes(f.type as typeof FIELD_TYPES[number])||typeof f.role!=='string'||(prefill?f.role!=='':!roles.includes(f.role))||!Number.isSafeInteger(f.page)||f.page!<1||f.page!>pageCount||typeof f.required!=='boolean'||!r||typeof r!=='object')throw new Error('Invalid field');
     if(prefill&&(typeof f.name!=='string'||f.name.length>64||!PREFILL_NAME.test(f.name)||!validLabel(f.label)||(f.default!==undefined&&(!validPrefillValue(f.default)||f.default===''))))throw new Error('Invalid pre-filled field');
     const {x,y,width,height}=r;
-    if(![x,y,width,height].every(v=>typeof v==='number'&&Number.isFinite(v))||x<0||y<0||width<=0||height<=0||x+width>1||y+height>1)throw new Error('Invalid field geometry');
+    if(![x,y,width,height].every(v=>typeof v==='number'&&Number.isFinite(v))||x<0||y<0||width<=0||height<=0||x+width>1||y+height>1)throw new FieldPlacementError('Invalid field geometry','field_off_page',[f.id]);
     ids.add(f.id);
     return {id:f.id,type:f.type,role:f.role,page:f.page!,required:f.required,rect:{x,y,width,height},...(prefill?{name:f.name,label:f.label,...(f.default===undefined?{}:{default:f.default})}:{})};
   });
@@ -80,7 +86,7 @@ function decimalLessThanSum(value:number,start:number,length:number):boolean {
 export function assertNoOverlappingFields(fields:TemplateField[]):void {
   for(let i=0;i<fields.length;i++)for(let j=i+1;j<fields.length;j++){
     const a=fields[i],b=fields[j];if(a.page!==b.page)continue;
-    if(decimalLessThanSum(a.rect.x,b.rect.x,b.rect.width)&&decimalLessThanSum(b.rect.x,a.rect.x,a.rect.width)&&decimalLessThanSum(a.rect.y,b.rect.y,b.rect.height)&&decimalLessThanSum(b.rect.y,a.rect.y,a.rect.height))throw new Error('Overlapping fields');
+    if(decimalLessThanSum(a.rect.x,b.rect.x,b.rect.width)&&decimalLessThanSum(b.rect.x,a.rect.x,a.rect.width)&&decimalLessThanSum(a.rect.y,b.rect.y,b.rect.height)&&decimalLessThanSum(b.rect.y,a.rect.y,a.rect.height))throw new FieldPlacementError('Overlapping fields','fields_overlap',[a.id,b.id]);
   }
 }
 

@@ -15,9 +15,10 @@ export function readSaveCall(event:Message,origin:string,parent:unknown):{reques
 export function readSaveRequest(event:Message,origin:string,parent:unknown):string|null {
  return readSaveCall(event,origin,parent)?.requestId??null;
 }
-export function readSaveResult(event:Message,origin:string,source:unknown,requestId:string):{type:'esign.editor.saved';templateId:string}|{type:'esign.editor.save-error';message:string}|null {
+/** A save's answer. A save-error with `shown: true` was shown in the editor too, so a host may leave it out. */
+export function readSaveResult(event:Message,origin:string,source:unknown,requestId:string):{type:'esign.editor.saved';templateId:string}|{type:'esign.editor.save-error';message:string;shown:boolean}|null {
  if(!source||!requestIdValid(requestId)||event.source!==source||event.origin!==origin||!record(event.data)||event.data.requestId!==requestId)return null;
  if(event.data.type==='esign.editor.saved'&&typeof event.data.templateId==='string'&&/^[a-f0-9-]{36}$/.test(event.data.templateId)&&Object.keys(event.data).length===3)return {type:'esign.editor.saved',templateId:event.data.templateId};
- if(event.data.type==='esign.editor.save-error'&&typeof event.data.message==='string'&&event.data.message.length<=300&&Object.keys(event.data).length===3)return {type:'esign.editor.save-error',message:event.data.message};
+ if(event.data.type==='esign.editor.save-error'&&typeof event.data.message==='string'&&event.data.message.length<=300&&(Object.keys(event.data).length===3||(Object.keys(event.data).length===4&&event.data.shown===true)))return {type:'esign.editor.save-error',message:event.data.message,shown:event.data.shown===true};
  return null;
 }

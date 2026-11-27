@@ -87,9 +87,12 @@ test('cross-origin browser embeds, saves and reopens; hostile parent and spoofed
   assert.ok(records.some(r=>r.path==='/host/editor-demo-session'&&r.status===201),'host selected file is staged through the session source upload');
   assert.ok(!records.some(r=>r.path.endsWith('/source')),'the browser never uploads the source itself');
   await wait(()=>evaluate("!document.querySelector('#continue').disabled"),'host editor ready');
+  await evaluate("window.__saveErrors=[];window.addEventListener('message',e=>{if(e.data?.type==='esign.editor.save-error')window.__saveErrors.push(e.data);})");
   await evaluate("document.querySelector('#continue').click()");
   await wait(()=>evaluate("document.querySelector('#status').textContent.includes('add a Signature field')"),'host shows validation error');
-  assert.equal(await evaluate("document.querySelector('[role=alert]').textContent",context),'','said once, by the host: the editor doesn\'t repeat it');
+  // The editor shows it too, and says so: a host may then leave it out (Esign's pages do; this one shows it).
+  assert.equal(await evaluate("document.querySelector('[role=alert]').textContent",context),'Role Partner: add a Signature field.');
+  assert.equal(await evaluate("window.__saveErrors.at(-1).shown"),true,'the answer says the editor showed it');
   const scroll=await evaluate(`(()=>{const pdf=document.querySelector('[aria-label="PDF pages"]'),panel=document.querySelector('aside');const before=panel.getBoundingClientRect().top;pdf.scrollTop=300;return {scroll:pdf.scrollTop,panelBefore:before,panelAfter:panel.getBoundingClientRect().top,overflow:getComputedStyle(pdf).overflowY}})()`,context);assert.ok(scroll.scroll>0,'PDF panel scrolls independently');assert.equal(scroll.panelBefore,scroll.panelAfter);assert.match(scroll.overflow,/auto|scroll/);
   // Real toolbar drags: different physical pages and displayed scales, center grab and edge clamp.
   for(const [page,zoom] of [[1,1],[2,.7]] as const){
@@ -223,8 +226,8 @@ test('cross-origin browser embeds, saves and reopens; hostile parent and spoofed
   await evaluate("document.querySelector('#continue').click()");
   const legacyVersion=await wait(async()=>{const v=await evaluate("document.querySelector('#status').textContent.match(/Saved template: ([a-f0-9-]+)/)?.[1]");return v&&v!==second?v:null;},'legacy version');
   for(const id of [legacy,legacyVersion]){const row=await db.prepare('SELECT roles_json,fields_json FROM templates WHERE id=?').bind(id).first() as any;assert.deepEqual(JSON.parse(row.roles_json),['Signer','signer']);const fields=JSON.parse(row.fields_json);if(id===legacy){assert.deepEqual(fields,legacyFields);}else{assert.equal(fields.length,2);assert.deepEqual(fields[0],{...legacyFields[0],page:2,rect:{...legacyFields[0].rect,width:.375,height:.05*800/600}});assert.deepEqual(fields[1],{...legacyFields[1],required:true});}}
-  // A save the server refuses for overlapping fields names them: the host says so, once (the editor doesn't repeat it),
-  // and the editor selects the first and focuses it, to move it apart.
+  // A save the server refuses for overlapping fields names them, in the editor and in its answer (marked shown), and
+  // the editor selects the first and focuses it, to move it apart.
   await evaluate(`(()=>{document.querySelector('#source').value='';document.querySelector('#roles').value='Partner';const input=document.querySelector('#file'),bytes=Uint8Array.from(atob(${JSON.stringify(base64)}),c=>c.charCodeAt(0)),d=new DataTransfer();d.items.add(new File([bytes],'overlap.pdf',{type:'application/pdf'}));input.files=d.files;input.dispatchEvent(new Event('change',{bubbles:true}));document.querySelector('#open').click();})()`);
   const overlapContext=await wait(async()=>{const c=await frameContext();return c&&c!==legacyContext?c:0;},'overlap frame');
   await wait(()=>evaluate("document.querySelectorAll('[data-page]').length===2",overlapContext),'overlap PDF');
@@ -233,7 +236,8 @@ test('cross-origin browser embeds, saves and reopens; hostile parent and spoofed
   await evaluate(`(()=>{const [signature,date]=document.querySelectorAll('[data-page="1"] [data-editor-field]'),r=signature.getBoundingClientRect(),data=new DataTransfer();data.setData('text/plain','field:'+date.dataset.editorField);document.querySelector('[data-page="1"] > div').dispatchEvent(new DragEvent('drop',{bubbles:true,dataTransfer:data,clientX:r.left+r.width/2,clientY:r.top+r.height/2}));document.body.focus();})()`,overlapContext);
   await wait(()=>evaluate("!document.querySelector('#continue').disabled"),'overlap host ready');await evaluate("document.querySelector('#continue').click()");
   await wait(()=>evaluate("document.querySelector('#status').textContent.startsWith('Partner — Signature and Partner — Date signed overlap on page 1: move them apart and save again.')"),'host names the overlapping fields');
-  assert.deepEqual(await evaluate(`(()=>{const signature=document.querySelector('[data-page="1"] [data-editor-field] button');return {alert:document.querySelector('[role=alert]').textContent,selected:signature.hasAttribute('data-selected'),focused:document.activeElement===signature};})()`,overlapContext),{alert:'',selected:true,focused:true});
+  assert.deepEqual(await evaluate(`(()=>{const signature=document.querySelector('[data-page="1"] [data-editor-field] button');return {alert:document.querySelector('[role=alert]').textContent,selected:signature.hasAttribute('data-selected'),focused:document.activeElement===signature};})()`,overlapContext),{alert:'Partner — Signature and Partner — Date signed overlap on page 1: move them apart and save again.',selected:true,focused:true});
+  assert.equal(await evaluate("window.__saveErrors.at(-1).shown"),true,'the answer says the editor showed it');
 
   // pages visible so CDP moves a genuine pointer through the iframe, not a
   // synthesized DragEvent. The temporary viewport belongs only to this browser.

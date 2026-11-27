@@ -20,7 +20,8 @@ const types=['Signature','Date signed','Title'];
 const MAX_FIELDS=20;
 const defaultRoles=['First signer','Second signer'];
 
-export type EditorSaveResult = {ok:true;templateId:string}|{ok:false;message:string};
+/** `shown`: the editor shows the message itself, so a host may leave it out (EditorPage.ts posts it to the host). */
+export type EditorSaveResult = {ok:true;templateId:string}|{ok:false;message:string;shown?:true};
 /** `save(true)`: as a draft, which needn't be ready yet and leaves the editor open to save again. */
 export type EditorHandle = { save:(draft?:boolean)=>Promise<EditorSaveResult> };
 /** `roleLabels`: who signs as each role (an uploaded envelope's signers), shown beside it. */
@@ -68,8 +69,8 @@ export const FieldEditor=React.forwardRef<EditorHandle,EditorProps>(function Fie
     else if(e.key==='PageDown'||e.key==='PageUp'){e.preventDefault();const page=Math.max(1,Math.min(pages.length,field.page+(e.key==='PageDown'?1:-1)));try{const size=sizeOnPage(field.rect,pageSize(field.page-1),pageSize(page-1));setFields(old=>old.map(f=>f.id===field.id?{...f,page,rect:{...f.rect,...size,x:Math.min(f.rect.x,1-size.width),y:Math.min(f.rect.y,1-size.height)}}:f));}catch{setError('This page is too small for the field.');}}
   }
   async function save(draft=false):Promise<EditorSaveResult>{
-    // Embedded, the host asked for the save and shows its answer (esign.editor.save-error): said once, there.
-    const fail=(message:string):EditorSaveResult=>{if(!embedded)setError(message);return {ok:false,message};};
+    // Shown here, embedded too, and the answer says so: a host may then leave it out (esign.editor.save-error `shown`).
+    const fail=(message:string):EditorSaveResult=>{setError(message);return {ok:false,message,shown:true};};
     /** A refused save that names fields (EditorPage.ts refusal): the first is selected and shown. */
     const showRefused=(error:Error)=>{const id=(error as Error&{fields?:string[]}).fields?.[0];if(id&&fields.some(f=>f.id===id)){setSelected(id);setReveal(id);}};
     if(!onSave||inFlightRef.current||savedRef.current)return fail('Saving is unavailable or already in progress. Check the host for the saved result.');

@@ -199,7 +199,8 @@ A host product can show the field editor inside its own pages. Its backend calls
    (`Content-Type: application/pdf`), once, before the page is opened.
 3. Frame the `url` in the host page. The editor posts `esign.editor.ready` to the parent; the host sends
    `esign.editor.save` with a request id, and the editor answers `esign.editor.saved` or `esign.editor.save-error`, only
-   to the parent origin. Show a save-error's `message` on your page: the editor doesn't show it too. Add `draft: true` to save a draft: the editor stays open, and each save after the first saves
+   to the parent origin. Show a save-error's `message` on your page, unless it has `shown: true`: the editor showed it
+   already, so you may leave it out. Add `draft: true` to save a draft: the editor stays open, and each save after the first saves
    the same draft again; a save without it makes the template ready and ends the session. A template in use (with
    `replace`) is saved as ready only; one that is a draft, with `replace`, is saved in place.
 4. Treat the message as a prompt only: read the result with `GET /api/template-editing-sessions/{id}`, which answers

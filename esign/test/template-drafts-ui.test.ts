@@ -54,6 +54,32 @@ test('the field editor saves a draft and stays open, then saves it as ready; the
   } finally { await app.unmount(); }
 });
 
+test('a failed save the editor showed itself is not said again on the page; one it didn\'t show is', async () => {
+  const app = await renderMember('/templates', (c) => {
+    if (c.path === '/api/me') return json(EDITOR);
+    if (c.path.startsWith('/api/templates?')) return json({ templates: [] });
+    if (c.path.startsWith('/api/tags?')) return json({ tags: [] });
+    if (c.path === '/api/template-editing-sessions' && c.method === 'POST') return json({ sessionId: SESSION, url: `${ORIGIN}/editor/page/${SESSION}#${'b'.repeat(64)}` }, 201);
+    if (c.path === `/api/template-editing-sessions/${SESSION}/source`) return json({}, 201);
+  });
+  const saveRequests = () => app.posted.filter((m: any) => m?.type === 'esign.editor.save') as { requestId: string }[];
+  const fail = (requestId: string, message: string, shown?: true) => app.dispatch({ origin: ORIGIN, source: app.frameWindow, data: { type: 'esign.editor.save-error', requestId, message, ...(shown ? { shown } : {}) } });
+  try {
+    await app.click(app.button('New template'), 'New template');
+    await app.act(async () => { app.byId('template-pdf').props.onChange({ target: { files: [pdf()] } }); });
+    await app.type(app.byLabel('Role 1'), 'partner');
+    await app.click(app.button('Upload and place fields'), 'Place fields');
+    await app.dispatch({ origin: ORIGIN, source: app.frameWindow, data: { type: 'esign.editor.ready' } });
+    await app.click(app.button('Save'), 'Save');
+    await fail(saveRequests()[0]!.requestId, 'partner — Signature and partner — Title overlap on page 2: move them apart and save again.', true);
+    assert.doesNotMatch(app.text(), /overlap on page 2|Saving the fields/, 'the editor said it: not again, and no longer saving');
+    assert.equal(app.button('Save').props.disabled, false, 'and it can be saved again');
+    await app.click(app.button('Save'), 'Save again');
+    await fail(saveRequests()[1]!.requestId, 'Save unavailable. Check the saved result before retrying.');
+    assert.match(app.text(), /Save unavailable\. Check the saved result before retrying\./);
+  } finally { await app.unmount(); }
+});
+
 test('the list: a draft has a Draft badge and Edit, which opens its fields with Save draft and Save; a ready one has Use; Status filters', async () => {
   const DRAFT = row('draft', '33333333-3333-4333-8333-333333333333', 'NDA draft'), READY = row('active');
   const app = await renderMember('/templates', (c) => {

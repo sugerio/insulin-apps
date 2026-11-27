@@ -91,7 +91,8 @@ export function SendDocumentPage({ me }: { me: Me }) {
       if (!editor.requestId) return
       const result = readSaveResult(event, window.location.origin, source, editor.requestId)
       if (!result) return
-      if (result.type === 'esign.editor.save-error') { setEditor((old) => old && { ...old, requestId: '' }); setMessage({ text: result.message, error: true }); return }
+      // The editor said it already (shown): not again here.
+      if (result.type === 'esign.editor.save-error') { setEditor((old) => old && { ...old, requestId: '' }); setMessage(result.shown ? { text: '', error: false } : { text: result.message, error: true }); return }
       void run(async () => {
         const envelope = await apiJson<Envelope>(`/api/envelopes/${draftId}`)
         setPlaced(envelope.upload?.fields ?? [])

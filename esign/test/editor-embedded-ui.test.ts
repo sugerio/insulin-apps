@@ -12,7 +12,7 @@ test('embedded editor has no upload or save buttons; host owns both',async()=>{
  assert.match(host,/type="file"/);assert.match(host,/>Save template<\/button>/);
 });
 
-test('a save the host asks for and that fails is said once, by the host: the embedded editor answers it without showing it too',async()=>{
+test('a save that fails is shown in the editor, embedded too, and its answer says so (shown), for a host to say it once',async()=>{
  const {default:Renderer,act}=await import('react-test-renderer');
  (globalThis as any).IS_REACT_ACT_ENVIRONMENT=true;
  const alertText=(renderer:any)=>renderer.root.findAll((n:any)=>n.type==='p'&&n.props.role==='alert').map((n:any)=>n.children.join('')).join('');
@@ -21,9 +21,9 @@ test('a save the host asks for and that fails is said once, by the host: the emb
   try{
    await act(async()=>{renderer=Renderer.create(React.createElement(FieldEditor,{ref,embedded,onSave:async()=>'unused'}));});
    let result:any;await act(async()=>{result=await ref.current.save();});
-   assert.deepEqual(result,{ok:false,message:'Upload a PDF and wait for the preview before saving.'});
-   // Embedded, the host shows the answer (esign.editor.save-error); the editor's own Save template button shows it here.
-   assert.equal(alertText(renderer),embedded?'':'Upload a PDF and wait for the preview before saving.');
+   assert.deepEqual(result,{ok:false,message:'Upload a PDF and wait for the preview before saving.',shown:true});
+   // Shown here, embedded or not: a host that doesn't show esign.editor.save-error still lets its user see it.
+   assert.equal(alertText(renderer),'Upload a PDF and wait for the preview before saving.');
   }finally{if(renderer)await act(async()=>renderer.unmount());}
  }
  delete (globalThis as any).IS_REACT_ACT_ENVIRONMENT;

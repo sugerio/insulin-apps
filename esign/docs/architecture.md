@@ -682,7 +682,8 @@ The host names its parent origin, `allowedParentOrigin` (https, or http on `loca
 framed by any other origin ("Who may frame the pages" above); the iframe removes the code from its URL before the exchange and
 keeps its token in memory. It posts `esign.editor.ready`, and answers the parent's
 `esign.editor.save` (with a request id) with `esign.editor.saved` or `esign.editor.save-error`, only
-to the parent origin; the host shows a save-error's message, which the editor doesn't repeat. A message is only a prompt: the host's backend reads the result with
+to the parent origin; a save-error the editor showed itself says `shown: true`, and a host may leave its message out
+(Esign's own pages do), else it shows it. A message is only a prompt: the host's backend reads the result with
 `GET /api/template-editing-sessions/:id`. One session saves once; another version needs a new
 session.
 

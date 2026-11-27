@@ -56,6 +56,7 @@ The editor shows the PDF's pages on the left and the tools on the right.
 
 1. Under **Placing fields for**, choose a role.
 2. Drag a field from **Fields** onto a page, or choose its button to add it: **Signature**, **Date signed** or **Title**.
+   A button adds it on the page most in view, below the fields already there, and selects it, ready for the arrow keys.
    A new box marks a starting area of 150 by 34 points.
 3. Move a placed field by dragging it, or select it and use the arrow keys. Page Up and Page Down move it to another
    page. Remove it with the × in the field.
@@ -86,7 +87,8 @@ Rules the editor and the server check:
 
 - every role has at least one required Signature field, and only these three field types are used;
 - at most 20 fields per template can be signed, and fields don't overlap;
-- each field is at least 20 by 10 points and stays on its page;
+- each field is at least 20 by 10 points and stays on its page (a save refused for an overlap or a field off its page
+  names the fields and their page, and the editor selects the first);
 - the PDF has no form fields or annotations, and its pages are upright and uncropped. Esign makes it so when the PDF is
   uploaded (below). A template uploaded before Esign did, or one uploaded through the API that Esign couldn't prepare
   (it is kept as uploaded), can break these rules: it can still be signed on a signature page, but an envelope sent
@@ -197,7 +199,7 @@ A host product can show the field editor inside its own pages. Its backend calls
    (`Content-Type: application/pdf`), once, before the page is opened.
 3. Frame the `url` in the host page. The editor posts `esign.editor.ready` to the parent; the host sends
    `esign.editor.save` with a request id, and the editor answers `esign.editor.saved` or `esign.editor.save-error`, only
-   to the parent origin. Add `draft: true` to save a draft: the editor stays open, and each save after the first saves
+   to the parent origin. Show a save-error's `message` on your page: the editor doesn't show it too. Add `draft: true` to save a draft: the editor stays open, and each save after the first saves
    the same draft again; a save without it makes the template ready and ends the session. A template in use (with
    `replace`) is saved as ready only; one that is a draft, with `replace`, is saved in place.
 4. Treat the message as a prompt only: read the result with `GET /api/template-editing-sessions/{id}`, which answers

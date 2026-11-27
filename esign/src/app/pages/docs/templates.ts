@@ -59,7 +59,7 @@ export const templates: DocTopic = {
       body: [
         ol(
           'Choose a role in the editor.',
-          'Drag a field from the toolbar onto a page. Move a placed field by dragging it, or select it and use the arrow keys. Remove it with ×.',
+          'Drag a field from the toolbar onto a page, or choose its button to add it on the page you are looking at, selected for the arrow keys. Move a placed field by dragging it, or select it and use the arrow keys. Remove it with ×.',
           ['Fields are required. To let the signer leave one empty, select it and clear ', b('Required'), ' under ', b('Selected field'), '.'],
           ['Repeat for every role, then choose ', b('Save'), ': the template is ready to use. Or choose ', b('Save draft'), ' to finish it later: a draft can\'t be used to send until it is saved as ready, and its ', b('Edit'), ' opens its fields again.'],
         ),
@@ -72,7 +72,7 @@ export const templates: DocTopic = {
             ['Date signed', 'Nothing: Esign fills in the date they sign.'],
           ],
         }),
-        p('The signer signs each field by selecting it, and can\'t finish until every required one is signed. The editor won\'t save until every role has a required Signature field, and it saves at most 20 fields.'),
+        p('The signer signs each field by selecting it, and can\'t finish until every required one is signed. The editor won\'t save until every role has a required Signature field, and it saves at most 20 fields. Fields can\'t overlap or run off their page: a save refused for that names the fields and their page, and selects the first, to move it.'),
         p(b('Pre-filled fields'), ' are filled in when an envelope is sent, before anyone signs, such as the partner\'s legal name. Nobody signs them: whoever sends gives each value by its name, or its default is used, and it is drawn on the document signers see. In the editor, give one a ', b('Label'), ' and a ', b('Name'), ' (such as partner.legalName), choose ', b('Add pre-filled field'), ' and drag it into place; drag its entry again to show it somewhere else too. Select it to change its label, name, default or whether it is required, wherever it is placed. Values are plain English letters, digits and punctuation, at most 128 characters, and must fit their box.'),
       ],
     },

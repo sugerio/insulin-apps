@@ -1,6 +1,6 @@
 import React, {useEffect, useRef, useState} from 'react';
 import {createPortal} from 'react-dom';
-import {editorFieldSize,moveField,newFieldPlacement,sizeOnPage,type Rect,type Size} from './field-placement.ts';
+import {editorFieldSize,mostVisiblePage,moveField,newFieldPlacement,sizeOnPage,type Rect,type Size} from './field-placement.ts';
 import {Button} from '../components/ui/button.ts';
 import {Input,checkClass} from '../components/ui/input.ts';
 
@@ -47,8 +47,14 @@ export const FieldEditor=React.forwardRef<EditorHandle,EditorProps>(function Fie
   },[file]);
   function pageSize(index:number):Size {const canvas=pages[index]?.querySelector('canvas');return {width:Number(canvas?.dataset.pdfWidth),height:Number(canvas?.dataset.pdfHeight)};}
   function drop(e:React.DragEvent<HTMLElement>,page:number) {e.preventDefault();if(lockedRef.current)return;try{const data=e.dataTransfer.getData('text/plain');const box=e.currentTarget.getBoundingClientRect(),target=pageSize(page-1);const existing=data.startsWith('field:')?fields.find(f=>f.id===data.slice(6)):undefined;if(existing){const source=pageSize(existing.page-1),size=sizeOnPage(existing.rect,source,target),oldOffset=dragOffset.current?.id===existing.id?dragOffset.current:{x:0,y:0},offset={x:oldOffset.x*source.width/target.width,y:oldOffset.y*source.height/target.height};dragOffset.current=null;const rect=moveField({x:box.left,y:box.top,width:box.width,height:box.height},{x:e.clientX,y:e.clientY},size,offset);setFields(old=>old.map(f=>f.id===existing.id?{...f,page,rect}:f));setSelected(existing.id);return;}const definition=data.startsWith('prefill:')?offered.find(d=>d.name===data.slice(8)):undefined;if(!types.includes(data)&&!definition)return;const rect=newFieldPlacement({x:box.left,y:box.top,width:box.width,height:box.height},{x:e.clientX,y:e.clientY},target);clearToolDrag();const id=crypto.randomUUID();setFields(old=>[...old,definition?{id,...placementOf(definition),page,rect}:{id,type:data,role,page,required:true,rect}]);setSelected(id);}catch{setError('This page is too small for the field.');}}
-  /** Adds a field on page 1: at the top left, or below the fields already there, so that it overlaps none. */
-  function addField(type:string,extra:Partial<Field>={}){if(lockedRef.current||!readyRef.current||!pages.length)return;try{const size=editorFieldSize(pageSize(0)),id=crypto.randomUUID();setFields(old=>{const x=Math.min(.05,1-size.width),step=size.height+.02,free=(y:number)=>!old.some(f=>f.page===1&&x<f.rect.x+f.rect.width+.3&&f.rect.x<x+size.width+.3&&y<f.rect.y+f.rect.height+.01&&f.rect.y<y+size.height+.01);let y=Math.min(.05,1-size.height);while(!free(y)&&y+step<=1-size.height)y=Number((y+step).toFixed(4));return [...old,{id,type,role,page:1,required:true,rect:{x,y,...size},...extra}];});setSelected(id);}catch{setError('This page is too small for the field.');}}
+  /** The page most in view in the PDF panel (and the window), from 1; page 1 when none is. */
+  function pageInView():number {const host=container.current,view=host?.getBoundingClientRect();if(!host||!view)return 1;const height=host.ownerDocument.defaultView?.innerHeight??view.bottom;return mostVisiblePage({top:Math.max(view.top,0),bottom:Math.min(view.bottom,height)},pages.map(p=>p.getBoundingClientRect()))+1;}
+  /** Adds a field on the page most in view: at the top left, or below the fields already there, so that it overlaps
+   * none; then brings it into view and focuses it, for the arrow keys. */
+  function addField(type:string,extra:Partial<Field>={}){if(lockedRef.current||!readyRef.current||!pages.length)return;try{const page=pageInView(),size=editorFieldSize(pageSize(page-1)),id=crypto.randomUUID();setFields(old=>{const x=Math.min(.05,1-size.width),step=size.height+.02,free=(y:number)=>!old.some(f=>f.page===page&&x<f.rect.x+f.rect.width+.3&&f.rect.x<x+size.width+.3&&y<f.rect.y+f.rect.height+.01&&f.rect.y<y+size.height+.01);let y=Math.min(.05,1-size.height);while(!free(y)&&y+step<=1-size.height)y=Number((y+step).toFixed(4));return [...old,{id,type,role,page,required:true,rect:{x,y,...size},...extra}];});setSelected(id);setReveal(id);}catch{setError('This page is too small for the field.');}}
+  /** Selects a field and brings it into view, focused: one just added, or one a refused save names. */
+  const [reveal,setReveal]=useState('');
+  useEffect(()=>{if(!reveal)return;setReveal('');const button=Array.from(container.current?.querySelectorAll<HTMLElement>('[data-editor-field]')??[]).find(e=>e.dataset.editorField===reveal)?.querySelector('button');button?.scrollIntoView?.({block:'nearest',inline:'nearest'});button?.focus({preventScroll:true});},[reveal]);
   /** A pre-filled field's own properties, as every placement of its name has them. */
   const placementOf=(d:Definition):Omit<Field,'id'|'page'|'rect'>=>({type:PREFILL,role:'',required:d.required,name:d.name,label:d.label,...(d.default?{default:d.default}:{})});
   /** Adds a new pre-filled field, or places one again, by its definition. */
@@ -62,7 +68,10 @@ export const FieldEditor=React.forwardRef<EditorHandle,EditorProps>(function Fie
     else if(e.key==='PageDown'||e.key==='PageUp'){e.preventDefault();const page=Math.max(1,Math.min(pages.length,field.page+(e.key==='PageDown'?1:-1)));try{const size=sizeOnPage(field.rect,pageSize(field.page-1),pageSize(page-1));setFields(old=>old.map(f=>f.id===field.id?{...f,page,rect:{...f.rect,...size,x:Math.min(f.rect.x,1-size.width),y:Math.min(f.rect.y,1-size.height)}}:f));}catch{setError('This page is too small for the field.');}}
   }
   async function save(draft=false):Promise<EditorSaveResult>{
-    const fail=(message:string):EditorSaveResult=>{setError(message);return {ok:false,message};};
+    // Embedded, the host asked for the save and shows its answer (esign.editor.save-error): said once, there.
+    const fail=(message:string):EditorSaveResult=>{if(!embedded)setError(message);return {ok:false,message};};
+    /** A refused save that names fields (EditorPage.ts refusal): the first is selected and shown. */
+    const showRefused=(error:Error)=>{const id=(error as Error&{fields?:string[]}).fields?.[0];if(id&&fields.some(f=>f.id===id)){setSelected(id);setReveal(id);}};
     if(!onSave||inFlightRef.current||savedRef.current)return fail('Saving is unavailable or already in progress. Check the host for the saved result.');
     if(!readyRef.current)return fail('Upload a PDF and wait for the preview before saving.');
     if(fields.filter(f=>f.type!==PREFILL).length>MAX_FIELDS)return fail(`Place at most ${MAX_FIELDS} fields in all.`);
@@ -73,11 +82,11 @@ export const FieldEditor=React.forwardRef<EditorHandle,EditorProps>(function Fie
     if(draft){
       inFlightRef.current=true;setSaving(true);setError('');
       try{const templateId=await onSave(editingSource?null:file,[...roles],cleaned(),true);return typeof templateId==='string'?{ok:true,templateId}:fail('Draft saved. Check the host for the confirmed result.');}
-      catch(error){if(error instanceof Error&&(error as Error&{refused?:boolean}).refused)return fail(error.message);return fail(error instanceof Error&&error.message==='draft_not_allowed'?'A template in use is saved as a new version, not as a draft.':'The draft could not be saved. Try again.');}
+      catch(error){if(error instanceof Error&&(error as Error&{refused?:boolean}).refused){showRefused(error);return fail(error.message);}return fail(error instanceof Error&&error.message==='draft_not_allowed'?'A template in use is saved as a new version, not as a draft.':'The draft could not be saved. Try again.');}
       finally{inFlightRef.current=false;setSaving(false);}
     }
     snapshot.current ??= {file:editingSource?null:file,roles:[...roles],fields:cleaned()};
-    lockedRef.current=true;inFlightRef.current=true;setSaving(true);setError('');try{const templateId=await onSave(snapshot.current.file,snapshot.current.roles,snapshot.current.fields);savedRef.current=true;setSaved(true);return typeof templateId==='string'?{ok:true,templateId}:{ok:false,message:'Saved. Check the host for the confirmed result.'};}catch(error){if(error instanceof Error&&(error as Error&{refused?:boolean}).refused){snapshot.current=null;lockedRef.current=false;return fail(error.message);}setUncertain(true);return fail('Save result is unknown. Retry the same snapshot or ask the host to check the session. Editing remains locked.');}finally{inFlightRef.current=false;setSaving(false);}
+    lockedRef.current=true;inFlightRef.current=true;setSaving(true);setError('');try{const templateId=await onSave(snapshot.current.file,snapshot.current.roles,snapshot.current.fields);savedRef.current=true;setSaved(true);return typeof templateId==='string'?{ok:true,templateId}:{ok:false,message:'Saved. Check the host for the confirmed result.'};}catch(error){if(error instanceof Error&&(error as Error&{refused?:boolean}).refused){snapshot.current=null;lockedRef.current=false;showRefused(error);return fail(error.message);}setUncertain(true);return fail('Save result is unknown. Retry the same snapshot or ask the host to check the session. Editing remains locked.');}finally{inFlightRef.current=false;setSaving(false);}
   }
   React.useImperativeHandle(ref,()=>({save}));
   const selectedField=fields.find(f=>f.id===selected);

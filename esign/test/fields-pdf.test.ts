@@ -28,3 +28,12 @@ test('overlap validation rejects same-page intersections for any role, but permi
  assert.doesNotThrow(()=>assertNoOverlappingFields([a,{...a,id:'b',page:2}]));
 });
 
+test('a refused placement names its fields: the two that overlap, or the one past its page\'s edge',async()=>{
+ const {assertNoOverlappingFields,validateTemplateFields,FieldPlacementError}=await import('../src/app/server/esign/fields.ts');
+ const a={id:'a',type:'Signature',role:'ana',page:1,required:true,rect:{x:.1,y:.1,width:.25,height:.1}};
+ assert.throws(()=>assertNoOverlappingFields([a,{...a,id:'b',page:2},{...a,id:'c',rect:{...a.rect,x:.2}}]),(e:unknown)=>e instanceof FieldPlacementError&&e.message==='Overlapping fields'&&e.reason==='fields_overlap'&&e.fields.join()==='a,c');
+ assert.throws(()=>validateTemplateFields([a,{...a,id:'b',rect:{...a.rect,y:.95}}],['ana'],1),(e:unknown)=>e instanceof FieldPlacementError&&e.reason==='field_off_page'&&e.fields.join()==='b');
+ // Anything else wrong with a field is no placement problem.
+ assert.throws(()=>validateTemplateFields([{...a,role:'nobody'}],['ana'],1),(e:unknown)=>e instanceof Error&&!(e instanceof FieldPlacementError));
+});
+

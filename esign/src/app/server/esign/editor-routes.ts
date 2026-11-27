@@ -6,7 +6,7 @@ import {PDFDocument} from 'pdf-lib';
 import {issueEditorPage,editorPageParent,exchangeEditorPage,editorPageContext,editorCodeOpen} from './editor-session.ts';
 import {validParentOrigin} from './access.ts';
 import {isProd} from './environment.ts';
-import {validateTemplateFields,assertNoOverlappingFields,assertEditorSigningFields,parsePrefillCatalog} from './fields.ts';
+import {validateTemplateFields,assertNoOverlappingFields,assertEditorSigningFields,parsePrefillCatalog,FieldPlacementError} from './fields.ts';
 import type {Hono} from 'hono';
 import type { BlobStore } from './blob-store.ts';
 import {parseMetadata,parseTemplateName,unknownKeys} from './metadata.ts';
@@ -20,6 +20,9 @@ const limit=5*1024*1024;
 const sha256=async(bytes:Uint8Array)=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new Uint8Array(bytes))),n=>n.toString(16).padStart(2,'0')).join('');
 async function stagedBytes(bucket:BlobStore,key:string,hash:string){const object=await bucket.get(key);if(!object||object.size<1||object.size>limit)throw new Error('Source unavailable');const bytes=new Uint8Array(await object.arrayBuffer());if(await sha256(bytes)!==hash)throw new Error('Source changed');return bytes;}
 function rolesValid(value:unknown,caseSensitive=false):value is string[]{return Array.isArray(value)&&value.length>0&&value.length<=20&&value.every(r=>typeof r==='string'&&r===r.trim()&&r.length>0&&r.length<=64)&&new Set(value.map(r=>caseSensitive?r:r.toLowerCase())).size===value.length;}
+/** A save refused for its PDF or its fields: for a field placed where it can't be, which fields (their ids, as the
+ * editor sent them) and why, so that the editor can say which. */
+function fieldsRefusal(error:unknown){return error instanceof FieldPlacementError?{error:'invalid_pdf_or_fields',reason:error.reason,fields:error.fields}:{error:'invalid_pdf_or_fields'};}
 function sameOrigin(request:Request){const origin=request.headers.get('origin');return !origin||origin===new URL(request.url).origin;}
 async function contextFor(c:import('hono').Context<Env>){const token=sessionToken(name=>c.req.header(name));if(!token)throw new Error('unauthorized');return editorPageContext(c.env.DB,token,Date.now());}
 /**
@@ -150,7 +153,7 @@ export function mountEditorRoutes(app:Hono<Env>){
    const documentHash=session.sourceSha256??await sha256(document);
    if(documentHash!==await sha256(document))return c.json({error:'source_changed'},409);
    let placed:import('./fields.ts').TemplateField[];
-   try{const pdf=await PDFDocument.load(document,{throwOnInvalidObject:true});const pages=pdf.getPages();if(!pages.length||pages.length>100||pages.some(p=>((p.getRotation().angle%360)+360)%360!==0))throw new Error('Unsupported rotation');placed=validateTemplateFields(fields,roles,pages.length);assertNoOverlappingFields(placed);}catch{return c.json({error:'invalid_pdf_or_fields'},422);}
+   try{const pdf=await PDFDocument.load(document,{throwOnInvalidObject:true});const pages=pdf.getPages();if(!pages.length||pages.length>100||pages.some(p=>((p.getRotation().angle%360)+360)%360!==0))throw new Error('Unsupported rotation');placed=validateTemplateFields(fields,roles,pages.length);assertNoOverlappingFields(placed);}catch(error){return c.json(fieldsRefusal(error),422);}
    // An uploaded document has no pre-filled fields: its sender writes on it before uploading it.
    if(placed.some(f=>f.type==='Prefill'))return c.json({error:'prefill_not_supported'},422);
    if(!draft)try{assertEditorSigningFields(placed,roles);}catch(error){return c.json({error:'invalid_signing_fields',message:error instanceof Error?error.message:'Invalid signing fields'},422);}
@@ -176,7 +179,7 @@ export function mountEditorRoutes(app:Hono<Env>){
    const staged=await c.env.DB.prepare('SELECT staged_uploaded_sha256 AS sha,staged_changes_json AS changes FROM editor_sessions WHERE id=? AND tenant_id=?').bind(session.pageId,session.tenantId).first<{sha:string|null;changes:string|null}>();record=[staged?.sha??null,staged?.changes??null];}else if(session.sourceTemplateId){if(form.has('file'))return c.json({error:'source_immutable'},422);if(!session.sourceSha256)return c.json({error:'source_unavailable'},409);try{const row=await c.env.DB.prepare('SELECT object_key,uploaded_sha256,upload_changes_json FROM templates WHERE id=? AND tenant_id=?').bind(session.sourceTemplateId,session.tenantId).first<{object_key:string;uploaded_sha256:string|null;upload_changes_json:string|null}>();if(!row)throw new Error('Source unavailable');bytes=await stagedBytes(c.env.ARTIFACTS,row.object_key,session.sourceSha256);record=[row.uploaded_sha256,row.upload_changes_json];}catch{return c.json({error:'source_unavailable'},409);}}else{const file=form.get('file');if(!(file instanceof File)||file.size<1||file.size>limit)return c.json({error:'invalid_file'},422);
    // The fields were placed on the page as the editor showed it, which is the page the rewritten PDF has (pdf-upload.ts).
    try{const prepared=await preparePdfUpload(new Uint8Array(await file.arrayBuffer()),{route:'editor-save',tenantId:session.tenantId,subjectId:session.pageId});bytes=prepared.bytes;record=uploadRecord(prepared);}catch(error){if(error instanceof PdfUploadRefused)return c.json(pdfRefusalBody('invalid_pdf_or_fields',error),422);throw error;}}
-  try{const pdf=await PDFDocument.load(bytes,{throwOnInvalidObject:true});const pages=pdf.getPages();if(!pages.length||pages.length>100||pages.some(p=>((p.getRotation().angle%360)+360)%360!==0))throw new Error('Unsupported rotation');fields=validateTemplateFields(fields,roles,pages.length);assertNoOverlappingFields(fields as import('./fields.ts').TemplateField[]);}catch{return c.json({error:'invalid_pdf_or_fields'},422);}
+  try{const pdf=await PDFDocument.load(bytes,{throwOnInvalidObject:true});const pages=pdf.getPages();if(!pages.length||pages.length>100||pages.some(p=>((p.getRotation().angle%360)+360)%360!==0))throw new Error('Unsupported rotation');fields=validateTemplateFields(fields,roles,pages.length);assertNoOverlappingFields(fields as import('./fields.ts').TemplateField[]);}catch(error){return c.json(fieldsRefusal(error),422);}
   if(!draft)try{assertEditorSigningFields(fields as import('./fields.ts').TemplateField[],roles);}catch(error){return c.json({error:'invalid_signing_fields',message:error instanceof Error?error.message:'Invalid signing fields'},422);}
   if(target){
    const row=await c.env.DB.prepare('SELECT status,default_signers_json FROM templates WHERE id=? AND tenant_id=?').bind(target,session.tenantId).first<{status:string;default_signers_json:string}>();

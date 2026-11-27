@@ -26,3 +26,23 @@ test('which failed saves are refusals the editor explains: a 422, but not a draf
   assert.equal(refusedSave(409, { error: 'not_draft' }), false, 'any other conflict leaves the result to be checked');
   assert.equal(refusedSave(500, {}), false);
 });
+
+test('a refused placement says which fields, as the editor labels them, and on which page; and carries their ids', () => {
+  const rect = { x: .1, y: .1, width: .2, height: .1 };
+  const fields = [
+    { id: 'sig', type: 'Signature', role: 'Partner', page: 2, required: true, rect },
+    { id: 'date', type: 'Date signed', role: 'Seller', page: 2, required: true, rect },
+    { id: 'name', type: 'Prefill', role: '', page: 1, required: false, rect, name: 'partner.legalName', label: 'Partner legal name' },
+  ];
+  const overlap = refusal({ error: 'invalid_pdf_or_fields', reason: 'fields_overlap', fields: ['sig', 'date'] }, fields);
+  assert.equal(overlap.message, 'Partner — Signature and Seller — Date signed overlap on page 2: move them apart and save again.');
+  assert.deepEqual(overlap.fields, ['sig', 'date']);
+  const offPage = refusal({ error: 'invalid_pdf_or_fields', reason: 'field_off_page', fields: ['name'] }, fields);
+  assert.equal(offPage.message, 'Partner legal name (pre-filled) doesn\'t fit on page 1: move it onto the page and save again.');
+  assert.deepEqual(offPage.fields, ['name']);
+  // Ids the editor doesn't have, or none: the general words, and no field to show.
+  const unknown = refusal({ error: 'invalid_pdf_or_fields', reason: 'fields_overlap', fields: ['gone', 'date'] }, fields);
+  assert.match(unknown.message, /^Some fields overlap/);
+  assert.deepEqual(unknown.fields, []);
+  assert.deepEqual(refusal({ error: 'invalid_pdf_or_fields' }).fields, []);
+});

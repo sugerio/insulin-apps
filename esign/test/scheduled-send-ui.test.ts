@@ -153,3 +153,34 @@ test('pre-filled fields on New envelope: their defaults filled in, required ones
     assert.deepEqual(sent.prefill, { 'partner.legalName': 'Kestrel Systems Ltd', 'partner.type': 'Reseller' });
   } finally { await app.unmount(); }
 });
+
+test('a send the form stops says why next to the send button, once, and takes the member to the field to fix', async () => {
+  const PREFILLED = { ...TEMPLATE, id: 'tpl-4', name: 'Partner agreement', prefill: [{ name: 'partner.legalName', label: 'Partner legal name', required: true }] };
+  const app = await renderMember('/envelopes/new?template=tpl-4', (c) => {
+    if (c.path === '/api/me') return json(EDITOR);
+    if (c.path === '/api/templates' || c.path.startsWith('/api/templates?')) return json({ templates: [PREFILLED] });
+    if (c.path.startsWith('/api/contacts')) return json({ contacts: [] });
+    if (c.path.startsWith('/api/tags?')) return json({ tags: [] });
+  });
+  // The page's fields, as the browser has them: which one is brought into view and focused.
+  const shown: string[] = [];
+  (globalThis as any).document = { getElementById: (id: string) => ({ scrollIntoView: () => shown.push(`scroll ${id}`), focus: () => shown.push(`focus ${id}`) }) };
+  const footer = () => app.renderer.root.findAll((n: any) => n.type === 'div' && n.props['data-slot'] === 'card-footer')[0];
+  const footerAlert = () => visibleText(footer().findAll((n: any) => n.props?.role === 'alert').map((n: any) => n.children)).trim();
+  try {
+    await app.type(app.byId('signer-0-name'), 'Pat Partner');
+    await app.type(app.byId('signer-0-email'), 'pat@partner.example');
+    await app.click(app.button('Send for signature'), 'Send');
+    assert.equal(app.calls.filter((c) => c.method === 'POST').length, 0, 'nothing asked of the server');
+    assert.equal(footerAlert(), 'Fill in Partner legal name.', 'said beside the button clicked');
+    assert.equal((app.text().match(/Fill in Partner legal name\./g) ?? []).length, 1, 'said once');
+    assert.deepEqual(shown, ['scroll prefill-partner.legalName', 'focus prefill-partner.legalName']);
+    // A signer without an email: that field.
+    shown.length = 0;
+    await app.type(app.byId('prefill-partner.legalName'), 'Kestrel Systems Ltd');
+    await app.type(app.byId('signer-0-email'), '');
+    await app.click(app.button('Send for signature'), 'Send');
+    assert.equal(footerAlert(), 'Enter a name and an email address for each signer.');
+    assert.deepEqual(shown, ['scroll signer-0-email', 'focus signer-0-email']);
+  } finally { delete (globalThis as any).document; await app.unmount(); }
+});

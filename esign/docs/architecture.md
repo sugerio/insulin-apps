@@ -682,13 +682,15 @@ The host names its parent origin, `allowedParentOrigin` (https, or http on `loca
 framed by any other origin ("Who may frame the pages" above); the iframe removes the code from its URL before the exchange and
 keeps its token in memory. It posts `esign.editor.ready`, and answers the parent's
 `esign.editor.save` (with a request id) with `esign.editor.saved` or `esign.editor.save-error`, only
-to the parent origin. A message is only a prompt: the host's backend reads the result with
+to the parent origin; the host shows a save-error's message, which the editor doesn't repeat. A message is only a prompt: the host's backend reads the result with
 `GET /api/template-editing-sessions/:id`. One session saves once; another version needs a new
 session.
 
 Saved fields use coordinates normalized to the displayed page's top-left. A file sent with a save
 is prepared as Uploaded PDFs says before its fields are checked. A save allows at most 20
-roles and 200 fields, refuses rotated pages and overlapping fields, and requires exactly one
+roles and 200 fields, refuses rotated pages and overlapping fields (`422 invalid_pdf_or_fields`, with
+`reason: "fields_overlap"` or `"field_off_page"` and `fields`, the ids of the two that overlap or of the one off its
+page, for the editor to name and select), and requires exactly one
 Signature field per role and no field types other than Signature, Date signed and Title.
 
 A code is a bearer credential and can be redeemed outside a browser; CSP constrains browsers only.

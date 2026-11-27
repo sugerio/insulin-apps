@@ -89,6 +89,7 @@ test('cross-origin browser embeds, saves and reopens; hostile parent and spoofed
   await wait(()=>evaluate("!document.querySelector('#continue').disabled"),'host editor ready');
   await evaluate("document.querySelector('#continue').click()");
   await wait(()=>evaluate("document.querySelector('#status').textContent.includes('add a Signature field')"),'host shows validation error');
+  assert.equal(await evaluate("document.querySelector('[role=alert]').textContent",context),'','said once, by the host: the editor doesn\'t repeat it');
   const scroll=await evaluate(`(()=>{const pdf=document.querySelector('[aria-label="PDF pages"]'),panel=document.querySelector('aside');const before=panel.getBoundingClientRect().top;pdf.scrollTop=300;return {scroll:pdf.scrollTop,panelBefore:before,panelAfter:panel.getBoundingClientRect().top,overflow:getComputedStyle(pdf).overflowY}})()`,context);assert.ok(scroll.scroll>0,'PDF panel scrolls independently');assert.equal(scroll.panelBefore,scroll.panelAfter);assert.match(scroll.overflow,/auto|scroll/);
   // Real toolbar drags: different physical pages and displayed scales, center grab and edge clamp.
   for(const [page,zoom] of [[1,1],[2,.7]] as const){
@@ -106,6 +107,12 @@ test('cross-origin browser embeds, saves and reopens; hostile parent and spoofed
    assert.equal(await evaluate("document.querySelector('[data-tool-drag-preview]')===null",context),true);
    await evaluate(`document.querySelector('[data-page="${page}"] [aria-label="Delete Title field"]').click()`,context);
   }
+  // Scrolled to page 2, a field added with a button goes there, in view and focused for the arrow keys.
+  await evaluate(`document.querySelector('[aria-label="PDF pages"]').style.zoom='';document.querySelector('[data-page="2"]').scrollIntoView({block:'center'})`,context);
+  await evaluate("document.querySelector('[aria-label=\"Add Date signed field\"]').click()",context);
+  const added=await wait(()=>evaluate(`(()=>{const f=document.querySelector('[data-page="2"] [data-editor-field]');if(!f)return null;const r=f.getBoundingClientRect(),s=document.querySelector('[aria-label="PDF pages"]').getBoundingClientRect();return {onPage1:Boolean(document.querySelector('[data-page="1"] [data-editor-field]')),inView:r.top>=s.top&&r.bottom<=s.bottom,focused:document.activeElement===f.querySelector('button')};})()`,context),'field added on the page in view');
+  assert.deepEqual(added,{onPage1:false,inView:true,focused:true});
+  await evaluate(`document.querySelector('[data-page="2"] [aria-label="Delete Date signed field"]').click()`,context);
   await evaluate(`document.querySelector('[aria-label="PDF pages"]').style.zoom='';document.querySelector('[data-page="1"]').scrollIntoView({block:'center'})`,context);
   assert.equal(await evaluate("Boolean(document.querySelector('[aria-label=\"Add Signature field\"]'))",context),true,'keyboard add is available');await evaluate("document.querySelector('[aria-label=\"Add Signature field\"]').focus()",context);assert.equal(await evaluate("document.activeElement?.getAttribute('aria-label')",context),'Add Signature field');await evaluate("document.querySelector('[aria-label=\"Add Signature field\"]').click()",context);await wait(()=>evaluate("Boolean(document.querySelector('[data-page=\"1\"] button'))",context),'keyboard field added');
   // Drive a native Chrome drag from inside the field, then compare the saved
@@ -216,13 +223,24 @@ test('cross-origin browser embeds, saves and reopens; hostile parent and spoofed
   await evaluate("document.querySelector('#continue').click()");
   const legacyVersion=await wait(async()=>{const v=await evaluate("document.querySelector('#status').textContent.match(/Saved template: ([a-f0-9-]+)/)?.[1]");return v&&v!==second?v:null;},'legacy version');
   for(const id of [legacy,legacyVersion]){const row=await db.prepare('SELECT roles_json,fields_json FROM templates WHERE id=?').bind(id).first() as any;assert.deepEqual(JSON.parse(row.roles_json),['Signer','signer']);const fields=JSON.parse(row.fields_json);if(id===legacy){assert.deepEqual(fields,legacyFields);}else{assert.equal(fields.length,2);assert.deepEqual(fields[0],{...legacyFields[0],page:2,rect:{...legacyFields[0].rect,width:.375,height:.05*800/600}});assert.deepEqual(fields[1],{...legacyFields[1],required:true});}}
-  // Exercise real cross-page drags with differently sized PDF pages. Keep both
+  // A save the server refuses for overlapping fields names them: the host says so, once (the editor doesn't repeat it),
+  // and the editor selects the first and focuses it, to move it apart.
+  await evaluate(`(()=>{document.querySelector('#source').value='';document.querySelector('#roles').value='Partner';const input=document.querySelector('#file'),bytes=Uint8Array.from(atob(${JSON.stringify(base64)}),c=>c.charCodeAt(0)),d=new DataTransfer();d.items.add(new File([bytes],'overlap.pdf',{type:'application/pdf'}));input.files=d.files;input.dispatchEvent(new Event('change',{bubbles:true}));document.querySelector('#open').click();})()`);
+  const overlapContext=await wait(async()=>{const c=await frameContext();return c&&c!==legacyContext?c:0;},'overlap frame');
+  await wait(()=>evaluate("document.querySelectorAll('[data-page]').length===2",overlapContext),'overlap PDF');
+  await evaluate("document.querySelector('[aria-label=\"Add Signature field\"]').click()",overlapContext);await evaluate("document.querySelector('[aria-label=\"Add Date signed field\"]').click()",overlapContext);
+  await wait(()=>evaluate("document.querySelectorAll('[data-page=\"1\"] [data-editor-field]').length===2",overlapContext),'two fields side by side');
+  await evaluate(`(()=>{const [signature,date]=document.querySelectorAll('[data-page="1"] [data-editor-field]'),r=signature.getBoundingClientRect(),data=new DataTransfer();data.setData('text/plain','field:'+date.dataset.editorField);document.querySelector('[data-page="1"] > div').dispatchEvent(new DragEvent('drop',{bubbles:true,dataTransfer:data,clientX:r.left+r.width/2,clientY:r.top+r.height/2}));document.body.focus();})()`,overlapContext);
+  await wait(()=>evaluate("!document.querySelector('#continue').disabled"),'overlap host ready');await evaluate("document.querySelector('#continue').click()");
+  await wait(()=>evaluate("document.querySelector('#status').textContent.startsWith('Partner — Signature and Partner — Date signed overlap on page 1: move them apart and save again.')"),'host names the overlapping fields');
+  assert.deepEqual(await evaluate(`(()=>{const signature=document.querySelector('[data-page="1"] [data-editor-field] button');return {alert:document.querySelector('[role=alert]').textContent,selected:signature.hasAttribute('data-selected'),focused:document.activeElement===signature};})()`,overlapContext),{alert:'',selected:true,focused:true});
+
   // pages visible so CDP moves a genuine pointer through the iframe, not a
   // synthesized DragEvent. The temporary viewport belongs only to this browser.
   const varied=await PDFDocument.create();const variedFirst=varied.addPage([600.37,800.63]);variedFirst.drawText('Synthetic left original',{x:40,y:520,size:18});variedFirst.drawText('Synthetic right original',{x:330,y:520,size:18});const variedSecond=varied.addPage([900.29,600.71]);variedSecond.drawText('Synthetic left original',{x:40,y:390,size:18});variedSecond.drawText('Synthetic right original',{x:500,y:390,size:18});const varied64=Buffer.from(await varied.save()).toString('base64');
   await call('Emulation.setDeviceMetricsOverride',{width:1600,height:2400,deviceScaleFactor:1,mobile:false});
   await evaluate(`(()=>{document.querySelector('#source').value='';document.querySelector('#roles').value='Partner, Seller';const input=document.querySelector('#file'),bytes=Uint8Array.from(atob(${JSON.stringify(varied64)}),c=>c.charCodeAt(0)),d=new DataTransfer();d.items.add(new File([bytes],'varied.pdf',{type:'application/pdf'}));input.files=d.files;input.dispatchEvent(new Event('change',{bubbles:true}));document.querySelector('iframe').style.height='2200px';document.querySelector('#open').click();})()`);
-  const variedContext=await wait(async()=>{const c=await frameContext();return c&&c!==legacyContext?c:0;},'varied-page frame');
+  const variedContext=await wait(async()=>{const c=await frameContext();return c&&c!==overlapContext?c:0;},'varied-page frame');
   await wait(()=>evaluate("document.querySelectorAll('[data-page]').length===2",variedContext),'varied PDF');
   await evaluate(`(()=>{document.querySelector('.esign-editor-workspace').style.cssText='height:2000px;width:850px;display:grid;grid-template-columns:minmax(0,1fr) 300px';document.querySelector('[aria-label="Add Signature field"]').click();window.dragTrace=[];for(const name of ['dragstart','drop'])document.addEventListener(name,e=>{const page=e.target.closest('[data-page]'),field=e.target.closest('[data-editor-field]');if(page){const p=page.getBoundingClientRect(),f=field?.getBoundingClientRect(),c=page.querySelector('canvas');window.dragTrace.push({name,x:e.clientX,y:e.clientY,page:Number(page.dataset.page),pageLeft:p.left,pageTop:p.top,pageWidth:p.width,pageHeight:p.height,pdfWidth:Number(c.dataset.pdfWidth),pdfHeight:Number(c.dataset.pdfHeight),fieldLeft:f?.left,fieldTop:f?.top});}},true);})()`,variedContext);
   let lastAnchor:{x:number;y:number}|undefined;
